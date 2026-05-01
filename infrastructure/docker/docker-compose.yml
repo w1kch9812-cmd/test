@@ -22,5 +22,7 @@ services:
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
+      timeout: 3s
+      retries: 10
 volumes:
   postgres-data:

@@ -1,6 +1,6 @@
 # 로컬 Docker Compose 인프라
 
-로컬 개발용 PostgreSQL 17 + PostGIS 3.5 + Valkey 8 컨테이너입니다.
+로컬 개발용 PostgreSQL 17 + PostGIS 3.5 + Valkey 8 컨테이너예요.
 
 ## 사전 준비
 
