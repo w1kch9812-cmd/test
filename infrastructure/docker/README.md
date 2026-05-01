@@ -8,25 +8,25 @@
 - `.env` 파일을 만들어 주세요. `.env.example`을 복사하면 돼요.
 
 ```bash
-cp infra/docker/.env.example infra/docker/.env
+cp infrastructure/docker/.env.example infrastructure/docker/.env
 ```
 
 ## 기동
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml --env-file infra/docker/.env up -d
+docker compose -f infrastructure/docker/docker-compose.yml --env-file infrastructure/docker/.env up -d
 ```
 
 ## 중지
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml down
+docker compose -f infrastructure/docker/docker-compose.yml down
 ```
 
 ## 데이터 초기화 (볼륨까지 삭제)
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml down -v
+docker compose -f infrastructure/docker/docker-compose.yml down -v
 ```
 
 ## 접속
@@ -38,7 +38,7 @@ docker exec -it gongzzang-postgres psql -U gongzzang
 ## 헬스체크
 
 ```bash
-docker compose -f infra/docker/docker-compose.yml ps
+docker compose -f infrastructure/docker/docker-compose.yml ps
 ```
 
 `postgres`, `valkey` 두 서비스 모두 `healthy`로 보이면 정상이에요.
