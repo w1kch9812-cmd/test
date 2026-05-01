@@ -84,7 +84,7 @@ packages/                    ← TS 라이브러리 (UI/api-client/map)
 
 | # | 위반 | 차단 도구 | 단계 |
 |---|------|---------|------|
-| 1 | 수동 작성 OpenAPI | CI에서 `cargo run --bin openapi-export | diff openapi.json` | CI |
+| 1 | 수동 작성 OpenAPI | CI에서 cargo로 `openapi.json` 생성 후 git diff (변경 시 fail) | CI |
 | 2 | 수동 작성 TS 타입 (백엔드 응답용) | dependency-cruiser — `packages/api-client/types.ts`는 자동 생성만 | CI |
 | 3 | AWS 콘솔 수동 변경 | Pulumi `refresh` drift 감지 → CI 알림 | CI 정기 |
 | 4 | DB 스키마 수동 변경 | `flyway info` / `sqlx migrate info` mismatch | pre-push + CI |

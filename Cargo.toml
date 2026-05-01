@@ -1,5 +1,5 @@
 [workspace]
-resolver = "3"
+resolver = "2"
 members = [
     # services/* 와 crates/* 는 sub-project 2+에서 추가됨.
     # sub-project 1에서는 빈 workspace로 시작.
