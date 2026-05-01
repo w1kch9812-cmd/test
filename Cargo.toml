@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    # services/* 와 crates/* 는 sub-project 2+에서 추가됨.
-    # sub-project 1에서는 빈 workspace로 시작.
+    "crates/_placeholder",
+    # services/* 와 다른 crates/* 는 sub-project 2+에서 추가됨.
+    # _placeholder는 sub-project 2 첫 도메인 추가 시 삭제.
 ]
 
 [workspace.package]
