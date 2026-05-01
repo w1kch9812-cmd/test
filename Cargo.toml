@@ -31,8 +31,17 @@ print_stdout = "deny"
 print_stderr = "deny"
 
 [workspace.dependencies]
-# sub-project 2+에서 채움 (axum, sqlx, tokio, serde, tracing 등)
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "json", "migrate"] }
+# 추가 예정 (Plan 2b/2c): axum, tokio, serde, tracing, utoipa
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "postgres",
+    "macros",
+    "uuid",
+    "chrono",
+    "bigdecimal",
+    "json",
+    "migrate",
+] }
 
 [profile.release]
 lto = "thin"
