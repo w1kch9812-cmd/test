@@ -12,6 +12,8 @@ yanked = "deny"
 ignore = []
 
 [licenses]
+# unused allow 항목 = warn만 (빈 workspace에서 fail 안 되도록)
+unused-allowed-license = "allow"
 allow = [
     "MIT",
     "Apache-2.0",
