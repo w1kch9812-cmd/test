@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":separateMajorReleases",
+    ":automergeMinor",
+    ":automergePatch"
+  ],
+  "schedule": ["before 5am on monday"],
+  "prConcurrentLimit": 5,
+  "rangeStrategy": "bump",
+  "rust": { "enabled": true },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@biomejs/", "^biome"],
+      "groupName": "biome"
+    },
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "types"
+    },
+    {
+      "matchManagers": ["cargo"],
+      "groupName": "rust deps"
+    }
+  ]
+}

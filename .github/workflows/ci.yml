@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  lint-format:
+    name: Lint & Format (Biome + clippy + markdownlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Biome check
+        run: pnpm biome check .
+      - name: markdownlint
+        run: pnpm markdownlint-cli2 "**/*.md" "#node_modules" "#_archive" "#reference" "#target"
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "rustfmt, clippy" }
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-features -- -D warnings
+
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run typecheck
+
+  cargo-check:
+    name: cargo check + cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-features
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with: { command: check }
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  link-check:
+    name: Markdown link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 9.12.0 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Check internal Markdown links
+        run: |
+          for f in $(find docs -name "*.md") README.md AGENTS.md TECH.md MEMORY.md; do
+            [ -f "$f" ] && pnpm markdown-link-check -q "$f" || true
+          done
+
+  file-size:
+    name: File size limit (≤500 권장 / 1500 강제)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check file sizes
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 1500 ]; then
+              echo "::error file=$f::$lines lines (> 1500). 폴더로 분해하세요."
+              fail=1
+            elif [ "$lines" -gt 500 ]; then
+              echo "::warning file=$f::$lines lines (> 500). 분해 권장."
+            fi
+          done < <(find . -type f \( -name "*.md" -o -name "*.rs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.sql" \) \
+                   ! -path "./node_modules/*" ! -path "./_archive/*" ! -path "./target/*" ! -path "./.next/*" \
+                   ! -path "./reference/*" ! -path "./docs/superpowers/*")
+          exit $fail

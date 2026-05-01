@@ -1,0 +1,5 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-config.json",
+  "description": "공짱 프로젝트 MCP 설정 — 개발자 Claude 세션 전용. 메인 코드 import 절대 금지.",
+  "mcpServers": {}
+}

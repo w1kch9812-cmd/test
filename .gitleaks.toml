@@ -1,0 +1,43 @@
+# 공짱 gitleaks 설정 — 시크릿이 git에 커밋되는 걸 차단
+# https://github.com/gitleaks/gitleaks
+
+title = "공짱 gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "vworld-api-key"
+description = "V-World API key (UUID 형식)"
+regex = '''[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}'''
+keywords = ["VWORLD", "vworld"]
+
+[[rules]]
+id = "naver-maps-credential"
+description = "Naver Maps Client ID/Secret"
+regex = '''(?i)(naver[_-]?maps?[_-]?(client[_-]?id|client[_-]?secret|key)).{0,5}['"]?[a-z0-9]{10,40}['"]?'''
+
+[[rules]]
+id = "zitadel-key"
+description = "Zitadel API key"
+regex = '''(?i)zitadel[_-]?(api[_-]?key|secret|token).{0,5}['"]?[a-zA-Z0-9_-]{20,}['"]?'''
+
+[[rules]]
+id = "korean-data-go-kr-key"
+description = "data.go.kr serviceKey"
+regex = '''(?i)(serviceKey|odp[_-]?service[_-]?key).{0,5}['"]?[a-zA-Z0-9%+/=]{40,}['"]?'''
+
+[allowlist]
+description = "허용 — 테스트/예시 값"
+paths = [
+    '''\.env\.example$''',
+    '''docs/.+\.md$''',
+    '''_archive/''',
+    '''reference/''',
+    '''\.gitleaks\.toml$''',
+]
+regexes = [
+    '''your_.*_here''',
+    '''<your-.+>''',
+    '''ZITADEL_API_KEY=$''',
+]

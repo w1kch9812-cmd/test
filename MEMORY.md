@@ -1,0 +1,8 @@
+- [프로젝트 도메인 스냅샷](memory/project_domain.md) — 산업용 부동산 정보 플랫폼 (옵션 A)
+- [데이터 접근 규칙](memory/data_access_layering.md) — 메인=공식 API, MCP=개발자 Claude 세션
+- [파일 크기 상한 규칙](memory/file_size_rule.md) — ≤500 권장, 1500 강제 (CI 차단)
+- [SSS 7 기둥 요약](memory/sss_charter_summary.md) — 일관성/강제/추적/안전/가시/SSOT/명확
+- [프로젝트 범위 결정](memory/scope_option_a.md) — 데이터 플랫폼, AI 생성 X, 임베딩 OK (Phase 3+)
+- [외부 의존 MCP](memory/external_mcps.md) — 개발자 보조 전용
+- [SSS급 기준 피드백](memory/feedback_sss_standard.md) — 미개함·꼼수 0
+- [기술 스택 확정](memory/tech_stack_confirmed.md) — Rust + Next.js + Postgres+PostGIS + Zitadel + Biome v2.4

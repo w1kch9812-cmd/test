@@ -1,0 +1,26 @@
+# 기본: 1인 운영자 (팀 합류 시 멤버 추가)
+* @w1kch9812-cmd
+
+# 도메인별 SSOT — 변경 시 책임자 리뷰
+/docs/sss-charter.md           @w1kch9812-cmd
+/docs/glossary.md              @w1kch9812-cmd
+/docs/ssot-matrix.md           @w1kch9812-cmd
+/docs/adr/                     @w1kch9812-cmd
+/docs/conventions/             @w1kch9812-cmd
+
+# 인프라 — 변경 영향 큼
+/infrastructure/               @w1kch9812-cmd
+/.github/                      @w1kch9812-cmd
+/Cargo.toml                    @w1kch9812-cmd
+/package.json                  @w1kch9812-cmd
+/turbo.json                    @w1kch9812-cmd
+/biome.json                    @w1kch9812-cmd
+/lefthook.yml                  @w1kch9812-cmd
+/deny.toml                     @w1kch9812-cmd
+/.gitleaks.toml                @w1kch9812-cmd
+
+# 인증·보안 — 변경 영향 큼
+/crates/auth/                  @w1kch9812-cmd
+/docs/auth/                    @w1kch9812-cmd
+/docs/security/                @w1kch9812-cmd
+/docs/compliance/              @w1kch9812-cmd

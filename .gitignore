@@ -1,0 +1,61 @@
+# === Env ===
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# === Node / pnpm / TS ===
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# === Rust / Cargo ===
+target/
+*.rs.bk
+Cargo.lock.bak
+
+# === Logs ===
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === IDE ===
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# === Claude / 로컬 메모리 ===
+.claude/settings.local.json
+.claude/*.local.*
+CLAUDE.local.md
+AGENTS.local.md
+
+# === 빌드 산출물 / 임시 ===
+*.tgz
+*.zip
+.cache/
+.temp/
+.tmp/
+
+# === 학습용 외부 레포 (빌드 제외) ===
+reference/*/
+!reference/README.md
+
+# === 로컬 MCP 빌드 ===
+.mcp-local/
+
+# === 백업 / 아카이브 ===
+_archive/

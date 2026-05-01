@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = [
+    # services/* 와 crates/* 는 sub-project 2+에서 추가됨.
+    # sub-project 1에서는 빈 workspace로 시작.
+]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.83"
+license = "UNLICENSED"
+authors = ["공짱 <perfectoryinc@gmail.com>"]
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_imports = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[workspace.dependencies]
+# sub-project 2+에서 채움 (axum, sqlx, tokio, serde, tracing 등)
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true

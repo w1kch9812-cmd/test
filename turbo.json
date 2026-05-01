@@ -1,0 +1,49 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "globalDependencies": ["**/.env", "**/.env.local", "tsconfig.base.json"],
+  "globalEnv": [
+    "NODE_ENV",
+    "VWORLD_API_KEY",
+    "VWORLD_DOMAIN",
+    "KOREAN_LAW_API_KEY",
+    "ODP_SERVICE_KEY",
+    "NICE_API_KEY",
+    "NICE_CLIENT_ID",
+    "NAVER_MAPS_CLIENT_ID",
+    "NAVER_MAPS_CLIENT_SECRET",
+    "ZITADEL_DOMAIN",
+    "ZITADEL_PROJECT_ID",
+    "ZITADEL_API_KEY",
+    "GEMINI_API_KEY",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "SENTRY_DSN",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_SERVICE_NAME"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json", "package.json"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "tsconfig.json"],
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["src/**", "test/**", "*.config.*"],
+      "outputs": ["coverage/**"]
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}
