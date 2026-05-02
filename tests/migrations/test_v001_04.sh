@@ -71,5 +71,22 @@ if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_indexes where tablename='pi
   echo "FAIL: pipeline_run missing composite index (schedule_id, started_at desc)" >&2; exit 1
 fi
 
-echo "PASS: V001_04 Pipeline 2 tables (pipeline_schedule, pipeline_run)"
+# pipeline_schedule must have version (optimistic locking — concurrent admin edits)
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_attribute a join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum where a.attrelid='pipeline_schedule'::regclass and a.attname='version' and pg_get_expr(d.adbin, d.adrelid)='1'::text;" | grep -q '^1$'; then
+  echo "FAIL: pipeline_schedule.version missing or default not 1 (optimistic locking)" >&2; exit 1
+fi
+
+# pipeline_run.output_hashes must be jsonb default '{}' (change detection feeding skipped_unchanged status)
+OUTPUT_HASHES_TYPE=$(psql "$DATABASE_URL" -t -A -c "select format_type(atttypid, atttypmod) from pg_attribute where attrelid='pipeline_run'::regclass and attname='output_hashes';")
+if [ "$OUTPUT_HASHES_TYPE" != "jsonb" ]; then
+  echo "FAIL: pipeline_run.output_hashes expected jsonb, got '$OUTPUT_HASHES_TYPE'" >&2; exit 1
+fi
+
+# pipeline_run.started_at must be NOT NULL with default now() (insert without started_at must succeed)
+STARTED_NOTNULL=$(psql "$DATABASE_URL" -t -A -c "select attnotnull from pg_attribute where attrelid='pipeline_run'::regclass and attname='started_at';")
+if [ "$STARTED_NOTNULL" != "t" ]; then
+  echo "FAIL: pipeline_run.started_at must be NOT NULL" >&2; exit 1
+fi
+
+echo "PASS: V001_04 Pipeline 2 tables + version + output_hashes + started_at NOT NULL"
 exit 0
