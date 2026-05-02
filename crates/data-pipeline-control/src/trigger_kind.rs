@@ -101,7 +101,11 @@ mod tests {
 
     #[test]
     fn round_trip_each_variant() {
-        for v in [TriggerKind::Schedule, TriggerKind::Manual, TriggerKind::Event] {
+        for v in [
+            TriggerKind::Schedule,
+            TriggerKind::Manual,
+            TriggerKind::Event,
+        ] {
             assert_eq!(TriggerKind::from_str(v.as_str()).unwrap(), v);
         }
     }

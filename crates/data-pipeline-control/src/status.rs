@@ -119,7 +119,10 @@ mod tests {
 
     #[test]
     fn display_matches_as_str() {
-        assert_eq!(format!("{}", RunStatus::SkippedUnchanged), "skipped_unchanged");
+        assert_eq!(
+            format!("{}", RunStatus::SkippedUnchanged),
+            "skipped_unchanged"
+        );
     }
 
     #[test]

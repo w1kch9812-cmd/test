@@ -11,7 +11,9 @@ use crate::status::RunStatus;
 use crate::trigger_kind::TriggerKind;
 
 fn t0() -> chrono::DateTime<chrono::Utc> {
-    Utc.with_ymd_and_hms(2026, 5, 2, 3, 0, 0).single().expect("valid")
+    Utc.with_ymd_and_hms(2026, 5, 2, 3, 0, 0)
+        .single()
+        .expect("valid")
 }
 
 fn sample_run() -> PipelineRun {
@@ -131,7 +133,8 @@ fn add_step_rejects_empty_name() {
 #[test]
 fn complete_step_marks_success_and_accumulates_counters() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
     let t1 = t0() + Duration::seconds(60);
     r.complete_step(
         "fetch",
@@ -152,16 +155,15 @@ fn complete_step_marks_success_and_accumulates_counters() {
 #[test]
 fn complete_step_returns_not_found_for_missing_step() {
     let mut r = sample_run();
-    let err = r
-        .complete_step("missing", 10, 5, None, t0())
-        .unwrap_err();
+    let err = r.complete_step("missing", 10, 5, None, t0()).unwrap_err();
     assert!(matches!(err, PipelineError::StepNotFound(s) if s == "missing"));
 }
 
 #[test]
 fn fail_step_marks_failed_with_error_but_does_not_change_run_status() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
     let t1 = t0() + Duration::seconds(30);
     r.fail_step("fetch", "timeout", t1).expect("valid");
     let entry = r.steps.as_array().unwrap()[0].as_object().unwrap();
@@ -209,7 +211,8 @@ fn add_step_rejected_after_terminal() {
 #[test]
 fn complete_step_rejected_after_terminal() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
     r.complete_run(t0() + Duration::seconds(60)).expect("valid");
     let err = r
         .complete_step("fetch", 1, 1, None, t0() + Duration::seconds(120))
@@ -220,8 +223,10 @@ fn complete_step_rejected_after_terminal() {
 #[test]
 fn fail_step_rejected_after_terminal() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
-    r.fail_run("boom", t0() + Duration::seconds(60)).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
+    r.fail_run("boom", t0() + Duration::seconds(60))
+        .expect("valid");
     let err = r
         .fail_step("fetch", "late", t0() + Duration::seconds(120))
         .unwrap_err();
@@ -253,7 +258,11 @@ fn fail_run_rejects_error_message_over_2000_chars() {
     let long = "X".repeat(2001);
     let err = r.fail_run(&long, t0()).unwrap_err();
     assert_eq!(err, PipelineError::ErrorMessageTooLong { actual: 2001 });
-    assert_eq!(r.status, RunStatus::Running, "no mutation on validation failure");
+    assert_eq!(
+        r.status,
+        RunStatus::Running,
+        "no mutation on validation failure"
+    );
 }
 
 #[test]
@@ -268,7 +277,9 @@ fn fail_run_accepts_error_message_exactly_2000_chars() {
 fn fail_run_rejected_after_terminal() {
     let mut r = sample_run();
     r.complete_run(t0()).expect("valid");
-    let err = r.fail_run("late", t0() + Duration::seconds(60)).unwrap_err();
+    let err = r
+        .fail_run("late", t0() + Duration::seconds(60))
+        .unwrap_err();
     assert_eq!(err, PipelineError::AlreadyTerminal("success"));
 }
 
@@ -316,7 +327,8 @@ fn serde_roundtrip_running() {
 #[test]
 fn serde_roundtrip_after_terminal() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
     r.complete_step(
         "fetch",
         50,
@@ -344,7 +356,8 @@ fn add_step_handles_non_object_payload_by_starting_fresh() {
 #[test]
 fn complete_step_with_no_output_hash_does_not_mutate_output_hashes() {
     let mut r = sample_run();
-    r.add_step("fetch", json!({"order": 1}), t0()).expect("valid");
+    r.add_step("fetch", json!({"order": 1}), t0())
+        .expect("valid");
     let before = r.output_hashes.clone();
     r.complete_step("fetch", 5, 2, None, t0() + Duration::seconds(30))
         .expect("valid");

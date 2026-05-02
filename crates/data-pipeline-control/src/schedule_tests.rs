@@ -9,7 +9,9 @@ use shared_kernel::id::Id;
 use super::{PipelineError, PipelineSchedule};
 
 fn t0() -> chrono::DateTime<chrono::Utc> {
-    Utc.with_ymd_and_hms(2026, 5, 2, 3, 0, 0).single().expect("valid")
+    Utc.with_ymd_and_hms(2026, 5, 2, 3, 0, 0)
+        .single()
+        .expect("valid")
 }
 
 fn sample() -> PipelineSchedule {
@@ -212,7 +214,10 @@ fn acquire_lock_sets_fields_and_does_not_bump_version() {
     s.acquire_lock("worker-1", t1).expect("valid");
     assert_eq!(s.running_lock_acquired_at, Some(t1));
     assert_eq!(s.running_worker_id.as_deref(), Some("worker-1"));
-    assert_eq!(s.version, before_version, "lock metadata is not a domain change");
+    assert_eq!(
+        s.version, before_version,
+        "lock metadata is not a domain change"
+    );
     assert_eq!(s.updated_at, t1);
 }
 
@@ -238,7 +243,10 @@ fn acquire_lock_accepts_worker_id_exactly_50_chars() {
     let mut s = sample();
     let exactly = "X".repeat(50);
     s.acquire_lock(&exactly, t0()).expect("50 ok");
-    assert_eq!(s.running_worker_id.as_ref().map(|w| w.chars().count()), Some(50));
+    assert_eq!(
+        s.running_worker_id.as_ref().map(|w| w.chars().count()),
+        Some(50)
+    );
 }
 
 #[test]
@@ -270,7 +278,11 @@ fn update_config_replaces_value_and_bumps_version() {
     let mut s = sample();
     let by: Id<shared_kernel::id::UserMarker> = Id::new();
     let t1 = t0() + Duration::seconds(180);
-    s.update_config(json!({"sido_whitelist": ["11", "26"]}), Some(by.clone()), t1);
+    s.update_config(
+        json!({"sido_whitelist": ["11", "26"]}),
+        Some(by.clone()),
+        t1,
+    );
     assert_eq!(s.config, json!({"sido_whitelist": ["11", "26"]}));
     assert_eq!(s.version, 2);
     assert_eq!(s.updated_at, t1);
