@@ -35,15 +35,17 @@
 - `infrastructure/docker/.env.example` — DB 비밀번호 placeholder
 - `infrastructure/docker/README.md` — 기동·정지·접속 안내 (해요체)
 
-### Phase B-C: 마이그레이션 (8 파일)
-- `migrations/V001_01__core_tables.sql` — user, parcel, building, industrial_complex, manufacturer
-- `migrations/V001_02__listing_tables.sql` — listing, listing_photo, bookmark_listing, bookmark_external
-- `migrations/V001_03__insights_tables.sql` — search_history, analysis_report, notification
-- `migrations/V001_04__audit_pipeline_tables.sql` — audit_log, outbox_event, pipeline_schedule, pipeline_run
-- `migrations/V001_05__operations_tables.sql` — admin_action, business_verification_queue, listing_review_queue, listing_report, featured_content, system_alert
+### Phase B-C: 마이그레이션 (8 파일, RDS 18 테이블)
+- `migrations/V001_01__core_tables.sql` — user, listing, listing_photo *(spec § 5.1, 3 테이블)*
+- `migrations/V001_02__insights_tables.sql` — bookmark_listing, bookmark_external, search_history, analysis_report, notification *(spec § 5.2, 5 테이블)*
+- `migrations/V001_03__system_tables.sql` — audit_log, outbox_event *(spec § 5.3, 2 테이블)*
+- `migrations/V001_04__pipeline_tables.sql` — pipeline_schedule, pipeline_run *(spec § 5.4, 2 테이블)*
+- `migrations/V001_05__operations_tables.sql` — admin_action, business_verification_queue, listing_review_queue, listing_report, featured_content, system_alert *(spec § 5.5, 6 테이블)*
 - `migrations/V002_01__db_roles.sql` — gongzzang_app_writer/reader/audit_archiver
 - `migrations/V002_02__audit_immutable_trigger.sql` — UPDATE/DELETE 차단 트리거
 - `migrations/README.md` — 적용 순서 + 롤백 정책
+
+> **분류 근거 (spec § 4):** Parcel/Building/IndustrialComplex/Manufacturer는 *R2 정적*. RealTransaction/CourtAuction/Law/Regulation도 *R2 정적*. RDS는 18 테이블만.
 
 ### Phase D-E: shared-kernel crate (약 35 파일)
 - `crates/shared-kernel/Cargo.toml`
@@ -226,27 +228,41 @@ git commit -m "docs(migrations): document migration naming + forward-only policy
 
 ---
 
-## Task 4: V001_01 — Core 5 테이블 (user, parcel, building, industrial_complex, manufacturer)
+## Task 4: V001_01 — Core BC 3 테이블 (user, listing, listing_photo)
+
+> **분류 정정 (Plan 2a 초안 결함 → 수정).** 본 Task는 *spec § 5.1만* 다룬다. Parcel/Building/IndustrialComplex/Manufacturer는 spec § 4에 의해 *R2 정적*이므로 RDS 스키마에 들어가지 않는다.
 
 **Files:**
 - Create: `migrations/V001_01__core_tables.sql`
+- Create: `tests/migrations/test_v001_01.sh`
 
-**스펙 참조:** spec § 5.1 (5개 테이블), § 5.10 (인덱스)
+**스펙 참조:** `docs/superpowers/specs/2026-05-02-sub-project-2-db-core-domain-design.md` § 5.1 (lines 147–238). SQL은 spec에서 *그대로 복사*. plan 본 task에서 SQL을 재정의하지 않는다 (SSOT — spec이 정답).
 
 - [ ] **Step 1: 테스트 작성 — `tests/migrations/test_v001_01.sh`**
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-source .env
-sqlx database drop -y
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$SCRIPT_DIR"
+if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
+  set -a; source <(tr -d '\r' < .env); set +a
+fi
+sqlx database drop -y >/dev/null 2>&1 || true
 sqlx database create
 sqlx migrate run --source migrations
-psql "$DATABASE_URL" -t -c "select tablename from pg_tables where schemaname='public' order by tablename;" \
-  | grep -q '^\s*user$' || { echo "FAIL: user table missing"; exit 1; }
-psql "$DATABASE_URL" -t -c "select tablename from pg_tables where schemaname='public';" \
-  | grep -qE '^\s*(parcel|building|industrial_complex|manufacturer)$' || { echo "FAIL"; exit 1; }
-echo "PASS: core 5 tables exist"
+
+EXPECTED=("user" listing listing_photo)
+for t in "${EXPECTED[@]}"; do
+  if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_tables where schemaname='public' and tablename='$t';" | grep -q '^1$'; then
+    echo "FAIL: table '$t' missing" >&2; exit 1
+  fi
+done
+# Geometry: only listing has geom_point in Core BC (parcel/building geom moved to R2 PMTiles)
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from information_schema.columns where table_name='listing' and column_name='geom_point';" | grep -q '^1$'; then
+  echo "FAIL: listing.geom_point missing" >&2; exit 1
+fi
+echo "PASS: V001_01 Core BC 3 tables (user, listing, listing_photo)"
 ```
 
 - [ ] **Step 2: 테스트 실행 — 실패 확인**
@@ -256,345 +272,134 @@ bash tests/migrations/test_v001_01.sh
 ```
 Expected: FAIL (마이그레이션 파일 없음)
 
-- [ ] **Step 3: V001_01__core_tables.sql 작성** (≤450줄)
+- [ ] **Step 2: 테스트 실행 — 실패 확인**
+
+로컬에서 실행이 가능하면 `bash tests/migrations/test_v001_01.sh`. Docker/sqlx-cli 미설치 환경이면 정적 검증만 (`bash -n`).
+
+- [ ] **Step 3: V001_01__core_tables.sql 작성**
+
+spec § 5.1 (lines 147–238) 의 3개 `create table` 블록 (`"user"`, `listing`, `listing_photo`) + 모든 `create index` 라인을 순서대로 복사한다. 파일 머리에 1줄 주석:
 
 ```sql
--- user: Zitadel sub와 1:1, 사업자번호/중개사번호 verified_at으로 검증 상태 표현
-create table "user" (
-    id char(30) primary key,
-    zitadel_sub varchar(255) not null unique,
-    email varchar(255) not null unique,
-    name varchar(100) not null,
-    phone varchar(20),
-    business_number varchar(12),
-    business_verified_at timestamptz,
-    broker_license_number varchar(50),
-    broker_verified_at timestamptz,
-    roles text[] not null default '{}',
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    deleted_at timestamptz,
-    version bigint not null default 1
-);
-create index idx_user_zitadel_sub on "user"(zitadel_sub) where deleted_at is null;
-create index idx_user_business on "user"(business_number) where business_verified_at is not null;
-
-create table parcel (
-    pnu char(19) primary key,
-    sido_code char(2) not null,
-    sigungu_code char(5) not null,
-    eupmyeondong_code char(8) not null,
-    jibun_main int not null,
-    jibun_sub int not null default 0,
-    land_category varchar(20) not null,
-    area_m2 numeric(14,2) not null check (area_m2 > 0),
-    official_price_krw bigint check (official_price_krw is null or official_price_krw >= 0),
-    use_zone varchar(50),
-    use_district varchar(50),
-    geom geometry(MultiPolygon, 4326),
-    last_synced_at timestamptz not null default now(),
-    source_version varchar(50),
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_parcel_sigungu on parcel(sigungu_code);
-create index idx_parcel_geom on parcel using gist(geom);
-
-create table building (
-    id char(30) primary key,
-    pnu char(19) not null references parcel(pnu),
-    building_name varchar(200),
-    main_purpose_code varchar(10) not null,
-    structure_code varchar(10),
-    total_floor_area_m2 numeric(14,2) not null check (total_floor_area_m2 > 0),
-    ground_floors int not null default 0,
-    underground_floors int not null default 0,
-    height_m numeric(8,2),
-    use_approval_date date,
-    geom geometry(MultiPolygon, 4326),
-    last_synced_at timestamptz not null default now(),
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_building_pnu on building(pnu);
-create index idx_building_geom on building using gist(geom);
-
-create table industrial_complex (
-    id char(30) primary key,
-    name varchar(200) not null,
-    type varchar(30) not null check (type in ('national', 'general', 'urban_high_tech', 'agricultural_industrial')),
-    sigungu_code char(5) not null,
-    designated_at date,
-    total_area_m2 numeric(16,2) not null check (total_area_m2 > 0),
-    geom geometry(MultiPolygon, 4326),
-    last_synced_at timestamptz not null default now(),
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_industrial_complex_geom on industrial_complex using gist(geom);
-
-create table manufacturer (
-    id char(30) primary key,
-    business_number varchar(12) not null unique,
-    company_name varchar(200) not null,
-    industrial_complex_id char(30) references industrial_complex(id),
-    pnu char(19) references parcel(pnu),
-    ksic_code char(5),
-    employee_count int check (employee_count is null or employee_count >= 0),
-    annual_revenue_krw bigint check (annual_revenue_krw is null or annual_revenue_krw >= 0),
-    last_synced_at timestamptz not null default now(),
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_manufacturer_complex on manufacturer(industrial_complex_id);
-create index idx_manufacturer_pnu on manufacturer(pnu);
+-- V001_01: Core BC RDS 동적 — user, listing, listing_photo (spec § 5.1)
+-- Parcel/Building/IndustrialComplex/Manufacturer는 R2 정적 — 본 파일 범위 밖 (spec § 4)
 ```
 
-- [ ] **Step 4: 테스트 실행 — 통과 확인**
+복사 후 검증 체크리스트:
 
-```bash
-bash tests/migrations/test_v001_01.sh
-```
-Expected: `PASS: core 5 tables exist`
+- [ ] `"user"` quote 유지 (PostgreSQL 예약어)
+- [ ] `listing.transaction_type` CHECK이 `'sale','monthly_rent','jeonse'` 3종
+- [ ] `listing.parcel_pnu char(19) not null` (FK 아님 — Parcel은 R2)
+- [ ] `listing.geom_point geometry(Point, 4326)` SRID 명시
+- [ ] `listing_photo.r2_key text not null` (R2 객체 키)
+- [ ] 모든 인덱스 (총 9개): `user_business_number_idx`, `user_roles_idx` (gin), `user_active_idx`, `listing_status_idx`, `listing_listing_type_idx`, `listing_owner_idx`, `listing_geom_gist_idx`, `listing_created_idx`, `listing_pnu_idx`, `listing_photo_listing_order_idx` (10 — 다시 세기)
+
+- [ ] **Step 4: 테스트 실행 — 통과 확인** (또는 정적 검증)
+
+Expected: `PASS: V001_01 Core BC 3 tables (user, listing, listing_photo)`
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add migrations/V001_01__core_tables.sql tests/migrations/test_v001_01.sh
-git commit -m "feat(db): V001_01 — core 5 tables (user, parcel, building, industrial_complex, manufacturer)"
+git commit -m "feat(db): V001_01 — Core BC 3 tables (user, listing, listing_photo) per spec § 5.1"
 ```
 
 ---
 
-## Task 5: V001_02 — Listing 4 테이블
+## Task 5: V001_02 — Insights BC 5 테이블
 
 **Files:**
-- Create: `migrations/V001_02__listing_tables.sql`
-- Modify: `tests/migrations/test_v001_01.sh` → `test_v001.sh` (모든 테이블 검증)
+- Create: `migrations/V001_02__insights_tables.sql`
+- Create: `tests/migrations/test_v001_02.sh`
 
-- [ ] **Step 1: 테스트 갱신** — listing/listing_photo/bookmark_listing/bookmark_external 4개 검증 추가
+**스펙 참조:** spec § 5.2 (lines 239–321). 5개 테이블: `bookmark_listing`, `bookmark_external`, `search_history`, `analysis_report`, `notification`.
 
-- [ ] **Step 2: 실행 — 실패 확인**
+핵심 패턴 (spec 인용):
+- `bookmark_listing` — 매물 FK (composite PK `(user_id, listing_id)`)
+- `bookmark_external` — polymorphic (target_type ∈ {parcel, building, industrial_complex, manufacturer, real_transaction, court_auction}, target_key는 R2 식별자)
+- `search_history` — 24시간 retention (운영 시 cron으로 정리)
+- `analysis_report` — payload jsonb + 7일 expires_at
+- `notification` — read_at IS NULL 부분 인덱스
 
-- [ ] **Step 3: V001_02 작성**
+- [ ] **Step 1-2:** 테스트 작성 + 실패 확인 (Task 4 패턴 따름, EXPECTED 배열 5개 테이블로 갱신)
+
+- [ ] **Step 3:** spec § 5.2 의 모든 `create table` + `create index` 그대로 복사. 파일 머리 주석:
 
 ```sql
-create table listing (
-    id char(30) primary key,
-    owner_id char(30) not null references "user"(id),
-    parcel_pnu char(19) not null references parcel(pnu),
-    building_id char(30) references building(id),
-    listing_type varchar(30) not null check (listing_type in ('factory','warehouse','knowledge_industry_center','land','complex')),
-    transaction_type varchar(20) not null check (transaction_type in ('sale','monthly_rent','jeonse')),
-    price_krw bigint not null check (price_krw > 0),
-    deposit_krw bigint check (deposit_krw is null or deposit_krw >= 0),
-    monthly_rent_krw bigint check (monthly_rent_krw is null or monthly_rent_krw >= 0),
-    area_m2 numeric(12,2) not null check (area_m2 > 0),
-    title varchar(200) not null,
-    description text,
-    contact_name varchar(100) not null,
-    contact_phone varchar(20) not null,
-    status varchar(20) not null default 'draft' check (status in ('draft','pending_review','active','sold','expired','rejected')),
-    rejected_reason text,
-    reviewed_by char(30) references "user"(id),
-    reviewed_at timestamptz,
-    expires_at timestamptz,
-    geom_point geometry(Point, 4326),
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    deleted_at timestamptz,
-    version bigint not null default 1,
-    constraint chk_transaction_fields check (
-        (transaction_type = 'sale' and deposit_krw is null and monthly_rent_krw is null)
-        or (transaction_type = 'monthly_rent' and deposit_krw is not null and monthly_rent_krw is not null)
-        or (transaction_type = 'jeonse' and deposit_krw is not null and monthly_rent_krw is null)
-    )
-);
-create index idx_listing_owner on listing(owner_id) where deleted_at is null;
-create index idx_listing_pnu on listing(parcel_pnu);
-create index idx_listing_status on listing(status) where deleted_at is null;
-create index idx_listing_geom on listing using gist(geom_point);
-
-create table listing_photo (
-    id char(30) primary key,
-    listing_id char(30) not null references listing(id) on delete cascade,
-    r2_key varchar(500) not null,
-    sort_order int not null default 0,
-    width int,
-    height int,
-    bytes bigint,
-    created_at timestamptz not null default now()
-);
-create index idx_listing_photo_listing on listing_photo(listing_id, sort_order);
-
-create table bookmark_listing (
-    user_id char(30) not null references "user"(id),
-    listing_id char(30) not null references listing(id) on delete cascade,
-    note text,
-    created_at timestamptz not null default now(),
-    primary key (user_id, listing_id)
-);
-
-create table bookmark_external (
-    id char(30) primary key,
-    user_id char(30) not null references "user"(id),
-    target_type varchar(30) not null check (target_type in ('parcel','building','industrial_complex','manufacturer','real_transaction','court_auction')),
-    target_key varchar(100) not null,
-    note text,
-    created_at timestamptz not null default now(),
-    unique (user_id, target_type, target_key)
-);
-create index idx_bookmark_external_user on bookmark_external(user_id);
+-- V001_02: Insights BC RDS 동적 — bookmark_listing, bookmark_external, search_history, analysis_report, notification (spec § 5.2)
 ```
 
-- [ ] **Step 4: 실행 — 통과**
+- [ ] **Step 4: 통과** — `PASS: V001_02 Insights BC 5 tables`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add migrations/V001_02__listing_tables.sql tests/migrations/test_v001.sh
-git commit -m "feat(db): V001_02 — listing + photo + bookmarks (transaction_type CHECK constraint)"
+git commit -m "feat(db): V001_02 — Insights BC 5 tables (bookmarks, search_history, analysis_report, notification) per spec § 5.2"
 ```
 
 ---
 
-## Task 6: V001_03 — Insights 3 테이블 (search_history, analysis_report, notification)
+## Task 6: V001_03 — System 2 테이블 (audit_log, outbox_event)
 
 **Files:**
-- Create: `migrations/V001_03__insights_tables.sql`
+- Create: `migrations/V001_03__system_tables.sql`
+- Create: `tests/migrations/test_v001_03.sh`
 
-- [ ] **Step 1-2:** 테스트 갱신 + 실패 확인
+**스펙 참조:** spec § 5.3 (lines 322–367). 2개 테이블: `audit_log`, `outbox_event`.
 
-- [ ] **Step 3: SQL 작성**
+핵심 패턴 (spec 인용):
+- `audit_log` — append-only (V002에서 writer의 UPDATE/DELETE 박탈 트리거 추가)
+- `outbox_event` — `published_at IS NULL` 부분 인덱스 (배포 큐 폴링)
+- `audit_log` 1년 RDS retention + 6년 R2 archive (spec § 5.3 retention 절)
+
+- [ ] **Step 1-2:** 테스트 작성 + 실패 확인 (EXPECTED 2개 테이블)
+
+- [ ] **Step 3:** spec § 5.3 의 SQL 그대로 복사. 파일 머리 주석:
 
 ```sql
-create table search_history (
-    id char(30) primary key,
-    user_id char(30) references "user"(id),
-    session_id varchar(100),
-    query_type varchar(30) not null check (query_type in ('keyword','geo_bbox','filter')),
-    query_payload jsonb not null,
-    result_count int not null check (result_count >= 0),
-    created_at timestamptz not null default now()
-);
-create index idx_search_history_user on search_history(user_id, created_at desc) where user_id is not null;
-create index idx_search_history_payload on search_history using gin(query_payload);
-
-create table analysis_report (
-    id char(30) primary key,
-    user_id char(30) not null references "user"(id),
-    report_type varchar(50) not null check (report_type in ('parcel_summary','building_summary','complex_summary','manufacturer_summary')),
-    target_key varchar(100) not null,
-    payload jsonb not null,
-    generated_at timestamptz not null default now(),
-    expires_at timestamptz,
-    created_at timestamptz not null default now()
-);
-create index idx_analysis_report_user on analysis_report(user_id, generated_at desc);
-
-create table notification (
-    id char(30) primary key,
-    recipient_id char(30) not null references "user"(id),
-    type varchar(50) not null,
-    title varchar(200) not null,
-    body text not null,
-    payload jsonb,
-    read_at timestamptz,
-    created_at timestamptz not null default now()
-);
-create index idx_notification_recipient on notification(recipient_id, created_at desc) where read_at is null;
+-- V001_03: System (감사·이벤트 분배) — audit_log, outbox_event (spec § 5.3)
+-- audit_log immutable 트리거는 V002에서 부착됨
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [ ] **Step 4: 통과** — `PASS: V001_03 System 2 tables`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(db): V001_03 — insights tables (search_history, analysis_report, notification)"
+git commit -m "feat(db): V001_03 — System 2 tables (audit_log append-only, outbox_event) per spec § 5.3"
 ```
 
 ---
 
-## Task 7: V001_04 — Audit + Outbox + Pipeline 4 테이블
+## Task 7: V001_04 — Pipeline 2 테이블 (pipeline_schedule, pipeline_run)
 
 **Files:**
-- Create: `migrations/V001_04__audit_pipeline_tables.sql`
+- Create: `migrations/V001_04__pipeline_tables.sql`
+- Create: `tests/migrations/test_v001_04.sh`
 
-- [ ] **Step 1-2:** 테스트 갱신 + 실패 확인
+**스펙 참조:** spec § 5.4 (lines 368–443). 2개 테이블: `pipeline_schedule`, `pipeline_run`.
 
-- [ ] **Step 3: SQL 작성**
+핵심 패턴 (spec 인용):
+- `pipeline_schedule` — cron 표현식 + Asia/Seoul TZ 기본값 + optimistic locking (`version`)
+- `pipeline_run.steps jsonb` — 단계별 진행 시각화 (어드민 9 화면 중 *파이프라인 모니터*가 이 컬럼을 노드 그래프로 렌더)
+- `pipeline_run.status` — `queued/running/succeeded/failed/cancelled` (5종)
+- `pipeline_run` 부분 인덱스: `status in ('queued','running')` (활성 큐 폴링)
+
+- [ ] **Step 1-2:** 테스트 작성 + 실패 확인 (EXPECTED 2개)
+
+- [ ] **Step 3:** spec § 5.4 의 SQL 그대로 복사. 파일 머리 주석:
 
 ```sql
-create table audit_log (
-    id char(30) primary key,
-    actor_user_id char(30) references "user"(id),
-    actor_role varchar(50),
-    action varchar(100) not null,
-    resource_type varchar(50) not null,
-    resource_id varchar(100) not null,
-    before_state jsonb,
-    after_state jsonb,
-    ip_address inet,
-    user_agent text,
-    request_id varchar(100),
-    occurred_at timestamptz not null default now()
-);
-create index idx_audit_log_actor on audit_log(actor_user_id, occurred_at desc);
-create index idx_audit_log_resource on audit_log(resource_type, resource_id, occurred_at desc);
-create index idx_audit_log_occurred on audit_log(occurred_at);
-
-create table outbox_event (
-    id char(30) primary key,
-    aggregate_type varchar(50) not null,
-    aggregate_id varchar(100) not null,
-    event_type varchar(100) not null,
-    payload jsonb not null,
-    occurred_at timestamptz not null default now(),
-    published_at timestamptz,
-    attempt_count int not null default 0,
-    last_error text
-);
-create index idx_outbox_unpublished on outbox_event(occurred_at) where published_at is null;
-create index idx_outbox_aggregate on outbox_event(aggregate_type, aggregate_id);
-
-create table pipeline_schedule (
-    id char(30) primary key,
-    name varchar(100) not null unique,
-    description text,
-    cron_expr varchar(50) not null,
-    timezone varchar(50) not null default 'Asia/Seoul',
-    enabled boolean not null default true,
-    last_run_id char(30),
-    next_run_at timestamptz,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-
-create table pipeline_run (
-    id char(30) primary key,
-    schedule_id char(30) not null references pipeline_schedule(id),
-    status varchar(20) not null check (status in ('queued','running','succeeded','failed','cancelled')),
-    started_at timestamptz,
-    finished_at timestamptz,
-    steps jsonb not null default '[]',
-    error_message text,
-    created_at timestamptz not null default now()
-);
-create index idx_pipeline_run_schedule on pipeline_run(schedule_id, created_at desc);
-create index idx_pipeline_run_status on pipeline_run(status) where status in ('queued','running');
+-- V001_04: Data Pipeline 제어 — pipeline_schedule (cron), pipeline_run (steps JSONB) (spec § 5.4)
 ```
 
-- [ ] **Step 4: 통과**
+- [ ] **Step 4: 통과** — `PASS: V001_04 Pipeline 2 tables`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(db): V001_04 — audit_log + outbox_event + pipeline schedule/run (steps JSONB)"
+git commit -m "feat(db): V001_04 — Pipeline 2 tables (schedule cron + run with steps JSONB) per spec § 5.4"
 ```
 
 ---
@@ -603,99 +408,34 @@ git commit -m "feat(db): V001_04 — audit_log + outbox_event + pipeline schedul
 
 **Files:**
 - Create: `migrations/V001_05__operations_tables.sql`
+- Create: `tests/migrations/test_v001_05.sh`
 
-- [ ] **Step 1-2:** 테스트 갱신 + 실패 확인
+**스펙 참조:** spec § 5.5 (lines 444–570). 6개 테이블: `admin_action`, `business_verification_queue`, `listing_review_queue`, `listing_report`, `featured_content`, `system_alert`.
 
-- [ ] **Step 3: SQL 작성** (admin_action / business_verification_queue / listing_review_queue / listing_report / featured_content / system_alert)
+핵심 패턴 (spec 인용):
+- `admin_action` — 어드민이 한 모든 행위 기록 (audit_log와 별개 — 운영 컨텍스트)
+- `business_verification_queue` — 사업자 등록 대기 큐 (NICE/공정위 검증 후 status 갱신)
+- `listing_review_queue` — 매물 사전 심사 큐 (assigned_to FK)
+- `listing_report` — 사용자 신고 (reason_code enum + status 4종)
+- `featured_content` — 추천 매물/산단/지역 (시작/종료 시각 + check (ends_at > starts_at))
+- `system_alert` — 운영 알림 (severity 3종, resolved_at IS NULL 부분 인덱스)
+
+> **참고:** `featured_content.content_type` enum에 `'industrial_complex'`이 포함되지만, *string 값*일 뿐 FK 아님 (IndustrialComplex는 R2 정적). target_id는 R2 식별자.
+
+- [ ] **Step 1-2:** 테스트 작성 + 실패 확인 (EXPECTED 6개)
+
+- [ ] **Step 3:** spec § 5.5 의 SQL 그대로 복사. 파일 머리 주석:
 
 ```sql
-create table admin_action (
-    id char(30) primary key,
-    admin_user_id char(30) not null references "user"(id),
-    action_type varchar(50) not null,
-    target_type varchar(50) not null,
-    target_id varchar(100) not null,
-    reason text,
-    payload jsonb,
-    occurred_at timestamptz not null default now()
-);
-create index idx_admin_action_admin on admin_action(admin_user_id, occurred_at desc);
-
-create table business_verification_queue (
-    id char(30) primary key,
-    user_id char(30) not null references "user"(id),
-    business_number varchar(12) not null,
-    submitted_documents jsonb not null,
-    status varchar(20) not null default 'pending' check (status in ('pending','approved','rejected')),
-    reviewed_by char(30) references "user"(id),
-    reviewed_at timestamptz,
-    rejected_reason text,
-    submitted_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_bvq_status on business_verification_queue(status, submitted_at);
-
-create table listing_review_queue (
-    id char(30) primary key,
-    listing_id char(30) not null references listing(id),
-    status varchar(20) not null default 'pending' check (status in ('pending','approved','rejected')),
-    assigned_to char(30) references "user"(id),
-    reviewed_by char(30) references "user"(id),
-    reviewed_at timestamptz,
-    rejected_reason text,
-    submitted_at timestamptz not null default now(),
-    version bigint not null default 1
-);
-create index idx_lrq_status on listing_review_queue(status, submitted_at);
-
-create table listing_report (
-    id char(30) primary key,
-    listing_id char(30) not null references listing(id),
-    reporter_id char(30) references "user"(id),
-    reason_code varchar(50) not null,
-    description text,
-    status varchar(20) not null default 'pending' check (status in ('pending','reviewed','resolved','dismissed')),
-    resolved_by char(30) references "user"(id),
-    resolved_at timestamptz,
-    created_at timestamptz not null default now()
-);
-create index idx_listing_report_status on listing_report(status, created_at desc);
-
-create table featured_content (
-    id char(30) primary key,
-    content_type varchar(30) not null check (content_type in ('listing','industrial_complex','region')),
-    target_id varchar(100) not null,
-    title varchar(200) not null,
-    priority int not null default 0,
-    starts_at timestamptz not null,
-    ends_at timestamptz not null,
-    created_by char(30) not null references "user"(id),
-    created_at timestamptz not null default now(),
-    check (ends_at > starts_at)
-);
-create index idx_featured_active on featured_content(starts_at, ends_at) where ends_at > now();
-
-create table system_alert (
-    id char(30) primary key,
-    severity varchar(20) not null check (severity in ('info','warning','critical')),
-    source varchar(50) not null,
-    title varchar(200) not null,
-    body text not null,
-    payload jsonb,
-    acknowledged_by char(30) references "user"(id),
-    acknowledged_at timestamptz,
-    resolved_at timestamptz,
-    created_at timestamptz not null default now()
-);
-create index idx_system_alert_open on system_alert(severity, created_at desc) where resolved_at is null;
+-- V001_05: Admin/Operations — admin_action, queues, reports, featured, alerts (spec § 5.5)
 ```
 
-- [ ] **Step 4: 통과** — `tests/migrations/test_v001.sh` 18 테이블 모두 검증
+- [ ] **Step 4: 통과** — `PASS: V001_05 Operations 6 tables`
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(db): V001_05 — operations 6 tables (admin_action, queues, report, featured, alert)"
+git commit -m "feat(db): V001_05 — Operations 6 tables (admin actions, queues, reports, featured, alerts) per spec § 5.5"
 ```
 
 ---
@@ -703,35 +443,56 @@ git commit -m "feat(db): V001_05 — operations 6 tables (admin_action, queues, 
 ## Task 9: V001 통합 검증 + ER 다이어그램
 
 **Files:**
-- Create: `tests/migrations/test_v001_full.sh` (18 테이블 + 인덱스 50+ 검증)
+- Create: `tests/migrations/test_v001_full.sh` (18 테이블 검증)
 - Create: `docs/database/er-diagram-v001.md` (Mermaid ERD)
+
+**스펙 참조:** spec § 5.6 (line 571) — 합계 18 테이블 명시.
 
 - [ ] **Step 1: 통합 테스트 작성**
 
 ```bash
-EXPECTED_TABLES=("user" parcel building industrial_complex manufacturer listing listing_photo \
-  bookmark_listing bookmark_external search_history analysis_report notification audit_log \
-  outbox_event pipeline_schedule pipeline_run admin_action business_verification_queue \
-  listing_review_queue listing_report featured_content system_alert)
-# count == 22? 18 도메인 테이블 + 4 — wait, 다시 세기. 정답: 18.
-# user, parcel, building, industrial_complex, manufacturer = 5
-# listing, listing_photo, bookmark_listing, bookmark_external = 4
-# search_history, analysis_report, notification = 3
-# audit_log, outbox_event, pipeline_schedule, pipeline_run = 4
-# admin_action, business_verification_queue, listing_review_queue, listing_report, featured_content, system_alert = 6
-# 합계: 5+4+3+4+6 = 22? spec § 5는 18 — 차이 검증.
+#!/usr/bin/env bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$SCRIPT_DIR"
+if [ -z "${DATABASE_URL:-}" ] && [ -f .env ]; then
+  set -a; source <(tr -d '\r' < .env); set +a
+fi
+sqlx database drop -y >/dev/null 2>&1 || true
+sqlx database create
+sqlx migrate run --source migrations
+
+EXPECTED_18=( "user" listing listing_photo \
+  bookmark_listing bookmark_external search_history analysis_report notification \
+  audit_log outbox_event \
+  pipeline_schedule pipeline_run \
+  admin_action business_verification_queue listing_review_queue listing_report featured_content system_alert )
+
+for t in "${EXPECTED_18[@]}"; do
+  if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_tables where schemaname='public' and tablename='$t';" | grep -q '^1$'; then
+    echo "FAIL: missing $t" >&2; exit 1
+  fi
+done
+
+# 추가 검증: 정확히 18 테이블 (sqlx 시스템 테이블 제외)
+COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_tables where schemaname='public' and tablename not like '\\_sqlx%';")
+if [ "$COUNT" != "18" ]; then
+  echo "FAIL: expected exactly 18 public tables (excluding _sqlx_*), got $COUNT" >&2
+  exit 1
+fi
+
+echo "PASS: V001 18 tables (spec § 5.6)"
 ```
 
-> **검증 책무:** 이 task 시작 시 implementer는 spec § 5의 *정확한 테이블 목록*을 다시 확인하고, 22 vs 18 차이를 명확히 한다. 차이가 있으면 인간에게 escalate.
+- [ ] **Step 2: ER 다이어그램** — `docs/database/er-diagram-v001.md` (Mermaid `erDiagram`, ≤300줄). 18 RDS 테이블만. R2 정적 (Parcel/Building/IndustrialComplex/Manufacturer/RealTransaction/CourtAuction/Law)은 *별도 점선 박스*로 표시 + "stored in R2 (see § 4)" 주석.
 
-- [ ] **Step 2: ER 다이어그램** (Mermaid `erDiagram`, ≤300줄)
-
-- [ ] **Step 3: 통과**
+- [ ] **Step 3: 통과** — `bash tests/migrations/test_v001_full.sh` (또는 정적 검증)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "test(db): V001 full migration test (table count + key indexes)"
+git add tests/migrations/test_v001_full.sh docs/database/er-diagram-v001.md
+git commit -m "test(db): V001 full validation — exactly 18 RDS tables per spec § 5.6 + ER diagram"
 ```
 
 ---
