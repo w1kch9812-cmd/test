@@ -11,8 +11,14 @@ pub fn now_utc() -> DateTime<Utc> {
 }
 
 /// `UTC` → `KST`(+09:00) 변환. 사용자 노출 전용.
+///
+/// # Panics
+///
+/// 이론상 `panic`하지 않아요. `9 * 3600 = 32400`초는 `FixedOffset`의
+/// 허용 범위 ±86400 안의 상수이므로 `east_opt`가 항상 `Some`을 반환해요.
+/// `expect`는 향후 `chrono` API 변경에 대비한 방어 코드일 뿐이에요.
 #[must_use]
-#[allow(clippy::expect_used)] // 9*3600 = 32400 is a const within FixedOffset's ±86400 range; expect is provably infallible
+#[allow(clippy::expect_used)] // see # Panics: provably infallible per FixedOffset bounds
 pub fn to_kst(t: DateTime<Utc>) -> DateTime<FixedOffset> {
     let kst = FixedOffset::east_opt(9 * 3600).expect("9*3600 is a valid FixedOffset");
     t.with_timezone(&kst)
