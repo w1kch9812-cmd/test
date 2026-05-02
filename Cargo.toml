@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/shared-kernel",
     "crates/domain/core/user",
+    "crates/db",
     # services/* 와 다른 crates/* 는 sub-project 2+에서 추가됨.
 ]
 

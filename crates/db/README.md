@@ -1,27 +1,26 @@
 # crates/db
 
-PostgreSQL + PostGIS 어댑터 (Repository 구현).
+`SQLx` `Postgres` `Repository` 구현체에요.
 
 ## 책임
-- SQLx 클라이언트 팩토리 (connection pool)
-- 도메인 Repository trait 구현 (각 Aggregate별)
-- PostGIS 공간 쿼리 헬퍼
-- Optimistic Locking (version 컬럼)
-- raw_response JSONB 저장
-- 마이그레이션은 `db/migration/` (sqlx migrate)
+
+- 도메인 BC가 정의한 `*Repository` trait의 `Postgres` 구현이에요.
+- `Optimistic Locking` (`version` 컬럼) 강제해요.
+- `SQL` 에러는 `RepoError::Database`로 매핑 (메시지만 — 정보 누설 방지).
+
+## 범위
+
+- **Walking Skeleton**: `PgUserRepository`만 (`find_by_id` + `save`).
+- **Sub-project 5**: `Listing`, `ListingPhoto` 등 모든 `Aggregate` `Repository` 추가.
 
 ## 의존
-- `crates/domain/*` (trait만)
-- `crates/api-types` (에러 타입)
-- `crates/observability`
-- `sqlx` (postgres + macros + chrono + uuid)
-- `postgis` crate (geometry 타입)
+
+- `crates/domain/core/user` (`UserRepository` trait)
+- `crates/shared-kernel` (`Id`, `Email` 등 값 객체)
+- `sqlx` (`postgres` + `chrono`)
 
 ## 정책
-- compile-time SQL 검증 (`sqlx::query!` / `sqlx::query_as!`)
-- 모든 geometry 컬럼 SRID 명시 (4326)
-- Optimistic locking 위반 = 명시적 에러 (`OptimisticLockConflict`)
-- 트랜잭션 = Repository 메서드 단위
-- Cross-aggregate transaction 금지 (도메인 이벤트 + Outbox)
 
-→ ADR-0004, → @docs/conventions/sql.md
+- 현재는 `sqlx::query` 런타임 `API` 사용 (compile-time `DB` 연결 불필요).
+- Sub-project 5에서 `sqlx prepare` 캐시 도입 후 `query!` 매크로로 전환해요.
+- `unwrap`/`expect` 금지 — 모든 에러는 `RepoError`로 매핑해요.

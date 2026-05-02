@@ -1,0 +1,21 @@
+[package]
+name = "db"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 SQLx Repository 구현체 (Walking Skeleton + sub-project 5)"
+
+[dependencies]
+shared-kernel = { path = "../shared-kernel", version = "0.1.0" }
+user-domain = { path = "../domain/core/user", version = "0.1.0" }
+sqlx = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -14,4 +14,5 @@ exclude-files = [
     "target/**",
     "**/tests/**",
     "_archive/**",
+    "crates/db/**",          # SQL Repository — tested via integration (Walking Skeleton T4)
 ]
