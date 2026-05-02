@@ -1,0 +1,17 @@
+# cargo-tarpaulin coverage config — sub-project 2a
+# Run: cargo tarpaulin --workspace --out Lcov --fail-under 90
+#
+# Targets shared-kernel (Plan 2a). Future sub-projects (2b/2c) extend this
+# config when they add domain crates.
+
+[default]
+features = ""
+skip-clean = true
+timeout = "120s"
+out = ["Html", "Lcov"]
+fail-under = 90
+exclude-files = [
+    "target/**",
+    "**/tests/**",
+    "_archive/**",
+]
