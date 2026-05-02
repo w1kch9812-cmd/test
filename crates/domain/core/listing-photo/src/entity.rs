@@ -66,7 +66,7 @@ impl FromStr for PhotoContentType {
 /// spec § 5.1 `listing_photo` 테이블 12 필드 1:1 매핑이에요.
 /// `version` 컬럼은 *없어요* — 사진은 append/soft-delete 흐름이라
 /// 동시 관리자 수정 충돌이 없어요.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListingPhoto {
     /// `lph_<26 ULID>` 형식 ID.
     pub id: Id<ListingPhotoMarker>,
@@ -107,9 +107,9 @@ impl ListingPhoto {
     pub fn try_new(
         id: Id<ListingPhotoMarker>,
         listing_id: Id<ListingMarker>,
-        r2_key: String,
-        thumbnail_r2_key: Option<String>,
-        caption: Option<String>,
+        r2_key: &str,
+        thumbnail_r2_key: Option<&str>,
+        caption: Option<&str>,
         display_order: i32,
         width_px: Option<i32>,
         height_px: Option<i32>,
@@ -117,8 +117,8 @@ impl ListingPhoto {
         content_type: PhotoContentType,
         now: DateTime<Utc>,
     ) -> Result<Self, ListingPhotoError> {
-        let r2_key = r2_key.trim().to_owned();
-        if r2_key.is_empty() {
+        let r2_key_trimmed = r2_key.trim();
+        if r2_key_trimmed.is_empty() {
             return Err(ListingPhotoError::EmptyR2Key);
         }
         if display_order < 0 {
@@ -126,7 +126,7 @@ impl ListingPhoto {
                 actual: display_order,
             });
         }
-        if let Some(ref c) = caption {
+        if let Some(c) = caption {
             let len = c.chars().count();
             if len > 200 {
                 return Err(ListingPhotoError::CaptionTooLong { actual: len });
@@ -136,9 +136,9 @@ impl ListingPhoto {
         Ok(Self {
             id,
             listing_id,
-            r2_key,
-            thumbnail_r2_key,
-            caption,
+            r2_key: r2_key_trimmed.to_owned(),
+            thumbnail_r2_key: thumbnail_r2_key.map(str::to_owned),
+            caption: caption.map(str::to_owned),
             display_order,
             width_px,
             height_px,

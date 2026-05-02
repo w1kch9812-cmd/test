@@ -31,18 +31,17 @@ fn sample_listing_id() -> Id<ListingMarker> {
     Id::<ListingMarker>::new()
 }
 
-fn sample_r2_key() -> String {
-    "listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1.jpg".to_owned()
-}
+const SAMPLE_R2_KEY: &str = "listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1.jpg";
+const SAMPLE_THUMB_KEY: &str = "listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg";
 
 /// 모든 `Some` 필드 + `Jpeg`로 happy path 빌드.
 fn build_full() -> ListingPhoto {
     ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
-        Some("listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg".to_owned()),
-        Some("정문에서 본 외관".to_owned()),
+        SAMPLE_R2_KEY,
+        Some(SAMPLE_THUMB_KEY),
+        Some("정문에서 본 외관"),
         0,
         Some(1920),
         Some(1080),
@@ -58,11 +57,8 @@ fn build_full() -> ListingPhoto {
 #[test]
 fn try_new_full_fields_succeeds() {
     let photo = build_full();
-    assert_eq!(photo.r2_key, sample_r2_key());
-    assert_eq!(
-        photo.thumbnail_r2_key.as_deref(),
-        Some("listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg")
-    );
+    assert_eq!(photo.r2_key, SAMPLE_R2_KEY);
+    assert_eq!(photo.thumbnail_r2_key.as_deref(), Some(SAMPLE_THUMB_KEY));
     assert_eq!(photo.caption.as_deref(), Some("정문에서 본 외관"));
     assert_eq!(photo.display_order, 0);
     assert_eq!(photo.width_px, Some(1920));
@@ -78,7 +74,7 @@ fn try_new_all_optionals_none_succeeds() {
     let photo = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
+        SAMPLE_R2_KEY,
         None,
         None,
         5,
@@ -107,7 +103,7 @@ fn try_new_all_three_content_types_succeed() {
         let photo = ListingPhoto::try_new(
             sample_id(),
             sample_listing_id(),
-            sample_r2_key(),
+            SAMPLE_R2_KEY,
             None,
             None,
             0,
@@ -127,7 +123,7 @@ fn try_new_zero_display_order_accepted() {
     let photo = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
+        SAMPLE_R2_KEY,
         None,
         None,
         0,
@@ -147,9 +143,9 @@ fn try_new_caption_exactly_200_chars_accepted() {
     let photo = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
+        SAMPLE_R2_KEY,
         None,
-        Some(caption.clone()),
+        Some(caption.as_str()),
         0,
         None,
         None,
@@ -168,7 +164,7 @@ fn try_new_empty_r2_key_rejected() {
     let err = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        String::new(),
+        "",
         None,
         None,
         0,
@@ -187,7 +183,7 @@ fn try_new_whitespace_r2_key_rejected_via_trim() {
     let err = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        "   \t\n  ".to_owned(),
+        "   \t\n  ",
         None,
         None,
         0,
@@ -206,7 +202,7 @@ fn try_new_negative_display_order_rejected() {
     let err = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
+        SAMPLE_R2_KEY,
         None,
         None,
         -1,
@@ -226,9 +222,9 @@ fn try_new_caption_201_chars_rejected() {
     let err = ListingPhoto::try_new(
         sample_id(),
         sample_listing_id(),
-        sample_r2_key(),
+        SAMPLE_R2_KEY,
         None,
-        Some(caption),
+        Some(caption.as_str()),
         0,
         None,
         None,
