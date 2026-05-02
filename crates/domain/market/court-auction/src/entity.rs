@@ -113,10 +113,7 @@ mod tests {
             fetched_at: Utc::now(),
         };
         assert_eq!(ca.status, CourtAuctionStatus::Sold);
-        assert_eq!(
-            ca.sold_price,
-            Some(MoneyKrw::try_new(820_000_000).unwrap())
-        );
+        assert_eq!(ca.sold_price, Some(MoneyKrw::try_new(820_000_000).unwrap()));
         assert_eq!(ca.sold_at, NaiveDate::from_ymd_opt(2024, 10, 20));
     }
 

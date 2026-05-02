@@ -22,7 +22,10 @@ mod tests {
 
     #[test]
     fn not_found_displays() {
-        assert_eq!(format!("{}", ReaderError::NotFound), "court auction not found");
+        assert_eq!(
+            format!("{}", ReaderError::NotFound),
+            "court auction not found"
+        );
     }
 
     #[test]
