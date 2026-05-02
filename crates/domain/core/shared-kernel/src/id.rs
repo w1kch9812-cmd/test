@@ -68,6 +68,15 @@ impl IdPrefix for NotificationMarker {
     const PREFIX: &'static str = "ntf";
 }
 
+/// `AuditLog` aggregate ID marker.
+///
+/// Append-only — V002 immutable trigger blocks `UPDATE`/`DELETE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AuditLogMarker;
+impl IdPrefix for AuditLogMarker {
+    const PREFIX: &'static str = "aud";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -227,6 +236,13 @@ mod tests {
         let id: Id<NotificationMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("ntf_"));
+    }
+
+    #[test]
+    fn new_audit_log_id_has_aud_prefix() {
+        let id: Id<AuditLogMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("aud_"));
     }
 
     #[test]

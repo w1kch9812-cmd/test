@@ -15,6 +15,7 @@ members = [
     "crates/domain/insights/search-history",
     "crates/domain/insights/analysis-report",
     "crates/domain/insights/notification",
+    "crates/domain/audit/audit-log",
     "crates/db",
     "services/api",
     # 다른 services/* 와 crates/* 는 sub-project 2+에서 추가됨.
