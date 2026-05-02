@@ -9,7 +9,7 @@ members = [
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "UNLICENSED"
 authors = ["공짱 <perfectoryinc@gmail.com>"]
 publish = false
