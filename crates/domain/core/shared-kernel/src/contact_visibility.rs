@@ -26,9 +26,7 @@ pub enum ContactVisibility {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ContactVisibilityError {
     /// 미지원 값.
-    #[error(
-        "unknown contact_visibility: '{0}' (expected: public, login_required, verified_only)"
-    )]
+    #[error("unknown contact_visibility: '{0}' (expected: public, login_required, verified_only)")]
     Unknown(String),
 }
 
