@@ -6,7 +6,7 @@ type: project
 
 ## 무거운 결정 (사실상 못 바꿈)
 
-- **백엔드**: Rust 1.83+ + Axum + SQLx + Tokio
+- **백엔드**: Rust 1.85+ + Axum + SQLx + Tokio
 - **프론트엔드**: Next.js 16 + React 19 + TypeScript 5.7 strict
 - **DB**: PostgreSQL 17 + PostGIS
 - **지도**: Naver Maps SDK

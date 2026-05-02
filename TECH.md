@@ -12,7 +12,7 @@
 
 | 영역 | 선택 | 결정 근거 |
 |------|------|---------|
-| 백엔드 언어 | **Rust 1.83+** | → [docs/adr/0001-language-rust-ts.md](./docs/adr/0001-language-rust-ts.md) |
+| 백엔드 언어 | **Rust 1.85+** | → [docs/adr/0001-language-rust-ts.md](./docs/adr/0001-language-rust-ts.md) |
 | 프론트엔드 | **Next.js 16 + React 19 + TypeScript 5.7** | → [docs/adr/0003-frontend-nextjs-react19.md](./docs/adr/0003-frontend-nextjs-react19.md) |
 | DB | **PostgreSQL 17 + PostGIS** | → [docs/adr/0004-db-postgres-postgis.md](./docs/adr/0004-db-postgres-postgis.md) |
 | HTTP 서버 | **Axum** + tokio | ADR-0001 |

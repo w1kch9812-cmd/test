@@ -35,7 +35,7 @@
 pnpm install
 
 # Rust toolchain 설치 (한 번만)
-rustup install 1.83.0 && rustup default 1.83.0
+rustup install 1.85.0 && rustup default 1.85.0
 
 # 로컬 환경 변수
 cp .env.example .env  # 값 채우기

@@ -1,4 +1,6 @@
 [toolchain]
-channel = "1.83.0"
+# 1.85 minimum: edition2024 stable 지원 — wit-bindgen 0.57+ 등 transitive deps가 요구
+# (Sub-project 1 ADR-0001 amendment 2026-05-02 — 1.83 → 1.85, sub-project 2 CI에서 발견)
+channel = "1.85.0"
 components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
 profile = "default"

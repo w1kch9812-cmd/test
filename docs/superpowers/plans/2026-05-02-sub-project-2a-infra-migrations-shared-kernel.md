@@ -12,7 +12,7 @@
 5. **Phase E (Task 12-25):** 값 객체 14개 *각각 TDD* (실패 테스트 → 실행 → 최소 구현 → 통과 → 커밋)
 6. **Phase F (Task 26):** 최종 검증 (`cargo check/clippy/deny` + `cargo test` 90%+ 커버리지 + `sqlx migrate run` E2E)
 
-**Tech Stack:** PostgreSQL 17, PostGIS 3.5, Valkey 8 (Redis 호환), SQLx 0.8 (offline mode), Rust 1.83, Cargo workspace, ULID, geo-types 0.7, cargo-tarpaulin (커버리지).
+**Tech Stack:** PostgreSQL 17, PostGIS 3.5, Valkey 8 (Redis 호환), SQLx 0.8 (offline mode), Rust 1.85, Cargo workspace, ULID, geo-types 0.7, cargo-tarpaulin (커버리지).
 
 **TDD 원칙 (모든 값 객체 task에 적용):**
 1. *실패하는 테스트 먼저* — 행동 명세를 테스트로 표현
