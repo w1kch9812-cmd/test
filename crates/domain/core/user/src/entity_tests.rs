@@ -820,7 +820,10 @@ fn is_business_verified_reflects_timestamp() {
     let mut user = sample_user(now);
     assert!(!user.is_business_verified());
 
-    user.verify_business(sample_business_number(), now + chrono::Duration::seconds(60));
+    user.verify_business(
+        sample_business_number(),
+        now + chrono::Duration::seconds(60),
+    );
 
     assert!(user.is_business_verified());
 }
