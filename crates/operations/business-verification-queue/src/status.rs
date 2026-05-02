@@ -5,10 +5,10 @@
 //!
 //! 상태 전이 규칙:
 //!
-//! - `Pending` → `Approved` (approve)
-//! - `Pending` → `Rejected` (reject, note required)
-//! - `Pending` → `NeedsMoreInfo` (request_more_info, note required)
-//! - `NeedsMoreInfo` → `Pending` (resubmit, 사용자 재제출)
+//! - `Pending` → `Approved` (`approve`)
+//! - `Pending` → `Rejected` (`reject`, note required)
+//! - `Pending` → `NeedsMoreInfo` (`request_more_info`, note required)
+//! - `NeedsMoreInfo` → `Pending` (`resubmit`, 사용자 재제출)
 //! - `Approved` / `Rejected` 는 terminal.
 
 use std::fmt;
