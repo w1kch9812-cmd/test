@@ -28,6 +28,7 @@ const MAX_LOG_URL_LEN: usize = 500;
 /// 13 필드 — spec § 5.4 `pipeline_run` 매핑.
 ///
 /// ## `steps` JSONB
+///
 /// 단계별 진행 + 결과 (UI 시각화용). 각 step 은 `{order, name, status, started_at, ...}` 형식.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PipelineRun {
@@ -67,6 +68,7 @@ impl PipelineRun {
     /// # Errors
     ///
     /// - `correlation_id` 빈/30자 초과 → [`PipelineError::EmptyCorrelationId`] / [`PipelineError::CorrelationIdTooLong`].
+    #[allow(clippy::too_many_arguments)] // 의도된 풀 생성자 (clippy.toml threshold = 5)
     pub fn try_new_started(
         id: Id<PipelineRunMarker>,
         schedule_id: Id<PipelineScheduleMarker>,
@@ -136,6 +138,7 @@ impl PipelineRun {
     ///
     /// - 해당 `step_name` 없음 → [`PipelineError::StepNotFound`].
     /// - 이미 터미널 상태 → [`PipelineError::AlreadyTerminal`].
+    #[allow(clippy::too_many_arguments)] // 의도된 — step 이름 + 누적 카운터 + hash + 시각
     pub fn complete_step(
         &mut self,
         step_name: &str,
@@ -274,7 +277,7 @@ impl PipelineRun {
         Ok(())
     }
 
-    fn ensure_running(&self) -> Result<(), PipelineError> {
+    const fn ensure_running(&self) -> Result<(), PipelineError> {
         if self.status.is_terminal() {
             return Err(PipelineError::AlreadyTerminal(self.status.as_str()));
         }
@@ -318,9 +321,8 @@ fn update_step<F>(
 where
     F: FnOnce(&mut serde_json::Map<String, serde_json::Value>),
 {
-    let arr = match steps {
-        serde_json::Value::Array(arr) => arr,
-        _ => return Err(PipelineError::StepNotFound(step_name.to_owned())),
+    let serde_json::Value::Array(arr) = steps else {
+        return Err(PipelineError::StepNotFound(step_name.to_owned()));
     };
     for entry in arr.iter_mut().rev() {
         if let serde_json::Value::Object(map) = entry {

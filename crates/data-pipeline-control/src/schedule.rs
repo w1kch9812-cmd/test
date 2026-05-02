@@ -22,11 +22,13 @@ const MAX_WORKER_ID_LEN: usize = 50;
 /// 13 필드 — spec § 5.4 `pipeline_schedule` 매핑.
 ///
 /// ## 락 (running)
+///
 /// 워커 시작 시 [`PipelineSchedule::acquire_lock`] → `running_lock_acquired_at`
-/// + `running_worker_id` 설정. 종료 시 [`PipelineSchedule::release_lock`] 으로 clear.
+/// 와 `running_worker_id` 를 설정. 종료 시 [`PipelineSchedule::release_lock`] 으로 clear.
 /// Postgres advisory lock 의 *보조* 메타데이터 — 어드민 UI 에서 stuck 워커 감지용.
 ///
 /// ## Optimistic locking
+///
 /// `version` 은 어드민이 내용 (cron / config / enabled) 을 변경할 때만 bump.
 /// 락/실행 메타데이터 (`acquire_lock`, `release_lock`, `record_run`) 는 bump 안 해요.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
