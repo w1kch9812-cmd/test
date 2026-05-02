@@ -1,0 +1,18 @@
+[package]
+name = "operations-meta-domain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 Operations Meta domain — FeaturedContent (홈페이지 추천/광고) + SystemAlert (시스템 알림) 두 Aggregate 합본 (Operations BC, RDS 동적, no OCC)"
+
+[dependencies]
+shared-kernel = { path = "../../domain/core/shared-kernel", version = "0.1.0" }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[lints]
+workspace = true

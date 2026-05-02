@@ -21,6 +21,7 @@ members = [
     "crates/operations/business-verification-queue",
     "crates/operations/listing-review-queue",
     "crates/operations/listing-report",
+    "crates/operations/operations-meta",
     "crates/data-pipeline-control",
     "crates/db",
     "services/api",

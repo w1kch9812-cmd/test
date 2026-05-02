@@ -150,6 +150,31 @@ impl IdPrefix for ListingReportMarker {
     const PREFIX: &'static str = "lrp";
 }
 
+/// `FeaturedContent` aggregate ID marker.
+///
+/// 홈페이지 추천/광고/스폰서 노출 콘텐츠 (Operations BC, RDS 동적).
+///
+/// **Prefix discrepancy note** — Spec § 5.5 `featured_content.id` inline comment
+/// 는 `fc_...` (2-char prefix) 로 적혀 있지만, 본 프로젝트 ID 불변식은 *3-char prefix*
+/// + `_` + 26-char ULID = 30자 고정이에요. Plan 2c T17 에서 명시적으로 `fea` (3-char)
+/// 사용하도록 결정했어요. Spec FU 11 에서 reconcile 예정.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FeaturedContentMarker;
+impl IdPrefix for FeaturedContentMarker {
+    const PREFIX: &'static str = "fea";
+}
+
+/// `SystemAlert` aggregate ID marker.
+///
+/// Spec § 5.5 `system_alert.id` inline comment (`sal_...`). 시스템 알림 — severity
+/// 4단계 (`info`/`warning`/`error`/`critical`) + acknowledge / resolve 워크플로우.
+/// (no OCC — alerts rarely conflict.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SystemAlertMarker;
+impl IdPrefix for SystemAlertMarker {
+    const PREFIX: &'static str = "sal";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -365,6 +390,20 @@ mod tests {
         let id: Id<ListingReportMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("lrp_"));
+    }
+
+    #[test]
+    fn new_featured_content_id_has_fea_prefix() {
+        let id: Id<FeaturedContentMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("fea_"));
+    }
+
+    #[test]
+    fn new_system_alert_id_has_sal_prefix() {
+        let id: Id<SystemAlertMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("sal_"));
     }
 
     #[test]
