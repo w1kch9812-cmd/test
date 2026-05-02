@@ -111,7 +111,7 @@ impl AnalysisReport {
         Ok(trimmed)
     }
 
-    fn validate_target_pnus(pnus: &[Pnu]) -> Result<(), AnalysisReportError> {
+    const fn validate_target_pnus(pnus: &[Pnu]) -> Result<(), AnalysisReportError> {
         if pnus.is_empty() {
             return Err(AnalysisReportError::EmptyTargetPnus);
         }
