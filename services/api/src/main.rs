@@ -16,10 +16,10 @@ use std::env;
 use std::sync::Arc;
 
 use axum::{
-    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{get, post},
+    Json, Router,
 };
 use db::user::PgUserRepository;
 use serde::{Deserialize, Serialize};
@@ -113,11 +113,12 @@ async fn create_user(
     )
     .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid user: {e}")))?;
 
-    state
-        .user_repo
-        .save(&user)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("save failed: {e}")))?;
+    state.user_repo.save(&user).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("save failed: {e}"),
+        )
+    })?;
 
     Ok((StatusCode::CREATED, Json(user.into())))
 }
@@ -134,7 +135,12 @@ async fn get_user(
         .user_repo
         .find_by_id(&id)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("find failed: {e}")))?
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("find failed: {e}"),
+            )
+        })?
         .ok_or((StatusCode::NOT_FOUND, "user not found".into()))?;
 
     Ok(Json(user.into()))
