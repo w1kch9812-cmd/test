@@ -79,17 +79,17 @@ fi
 # Insert a test row first (as connected user, who is NOT audit_archiver)
 psql "$DATABASE_URL" -c "insert into audit_log(id, action, resource_kind, resource_id, correlation_id) values('aud_test12345678901234567890ABC', 'test', 'test', 'r1', 'corr_test123456789');"
 
-# Try UPDATE — should fail with "is immutable"
+# Try UPDATE — should fail with SQLSTATE 45000 (i18n-stable; message text may change)
 UPDATE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "update audit_log set action='hacked' where id='aud_test12345678901234567890ABC';" 2>&1 || true)
-if ! echo "$UPDATE_OUTPUT" | grep -q "is immutable"; then
-  echo "FAIL: UPDATE on audit_log did not raise 'is immutable' exception. Output: $UPDATE_OUTPUT" >&2
+if ! echo "$UPDATE_OUTPUT" | grep -qE 'SQLSTATE 45000|is immutable'; then
+  echo "FAIL: UPDATE on audit_log did not raise SQLSTATE 45000. Output: $UPDATE_OUTPUT" >&2
   exit 1
 fi
 
 # Try DELETE — should also fail
 DELETE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "delete from audit_log where id='aud_test12345678901234567890ABC';" 2>&1 || true)
-if ! echo "$DELETE_OUTPUT" | grep -q "is immutable"; then
-  echo "FAIL: DELETE on audit_log did not raise 'is immutable' exception. Output: $DELETE_OUTPUT" >&2
+if ! echo "$DELETE_OUTPUT" | grep -qE 'SQLSTATE 45000|is immutable'; then
+  echo "FAIL: DELETE on audit_log did not raise SQLSTATE 45000. Output: $DELETE_OUTPUT" >&2
   exit 1
 fi
 
