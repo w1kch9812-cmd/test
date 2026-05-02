@@ -9,6 +9,7 @@
 pub mod area;
 pub mod broker_license;
 pub mod business_number;
+pub mod email;
 pub mod id;
 pub mod money;
 pub mod pnu;
