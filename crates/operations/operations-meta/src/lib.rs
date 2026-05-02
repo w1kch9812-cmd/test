@@ -9,7 +9,7 @@
 //! ## ID prefix 주의
 //!
 //! - `FeaturedContent` — Spec inline 은 `fc_` (2-char) 로 적혀있지만 본 프로젝트
-//!   30자 ID 불변식 (3-char prefix + `_` + 26-char ULID) 충족 위해 **`fea`** 사용.
+//!   30자 ID 불변식 (3-char prefix 와 `_` 와 26-char ULID 합) 충족 위해 `fea` 사용.
 //!   Plan 2c T17 결정. Spec FU 11 에서 reconcile 예정.
 //! - `SystemAlert` — Spec inline `sal_` 와 일치.
 //!

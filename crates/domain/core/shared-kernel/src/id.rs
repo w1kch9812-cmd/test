@@ -155,9 +155,9 @@ impl IdPrefix for ListingReportMarker {
 /// 홈페이지 추천/광고/스폰서 노출 콘텐츠 (Operations BC, RDS 동적).
 ///
 /// **Prefix discrepancy note** — Spec § 5.5 `featured_content.id` inline comment
-/// 는 `fc_...` (2-char prefix) 로 적혀 있지만, 본 프로젝트 ID 불변식은 *3-char prefix*
-/// + `_` + 26-char ULID = 30자 고정이에요. Plan 2c T17 에서 명시적으로 `fea` (3-char)
-/// 사용하도록 결정했어요. Spec FU 11 에서 reconcile 예정.
+/// 는 `fc_...` (2-char prefix) 로 적혀 있지만, 본 프로젝트 ID 불변식은 3-char prefix
+/// 와 `_` 와 26-char ULID 합 30자 고정이에요. Plan 2c T17 에서 명시적으로 `fea`
+/// (3-char) 사용하도록 결정했어요. Spec FU 11 에서 reconcile 예정.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FeaturedContentMarker;
 impl IdPrefix for FeaturedContentMarker {
