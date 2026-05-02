@@ -1,6 +1,6 @@
 ---
-name: 프로젝트 진행 현황 (2026-05-02)
-description: Sub-project 1, 2a, 2a-fixup, Walking Skeleton, 2b-i 완료 상태 + 누적 산출물
+name: 프로젝트 진행 현황 (2026-05-03)
+description: Sub-project 1 + 2 (Core + Market + Insights + Operations + Pipeline + Audit + Outbox) 완료, Sub-project 3 진입 대기
 type: project
 ---
 
@@ -13,7 +13,7 @@ type: project
 ### Sub-project 2a: DB + shared-kernel (완료, 31 task)
 - 18 RDS 테이블 (V001 5분할) + V002 (3 role + audit immutable trigger)
 - shared-kernel crate, 14 값 객체 (Pnu, Money, Email, BusinessNumber + checksum 등)
-- 167 단위 테스트, tarpaulin ≥90% CI 게이트
+- tarpaulin ≥90% CI 게이트
 
 ### Sub-project 2a-fixup: spec 결함 5건 보강 (완료)
 - V003_01: listing transaction_type cross-field CHECK
@@ -26,8 +26,7 @@ type: project
 - User Aggregate minimal (`crates/domain/core/user`)
 - PgUserRepository (SQLx, `crates/db`)
 - Axum HTTP server (`services/api`, 3 endpoint)
-- CI smoke test workflow (`.github/workflows/walking-skeleton.yml`) — POST /users + GET /users/:id round-trip
-- 로컬 시연 검증 (psql 직접 + DB invariant 강제 동작)
+- CI smoke test workflow — POST /users + GET /users/:id round-trip
 
 ### Sub-project 2b-i: Core BC RDS Aggregates (완료, T1-T13)
 - 워크스페이스 재구조 (shared-kernel → `crates/domain/core/`)
@@ -35,63 +34,86 @@ type: project
 - User Aggregate full (18 필드, 13 도메인 메서드, soft-delete)
 - Listing Aggregate full (20 필드, 9 도메인 메서드, 상태 머신, V003_01 invariant)
 - ListingPhoto Aggregate (12 필드, soft-delete + reorder)
-- Repository trait 3개 (User/Listing/ListingPhoto), 모두 port-only (구현은 sub-project 5)
-- 348 단위 테스트 누적
+- Repository trait 3개 (User/Listing/ListingPhoto), 모두 port-only
 
 ### Sub-project 2b-ii: Core BC R2 정적 Reader (완료, T1-T8)
-- shared-kernel 추가: LandUseType (지목 9), Zoning (용도지역 5), PolygonSrid, BoundingBox, AdminDivision composite
-- 4 R2 정적 BC 신규 crate:
-  - **Parcel** (10 필드 + ParcelMarker 마커 projection)
-  - **Building** (12 필드 + BuildingPurposeCode 10 + BuildingStructureCode 8)
-  - **IndustrialComplex** (8 필드 + IndustrialComplexKind 4)
-  - **Manufacturer** (9 필드 + EmployeeCountBand 6)
+- shared-kernel 추가: LandUseType, Zoning, PolygonSrid, BoundingBox, AdminDivision composite
+- 4 R2 정적 BC 신규 crate: Parcel, Building, IndustrialComplex, Manufacturer
 - Reader trait 4개, 모두 read-only port (구현은 sub-project 4)
-- 466 단위 테스트 누적, 99% 커버리지
+
+### Sub-project 2c: Market + Insights + Audit + Pipeline + Operations BC (완료, 14 task — T1-T18)
+- T1 RealTransaction Aggregate (Market BC)
+- T2 CourtAuction Aggregate (Market BC)
+- T3 Bookmark Aggregate (Insights BC)
+- T4 SearchHistory Aggregate (Insights BC)
+- T5 AnalysisReport Aggregate (Insights BC)
+- T6 Notification Aggregate (Insights BC)
+- T7 shared-kernel `DomainEvent` trait + ULID id 표준 (4 tests 추가)
+- T8 AuditLog (Audit BC, immutable)
+- T9-T10 OutboxEvent + Outbox 패턴 (Audit BC)
+- T11-T12 PipelineSchedule + PipelineRun + steps JSONB (data-pipeline-control)
+- T13 AdminAction (Operations BC)
+- T14 BusinessVerificationQueue (Operations BC, optimistic locking)
+- T15 ListingReviewQueue (Operations BC, optimistic locking)
+- T16 ListingReport (Operations BC)
+- T17 OperationsMeta (FeaturedContent + AlertHistory, 단일 crate)
+- T18 통합 검증 + memory 갱신 (현재)
+
+**누적**: 14 신규 crate (Market 2 + Insights 4 + Audit 2 + Pipeline 1 + Operations 5),
+1017 단위 테스트, Rust 1.88, 24 workspace member.
 
 ## 워크스페이스 구조 (현재)
 
 ```
 crates/domain/core/
-├── shared-kernel/         24 모듈 (값 객체 ALL — 14 + 6 from 2b-i + 4 from 2b-ii)
+├── shared-kernel/         24 모듈 + DomainEvent trait (값 객체 ALL, 298 tests)
 ├── user/                  User Aggregate (RDS 동적, 46 tests)
 ├── listing/               Listing Aggregate (RDS 동적, 46 tests)
 ├── listing-photo/         ListingPhoto Aggregate (RDS 동적, 20 tests)
 ├── parcel/                Parcel Reader (R2 정적, 10 tests)
-├── building/              Building Reader (R2 정적, 28 tests with enums)
+├── building/              Building Reader (R2 정적, 28 tests)
 ├── industrial-complex/    IndustrialComplex Reader (R2 정적, 18 tests)
 └── manufacturer/          Manufacturer Reader (R2 정적, 18 tests)
-crates/db/                 PgUserRepository (Walking Skeleton, 사용자만)
+crates/domain/market/
+├── real-transaction/      RealTransaction Aggregate (16 tests)
+└── court-auction/         CourtAuction Aggregate (26 tests)
+crates/domain/insights/
+├── bookmark/              Bookmark Aggregate (20 tests)
+├── search-history/        SearchHistory Aggregate (17 tests)
+├── analysis-report/       AnalysisReport Aggregate (21 tests)
+└── notification/          Notification Aggregate (16 tests)
+crates/domain/audit/
+├── audit-log/             AuditLog (35 tests, immutable)
+└── outbox-event/          OutboxEvent (25 tests, Outbox 패턴)
+crates/data-pipeline-control/  PipelineSchedule + PipelineRun (84 tests)
+crates/operations/
+├── admin-action/          AdminAction (33 tests)
+├── business-verification-queue/  BVQ (49 tests, optimistic locking)
+├── listing-review-queue/  LRQ (46 tests, optimistic locking)
+├── listing-report/        ListingReport (59 tests)
+└── operations-meta/       FeaturedContent + AlertHistory (86 tests)
+crates/db/                 PgUserRepository (Walking Skeleton)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
 
-총 **10 crate, 466 단위 테스트, 99% 커버리지.**
+총 **24 crate, 1017 단위 테스트, Rust 1.88.**
 
 ## CI 상태
 
-3 workflow 모두 그린 (commit `b64741b` 시점):
+3 workflow 모두 그린 (commit `51647a5` 시점):
 - CI (7 jobs): lint, clippy, fmt, cargo-check, cargo-deny, tarpaulin ≥90%, secret scan
 - db-migrations: PG17+PostGIS 컨테이너 + V001-V003 마이그 + immutable trigger 검증
 - walking-skeleton: 실제 HTTP API 빌드 + 백그라운드 실행 + curl POST/GET round-trip
 
 ## Rust 툴체인
 
-1.88.0 (1.83 → 1.85 → 1.88 — 두 번 amendment, 모두 transitive deps 강제)
-- Sub-project 2a Task 26: 1.83 → 1.85 (edition2024)
-- WS T2: 1.85 → 1.88 (sqlx 0.8 + rustls)
+1.88.0 (변동 없음).
 
-## 다음 단계 (Sub-project 2 잔여)
+## 다음 단계
 
-### Plan 2c: Market BC + Insights BC + Operations BC + Pipeline + 도메인 이벤트
-- RealTransaction, CourtAuction (Market BC)
-- Bookmark, SearchHistory, Notification (Insights BC) — Aggregate
-- Admin Operations 6개 Aggregate
-- Pipeline schedule + run + steps JSONB
-- Outbox event publisher trait
-
-### 이후 Sub-projects
-- 3: Auth (Zitadel JWT 미들웨어)
-- 4: 외부 API 통합 (V-World, 법제처, data.go.kr)
-- 5: Repository SQLx 구현 (3개 BC 모두)
+- **Sub-project 3 (Auth)**: Zitadel JWT 미들웨어 (Axum tower) + User Aggregate 연결
+- **Sub-project 4 (외부 API)**: Reader trait 구현체 (V-World, 법제처, data.go.kr)
+- **Sub-project 5 (Repository SQLx 구현)**: 도메인 → DB 통합 (3개 BC 모두)
 - 6: Frontend (Next.js)
 - 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry)
 - 8: IaC (Pulumi RDS/R2/ECS)
@@ -102,6 +124,9 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 1. BusinessNumber NTS 체크섬 외부 검증 (실제 사업자번호 표본)
 2. BusinessNumber D₃D₄ 사업자 유형 코드 검증
 3. KsicCode 대분류 letter A-U 강제 (KSIC 11차 추적)
+4. **Spec FU 9** — `analysis_report.updated_at` 컬럼 추가 마이그 V003_04 (도메인 코드는 이미 반영, 스키마만 후속)
+5. **Spec FU 10** — `outbox_event` prefix 표기 일관화 (plan body 표기 통일)
+6. **Spec FU 11** — `featured_content` prefix `fc` → `fea` 표기 일관화 (spec § 5.5 inline)
 
 ## 환경 알려진 한계
 
