@@ -26,10 +26,10 @@ for t in "${EXPECTED_18[@]}"; do
   fi
 done
 
-# Exactly 18 public tables (excluding sqlx system tables)
-COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_tables where schemaname='public' and tablename not like '\\_sqlx%';")
+# Exactly 18 public tables (excluding sqlx + PostGIS system tables)
+COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_tables where schemaname='public' and tablename not like '\\_sqlx%' and tablename not in ('spatial_ref_sys');")
 if [ "$COUNT" != "18" ]; then
-  echo "FAIL: expected exactly 18 RDS tables (excl _sqlx_*), got $COUNT" >&2
+  echo "FAIL: expected exactly 18 RDS tables (excl _sqlx_*, spatial_ref_sys), got $COUNT" >&2
   echo "All public tables:" >&2
   psql "$DATABASE_URL" -c "select tablename from pg_tables where schemaname='public' order by tablename;" >&2
   exit 1
