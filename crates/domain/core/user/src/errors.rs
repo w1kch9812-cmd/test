@@ -26,4 +26,13 @@ pub enum UserError {
         /// 실제 길이.
         actual: usize,
     },
+    /// `phone_kr_hash` 형식 오류 (64-char hex 아님).
+    #[error("phone_kr_hash must be 64-char SHA-256 hex string")]
+    InvalidPhoneHash,
+    /// `business_verified_at` `Some`인데 `business_number` `None`.
+    #[error("business_verified_at requires business_number to be Some")]
+    BusinessVerificationInconsistent,
+    /// `broker_verified_at` `Some`인데 `broker_license_number` `None`.
+    #[error("broker_verified_at requires broker_license_number to be Some")]
+    BrokerVerificationInconsistent,
 }

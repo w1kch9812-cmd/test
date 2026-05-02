@@ -84,14 +84,27 @@ impl UserRepository for PgUserRepository {
             }
         };
 
+        // T8 expanded `User` to 18 fields. Walking Skeleton SELECT only fetches
+        // the original 8 — remaining fields default to `None`/empty until the
+        // db layer is expanded in a future task.
         Ok(Some(User {
             id: id_typed,
             zitadel_sub,
             email,
+            phone_kr_hash: None,
             display_name,
             user_kind,
+            business_number: None,
+            business_verified_at: None,
+            broker_license_number: None,
+            broker_verified_at: None,
+            roles: Vec::new(),
+            nice_verified_at: None,
+            marketing_consent_at: None,
             created_at,
             updated_at,
+            last_login_at: None,
+            deleted_at: None,
             version,
         }))
     }
