@@ -141,7 +141,7 @@ async fn get_user(
                 format!("find failed: {e}"),
             )
         })?
-        .ok_or((StatusCode::NOT_FOUND, "user not found".into()))?;
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "user not found".into()))?;
 
     Ok(Json(user.into()))
 }
