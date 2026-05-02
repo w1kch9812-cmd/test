@@ -6,6 +6,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
+use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::geometry::PointSrid;
 // `shared_kernel::id::ListingMarker`는 `Id<_>`용 phantom marker.
 // 이 모듈의 `ListingMarker` projection과 이름이 겹치므로 `ListingIdMarker`로 별명 부여.
@@ -75,19 +76,6 @@ pub struct ListingMarker {
     pub listing_type: ListingType,
     /// 거래 유형.
     pub transaction_type: TransactionType,
-}
-
-/// 지도 영역 (`WGS84` 좌표).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BoundingBox {
-    /// 최소 경도.
-    pub min_lng: f64,
-    /// 최소 위도.
-    pub min_lat: f64,
-    /// 최대 경도.
-    pub max_lng: f64,
-    /// 최대 위도.
-    pub max_lat: f64,
 }
 
 /// `Repository` 에러.

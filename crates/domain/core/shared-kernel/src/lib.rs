@@ -9,6 +9,7 @@
 pub mod address;
 pub mod admin_division;
 pub mod area;
+pub mod bounding_box;
 pub mod broker_license;
 pub mod business_number;
 pub mod contact_visibility;
