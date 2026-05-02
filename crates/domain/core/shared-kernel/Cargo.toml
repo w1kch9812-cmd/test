@@ -14,5 +14,8 @@ thiserror = { workspace = true }
 geo-types = { workspace = true }
 regex = { workspace = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [lints]
 workspace = true
