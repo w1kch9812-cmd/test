@@ -118,6 +118,8 @@ impl User {
     ///
     /// `display_name` 빈 → [`UserError::EmptyDisplayName`]. 100자 초과 → [`UserError::DisplayNameTooLong`].
     /// `zitadel_sub` 빈 → [`UserError::EmptyZitadelSub`]. 255자 초과 → [`UserError::ZitadelSubTooLong`].
+    // 6 args (>5 default) — Walking Skeleton 호환 시그니처라 의도적.
+    #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         id: Id<UserMarker>,
         zitadel_sub: &str,
