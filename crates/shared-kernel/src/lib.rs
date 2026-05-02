@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod area;
 pub mod id;
 pub mod money;
 pub mod pnu;
