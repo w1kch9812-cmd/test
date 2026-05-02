@@ -185,10 +185,7 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `Rejected`가 아니면 [`ListingError::InvalidTransition`].
-    pub const fn revise_after_rejection(
-        &mut self,
-        at: DateTime<Utc>,
-    ) -> Result<(), ListingError> {
+    pub const fn revise_after_rejection(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Draft, at)
     }
 
