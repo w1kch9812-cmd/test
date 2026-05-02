@@ -61,6 +61,13 @@ impl IdPrefix for AnalysisReportMarker {
     const PREFIX: &'static str = "rpt";
 }
 
+/// `Notification` aggregate ID marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NotificationMarker;
+impl IdPrefix for NotificationMarker {
+    const PREFIX: &'static str = "ntf";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -213,6 +220,13 @@ mod tests {
         let id: Id<AnalysisReportMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("rpt_"));
+    }
+
+    #[test]
+    fn new_notification_id_has_ntf_prefix() {
+        let id: Id<NotificationMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("ntf_"));
     }
 
     #[test]
