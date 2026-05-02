@@ -284,7 +284,7 @@ impl User {
     ///
     /// `version`은 일부러 bump *안* 함 — 로그인은 빈번한 갱신이며 동시성 충돌
     /// 검사 대상이 아니에요. `updated_at`만 갱신.
-    pub fn record_login(&mut self, at: DateTime<Utc>) {
+    pub const fn record_login(&mut self, at: DateTime<Utc>) {
         self.last_login_at = Some(at);
         self.updated_at = at;
     }
@@ -341,7 +341,7 @@ impl User {
     }
 
     /// 내부 헬퍼: `version` bump + `updated_at` 갱신.
-    fn bump_version(&mut self, at: DateTime<Utc>) {
+    const fn bump_version(&mut self, at: DateTime<Utc>) {
         self.version += 1;
         self.updated_at = at;
     }
