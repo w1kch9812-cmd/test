@@ -1,0 +1,21 @@
+[package]
+name = "building-domain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 Building domain (Core BC, R2 정적 — Reader trait only)"
+
+[dependencies]
+shared-kernel = { path = "../shared-kernel", version = "0.1.0" }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+geo-types = { workspace = true }
+
+[lints]
+workspace = true
