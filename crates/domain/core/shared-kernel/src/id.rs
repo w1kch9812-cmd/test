@@ -77,6 +77,18 @@ impl IdPrefix for AuditLogMarker {
     const PREFIX: &'static str = "aud";
 }
 
+/// `OutboxEvent` aggregate ID marker.
+///
+/// Outbox pattern — `DomainEvent` 가 application layer 에서 `OutboxEvent` 로 wrap 되어
+/// 같은 트랜잭션에 INSERT 됩니다. Publisher 워커 (sub-project 4) 가 미발행 row 를 fetch
+/// 후 외부 시스템에 발행해요. PREFIX 는 spec § 5.3 `outbox_event.id` inline comment
+/// (`evt_...`) 를 따릅니다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OutboxEventMarker;
+impl IdPrefix for OutboxEventMarker {
+    const PREFIX: &'static str = "evt";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -243,6 +255,13 @@ mod tests {
         let id: Id<AuditLogMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("aud_"));
+    }
+
+    #[test]
+    fn new_outbox_event_id_has_evt_prefix() {
+        let id: Id<OutboxEventMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("evt_"));
     }
 
     #[test]

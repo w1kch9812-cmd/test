@@ -1,0 +1,18 @@
+[package]
+name = "outbox-event-domain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 OutboxEvent domain (System BC, 도메인 이벤트 publisher 패턴)"
+
+[dependencies]
+shared-kernel = { path = "../../core/shared-kernel", version = "0.1.0" }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[lints]
+workspace = true
