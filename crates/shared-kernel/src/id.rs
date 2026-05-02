@@ -109,11 +109,33 @@ impl<P: IdPrefix> Id<P> {
     pub fn as_str(&self) -> &str {
         &self.inner
     }
+
+    /// 소유권을 포함한 내부 String을 반환해요.
+    ///
+    /// DB layer에서 owned 문자열이 필요할 때 사용해요.
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.inner
+    }
 }
 
 impl<P: IdPrefix> Default for Id<P> {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl<P: IdPrefix> std::fmt::Display for Id<P> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.inner)
+    }
+}
+
+impl<P: IdPrefix> std::str::FromStr for Id<P> {
+    type Err = IdError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from_str(s)
     }
 }
 
@@ -173,5 +195,30 @@ mod tests {
         assert_eq!(raw.len(), 30);
         let err = Id::<UserMarker>::try_from_str(raw).unwrap_err();
         assert!(matches!(err, IdError::InvalidUlid));
+    }
+
+    #[test]
+    fn parse_no_delimiter_fails() {
+        // Length=30, prefix-like start, but no '_' anywhere.
+        let raw = "usrXX01HXY3NK0Z9F6S1B2C3D4E5F";
+        assert_eq!(raw.len(), 30);
+        let err = Id::<UserMarker>::try_from_str(raw).unwrap_err();
+        assert!(matches!(err, IdError::MissingDelimiter));
+    }
+
+    #[test]
+    fn display_renders_inner() {
+        use std::str::FromStr;
+        let raw = "usr_01HXY3NK0Z9F6S1B2C3D4E5F6G";
+        let id = Id::<UserMarker>::from_str(raw).expect("valid");
+        assert_eq!(format!("{id}"), raw);
+    }
+
+    #[test]
+    fn into_inner_yields_owned_string() {
+        let raw = "usr_01HXY3NK0Z9F6S1B2C3D4E5F6G";
+        let id = Id::<UserMarker>::try_from_str(raw).expect("valid");
+        let owned: String = id.into_inner();
+        assert_eq!(owned, raw);
     }
 }

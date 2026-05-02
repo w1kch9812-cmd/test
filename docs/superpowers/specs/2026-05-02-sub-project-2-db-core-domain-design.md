@@ -217,7 +217,7 @@ create index listing_pnu_idx on listing(parcel_pnu);
 
 ```sql
 create table listing_photo (
-    id char(30) primary key,                            -- ph_...
+    id char(30) primary key,                            -- lph_... (3-char prefix per shared-kernel Id<P>)
     listing_id char(30) not null references listing(id) on delete cascade,
     r2_key text not null,                               -- 'listings/lst_01HXY/photos/p1.jpg'
     thumbnail_r2_key text,
@@ -273,7 +273,7 @@ create index bookmark_external_user_idx on bookmark_external(user_id, created_at
 
 ```sql
 create table search_history (
-    id char(30) primary key,                            -- sh_...
+    id char(30) primary key,                            -- srh_... (3-char prefix per shared-kernel Id<P>)
     user_id char(30) references "user"(id),             -- nullable (비로그인)
     query text not null,
     filters jsonb not null default '{}',
