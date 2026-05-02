@@ -12,8 +12,7 @@ const MAX_KIND_LEN: usize = 50;
 /// 사용자 알림 1건. append-mostly (이벤트 발생 시 INSERT).
 ///
 /// `mark_read`는 멱등 — 이미 읽은 알림 재호출 시 `read_at` 보존.
-/// `payload`는 `serde_json::Value`라 `Eq`를 derive 할 수 없어요 (`PartialEq`만).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Notification {
     /// 식별자 (`ntf_<26 ULID>`).
     pub id: Id<NotificationMarker>,
@@ -66,7 +65,7 @@ impl Notification {
     /// 읽음 처리 — 멱등. 이미 읽은 경우 `read_at`를 보존해요.
     ///
     /// append-mostly 도메인이라 `version` bump 없어요.
-    pub fn mark_read(&mut self, at: DateTime<Utc>) {
+    pub const fn mark_read(&mut self, at: DateTime<Utc>) {
         if self.read_at.is_none() {
             self.read_at = Some(at);
         }
