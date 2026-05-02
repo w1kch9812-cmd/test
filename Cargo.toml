@@ -19,6 +19,7 @@ members = [
     "crates/domain/audit/outbox-event",
     "crates/operations/admin-action",
     "crates/operations/business-verification-queue",
+    "crates/operations/listing-review-queue",
     "crates/data-pipeline-control",
     "crates/db",
     "services/api",

@@ -128,6 +128,17 @@ impl IdPrefix for BvqMarker {
     const PREFIX: &'static str = "bvq";
 }
 
+/// `ListingReviewQueue` aggregate ID marker.
+///
+/// Spec § 5.5 `listing_review_queue.id` inline comment (`lrq_...`).
+/// 매물 검토 큐 — decision-based workflow (`approve`/`reject`/`request_changes`,
+/// `None` = pending) + version OCC + 12h SLA + `auto_check` (룰 기반).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct LrqMarker;
+impl IdPrefix for LrqMarker {
+    const PREFIX: &'static str = "lrq";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -329,6 +340,13 @@ mod tests {
         let id: Id<BvqMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("bvq_"));
+    }
+
+    #[test]
+    fn new_lrq_id_has_lrq_prefix() {
+        let id: Id<LrqMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("lrq_"));
     }
 
     #[test]
