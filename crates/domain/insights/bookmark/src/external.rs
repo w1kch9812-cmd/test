@@ -33,6 +33,7 @@ impl BookmarkExternal {
     /// - `target_id` 빈 → [`BookmarkError::EmptyTargetId`].
     /// - `target_id` 50자 초과 → [`BookmarkError::TargetIdTooLong`].
     /// - `note` 500자 초과 → [`BookmarkError::NoteTooLong`].
+    #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         id: Id<BookmarkExternalMarker>,
         user_id: Id<UserMarker>,
