@@ -92,7 +92,7 @@ impl OutboxEvent {
     /// 발행 완료 마킹. **Idempotent** — 이미 발행된 경우 무시.
     ///
     /// Publisher 워커가 외부 시스템 발행 성공 후 호출해요.
-    pub fn mark_published(&mut self, at: DateTime<Utc>) {
+    pub const fn mark_published(&mut self, at: DateTime<Utc>) {
         if self.published_at.is_none() {
             self.published_at = Some(at);
         }
