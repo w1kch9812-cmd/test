@@ -69,5 +69,10 @@ for tbl in business_verification_queue listing_review_queue; do
   fi
 done
 
+# V003_03: featured_content ends_at > starts_at CHECK exists
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='featured_content'::regclass and conname='featured_content_time_bound_chk';" | grep -q '^1$'; then
+  echo "FAIL: featured_content_time_bound_chk missing (V003_03)" >&2; exit 1
+fi
+
 echo "PASS: V001 18 RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0

@@ -548,7 +548,8 @@ create table featured_content (
     purchased_by char(30) references "user"(id),        -- Phase 2+ 결제
     impression_count bigint not null default 0,
     click_count bigint not null default 0,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    constraint featured_content_time_bound_chk check (ends_at > starts_at)
 );
 
 -- Note: partial index predicate cannot use now() (PG requires IMMUTABLE).
