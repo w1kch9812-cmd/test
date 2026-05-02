@@ -1,0 +1,42 @@
+//! `UserRepository` port (interface). 구현체는 `crates/db` 또는 sub-project 5에서.
+
+// `UserRepository` 처럼 모듈명 반복은 의도된 공개 API 형태.
+#![allow(clippy::module_name_repetitions)]
+
+use async_trait::async_trait;
+use shared_kernel::id::{Id, UserMarker};
+use thiserror::Error;
+
+use crate::entity::User;
+
+/// `User` 저장/조회 포트.
+#[async_trait]
+pub trait UserRepository: Send + Sync {
+    /// `id`로 조회. 없으면 `Ok(None)`.
+    ///
+    /// # Errors
+    ///
+    /// DB 통신 실패 시 [`RepoError::Database`].
+    async fn find_by_id(&self, id: &Id<UserMarker>) -> Result<Option<User>, RepoError>;
+
+    /// 저장 (insert or update). Optimistic lock 충돌 시 [`RepoError::Conflict`].
+    ///
+    /// # Errors
+    ///
+    /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
+    async fn save(&self, user: &User) -> Result<(), RepoError>;
+}
+
+/// `Repository` 에러.
+#[derive(Debug, Error)]
+pub enum RepoError {
+    /// 대상 Aggregate 미존재.
+    #[error("not found")]
+    NotFound,
+    /// Optimistic lock 버전 불일치.
+    #[error("conflict (version mismatch)")]
+    Conflict,
+    /// DB 통신/SQL 에러 (정보 누설 방지로 메시지만).
+    #[error("database error: {0}")]
+    Database(String),
+}

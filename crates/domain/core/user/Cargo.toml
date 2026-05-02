@@ -1,0 +1,20 @@
+[package]
+name = "user-domain"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 User Aggregate (Core BC, RDS 동적)"
+
+[dependencies]
+shared-kernel = { path = "../../../shared-kernel" }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[lints]
+workspace = true
