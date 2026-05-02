@@ -38,17 +38,33 @@ type: project
 - Repository trait 3개 (User/Listing/ListingPhoto), 모두 port-only (구현은 sub-project 5)
 - 348 단위 테스트 누적
 
+### Sub-project 2b-ii: Core BC R2 정적 Reader (완료, T1-T8)
+- shared-kernel 추가: LandUseType (지목 9), Zoning (용도지역 5), PolygonSrid, BoundingBox, AdminDivision composite
+- 4 R2 정적 BC 신규 crate:
+  - **Parcel** (10 필드 + ParcelMarker 마커 projection)
+  - **Building** (12 필드 + BuildingPurposeCode 10 + BuildingStructureCode 8)
+  - **IndustrialComplex** (8 필드 + IndustrialComplexKind 4)
+  - **Manufacturer** (9 필드 + EmployeeCountBand 6)
+- Reader trait 4개, 모두 read-only port (구현은 sub-project 4)
+- 466 단위 테스트 누적, 99% 커버리지
+
 ## 워크스페이스 구조 (현재)
 
 ```
 crates/domain/core/
-├── shared-kernel/        20 모듈, 230+ 테스트
-├── user/                 User Aggregate (36 tests)
-├── listing/              Listing Aggregate (46 tests)
-└── listing-photo/        ListingPhoto Aggregate (20 tests)
-crates/db/                PgUserRepository (Walking Skeleton, 사용자만)
-services/api/             Axum HTTP server (Walking Skeleton, 3 endpoint)
+├── shared-kernel/         24 모듈 (값 객체 ALL — 14 + 6 from 2b-i + 4 from 2b-ii)
+├── user/                  User Aggregate (RDS 동적, 46 tests)
+├── listing/               Listing Aggregate (RDS 동적, 46 tests)
+├── listing-photo/         ListingPhoto Aggregate (RDS 동적, 20 tests)
+├── parcel/                Parcel Reader (R2 정적, 10 tests)
+├── building/              Building Reader (R2 정적, 28 tests with enums)
+├── industrial-complex/    IndustrialComplex Reader (R2 정적, 18 tests)
+└── manufacturer/          Manufacturer Reader (R2 정적, 18 tests)
+crates/db/                 PgUserRepository (Walking Skeleton, 사용자만)
+services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
+
+총 **10 crate, 466 단위 테스트, 99% 커버리지.**
 
 ## CI 상태
 
@@ -64,10 +80,6 @@ services/api/             Axum HTTP server (Walking Skeleton, 3 endpoint)
 - WS T2: 1.85 → 1.88 (sqlx 0.8 + rustls)
 
 ## 다음 단계 (Sub-project 2 잔여)
-
-### Plan 2b-ii: R2 정적 BC (Parcel/Building/IndustrialComplex/Manufacturer Reader trait)
-- R2 객체 구조 정의
-- Reader trait per BC (port only, 구현은 sub-project 4)
 
 ### Plan 2c: Market BC + Insights BC + Operations BC + Pipeline + 도메인 이벤트
 - RealTransaction, CourtAuction (Market BC)
