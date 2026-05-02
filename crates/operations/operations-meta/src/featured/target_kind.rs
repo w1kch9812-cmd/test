@@ -91,19 +91,28 @@ mod tests {
     #[test]
     fn round_trip_listing() {
         let v = FeaturedContentTargetKind::Listing;
-        assert_eq!(FeaturedContentTargetKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentTargetKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
     fn round_trip_industrial_complex() {
         let v = FeaturedContentTargetKind::IndustrialComplex;
-        assert_eq!(FeaturedContentTargetKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentTargetKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
     fn round_trip_manufacturer() {
         let v = FeaturedContentTargetKind::Manufacturer;
-        assert_eq!(FeaturedContentTargetKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentTargetKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
@@ -115,7 +124,10 @@ mod tests {
 
     #[test]
     fn display_matches_db_str() {
-        assert_eq!(format!("{}", FeaturedContentTargetKind::Manufacturer), "manufacturer");
+        assert_eq!(
+            format!("{}", FeaturedContentTargetKind::Manufacturer),
+            "manufacturer"
+        );
     }
 
     #[test]

@@ -146,7 +146,10 @@ mod tests {
         let fc = make_fc(now, now + Duration::hours(24));
         assert_eq!(fc.weight, 5);
         assert_eq!(fc.target_kind, FeaturedContentTargetKind::Listing);
-        assert_eq!(fc.feature_kind, FeaturedContentFeatureKind::HomepageFeatured);
+        assert_eq!(
+            fc.feature_kind,
+            FeaturedContentFeatureKind::HomepageFeatured
+        );
         assert_eq!(fc.impression_count, 0);
         assert_eq!(fc.click_count, 0);
         assert!(fc.purchased_by.is_none());

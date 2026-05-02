@@ -73,10 +73,7 @@ pub trait OperationsMetaRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn find_unacknowledged_alerts(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<SystemAlert>, RepoError>;
+    async fn find_unacknowledged_alerts(&self, limit: u32) -> Result<Vec<SystemAlert>, RepoError>;
 }
 
 /// `Repository` 에러. **No `Conflict` variant** — 두 Aggregate 모두 OCC 미사용.

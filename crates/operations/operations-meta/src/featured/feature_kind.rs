@@ -102,25 +102,37 @@ mod tests {
     #[test]
     fn round_trip_homepage_featured() {
         let v = FeaturedContentFeatureKind::HomepageFeatured;
-        assert_eq!(FeaturedContentFeatureKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentFeatureKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
     fn round_trip_search_top() {
         let v = FeaturedContentFeatureKind::SearchTop;
-        assert_eq!(FeaturedContentFeatureKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentFeatureKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
     fn round_trip_sponsored_marker() {
         let v = FeaturedContentFeatureKind::SponsoredMarker;
-        assert_eq!(FeaturedContentFeatureKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentFeatureKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
     fn round_trip_newsletter() {
         let v = FeaturedContentFeatureKind::Newsletter;
-        assert_eq!(FeaturedContentFeatureKind::from_db_str(v.as_db_str()), Some(v));
+        assert_eq!(
+            FeaturedContentFeatureKind::from_db_str(v.as_db_str()),
+            Some(v)
+        );
     }
 
     #[test]
