@@ -47,6 +47,13 @@ impl IdPrefix for BookmarkExternalMarker {
     const PREFIX: &'static str = "bme";
 }
 
+/// `SearchHistory` aggregate ID marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SearchHistoryMarker;
+impl IdPrefix for SearchHistoryMarker {
+    const PREFIX: &'static str = "srh";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -185,6 +192,13 @@ mod tests {
         let id: Id<BookmarkExternalMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("bme_"));
+    }
+
+    #[test]
+    fn new_search_history_id_has_srh_prefix() {
+        let id: Id<SearchHistoryMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("srh_"));
     }
 
     #[test]

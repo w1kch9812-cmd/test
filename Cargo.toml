@@ -12,6 +12,7 @@ members = [
     "crates/domain/market/real-transaction",
     "crates/domain/market/court-auction",
     "crates/domain/insights/bookmark",
+    "crates/domain/insights/search-history",
     "crates/db",
     "services/api",
     # 다른 services/* 와 crates/* 는 sub-project 2+에서 추가됨.
