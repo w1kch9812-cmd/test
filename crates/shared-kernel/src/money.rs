@@ -7,9 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// 한국 원화 금액 (`KRW`).
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct MoneyKrw(i64);
 
