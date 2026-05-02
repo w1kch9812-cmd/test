@@ -2,7 +2,7 @@
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
-use super::entity::Parcel;
+use super::Parcel;
 use chrono::Utc;
 use geo_types::{Coord, LineString, Polygon as GeoPolygon};
 use shared_kernel::address::{JibunAddress, RoadAddress};
