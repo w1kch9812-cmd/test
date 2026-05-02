@@ -30,7 +30,10 @@ mod tests {
         let our = now_utc();
         let theirs = Utc::now();
         let diff_secs = (our - theirs).num_seconds().abs();
-        assert!(diff_secs < 2, "now_utc deviated by {diff_secs}s from Utc::now()");
+        assert!(
+            diff_secs < 2,
+            "now_utc deviated by {diff_secs}s from Utc::now()"
+        );
     }
 
     #[test]
