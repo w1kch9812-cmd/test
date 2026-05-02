@@ -134,7 +134,7 @@ impl Listing {
     /// 내부 헬퍼 — 상태 전이 + `version` bump + `updated_at` 갱신.
     ///
     /// `ListingStatus::can_transition_to`로 spec § 8.3 머신 검사.
-    fn transition_to(
+    const fn transition_to(
         &mut self,
         target: ListingStatus,
         at: DateTime<Utc>,
@@ -156,7 +156,7 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `Draft`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn submit_for_review(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn submit_for_review(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::PendingReview, at)
     }
 
@@ -167,7 +167,7 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `PendingReview`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn approve(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn approve(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Active, at)
     }
 
@@ -176,7 +176,7 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `PendingReview`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn reject(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn reject(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Rejected, at)
     }
 
@@ -185,7 +185,10 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `Rejected`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn revise_after_rejection(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn revise_after_rejection(
+        &mut self,
+        at: DateTime<Utc>,
+    ) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Draft, at)
     }
 
@@ -194,7 +197,7 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `Active`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn mark_sold(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn mark_sold(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Sold, at)
     }
 
@@ -203,25 +206,25 @@ impl Listing {
     /// # Errors
     ///
     /// 현재 상태가 `Active`가 아니면 [`ListingError::InvalidTransition`].
-    pub fn expire(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+    pub const fn expire(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
         self.transition_to(ListingStatus::Expired, at)
     }
 
     /// 조회수 증가 (`saturating_add`). `version`은 bump하지 *않아요* — 빈번한
     /// 갱신이라 optimistic lock 충돌과 무관해요.
-    pub fn increment_view_count(&mut self, at: DateTime<Utc>) {
+    pub const fn increment_view_count(&mut self, at: DateTime<Utc>) {
         self.view_count = self.view_count.saturating_add(1);
         self.updated_at = at;
     }
 
     /// 북마크 수 증가 (`saturating_add`). `version` bump *안* 함.
-    pub fn record_bookmark(&mut self, at: DateTime<Utc>) {
+    pub const fn record_bookmark(&mut self, at: DateTime<Utc>) {
         self.bookmark_count = self.bookmark_count.saturating_add(1);
         self.updated_at = at;
     }
 
     /// 북마크 수 감소 (`saturating_sub`, `0` 이하면 `0` 유지). `version` bump *안* 함.
-    pub fn release_bookmark(&mut self, at: DateTime<Utc>) {
+    pub const fn release_bookmark(&mut self, at: DateTime<Utc>) {
         self.bookmark_count = self.bookmark_count.saturating_sub(1);
         self.updated_at = at;
     }
