@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 
 pub mod area;
+pub mod business_number;
 pub mod id;
 pub mod money;
 pub mod pnu;
