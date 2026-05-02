@@ -323,7 +323,10 @@ mod tests {
         ]);
         let polygon = GeoPolygon::new(exterior, vec![]);
         let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
-        assert!(matches!(err, GeometryError::ExteriorRingTooShort { actual: 3 }));
+        assert!(matches!(
+            err,
+            GeometryError::ExteriorRingTooShort { actual: 3 }
+        ));
     }
 
     #[test]
@@ -355,7 +358,10 @@ mod tests {
     #[test]
     fn polygon_rejects_nan_in_exterior() {
         let exterior = LineString(vec![
-            Coord { x: f64::NAN, y: 37.0 },
+            Coord {
+                x: f64::NAN,
+                y: 37.0,
+            },
             Coord { x: 127.0, y: 37.0 },
             Coord { x: 127.0, y: 38.0 },
             Coord { x: 126.0, y: 37.0 },
