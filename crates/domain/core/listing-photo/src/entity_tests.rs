@@ -59,7 +59,10 @@ fn build_full() -> ListingPhoto {
 fn try_new_full_fields_succeeds() {
     let photo = build_full();
     assert_eq!(photo.r2_key, sample_r2_key());
-    assert_eq!(photo.thumbnail_r2_key.as_deref(), Some("listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg"));
+    assert_eq!(
+        photo.thumbnail_r2_key.as_deref(),
+        Some("listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg")
+    );
     assert_eq!(photo.caption.as_deref(), Some("정문에서 본 외관"));
     assert_eq!(photo.display_order, 0);
     assert_eq!(photo.width_px, Some(1920));
@@ -315,7 +318,10 @@ fn content_type_from_str_roundtrip() {
 #[test]
 fn content_type_from_str_rejects_unsupported() {
     let err = PhotoContentType::from_str("image/gif").unwrap_err();
-    assert_eq!(err, PhotoContentTypeError::Unsupported("image/gif".to_owned()));
+    assert_eq!(
+        err,
+        PhotoContentTypeError::Unsupported("image/gif".to_owned())
+    );
 }
 
 #[test]
