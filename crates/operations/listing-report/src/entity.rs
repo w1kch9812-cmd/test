@@ -250,14 +250,8 @@ mod tests {
     #[test]
     fn try_new_with_anonymous_reporter() {
         let now = Utc::now();
-        let r = ListingReport::try_new(
-            Id::new(),
-            None,
-            ListingReportReason::Other,
-            None,
-            now,
-        )
-        .expect("anon ok");
+        let r = ListingReport::try_new(Id::new(), None, ListingReportReason::Other, None, now)
+            .expect("anon ok");
         assert!(r.reporter_id.is_none());
         assert!(r.detail.is_none());
     }
