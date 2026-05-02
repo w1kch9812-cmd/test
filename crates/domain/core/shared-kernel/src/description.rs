@@ -44,7 +44,7 @@ impl Description {
 
     /// 빈 `Description` (`DB` `default`).
     #[must_use]
-    pub fn empty() -> Self {
+    pub const fn empty() -> Self {
         Self(String::new())
     }
 
@@ -56,7 +56,7 @@ impl Description {
 
     /// 빈 문자열인지.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
