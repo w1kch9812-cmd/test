@@ -4,6 +4,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
+use shared_kernel::email::Email;
 use shared_kernel::id::{Id, UserMarker};
 use thiserror::Error;
 
@@ -12,12 +13,26 @@ use crate::entity::User;
 /// `User` 저장/조회 포트.
 #[async_trait]
 pub trait UserRepository: Send + Sync {
-    /// `id`로 조회. 없으면 `Ok(None)`.
+    /// `id`로 활성 사용자 조회 (`deleted_at IS NULL`). 없으면 `Ok(None)`.
     ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
     async fn find_by_id(&self, id: &Id<UserMarker>) -> Result<Option<User>, RepoError>;
+
+    /// `zitadel_sub`로 활성 사용자 조회 (인증 미들웨어 lookup 용).
+    ///
+    /// # Errors
+    ///
+    /// DB 통신 실패 시 [`RepoError::Database`].
+    async fn find_by_zitadel_sub(&self, sub: &str) -> Result<Option<User>, RepoError>;
+
+    /// `Email`로 활성 사용자 조회 (가입 중복 방지).
+    ///
+    /// # Errors
+    ///
+    /// DB 통신 실패 시 [`RepoError::Database`].
+    async fn find_by_email(&self, email: &Email) -> Result<Option<User>, RepoError>;
 
     /// 저장 (insert or update). Optimistic lock 충돌 시 [`RepoError::Conflict`].
     ///

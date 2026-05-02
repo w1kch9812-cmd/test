@@ -1,7 +1,9 @@
 //! `User` Aggregate (Core BC, RDS 동적).
 //!
-//! Walking Skeleton 범위 — `try_new` + 기본 필드만. 비즈니스 검증·중개사·roles
-//! 등은 Plan 2b-i 본격 구현에서 추가해요.
+//! Plan 2b-i 범위 — spec § 5.1 18 필드 전체 + 도메인 mutation 메서드
+//! (`verify_business`, `verify_broker`, `add_role`, `soft_delete` 등).
+//! `UserRepository` trait는 4개 query 메서드 (`find_by_id`,
+//! `find_by_zitadel_sub`, `find_by_email`, `save`)를 노출해요.
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
