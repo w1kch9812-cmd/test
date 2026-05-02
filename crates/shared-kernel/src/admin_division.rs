@@ -299,10 +299,7 @@ mod tests {
     fn from_str_round_trips() {
         use std::str::FromStr;
         assert_eq!(SidoCode::from_str("11").unwrap().as_str(), "11");
-        assert_eq!(
-            SigunguCode::from_str("11110").unwrap().as_str(),
-            "11110"
-        );
+        assert_eq!(SigunguCode::from_str("11110").unwrap().as_str(), "11110");
         assert_eq!(
             EupmyeondongCode::from_str("11110101").unwrap().as_str(),
             "11110101"
