@@ -46,15 +46,17 @@ impl KsicCode {
     ///
     /// # Errors
     ///
-    /// 길이 ≠ 5 → `InvalidLength`. 첫 글자가 대문자 영문 아니면 `FirstMustBeUppercase`.
+    /// 길이 ≠ 5 → `InvalidLength` (`char` 기준). 첫 글자가 대문자 영문 아니면 `FirstMustBeUppercase`.
     /// 뒤 4자리가 숫자 아니면 `TailMustBeDigits`.
     pub fn try_new(s: &str) -> Result<Self, KsicCodeError> {
-        if s.len() != 5 {
-            return Err(KsicCodeError::InvalidLength { actual: s.len() });
+        let char_count = s.chars().count();
+        if char_count != 5 {
+            return Err(KsicCodeError::InvalidLength { actual: char_count });
         }
         let mut chars = s.chars();
-        // SAFETY: length 5 guaranteed by check above; .next() yields Some.
-        let first = chars.next().expect("length 5 guarantees first char");
+        let Some(first) = chars.next() else {
+            return Err(KsicCodeError::InvalidLength { actual: char_count });
+        };
         if !first.is_ascii_uppercase() {
             return Err(KsicCodeError::FirstMustBeUppercase { first });
         }
@@ -160,10 +162,13 @@ mod tests {
 
     #[test]
     fn rejects_unicode_first_char() {
-        // 길이를 5로 맞춰야 InvalidLength가 아닌 FirstMustBeUppercase로 떨어지는데,
-        // 한글은 UTF-8에서 3바이트라 "가1234"는 .len() = 7이 되어 InvalidLength로 처리됨.
+        // 길이는 char 단위로 체크하므로 "가1234"는 5자로 인정되고
+        // 첫 글자가 ASCII 대문자가 아니라서 FirstMustBeUppercase로 떨어져요.
         let err = KsicCode::try_new("가1234").unwrap_err();
-        assert!(matches!(err, KsicCodeError::InvalidLength { .. }));
+        assert!(matches!(
+            err,
+            KsicCodeError::FirstMustBeUppercase { first: '가' }
+        ));
     }
 
     #[test]
