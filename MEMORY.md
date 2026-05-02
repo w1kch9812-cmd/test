@@ -6,3 +6,4 @@
 - [외부 의존 MCP](memory/external_mcps.md) — 개발자 보조 전용
 - [SSS급 기준 피드백](memory/feedback_sss_standard.md) — 미개함·꼼수 0
 - [기술 스택 확정](memory/tech_stack_confirmed.md) — Rust + Next.js + Postgres+PostGIS + Zitadel + Biome v2.4
+- [Sub-project 2a 작업 패턴 교훈](memory/feedback_subproject_2a_lessons.md) — spec verbatim 강제, 값 객체 dispatch 표준, 마이그 파일명, tarpaulin strict
