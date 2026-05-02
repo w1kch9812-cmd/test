@@ -1,0 +1,86 @@
+name: walking-skeleton
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  POSTGRES_USER: gongzzang
+  POSTGRES_PASSWORD: ci_only_changeme
+  POSTGRES_DB: gongzzang
+
+jobs:
+  smoke:
+    name: WS smoke (POST/GET /users round-trip)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: gongzzang
+          POSTGRES_PASSWORD: ci_only_changeme
+          POSTGRES_DB: gongzzang
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gongzzang"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: walking-skeleton
+
+      - name: Install sqlx-cli
+        run: cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features postgres,rustls
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U gongzzang && break
+            sleep 1
+          done
+
+      - name: Apply migrations
+        run: sqlx migrate run --source migrations
+
+      - name: Build api binary
+        run: cargo build --package api --release
+
+      - name: Start api in background
+        run: |
+          ./target/release/api &
+          echo $! > /tmp/api.pid
+          sleep 1
+
+      - name: Run smoke test
+        run: bash tests/walking-skeleton/smoke.sh
+        env:
+          API_URL: http://localhost:8080
+
+      - name: Stop api
+        if: always()
+        run: |
+          if [ -f /tmp/api.pid ]; then
+            kill "$(cat /tmp/api.pid)" 2>/dev/null || true
+          fi
