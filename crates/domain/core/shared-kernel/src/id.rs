@@ -40,6 +40,13 @@ impl IdPrefix for ListingPhotoMarker {
     const PREFIX: &'static str = "lph";
 }
 
+/// `BookmarkExternal` aggregate ID marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BookmarkExternalMarker;
+impl IdPrefix for BookmarkExternalMarker {
+    const PREFIX: &'static str = "bme";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -171,6 +178,13 @@ mod tests {
         let id: Id<ListingPhotoMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("lph_"));
+    }
+
+    #[test]
+    fn new_bookmark_external_id_has_bme_prefix() {
+        let id: Id<BookmarkExternalMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("bme_"));
     }
 
     #[test]
