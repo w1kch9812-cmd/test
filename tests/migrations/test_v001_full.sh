@@ -52,5 +52,10 @@ if [ "$SRID" != "4326" ]; then
   echo "FAIL: listing.geom_point SRID expected 4326, got '$SRID'" >&2; exit 1
 fi
 
+# V003_01: listing transaction_type cross-field CHECK exists
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing'::regclass and conname='listing_transaction_fields_chk';" | grep -q '^1$'; then
+  echo "FAIL: listing_transaction_fields_chk missing (V003_01)" >&2; exit 1
+fi
+
 echo "PASS: V001 18 RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0

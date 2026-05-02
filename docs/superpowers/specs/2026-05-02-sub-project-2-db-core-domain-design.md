@@ -202,7 +202,12 @@ create table listing (
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     expires_at timestamptz,
-    version bigint not null default 1
+    version bigint not null default 1,
+    constraint listing_transaction_fields_chk check (
+        (transaction_type = 'sale' and deposit_krw is null and monthly_rent_krw is null)
+        or (transaction_type = 'monthly_rent' and deposit_krw is not null and monthly_rent_krw is not null)
+        or (transaction_type = 'jeonse' and deposit_krw is not null and monthly_rent_krw is null)
+    )
 );
 
 create index listing_status_idx on listing(status);
