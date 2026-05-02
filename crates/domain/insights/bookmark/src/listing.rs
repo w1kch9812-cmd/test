@@ -69,16 +69,15 @@ mod tests {
 
     #[test]
     fn happy_path_without_note() {
-        let bm =
-            BookmarkListing::try_new(Id::new(), Id::new(), None, Utc::now()).expect("valid");
+        let bm = BookmarkListing::try_new(Id::new(), Id::new(), None, Utc::now()).expect("valid");
         assert!(bm.note.is_none());
     }
 
     #[test]
     fn rejects_note_over_500_chars() {
         let long = "X".repeat(501);
-        let err = BookmarkListing::try_new(Id::new(), Id::new(), Some(long), Utc::now())
-            .unwrap_err();
+        let err =
+            BookmarkListing::try_new(Id::new(), Id::new(), Some(long), Utc::now()).unwrap_err();
         assert!(matches!(err, BookmarkError::NoteTooLong { actual: 501 }));
     }
 
@@ -92,13 +91,8 @@ mod tests {
 
     #[test]
     fn serde_roundtrip() {
-        let bm = BookmarkListing::try_new(
-            Id::new(),
-            Id::new(),
-            Some("hi".to_owned()),
-            Utc::now(),
-        )
-        .expect("valid");
+        let bm = BookmarkListing::try_new(Id::new(), Id::new(), Some("hi".to_owned()), Utc::now())
+            .expect("valid");
         let json = serde_json::to_string(&bm).expect("serialize");
         let back: BookmarkListing = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(bm, back);
