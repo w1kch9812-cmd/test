@@ -14,6 +14,7 @@ pub mod business_number;
 pub mod email;
 pub mod geometry;
 pub mod id;
+pub mod ksic_code;
 pub mod money;
 pub mod phone_kr;
 pub mod pnu;
