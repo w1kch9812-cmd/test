@@ -31,7 +31,7 @@ impl MoneyKrw {
     /// # Errors
     ///
     /// `krw < 0`이면 [`MoneyError::Negative`].
-    pub fn try_new(krw: i64) -> Result<Self, MoneyError> {
+    pub const fn try_new(krw: i64) -> Result<Self, MoneyError> {
         if krw < 0 {
             return Err(MoneyError::Negative);
         }
@@ -40,7 +40,7 @@ impl MoneyKrw {
 
     /// 내부 `i64` 값.
     #[must_use]
-    pub fn as_i64(self) -> i64 {
+    pub const fn as_i64(self) -> i64 {
         self.0
     }
 
