@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn parse_no_delimiter_fails() {
         // Length=30, prefix-like start, but no '_' anywhere.
-        let raw = "usrXX01HXY3NK0Z9F6S1B2C3D4E5F";
+        let raw = "usrXX01HXY3NK0Z9F6S1B2C3D4E5F6";
         assert_eq!(raw.len(), 30);
         let err = Id::<UserMarker>::try_from_str(raw).unwrap_err();
         assert!(matches!(err, IdError::MissingDelimiter));
