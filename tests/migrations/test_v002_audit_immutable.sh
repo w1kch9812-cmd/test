@@ -77,25 +77,25 @@ fi
 
 # 6. Trigger blocks UPDATE for current connected user (when !=audit_archiver)
 # Insert a test row first (as connected user, who is NOT audit_archiver)
-psql "$DATABASE_URL" -c "insert into audit_log(id, action, resource_kind, resource_id, correlation_id) values('aud_test12345678901234567890ABC', 'test', 'test', 'r1', 'corr_test123456789');"
+psql "$DATABASE_URL" -c "insert into audit_log(id, action, resource_kind, resource_id, correlation_id) values('aud_test12345678901234567890AB', 'test', 'test', 'r1', 'corr_test123456789');"
 
 # Try UPDATE — should fail with SQLSTATE 45000 (i18n-stable; message text may change)
-UPDATE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "update audit_log set action='hacked' where id='aud_test12345678901234567890ABC';" 2>&1 || true)
+UPDATE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "update audit_log set action='hacked' where id='aud_test12345678901234567890AB';" 2>&1 || true)
 if ! echo "$UPDATE_OUTPUT" | grep -qE 'SQLSTATE 45000|is immutable'; then
   echo "FAIL: UPDATE on audit_log did not raise SQLSTATE 45000. Output: $UPDATE_OUTPUT" >&2
   exit 1
 fi
 
 # Try DELETE — should also fail
-DELETE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "delete from audit_log where id='aud_test12345678901234567890ABC';" 2>&1 || true)
+DELETE_OUTPUT=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=0 -c "delete from audit_log where id='aud_test12345678901234567890AB';" 2>&1 || true)
 if ! echo "$DELETE_OUTPUT" | grep -qE 'SQLSTATE 45000|is immutable'; then
   echo "FAIL: DELETE on audit_log did not raise SQLSTATE 45000. Output: $DELETE_OUTPUT" >&2
   exit 1
 fi
 
 # 7. SET ROLE audit_archiver THEN delete — should succeed
-psql "$DATABASE_URL" -c "set role gongzzang_audit_archiver; delete from audit_log where id='aud_test12345678901234567890ABC'; reset role;"
-REMAINING=$(psql "$DATABASE_URL" -t -A -c "select count(*) from audit_log where id='aud_test12345678901234567890ABC';")
+psql "$DATABASE_URL" -c "set role gongzzang_audit_archiver; delete from audit_log where id='aud_test12345678901234567890AB'; reset role;"
+REMAINING=$(psql "$DATABASE_URL" -t -A -c "select count(*) from audit_log where id='aud_test12345678901234567890AB';")
 if [ "$REMAINING" != "0" ]; then
   echo "FAIL: audit_archiver could not DELETE audit_log row (count=$REMAINING)" >&2; exit 1
 fi
