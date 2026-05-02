@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod admin_division;
 pub mod area;
 pub mod broker_license;
 pub mod business_number;
