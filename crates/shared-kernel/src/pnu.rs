@@ -82,9 +82,7 @@ impl Pnu {
     #[must_use]
     #[allow(clippy::expect_used)] // see # Panics
     pub fn jibun_main(&self) -> u32 {
-        self.0[11..15]
-            .parse()
-            .expect("digits validated by try_new")
+        self.0[11..15].parse().expect("digits validated by try_new")
     }
 
     /// 부번 (chars 15-18, 4자리 정수).
@@ -95,9 +93,7 @@ impl Pnu {
     #[must_use]
     #[allow(clippy::expect_used)] // see # Panics
     pub fn jibun_sub(&self) -> u32 {
-        self.0[15..19]
-            .parse()
-            .expect("digits validated by try_new")
+        self.0[15..19].parse().expect("digits validated by try_new")
     }
 }
 
