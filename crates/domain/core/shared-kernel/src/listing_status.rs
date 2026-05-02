@@ -71,10 +71,8 @@ impl ListingStatus {
         matches!(
             (self, target),
             (Draft, PendingReview)
-                | (PendingReview, Active)
-                | (PendingReview, Rejected)
-                | (Active, Sold)
-                | (Active, Expired)
+                | (PendingReview, Active | Rejected)
+                | (Active, Sold | Expired)
                 | (Rejected, Draft)
         )
     }
