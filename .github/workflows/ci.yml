@@ -67,6 +67,28 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with: { command: check }
 
+  coverage:
+    name: Coverage (tarpaulin ≥ 90%)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: tarpaulin
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin --version "^0.31" --locked
+      - name: Run tarpaulin
+        run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: lcov.info
+
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
