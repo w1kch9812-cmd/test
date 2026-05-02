@@ -62,7 +62,7 @@ pub struct Listing {
 }
 
 impl Listing {
-    /// `Draft` 상태 새 매물 생성. V003_01 cross-field invariant 강제.
+    /// `Draft` 상태 새 매물 생성. `V003_01` cross-field invariant 강제.
     ///
     /// `created_at == updated_at == now`, `status = Draft`,
     /// `contact_visibility = LoginRequired`, `view_count = 0`,
@@ -70,7 +70,7 @@ impl Listing {
     ///
     /// # Errors
     ///
-    /// `transaction_type` 과 `deposit`/`monthly_rent` 조합이 V003_01과 다르면
+    /// `transaction_type` 과 `deposit`/`monthly_rent` 조합이 `V003_01`과 다르면
     /// [`ListingError::TransactionFieldsMismatch`]. (예: `Sale`인데
     /// `deposit` `Some` 등)
     #[allow(clippy::too_many_arguments)] // 의도된 풀 생성자
