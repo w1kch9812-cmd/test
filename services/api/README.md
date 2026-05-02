@@ -1,29 +1,28 @@
 # services/api
 
-Rust HTTP API 서버 (Axum). 모든 도메인 로직 진입점.
+공짱 HTTP API 서버 (Axum). Walking Skeleton 단계예요.
 
-## 의존
-- `crates/domain/*` — 비즈니스 규칙
-- `crates/data-clients/*` — 외부 API
-- `crates/db` — Repository 구현
-- `crates/auth` — JWT 검증
-- `crates/cache` — moka L1 + Valkey L2
-- `crates/observability` — tracing + OTel
-- `crates/api-types` — utoipa OpenAPI 타입
+## Walking Skeleton 범위 (T3)
 
-## 정책
-- 모든 endpoint에 utoipa 매크로 (OpenAPI 자동)
-- 모든 외부 호출 Circuit Breaker 적용
-- 모든 쓰기에 Idempotency-Key 헤더
-- 모든 응답에 `correlationId` 포함
-- 에러 = RFC 9457 Problem Details
+3 endpoint만 노출해요:
 
-## 진입점 (sub-project 5+)
-- `/v1/listings/*` — 매물
-- `/v1/parcels/{pnu}` — 필지
-- `/v1/buildings/*` — 건축물
-- `/v1/manufacturers/*` — 제조업체
-- `/v1/laws/*` — 법령
-- `/v1/auth/*` — Zitadel 위임
-- `/docs/openapi.json` — 자동 spec
-- `/docs` — Swagger UI
+- `GET /healthz` — liveness probe (DB 미접속)
+- `POST /users` — `User` 생성 (`PgUserRepository::save`)
+- `GET /users/:id` — `User` 조회 (`PgUserRepository::find_by_id`)
+
+## 로컬 실행
+
+```bash
+export DATABASE_URL=postgres://user:pass@localhost:5432/gongzzang
+cargo run --package api  # api listening on 0.0.0.0:8080
+
+curl -X POST http://localhost:8080/users -H 'content-type: application/json' \
+  -d '{"zitadel_sub":"sub-1","email":"a@b.com","display_name":"Alice","user_kind":"individual"}'
+curl http://localhost:8080/users/usr_01HXY3NK0Z9F6S1B2C3D4E5F6G
+```
+
+## 향후 추가 (sub-project 3 / 5 / 7)
+
+- Zitadel JWT 인증, RBAC
+- 전체 `*Repository` (Listing, Parcel ...)
+- OpenTelemetry, RFC 9457 Problem Details, utoipa OpenAPI
