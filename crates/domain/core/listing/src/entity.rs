@@ -130,9 +130,108 @@ impl Listing {
             version: 1,
         })
     }
+
+    /// 내부 헬퍼 — 상태 전이 + `version` bump + `updated_at` 갱신.
+    ///
+    /// `ListingStatus::can_transition_to`로 spec § 8.3 머신 검사.
+    fn transition_to(
+        &mut self,
+        target: ListingStatus,
+        at: DateTime<Utc>,
+    ) -> Result<(), ListingError> {
+        if !self.status.can_transition_to(target) {
+            return Err(ListingError::InvalidTransition {
+                from: self.status,
+                to: target,
+            });
+        }
+        self.status = target;
+        self.version += 1;
+        self.updated_at = at;
+        Ok(())
+    }
+
+    /// `Draft` → `PendingReview`. 사용자가 검토 요청.
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `Draft`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn submit_for_review(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::PendingReview, at)
+    }
+
+    /// `PendingReview` → `Active`. 어드민 승인.
+    ///
+    /// `reviewed_by`/`reviewed_at` 추적은 별도 `listing_review_queue` 테이블.
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `PendingReview`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn approve(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::Active, at)
+    }
+
+    /// `PendingReview` → `Rejected`. 어드민 거부.
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `PendingReview`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn reject(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::Rejected, at)
+    }
+
+    /// `Rejected` → `Draft`. 사용자 수정 후 재제출 준비.
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `Rejected`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn revise_after_rejection(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::Draft, at)
+    }
+
+    /// `Active` → `Sold`. 판매 완료 (terminal).
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `Active`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn mark_sold(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::Sold, at)
+    }
+
+    /// `Active` → `Expired`. 만료 처리 (terminal).
+    ///
+    /// # Errors
+    ///
+    /// 현재 상태가 `Active`가 아니면 [`ListingError::InvalidTransition`].
+    pub fn expire(&mut self, at: DateTime<Utc>) -> Result<(), ListingError> {
+        self.transition_to(ListingStatus::Expired, at)
+    }
+
+    /// 조회수 증가 (`saturating_add`). `version`은 bump하지 *않아요* — 빈번한
+    /// 갱신이라 optimistic lock 충돌과 무관해요.
+    pub fn increment_view_count(&mut self, at: DateTime<Utc>) {
+        self.view_count = self.view_count.saturating_add(1);
+        self.updated_at = at;
+    }
+
+    /// 북마크 수 증가 (`saturating_add`). `version` bump *안* 함.
+    pub fn record_bookmark(&mut self, at: DateTime<Utc>) {
+        self.bookmark_count = self.bookmark_count.saturating_add(1);
+        self.updated_at = at;
+    }
+
+    /// 북마크 수 감소 (`saturating_sub`, `0` 이하면 `0` 유지). `version` bump *안* 함.
+    pub fn release_bookmark(&mut self, at: DateTime<Utc>) {
+        self.bookmark_count = self.bookmark_count.saturating_sub(1);
+        self.updated_at = at;
+    }
 }
 
-// Tests in sibling file via #[path] (anticipate >300 lines).
+// Tests in sibling files via #[path] (anticipate >500 lines combined).
 #[cfg(test)]
 #[path = "entity_tests.rs"]
-mod tests;
+mod entity_tests;
+
+#[cfg(test)]
+#[path = "methods_tests.rs"]
+mod methods_tests;

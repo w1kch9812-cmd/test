@@ -2,9 +2,10 @@
 
 use thiserror::Error;
 
+use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::transaction_type::TransactionType;
 
-/// `Listing` Aggregate 검증 에러.
+/// `Listing` Aggregate 검증/상태 전이 에러.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ListingError {
     /// `transaction_type` 과 `deposit`/`monthly_rent` 일관성 위반 (`V003_01`).
@@ -21,5 +22,13 @@ pub enum ListingError {
         deposit_required: bool,
         /// `monthly_rent` `Some` 필요 여부.
         monthly_rent_required: bool,
+    },
+    /// 상태 머신 위반 — `from` → `to` 전이가 허용되지 않음 (spec § 8.3).
+    #[error("invalid status transition: {from:?} -> {to:?}")]
+    InvalidTransition {
+        /// 현재 상태.
+        from: ListingStatus,
+        /// 시도된 대상 상태.
+        to: ListingStatus,
     },
 }
