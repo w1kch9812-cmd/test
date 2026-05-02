@@ -19,10 +19,8 @@ pub trait LrqRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn find_by_id(
-        &self,
-        id: &Id<LrqMarker>,
-    ) -> Result<Option<ListingReviewQueue>, RepoError>;
+    async fn find_by_id(&self, id: &Id<LrqMarker>)
+        -> Result<Option<ListingReviewQueue>, RepoError>;
 
     /// 결정되지 않은 (pending) 큐를 SLA 임박 순으로 최대 `limit` 건 조회 (어드민 워크큐용).
     ///

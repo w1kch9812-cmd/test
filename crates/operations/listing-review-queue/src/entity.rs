@@ -297,9 +297,8 @@ mod tests {
     #[test]
     fn try_new_pending_score_101_errors() {
         let now = Utc::now();
-        let err =
-            ListingReviewQueue::try_new_pending(Id::new(), Id::new(), Some(101), None, now)
-                .unwrap_err();
+        let err = ListingReviewQueue::try_new_pending(Id::new(), Id::new(), Some(101), None, now)
+            .unwrap_err();
         assert!(matches!(
             err,
             LrqError::AutoCheckScoreOutOfRange { actual: 101 }

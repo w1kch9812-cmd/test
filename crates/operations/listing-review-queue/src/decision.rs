@@ -100,7 +100,10 @@ mod tests {
 
     #[test]
     fn display_matches_as_str() {
-        assert_eq!(format!("{}", LrqDecision::RequestChanges), "request_changes");
+        assert_eq!(
+            format!("{}", LrqDecision::RequestChanges),
+            "request_changes"
+        );
     }
 
     #[test]
