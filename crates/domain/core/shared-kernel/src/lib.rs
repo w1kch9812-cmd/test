@@ -14,6 +14,7 @@ pub mod broker_license;
 pub mod business_number;
 pub mod contact_visibility;
 pub mod description;
+pub mod domain_event;
 pub mod email;
 pub mod geometry;
 pub mod id;
