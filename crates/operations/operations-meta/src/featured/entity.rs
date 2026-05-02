@@ -1,4 +1,4 @@
-//! `FeaturedContent` Aggregate (no OCC, V003_03 invariant `ends_at > starts_at`).
+//! `FeaturedContent` Aggregate (no OCC, `V003_03` invariant `ends_at > starts_at`).
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ const MAX_TARGET_ID_LEN: usize = 50;
 ///
 /// 12 필드 — spec § 5.5 `featured_content` 매핑. `version` 컬럼 없음.
 ///
-/// ## V003_03 invariant
+/// ## `V003_03` invariant
 ///
 /// `ends_at > starts_at` — DB CHECK `featured_content_time_bound_chk` 와 동일하게
 /// Aggregate 검증에서 차단. 구간 길이 0 (동일 시각) 도 거부.
@@ -38,7 +38,7 @@ pub struct FeaturedContent {
     pub weight: i32,
     /// 노출 시작.
     pub starts_at: DateTime<Utc>,
-    /// 노출 종료 (V003_03: `> starts_at`).
+    /// 노출 종료 (`V003_03`: `> starts_at`).
     pub ends_at: DateTime<Utc>,
     /// 결제한 사용자 (FK → `user.id`). Phase 2+ 결제 연동 전엔 `None`.
     pub purchased_by: Option<Id<UserMarker>>,
@@ -63,7 +63,7 @@ impl FeaturedContent {
     #[allow(clippy::too_many_arguments)] // 의도된 풀 생성자 — spec column 매핑.
     pub fn try_new(
         target_kind: FeaturedContentTargetKind,
-        target_id: String,
+        target_id: &str,
         feature_kind: FeaturedContentFeatureKind,
         weight: i32,
         starts_at: DateTime<Utc>,
@@ -127,7 +127,7 @@ mod tests {
     fn make_fc(starts: DateTime<Utc>, ends: DateTime<Utc>) -> FeaturedContent {
         FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "lst_01HXY3NK0Z9F6S1B2C3D4E5F6G".to_owned(),
+            "lst_01HXY3NK0Z9F6S1B2C3D4E5F6G",
             FeaturedContentFeatureKind::HomepageFeatured,
             5,
             starts,
@@ -169,7 +169,7 @@ mod tests {
         let now = Utc::now();
         let fc = FeaturedContent::try_new(
             FeaturedContentTargetKind::Manufacturer,
-            "  mfg-123  ".to_owned(),
+            "  mfg-123  ",
             FeaturedContentFeatureKind::Newsletter,
             1,
             now,
@@ -188,7 +188,7 @@ mod tests {
         let now = Utc::now();
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            String::new(),
+            "",
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -205,7 +205,7 @@ mod tests {
         let now = Utc::now();
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "   \t\n".to_owned(),
+            "   \t\n",
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -223,7 +223,7 @@ mod tests {
         let too_long = "X".repeat(51);
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            too_long,
+            &too_long,
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -241,7 +241,7 @@ mod tests {
         let exactly = "X".repeat(50);
         let fc = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            exactly.clone(),
+            &exactly,
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -258,7 +258,7 @@ mod tests {
         let now = Utc::now();
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "lst-x".to_owned(),
+            "lst-x",
             FeaturedContentFeatureKind::HomepageFeatured,
             -1,
             now,
@@ -275,7 +275,7 @@ mod tests {
         let now = Utc::now();
         let fc = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "lst-x".to_owned(),
+            "lst-x",
             FeaturedContentFeatureKind::HomepageFeatured,
             0,
             now,
@@ -294,7 +294,7 @@ mod tests {
         let now = Utc::now();
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "lst-x".to_owned(),
+            "lst-x",
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -311,7 +311,7 @@ mod tests {
         let now = Utc::now();
         let err = FeaturedContent::try_new(
             FeaturedContentTargetKind::Listing,
-            "lst-x".to_owned(),
+            "lst-x",
             FeaturedContentFeatureKind::HomepageFeatured,
             1,
             now,
@@ -424,7 +424,7 @@ mod tests {
         let buyer = Id::<UserMarker>::new();
         let fc = FeaturedContent::try_new(
             FeaturedContentTargetKind::IndustrialComplex,
-            "idc-001".to_owned(),
+            "idc-001",
             FeaturedContentFeatureKind::SponsoredMarker,
             10,
             now,

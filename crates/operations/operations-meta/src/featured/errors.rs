@@ -20,7 +20,7 @@ pub enum FeaturedContentError {
         /// 실제 weight.
         actual: i32,
     },
-    /// `ends_at <= starts_at` — V003_03 invariant 위반.
+    /// `ends_at <= starts_at` — `V003_03` invariant 위반.
     #[error("ends_at must be strictly after starts_at")]
     InvalidTimeBound,
 }

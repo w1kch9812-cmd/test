@@ -61,11 +61,12 @@ impl SystemAlert {
     /// - `title` 가 trim 후 빈 문자열 → [`SystemAlertError::EmptyTitle`].
     /// - `title` 가 200자 초과 → [`SystemAlertError::TitleTooLong`].
     /// - `detail` 가 `Some` 이고 4000자 초과 → [`SystemAlertError::DetailTooLong`].
+    #[allow(clippy::too_many_arguments)] // 의도된 풀 생성자 — spec column 매핑.
     pub fn try_new(
         severity: SystemAlertSeverity,
-        source: String,
-        title: String,
-        detail: Option<String>,
+        source: &str,
+        title: &str,
+        detail: Option<&str>,
         metadata: serde_json::Value,
         created_at: DateTime<Utc>,
     ) -> Result<Self, SystemAlertError> {
@@ -77,7 +78,7 @@ impl SystemAlert {
                 if len > MAX_DETAIL_LEN {
                     return Err(SystemAlertError::DetailTooLong { actual: len });
                 }
-                Some(d)
+                Some(d.to_owned())
             }
             None => None,
         };
@@ -119,7 +120,7 @@ impl SystemAlert {
     /// # Errors
     ///
     /// 이미 resolve 된 경우 [`SystemAlertError::AlreadyResolved`].
-    pub fn resolve(&mut self, at: DateTime<Utc>) -> Result<(), SystemAlertError> {
+    pub const fn resolve(&mut self, at: DateTime<Utc>) -> Result<(), SystemAlertError> {
         if self.resolved_at.is_some() {
             return Err(SystemAlertError::AlreadyResolved);
         }
@@ -146,7 +147,7 @@ impl SystemAlert {
     }
 }
 
-fn validate_source(value: String) -> Result<String, SystemAlertError> {
+fn validate_source(value: &str) -> Result<String, SystemAlertError> {
     let trimmed = value.trim().to_owned();
     if trimmed.is_empty() {
         return Err(SystemAlertError::EmptySource);
@@ -158,7 +159,7 @@ fn validate_source(value: String) -> Result<String, SystemAlertError> {
     Ok(trimmed)
 }
 
-fn validate_title(value: String) -> Result<String, SystemAlertError> {
+fn validate_title(value: &str) -> Result<String, SystemAlertError> {
     let trimmed = value.trim().to_owned();
     if trimmed.is_empty() {
         return Err(SystemAlertError::EmptyTitle);
@@ -181,9 +182,9 @@ mod tests {
     fn make_alert(at: DateTime<Utc>) -> SystemAlert {
         SystemAlert::try_new(
             SystemAlertSeverity::Error,
-            "vworld_client".to_owned(),
-            "V-World API rate limit exceeded".to_owned(),
-            Some("threshold=1000/hour, current=1500".to_owned()),
+            "vworld_client",
+            "V-World API rate limit exceeded",
+            Some("threshold=1000/hour, current=1500"),
             json!({"region": "seoul"}),
             at,
         )
@@ -222,8 +223,8 @@ mod tests {
     fn try_new_with_empty_source_errors() {
         let err = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            "   ".to_owned(),
-            "title".to_owned(),
+            "   ",
+            "title",
             None,
             json!({}),
             Utc::now(),
@@ -237,8 +238,8 @@ mod tests {
         let too_long = "X".repeat(51);
         let err = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            too_long,
-            "title".to_owned(),
+            &too_long,
+            "title",
             None,
             json!({}),
             Utc::now(),
@@ -251,8 +252,8 @@ mod tests {
     fn try_new_with_empty_title_errors() {
         let err = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            "src".to_owned(),
-            "   ".to_owned(),
+            "src",
+            "   ",
             None,
             json!({}),
             Utc::now(),
@@ -266,8 +267,8 @@ mod tests {
         let too_long = "X".repeat(201);
         let err = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            "src".to_owned(),
-            too_long,
+            "src",
+            &too_long,
             None,
             json!({}),
             Utc::now(),
@@ -281,9 +282,9 @@ mod tests {
         let too_long = "X".repeat(4001);
         let err = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            "src".to_owned(),
-            "title".to_owned(),
-            Some(too_long),
+            "src",
+            "title",
+            Some(&too_long),
             json!({}),
             Utc::now(),
         )
@@ -295,8 +296,8 @@ mod tests {
     fn try_new_with_no_detail_accepted() {
         let a = SystemAlert::try_new(
             SystemAlertSeverity::Info,
-            "src".to_owned(),
-            "ok".to_owned(),
+            "src",
+            "ok",
             None,
             json!({}),
             Utc::now(),
@@ -424,8 +425,8 @@ mod tests {
     fn try_new_trims_source_and_title() {
         let a = SystemAlert::try_new(
             SystemAlertSeverity::Warning,
-            "  src  ".to_owned(),
-            "  title  ".to_owned(),
+            "  src  ",
+            "  title  ",
             None,
             json!({}),
             Utc::now(),
