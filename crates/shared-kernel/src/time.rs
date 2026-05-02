@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn to_kst_converts_offset() {
-        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).expect("valid");
+        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).single().expect("valid");
         let kst = to_kst(utc);
         assert_eq!(kst.hour(), 9);
         assert_eq!(kst.offset().local_minus_utc(), 9 * 3600);
@@ -53,7 +53,7 @@ mod tests {
     #[test]
     fn to_kst_preserves_instant() {
         // The instant in UTC seconds since epoch must be unchanged after timezone conversion.
-        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 12, 30, 45).expect("valid");
+        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 12, 30, 45).single().expect("valid");
         let kst = to_kst(utc);
         assert_eq!(utc.timestamp(), kst.timestamp());
     }
@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn to_kst_rolls_date_forward_at_midnight_utc() {
         // 2026-05-01 00:00 UTC → 2026-05-01 09:00 KST (same date)
-        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).expect("valid");
+        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 0, 0, 0).single().expect("valid");
         let kst = to_kst(utc);
         assert_eq!(kst.format("%Y-%m-%d").to_string(), "2026-05-01");
     }
@@ -69,7 +69,7 @@ mod tests {
     #[test]
     fn to_kst_rolls_date_forward_at_late_utc() {
         // 2026-05-01 16:00 UTC → 2026-05-02 01:00 KST (date rolled)
-        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 16, 0, 0).expect("valid");
+        let utc = Utc.with_ymd_and_hms(2026, 5, 1, 16, 0, 0).single().expect("valid");
         let kst = to_kst(utc);
         assert_eq!(kst.format("%Y-%m-%d").to_string(), "2026-05-02");
         assert_eq!(kst.hour(), 1);
