@@ -20,14 +20,14 @@ pub trait IdPrefix {
 }
 
 /// User aggregate ID marker.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UserMarker;
 impl IdPrefix for UserMarker {
     const PREFIX: &'static str = "usr";
 }
 
 /// Listing aggregate ID marker.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ListingMarker;
 impl IdPrefix for ListingMarker {
     const PREFIX: &'static str = "lst";
