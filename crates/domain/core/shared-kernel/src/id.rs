@@ -117,6 +117,17 @@ impl IdPrefix for AdminActionMarker {
     const PREFIX: &'static str = "ada";
 }
 
+/// `BusinessVerificationQueue` aggregate ID marker.
+///
+/// Spec § 5.5 `business_verification_queue.id` inline comment (`bvq_...`).
+/// 사업자 인증 큐 — 4-status workflow (`pending`/`approved`/`rejected`/
+/// `needs_more_info`) + version OCC + 24h SLA.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BvqMarker;
+impl IdPrefix for BvqMarker {
+    const PREFIX: &'static str = "bvq";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -311,6 +322,13 @@ mod tests {
         let id: Id<AdminActionMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("ada_"));
+    }
+
+    #[test]
+    fn new_bvq_id_has_bvq_prefix() {
+        let id: Id<BvqMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("bvq_"));
     }
 
     #[test]
