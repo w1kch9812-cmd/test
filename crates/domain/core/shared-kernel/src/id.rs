@@ -139,6 +139,17 @@ impl IdPrefix for LrqMarker {
     const PREFIX: &'static str = "lrq";
 }
 
+/// `ListingReport` aggregate ID marker.
+///
+/// Spec § 5.5 `listing_report.id` inline comment (`lrp_...`).
+/// 매물 신고 — `open`/`investigating`/`confirmed`/`dismissed` 4-status workflow
+/// (no OCC — admin reports rarely conflict). 신고자(`reporter_id`) 는 익명 가능.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ListingReportMarker;
+impl IdPrefix for ListingReportMarker {
+    const PREFIX: &'static str = "lrp";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -347,6 +358,13 @@ mod tests {
         let id: Id<LrqMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("lrq_"));
+    }
+
+    #[test]
+    fn new_listing_report_id_has_lrp_prefix() {
+        let id: Id<ListingReportMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("lrp_"));
     }
 
     #[test]
