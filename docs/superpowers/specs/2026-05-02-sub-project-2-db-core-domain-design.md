@@ -544,8 +544,9 @@ create table featured_content (
     created_at timestamptz not null default now()
 );
 
-create index featured_active_idx on featured_content(feature_kind, starts_at, ends_at)
-    where ends_at > now();
+-- Note: partial index predicate cannot use now() (PG requires IMMUTABLE).
+-- Range scan on (starts_at, ends_at) suffices; queries filter `ends_at > now()` at runtime.
+create index featured_active_idx on featured_content(feature_kind, starts_at, ends_at);
 ```
 
 #### `system_alert`
