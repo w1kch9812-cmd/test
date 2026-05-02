@@ -4,7 +4,7 @@
 //! 길이는 `RFC 5321` `SMTP` envelope 한도인 254자 이하로 제한해요.
 //!
 //! 일부 `RFC 5322` 엣지 케이스(따옴표 묶인 local part, IP literal 도메인)는
-//! 의도적으로 거부해요 — 실무에서 거의 사용 안 되고 ReDoS 위험을 줄이기 위해서예요.
+//! 의도적으로 거부해요 — 실무에서 거의 사용 안 되고 `ReDoS` 위험을 줄이기 위해서예요.
 
 use once_cell::sync::Lazy;
 use regex::Regex;
