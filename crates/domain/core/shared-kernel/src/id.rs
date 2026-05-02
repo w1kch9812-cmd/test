@@ -33,6 +33,13 @@ impl IdPrefix for ListingMarker {
     const PREFIX: &'static str = "lst";
 }
 
+/// `ListingPhoto` aggregate ID marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ListingPhotoMarker;
+impl IdPrefix for ListingPhotoMarker {
+    const PREFIX: &'static str = "lph";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -157,6 +164,13 @@ mod tests {
         let id: Id<ListingMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("lst_"));
+    }
+
+    #[test]
+    fn new_listing_photo_id_has_lph_prefix() {
+        let id: Id<ListingPhotoMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("lph_"));
     }
 
     #[test]

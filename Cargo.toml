@@ -4,6 +4,7 @@ members = [
     "crates/domain/core/shared-kernel",
     "crates/domain/core/user",
     "crates/domain/core/listing",
+    "crates/domain/core/listing-photo",
     "crates/db",
     "services/api",
     # 다른 services/* 와 crates/* 는 sub-project 2+에서 추가됨.
