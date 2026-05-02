@@ -107,7 +107,10 @@ mod tests {
             BuildingPurposeCode::KnowledgeIndustryCenter.as_str(),
             "knowledge_industry_center"
         );
-        assert_eq!(BuildingPurposeCode::LogisticsCenter.as_str(), "logistics_center");
+        assert_eq!(
+            BuildingPurposeCode::LogisticsCenter.as_str(),
+            "logistics_center"
+        );
         assert_eq!(BuildingPurposeCode::Educational.as_str(), "educational");
         assert_eq!(BuildingPurposeCode::Other.as_str(), "other");
     }
