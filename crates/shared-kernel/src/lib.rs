@@ -7,5 +7,6 @@
 #![warn(missing_docs)]
 
 pub mod id;
+pub mod money;
 pub mod pnu;
 pub mod time;
