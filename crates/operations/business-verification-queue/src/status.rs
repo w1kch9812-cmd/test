@@ -35,9 +35,7 @@ pub enum BvqStatus {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BvqStatusError {
     /// 미지원 값.
-    #[error(
-        "unknown bvq_status: '{0}' (expected: pending, approved, rejected, needs_more_info)"
-    )]
+    #[error("unknown bvq_status: '{0}' (expected: pending, approved, rejected, needs_more_info)")]
     Unknown(String),
 }
 

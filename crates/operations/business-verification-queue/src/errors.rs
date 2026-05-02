@@ -65,6 +65,9 @@ mod tests {
     #[test]
     fn reviewer_note_too_long_message() {
         let err = BvqError::ReviewerNoteTooLong { actual: 2001 };
-        assert_eq!(err.to_string(), "reviewer_note exceeds 2000 chars (got 2001)");
+        assert_eq!(
+            err.to_string(),
+            "reviewer_note exceeds 2000 chars (got 2001)"
+        );
     }
 }

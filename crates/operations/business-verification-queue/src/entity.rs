@@ -105,9 +105,7 @@ impl BusinessVerificationQueue {
         let trimmed = note.map(|n| n.trim().to_owned());
         match (trimmed, required_for) {
             (None, Some(action)) => Err(BvqError::EmptyReviewerNote { action }),
-            (Some(s), Some(action)) if s.is_empty() => {
-                Err(BvqError::EmptyReviewerNote { action })
-            }
+            (Some(s), Some(action)) if s.is_empty() => Err(BvqError::EmptyReviewerNote { action }),
             (Some(s), _) => {
                 let len = s.chars().count();
                 if len > MAX_REVIEWER_NOTE_LEN {
@@ -409,8 +407,12 @@ mod tests {
         let now = Utc::now();
         let mut bvq = make_pending(now);
         // 먼저 NeedsMoreInfo 로 보낸 뒤 resubmit.
-        bvq.request_more_info(Id::new(), "더 필요해요".to_owned(), now + Duration::hours(1))
-            .expect("rmi ok");
+        bvq.request_more_info(
+            Id::new(),
+            "더 필요해요".to_owned(),
+            now + Duration::hours(1),
+        )
+        .expect("rmi ok");
         assert_eq!(bvq.status, BvqStatus::NeedsMoreInfo);
         assert!(bvq.reviewer_id.is_some());
         assert!(bvq.reviewer_note.is_some());
@@ -431,8 +433,12 @@ mod tests {
     fn resubmit_bumps_version() {
         let now = Utc::now();
         let mut bvq = make_pending(now);
-        bvq.request_more_info(Id::new(), "더 필요해요".to_owned(), now + Duration::hours(1))
-            .expect("rmi ok");
+        bvq.request_more_info(
+            Id::new(),
+            "더 필요해요".to_owned(),
+            now + Duration::hours(1),
+        )
+        .expect("rmi ok");
         let v_before_resubmit = bvq.version;
         bvq.resubmit(sample_documents_v2(), now + Duration::hours(2))
             .expect("resubmit ok");
@@ -580,8 +586,7 @@ mod tests {
         let now = Utc::now();
         let bvq = make_pending(now);
         let json = serde_json::to_string(&bvq).expect("serialize");
-        let back: BusinessVerificationQueue =
-            serde_json::from_str(&json).expect("deserialize");
+        let back: BusinessVerificationQueue = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(bvq, back);
     }
 
@@ -592,8 +597,7 @@ mod tests {
         bvq.approve(Id::new(), Some("OK".to_owned()), now + Duration::hours(1))
             .expect("approve ok");
         let json = serde_json::to_string(&bvq).expect("serialize");
-        let back: BusinessVerificationQueue =
-            serde_json::from_str(&json).expect("deserialize");
+        let back: BusinessVerificationQueue = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(bvq, back);
     }
 }

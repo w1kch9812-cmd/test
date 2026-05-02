@@ -230,8 +230,7 @@ mod tests {
     #[test]
     fn rejects_target_id_over_50_chars() {
         let long = "X".repeat(51);
-        let err =
-            make_full("approve_listing", Some("listing"), Some(&long), "corr_x").unwrap_err();
+        let err = make_full("approve_listing", Some("listing"), Some(&long), "corr_x").unwrap_err();
         assert!(matches!(
             err,
             AdminActionError::TargetIdTooLong { actual: 51 }
@@ -256,13 +255,8 @@ mod tests {
 
     #[test]
     fn has_target_true_when_both_some() {
-        let action = make_full(
-            "approve_listing",
-            Some("listing"),
-            Some("lst_x"),
-            "corr_x",
-        )
-        .expect("valid");
+        let action =
+            make_full("approve_listing", Some("listing"), Some("lst_x"), "corr_x").expect("valid");
         assert!(action.has_target());
     }
 
@@ -289,8 +283,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip_without_target() {
-        let action =
-            make_full("force_pipeline_run", None, None, "corr_x").expect("valid");
+        let action = make_full("force_pipeline_run", None, None, "corr_x").expect("valid");
         let json = serde_json::to_string(&action).expect("serialize");
         let back: AdminAction = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(action, back);
@@ -358,8 +351,8 @@ mod tests {
     #[test]
     fn boundary_target_kind_exactly_30_chars_accepted() {
         let exactly = "X".repeat(30);
-        let action = make_full("approve_listing", Some(&exactly), Some("lst_x"), "corr_x")
-            .expect("30 ok");
+        let action =
+            make_full("approve_listing", Some(&exactly), Some("lst_x"), "corr_x").expect("30 ok");
         assert_eq!(
             action.target_kind.as_ref().map(|t| t.chars().count()),
             Some(30)
@@ -369,8 +362,8 @@ mod tests {
     #[test]
     fn boundary_target_id_exactly_50_chars_accepted() {
         let exactly = "X".repeat(50);
-        let action = make_full("approve_listing", Some("listing"), Some(&exactly), "corr_x")
-            .expect("50 ok");
+        let action =
+            make_full("approve_listing", Some("listing"), Some(&exactly), "corr_x").expect("50 ok");
         assert_eq!(
             action.target_id.as_ref().map(|t| t.chars().count()),
             Some(50)

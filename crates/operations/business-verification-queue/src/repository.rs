@@ -29,10 +29,7 @@ pub trait BvqRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn find_pending(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<BusinessVerificationQueue>, RepoError>;
+    async fn find_pending(&self, limit: u32) -> Result<Vec<BusinessVerificationQueue>, RepoError>;
 
     /// 사용자별 큐 조회 (제출 이력 추적용, 최신 순).
     ///
@@ -81,7 +78,10 @@ mod tests {
     #[test]
     fn repo_error_messages() {
         assert_eq!(RepoError::NotFound.to_string(), "not found");
-        assert_eq!(RepoError::Conflict.to_string(), "conflict (version mismatch)");
+        assert_eq!(
+            RepoError::Conflict.to_string(),
+            "conflict (version mismatch)"
+        );
         assert_eq!(
             RepoError::Database("oops".to_owned()).to_string(),
             "database error: oops"
