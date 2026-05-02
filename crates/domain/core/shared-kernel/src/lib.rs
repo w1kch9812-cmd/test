@@ -21,3 +21,4 @@ pub mod phone_kr;
 pub mod pnu;
 pub mod srid;
 pub mod time;
+pub mod transaction_type;
