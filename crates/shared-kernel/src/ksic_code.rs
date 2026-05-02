@@ -146,7 +146,10 @@ mod tests {
     #[test]
     fn rejects_digit_first_char() {
         let err = KsicCode::try_new("12620").unwrap_err();
-        assert!(matches!(err, KsicCodeError::FirstMustBeUppercase { first: '1' }));
+        assert!(matches!(
+            err,
+            KsicCodeError::FirstMustBeUppercase { first: '1' }
+        ));
     }
 
     #[test]
