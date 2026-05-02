@@ -121,6 +121,22 @@ pub enum AdminDivisionError {
     /// `ASCII` 숫자 아닌 문자 포함.
     #[error("admin division code must be ASCII digits only")]
     NonDigit,
+    /// `sigungu` 첫 2자리가 `sido`와 다름.
+    #[error("sigungu prefix mismatch: sido={sido}, sigungu={sigungu}")]
+    SidoSigunguMismatch {
+        /// 입력 sido.
+        sido: String,
+        /// 입력 sigungu.
+        sigungu: String,
+    },
+    /// `eupmyeondong` 첫 5자리가 `sigungu`와 다름.
+    #[error("eupmyeondong prefix mismatch: sigungu={sigungu}, eupmyeondong={eupmyeondong}")]
+    SigunguEupmyeondongMismatch {
+        /// 입력 sigungu.
+        sigungu: String,
+        /// 입력 eupmyeondong.
+        eupmyeondong: String,
+    },
 }
 
 fn validate_digits(s: &str, expected: usize) -> Result<(), AdminDivisionError> {
@@ -171,6 +187,55 @@ impl std::str::FromStr for EupmyeondongCode {
     type Err = AdminDivisionError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_new(s)
+    }
+}
+
+// ── AdminDivision composite ───────────────────────────────────────────
+
+/// 행정구역 composite (시도 + 시군구 + 읍면동 일관성 강제).
+///
+/// 단일 newtype 아님 — 3 코드를 묶어서 cross-field invariant를 강제해요:
+/// - `sigungu`의 첫 2자리 == `sido`
+/// - `eupmyeondong`의 첫 5자리 == `sigungu`
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AdminDivision {
+    /// 시도 코드 (2자리).
+    pub sido: SidoCode,
+    /// 시군구 코드 (5자리).
+    pub sigungu: SigunguCode,
+    /// 읍면동 코드 (8자리).
+    pub eupmyeondong: EupmyeondongCode,
+}
+
+impl AdminDivision {
+    /// 검증 후 `AdminDivision` 생성.
+    ///
+    /// # Errors
+    ///
+    /// `sigungu`의 첫 2자리가 `sido`와 다르면`SidoSigunguMismatch`.
+    /// `eupmyeondong`의 첫 5자리가 `sigungu`와 다르면 `SigunguEupmyeondongMismatch`.
+    pub fn try_new(
+        sido: SidoCode,
+        sigungu: SigunguCode,
+        eupmyeondong: EupmyeondongCode,
+    ) -> Result<Self, AdminDivisionError> {
+        if sigungu.sido_code() != sido {
+            return Err(AdminDivisionError::SidoSigunguMismatch {
+                sido: sido.as_str().to_owned(),
+                sigungu: sigungu.as_str().to_owned(),
+            });
+        }
+        if eupmyeondong.sigungu_code() != sigungu {
+            return Err(AdminDivisionError::SigunguEupmyeondongMismatch {
+                sigungu: sigungu.as_str().to_owned(),
+                eupmyeondong: eupmyeondong.as_str().to_owned(),
+            });
+        }
+        Ok(Self {
+            sido,
+            sigungu,
+            eupmyeondong,
+        })
     }
 }
 
@@ -304,5 +369,76 @@ mod tests {
             EupmyeondongCode::from_str("11110101").unwrap().as_str(),
             "11110101"
         );
+    }
+
+    // ── AdminDivision composite ─────────────────────────────────────────
+
+    #[test]
+    fn admin_division_seoul_jongno_cheongun() {
+        let sido = SidoCode::try_new("11").expect("ok");
+        let sigungu = SigunguCode::try_new("11110").expect("ok");
+        let dong = EupmyeondongCode::try_new("11110101").expect("ok");
+        let d = AdminDivision::try_new(sido, sigungu, dong).expect("valid");
+        assert_eq!(d.sido.as_str(), "11");
+        assert_eq!(d.sigungu.as_str(), "11110");
+        assert_eq!(d.eupmyeondong.as_str(), "11110101");
+    }
+
+    #[test]
+    fn admin_division_rejects_sido_sigungu_mismatch() {
+        // sido = "11" (Seoul), but sigungu prefix = "26" (Busan)
+        let sido = SidoCode::try_new("11").expect("ok");
+        let sigungu = SigunguCode::try_new("26110").expect("ok");
+        let dong = EupmyeondongCode::try_new("26110101").expect("ok");
+        let err = AdminDivision::try_new(sido, sigungu, dong).unwrap_err();
+        assert!(matches!(
+            err,
+            AdminDivisionError::SidoSigunguMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn admin_division_rejects_sigungu_eupmyeondong_mismatch() {
+        // sigungu = "11110", but eupmyeondong prefix = "11140"
+        let sido = SidoCode::try_new("11").expect("ok");
+        let sigungu = SigunguCode::try_new("11110").expect("ok");
+        let dong = EupmyeondongCode::try_new("11140101").expect("ok");
+        let err = AdminDivision::try_new(sido, sigungu, dong).unwrap_err();
+        assert!(matches!(
+            err,
+            AdminDivisionError::SigunguEupmyeondongMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn admin_division_serde_roundtrip() {
+        let sido = SidoCode::try_new("11").expect("ok");
+        let sigungu = SigunguCode::try_new("11110").expect("ok");
+        let dong = EupmyeondongCode::try_new("11110101").expect("ok");
+        let d = AdminDivision::try_new(sido, sigungu, dong).expect("valid");
+        let json = serde_json::to_string(&d).expect("serialize");
+        let back: AdminDivision = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(d, back);
+    }
+
+    #[test]
+    fn admin_division_accessor_consistency() {
+        let sido = SidoCode::try_new("11").expect("ok");
+        let sigungu = SigunguCode::try_new("11110").expect("ok");
+        let dong = EupmyeondongCode::try_new("11110101").expect("ok");
+        let d = AdminDivision::try_new(sido, sigungu, dong).expect("valid");
+        assert_eq!(d.sido, d.sigungu.sido_code());
+        assert_eq!(d.sigungu, d.eupmyeondong.sigungu_code());
+        assert_eq!(d.sido, d.eupmyeondong.sido_code());
+    }
+
+    #[test]
+    fn admin_division_clone_and_eq() {
+        let sido = SidoCode::try_new("26").expect("ok");
+        let sigungu = SigunguCode::try_new("26110").expect("ok");
+        let dong = EupmyeondongCode::try_new("26110101").expect("ok");
+        let d = AdminDivision::try_new(sido, sigungu, dong).expect("valid");
+        let cloned = d.clone();
+        assert_eq!(d, cloned);
     }
 }
