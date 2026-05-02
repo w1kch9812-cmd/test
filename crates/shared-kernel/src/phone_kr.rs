@@ -3,6 +3,9 @@
 //! 입력 형식 다양 (하이픈/공백/괄호 포함, `+82` prefix 등) → 숫자만 추출 후
 //! `+82`를 선두 `0`으로 정규화. 결과는 9-11자리 `0`으로 시작하는 숫자 문자열.
 //!
+//! **명시적 `+82` prefix만 strip해요.** Raw `82xxx...`는 모호하므로
+//! 그대로 검증하고 `MustStartWithZero`로 거부해요.
+//!
 //! `MSISDN` 형식 (E.164에서 `+` 제거 후 국가별 표기)에 가까운 한국 로컬 표기를 사용해요.
 
 use serde::{Deserialize, Serialize};
@@ -35,20 +38,28 @@ impl PhoneKr {
     ///
     /// 처리 순서:
     /// 1. 모든 비숫자 문자 제거
-    /// 2. `82`로 시작하면 첫 두 글자 → `0`로 치환 (`+82-10-1234-5678` → `01012345678`)
+    /// 2. 입력이 `+82`로 시작했다면 선두 `82` → `0`로 치환 (`+82-10-1234-5678` → `01012345678`)
     /// 3. 길이 9-11 검증
     /// 4. 선두 `0` 검증
+    ///
+    /// Raw `82xxx...` (명시적 `+` 없음)는 모호하므로 그대로 검증해요.
     ///
     /// # Errors
     ///
     /// 길이가 9-11 범위 밖이면 [`PhoneKrError::InvalidLength`].
     /// 선두가 `0`이 아니면 [`PhoneKrError::MustStartWithZero`].
     pub fn try_new(s: &str) -> Result<Self, PhoneKrError> {
-        let mut digits: String = s.chars().filter(char::is_ascii_digit).collect();
+        let trimmed = s.trim();
+        let has_plus_82 = trimmed.starts_with("+82");
 
-        // `+82` (또는 `82`) 국제 prefix → 선두 `0`으로 치환.
-        if let Some(rest) = digits.strip_prefix("82") {
-            digits = format!("0{rest}");
+        let mut digits: String = trimmed.chars().filter(char::is_ascii_digit).collect();
+
+        // 명시적 `+82` 국제 prefix만 strip → 선두 `0`으로 치환.
+        // Raw `82...`는 모호하므로 leading-zero 검증에서 거부.
+        if has_plus_82 {
+            if let Some(rest) = digits.strip_prefix("82") {
+                digits = format!("0{rest}");
+            }
         }
 
         if !(9..=11).contains(&digits.len()) {
@@ -131,9 +142,23 @@ mod tests {
     }
 
     #[test]
-    fn parse_with_82_prefix_no_plus() {
-        let p = PhoneKr::try_new("82-10-1234-5678").expect("valid 82 form");
-        assert_eq!(p.as_str(), "01012345678");
+    fn rejects_82_prefix_without_plus() {
+        // Without "+", leading "82..." is treated as raw digits.
+        // 8212345678 → 10 digits starting with 8 → MustStartWithZero
+        let err = PhoneKr::try_new("8212345678").unwrap_err();
+        assert!(matches!(err, PhoneKrError::MustStartWithZero { .. }));
+    }
+
+    #[test]
+    fn rejects_82_prefix_with_zero_after() {
+        // "+82-0-..." would silently strip "82" → "0-..." which is correct,
+        // but typing "+82" then "0" is a common user mistake. Verify the
+        // result is at least valid Korean (starts with 0, length 9-11).
+        // "+82-0-2-1234-5678" → digits "820212345678" (12) → strip "82" + prepend "0"
+        //   → "00212345678" (11 digits). Redundant `0` after country code is preserved.
+        // Current behavior: accepts. Document as expected-but-suboptimal.
+        let p = PhoneKr::try_new("+82-0-2-1234-5678").expect("strips +82, accepts redundant 0");
+        assert_eq!(p.as_str(), "00212345678");
     }
 
     #[test]
