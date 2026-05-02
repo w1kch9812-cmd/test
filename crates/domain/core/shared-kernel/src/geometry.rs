@@ -7,7 +7,7 @@
 //! 한국 영역으로 좁힌 검증은 aggregate level (예: `Listing.geom_point`) 책임이에요.
 
 use crate::srid::Srid;
-use geo_types::Point as GeoPoint;
+use geo_types::{Point as GeoPoint, Polygon as GeoPolygon};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -48,6 +48,12 @@ pub enum GeometryError {
         /// 입력 위도.
         lat: f64,
     },
+    /// `Polygon` 외곽 링 점 < 4 (`GeoJSON`은 첫=마지막 포함 ≥4 점 요구).
+    #[error("polygon exterior ring must have ≥4 points (got {actual})")]
+    ExteriorRingTooShort {
+        /// 실제 점 수.
+        actual: usize,
+    },
 }
 
 impl PointSrid {
@@ -80,6 +86,73 @@ impl PointSrid {
     #[must_use]
     pub fn to_geo_point(self) -> GeoPoint<f64> {
         GeoPoint::new(self.lng, self.lat)
+    }
+}
+
+/// `WGS84` 강제 + 좌표 범위 검증된 `Polygon`.
+///
+/// Spec § 8.4 `Parcel.geom` 매핑. `PointSrid`의 `Polygon` 버전.
+///
+/// Exterior ring + 0개 이상 holes (interior rings) 지원. `geo-types::Polygon` wrapper.
+/// Self-intersection 검증 *안* 함 — 비용이 큼, 외부 `R2` 데이터 신뢰.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PolygonSrid {
+    /// `Polygon` 데이터 (`geo-types::Polygon`).
+    pub polygon: GeoPolygon<f64>,
+    /// 좌표계.
+    pub srid: Srid,
+}
+
+impl PolygonSrid {
+    /// `WGS84` `Polygon` 생성. 모든 좌표 finite + 범위 검증 + exterior ring ≥4 점.
+    ///
+    /// # Errors
+    ///
+    /// 좌표 `NaN`/`±∞` → `NotFinite`. `lng` 범위 외 → `LngOutOfRange`.
+    /// `lat` 범위 외 → `LatOutOfRange`. 외곽 링 점 < 4 → `ExteriorRingTooShort`.
+    pub fn try_new_wgs84(polygon: GeoPolygon<f64>) -> Result<Self, GeometryError> {
+        // Exterior ring 점 수 검증 (`GeoJSON`: 첫=마지막 포함 ≥4 점).
+        let exterior_len = polygon.exterior().0.len();
+        if exterior_len < 4 {
+            return Err(GeometryError::ExteriorRingTooShort {
+                actual: exterior_len,
+            });
+        }
+
+        // 모든 좌표 (exterior + holes) finite + `WGS84` 범위 검증.
+        for coord in &polygon.exterior().0 {
+            Self::validate_coord(coord.x, coord.y)?;
+        }
+        for hole in polygon.interiors() {
+            for coord in &hole.0 {
+                Self::validate_coord(coord.x, coord.y)?;
+            }
+        }
+
+        Ok(Self {
+            polygon,
+            srid: Srid::Wgs84,
+        })
+    }
+
+    /// 내부 헬퍼 — 단일 좌표 검증.
+    fn validate_coord(lng: f64, lat: f64) -> Result<(), GeometryError> {
+        if !lng.is_finite() || !lat.is_finite() {
+            return Err(GeometryError::NotFinite { lng, lat });
+        }
+        if !(-180.0..=180.0).contains(&lng) {
+            return Err(GeometryError::LngOutOfRange { actual: lng });
+        }
+        if !(-90.0..=90.0).contains(&lat) {
+            return Err(GeometryError::LatOutOfRange { actual: lat });
+        }
+        Ok(())
+    }
+
+    /// `geo-types::Polygon` 참조 반환 (`PostGIS` interop).
+    #[must_use]
+    pub const fn as_geo_polygon(&self) -> &GeoPolygon<f64> {
+        &self.polygon
     }
 }
 
@@ -199,5 +272,146 @@ mod tests {
         let q = p; // Copy
         assert_eq!(p.srid, q.srid);
         assert_eq!(p.lng, q.lng);
+    }
+
+    // ── PolygonSrid ────────────────────────────────────────────────
+
+    use geo_types::{Coord, LineString};
+
+    // Helper: build a square polygon
+    fn unit_square_wgs84() -> GeoPolygon<f64> {
+        let exterior = LineString(vec![
+            Coord { x: 126.0, y: 37.0 },
+            Coord { x: 127.0, y: 37.0 },
+            Coord { x: 127.0, y: 38.0 },
+            Coord { x: 126.0, y: 38.0 },
+            Coord { x: 126.0, y: 37.0 }, // closing point
+        ]);
+        GeoPolygon::new(exterior, vec![])
+    }
+
+    #[test]
+    fn polygon_wgs84_simple_square() {
+        let p = PolygonSrid::try_new_wgs84(unit_square_wgs84()).expect("valid");
+        assert_eq!(p.srid, Srid::Wgs84);
+        assert_eq!(p.polygon.exterior().0.len(), 5);
+        assert_eq!(p.polygon.interiors().len(), 0);
+    }
+
+    #[test]
+    fn polygon_with_hole() {
+        let exterior = unit_square_wgs84().exterior().clone();
+        let hole = LineString(vec![
+            Coord { x: 126.4, y: 37.4 },
+            Coord { x: 126.6, y: 37.4 },
+            Coord { x: 126.6, y: 37.6 },
+            Coord { x: 126.4, y: 37.6 },
+            Coord { x: 126.4, y: 37.4 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![hole]);
+        let p = PolygonSrid::try_new_wgs84(polygon).expect("valid with hole");
+        assert_eq!(p.polygon.interiors().len(), 1);
+    }
+
+    #[test]
+    fn polygon_rejects_short_exterior_ring() {
+        // Only 3 points — too short
+        let exterior = LineString(vec![
+            Coord { x: 126.0, y: 37.0 },
+            Coord { x: 127.0, y: 37.0 },
+            Coord { x: 126.0, y: 37.0 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![]);
+        let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
+        assert!(matches!(err, GeometryError::ExteriorRingTooShort { actual: 3 }));
+    }
+
+    #[test]
+    fn polygon_rejects_lng_out_of_range_exterior() {
+        let exterior = LineString(vec![
+            Coord { x: 200.0, y: 37.0 }, // lng > 180
+            Coord { x: 127.0, y: 37.0 },
+            Coord { x: 127.0, y: 38.0 },
+            Coord { x: 126.0, y: 37.0 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![]);
+        let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
+        assert!(matches!(err, GeometryError::LngOutOfRange { .. }));
+    }
+
+    #[test]
+    fn polygon_rejects_lat_out_of_range_exterior() {
+        let exterior = LineString(vec![
+            Coord { x: 126.0, y: 91.0 }, // lat > 90
+            Coord { x: 127.0, y: 37.0 },
+            Coord { x: 127.0, y: 38.0 },
+            Coord { x: 126.0, y: 37.0 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![]);
+        let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
+        assert!(matches!(err, GeometryError::LatOutOfRange { .. }));
+    }
+
+    #[test]
+    fn polygon_rejects_nan_in_exterior() {
+        let exterior = LineString(vec![
+            Coord { x: f64::NAN, y: 37.0 },
+            Coord { x: 127.0, y: 37.0 },
+            Coord { x: 127.0, y: 38.0 },
+            Coord { x: 126.0, y: 37.0 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![]);
+        let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
+        assert!(matches!(err, GeometryError::NotFinite { .. }));
+    }
+
+    #[test]
+    fn polygon_rejects_lng_out_of_range_in_hole() {
+        let exterior = unit_square_wgs84().exterior().clone();
+        let hole = LineString(vec![
+            Coord { x: 200.0, y: 37.4 }, // lng > 180 in hole
+            Coord { x: 126.6, y: 37.4 },
+            Coord { x: 126.6, y: 37.6 },
+            Coord { x: 126.4, y: 37.4 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![hole]);
+        let err = PolygonSrid::try_new_wgs84(polygon).unwrap_err();
+        assert!(matches!(err, GeometryError::LngOutOfRange { .. }));
+    }
+
+    #[test]
+    fn polygon_boundary_lng_180() {
+        let exterior = LineString(vec![
+            Coord { x: 180.0, y: 37.0 },
+            Coord { x: 179.0, y: 37.0 },
+            Coord { x: 179.0, y: 38.0 },
+            Coord { x: 180.0, y: 37.0 },
+        ]);
+        let polygon = GeoPolygon::new(exterior, vec![]);
+        let p = PolygonSrid::try_new_wgs84(polygon).expect("180 inclusive");
+        assert_eq!(p.srid, Srid::Wgs84);
+    }
+
+    #[test]
+    fn polygon_to_geo_polygon_borrows() {
+        let p = PolygonSrid::try_new_wgs84(unit_square_wgs84()).expect("valid");
+        let geo: &GeoPolygon<f64> = p.as_geo_polygon();
+        assert_eq!(geo.exterior().0.len(), 5);
+    }
+
+    #[test]
+    fn polygon_clone_works() {
+        let p = PolygonSrid::try_new_wgs84(unit_square_wgs84()).expect("valid");
+        let q = p.clone();
+        assert_eq!(p.srid, q.srid);
+        assert_eq!(p, q);
+    }
+
+    #[test]
+    fn polygon_serde_roundtrip() {
+        let p = PolygonSrid::try_new_wgs84(unit_square_wgs84()).expect("valid");
+        let json = serde_json::to_string(&p).expect("serialize");
+        let back: PolygonSrid = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(p, back);
     }
 }
