@@ -96,10 +96,7 @@ mod tests {
 
     #[test]
     fn from_str_parses_each_variant() {
-        assert_eq!(
-            TransactionType::from_str("sale"),
-            Ok(TransactionType::Sale)
-        );
+        assert_eq!(TransactionType::from_str("sale"), Ok(TransactionType::Sale));
         assert_eq!(
             TransactionType::from_str("monthly_rent"),
             Ok(TransactionType::MonthlyRent)
