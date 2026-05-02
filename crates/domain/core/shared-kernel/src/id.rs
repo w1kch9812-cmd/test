@@ -89,6 +89,24 @@ impl IdPrefix for OutboxEventMarker {
     const PREFIX: &'static str = "evt";
 }
 
+/// `PipelineSchedule` aggregate ID marker.
+///
+/// Spec § 5.4 `pipeline_schedule.id` inline comment (`pls_...`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PipelineScheduleMarker;
+impl IdPrefix for PipelineScheduleMarker {
+    const PREFIX: &'static str = "pls";
+}
+
+/// `PipelineRun` aggregate ID marker.
+///
+/// Spec § 5.4 `pipeline_run.id` inline comment (`plr_...`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PipelineRunMarker;
+impl IdPrefix for PipelineRunMarker {
+    const PREFIX: &'static str = "plr";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -262,6 +280,20 @@ mod tests {
         let id: Id<OutboxEventMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("evt_"));
+    }
+
+    #[test]
+    fn new_pipeline_schedule_id_has_pls_prefix() {
+        let id: Id<PipelineScheduleMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("pls_"));
+    }
+
+    #[test]
+    fn new_pipeline_run_id_has_plr_prefix() {
+        let id: Id<PipelineRunMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("plr_"));
     }
 
     #[test]

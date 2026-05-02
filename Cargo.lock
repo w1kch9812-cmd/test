@@ -389,6 +389,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-pipeline-control"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "shared-kernel",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "db"
 version = "0.1.0"
 dependencies = [
