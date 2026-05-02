@@ -135,7 +135,7 @@ impl ListingReport {
         note: String,
         at: DateTime<Utc>,
     ) -> Result<(), ListingReportError> {
-        self.apply_terminal(ListingReportStatus::Confirmed, handler_id, note, at)
+        self.apply_terminal(ListingReportStatus::Confirmed, handler_id, Some(note), at)
     }
 
     /// `Open` / `Investigating` → `Dismissed` (terminal). 신고 기각 + handler 메모 필수.
@@ -154,21 +154,23 @@ impl ListingReport {
         note: String,
         at: DateTime<Utc>,
     ) -> Result<(), ListingReportError> {
-        self.apply_terminal(ListingReportStatus::Dismissed, handler_id, note, at)
+        self.apply_terminal(ListingReportStatus::Dismissed, handler_id, Some(note), at)
     }
 
-    /// `mark_confirmed` / `mark_dismissed` 공통 로직 — note 검증 + state 전이.
+    /// `mark_confirmed` / `mark_dismissed` 공통 — handler note 검증 + state 전이.
+    ///
+    /// `note` 를 `Option<String>` 으로 받아 `.map(|n| n.trim().to_owned())` 패턴으로 소비.
     fn apply_terminal(
         &mut self,
         next: ListingReportStatus,
         handler_id: Id<UserMarker>,
-        note: String,
+        note: Option<String>,
         at: DateTime<Utc>,
     ) -> Result<(), ListingReportError> {
         if self.status.is_terminal() {
             return Err(ListingReportError::InvalidTransition { from: self.status });
         }
-        let trimmed = note.trim().to_owned();
+        let trimmed = note.map_or_else(String::new, |n| n.trim().to_owned());
         if trimmed.is_empty() {
             return Err(ListingReportError::EmptyHandlerNote);
         }
