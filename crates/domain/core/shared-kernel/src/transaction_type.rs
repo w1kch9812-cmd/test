@@ -3,7 +3,7 @@
 //! Spec § 5.1 listing 테이블 `transaction_type` CHECK enum 3값:
 //! `sale` (매매), `monthly_rent` (월세), `jeonse` (전세).
 //!
-//! V003_01 cross-field CHECK invariant:
+//! `V003_01` cross-field CHECK invariant:
 //! - `sale`         → `deposit_krw` NULL,    `monthly_rent_krw` NULL
 //! - `monthly_rent` → `deposit_krw` NOT NULL, `monthly_rent_krw` NOT NULL
 //! - `jeonse`       → `deposit_krw` NOT NULL, `monthly_rent_krw` NULL
@@ -35,7 +35,7 @@ pub enum TransactionTypeError {
 }
 
 impl TransactionType {
-    /// 정규화된 snake_case 문자열 반환 (`DB varchar(20)` 매핑).
+    /// 정규화된 `snake_case` 문자열 반환 (`DB varchar(20)` 매핑).
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -45,7 +45,7 @@ impl TransactionType {
         }
     }
 
-    /// 거래 유형이 `deposit_krw`를 필수로 요구하는지 (V003_01 invariant).
+    /// 거래 유형이 `deposit_krw`를 필수로 요구하는지 (`V003_01` invariant).
     ///
     /// `monthly_rent` + `jeonse` → true. `sale` → false (deposit NULL).
     #[must_use]
@@ -53,9 +53,9 @@ impl TransactionType {
         matches!(self, Self::MonthlyRent | Self::Jeonse)
     }
 
-    /// 거래 유형이 `monthly_rent_krw`를 필수로 요구하는지 (V003_01 invariant).
+    /// 거래 유형이 `monthly_rent_krw`를 필수로 요구하는지 (`V003_01` invariant).
     ///
-    /// `monthly_rent` → true. `sale` + `jeonse` → false (monthly_rent NULL).
+    /// `monthly_rent` → true. `sale` + `jeonse` → false (`monthly_rent` NULL).
     #[must_use]
     pub const fn requires_monthly_rent(self) -> bool {
         matches!(self, Self::MonthlyRent)
