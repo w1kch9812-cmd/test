@@ -50,13 +50,13 @@ impl User {
     #[allow(clippy::too_many_arguments)]
     pub fn try_new(
         id: Id<UserMarker>,
-        zitadel_sub: String,
+        zitadel_sub: &str,
         email: Email,
-        display_name: String,
+        display_name: &str,
         user_kind: UserKind,
         now: DateTime<Utc>,
     ) -> Result<Self, UserError> {
-        let display_name = display_name.trim().to_owned();
+        let display_name = display_name.trim();
         if display_name.is_empty() {
             return Err(UserError::EmptyDisplayName);
         }
@@ -67,7 +67,7 @@ impl User {
             });
         }
 
-        let zitadel_sub = zitadel_sub.trim().to_owned();
+        let zitadel_sub = zitadel_sub.trim();
         if zitadel_sub.is_empty() {
             return Err(UserError::EmptyZitadelSub);
         }
@@ -78,9 +78,9 @@ impl User {
 
         Ok(Self {
             id,
-            zitadel_sub,
+            zitadel_sub: zitadel_sub.to_owned(),
             email,
-            display_name,
+            display_name: display_name.to_owned(),
             user_kind,
             created_at: now,
             updated_at: now,
@@ -105,9 +105,9 @@ mod tests {
         let now = Utc::now();
         let user = User::try_new(
             id.clone(),
-            "zitadel-sub-1".to_owned(),
+            "zitadel-sub-1",
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             now,
         )
@@ -123,9 +123,9 @@ mod tests {
     fn rejects_empty_display_name() {
         let err = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            String::new(),
+            "",
             UserKind::Individual,
             Utc::now(),
         )
@@ -137,9 +137,9 @@ mod tests {
     fn rejects_whitespace_only_display_name() {
         let err = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            "   ".to_owned(),
+            "   ",
             UserKind::Individual,
             Utc::now(),
         )
@@ -152,9 +152,9 @@ mod tests {
         let long = "X".repeat(101);
         let err = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            long,
+            &long,
             UserKind::Individual,
             Utc::now(),
         )
@@ -167,9 +167,9 @@ mod tests {
         let exactly = "X".repeat(100);
         let user = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            exactly.clone(),
+            &exactly,
             UserKind::Individual,
             Utc::now(),
         )
@@ -181,9 +181,9 @@ mod tests {
     fn rejects_empty_zitadel_sub() {
         let err = User::try_new(
             Id::new(),
-            String::new(),
+            "",
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             Utc::now(),
         )
@@ -195,9 +195,9 @@ mod tests {
     fn rejects_whitespace_only_zitadel_sub() {
         let err = User::try_new(
             Id::new(),
-            "   ".to_owned(),
+            "   ",
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             Utc::now(),
         )
@@ -210,9 +210,9 @@ mod tests {
         let long = "X".repeat(256);
         let err = User::try_new(
             Id::new(),
-            long,
+            &long,
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             Utc::now(),
         )
@@ -225,9 +225,9 @@ mod tests {
         let exactly = "X".repeat(255);
         let user = User::try_new(
             Id::new(),
-            exactly.clone(),
+            &exactly,
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             Utc::now(),
         )
@@ -248,9 +248,9 @@ mod tests {
         let now = Utc::now();
         let user = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            "Alice".to_owned(),
+            "Alice",
             UserKind::Individual,
             now,
         )
@@ -264,9 +264,9 @@ mod tests {
     fn corporation_user_kind_works() {
         let user = User::try_new(
             Id::new(),
-            "sub".to_owned(),
+            "sub",
             sample_email(),
-            "Acme Co.".to_owned(),
+            "Acme Co.",
             UserKind::Corporation,
             Utc::now(),
         )

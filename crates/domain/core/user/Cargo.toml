@@ -7,7 +7,7 @@ license = "Apache-2.0"
 description = "공짱 User Aggregate (Core BC, RDS 동적)"
 
 [dependencies]
-shared-kernel = { path = "../../../shared-kernel" }
+shared-kernel = { path = "../../../shared-kernel", version = "0.1.0" }
 chrono = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
