@@ -140,9 +140,10 @@ mod tests {
 
     #[test]
     fn road_rejects_too_long() {
-        let s = "가".repeat(201); // 201 hangul chars; bytes = 603 (3 each)
+        // 201 hangul chars; bytes = 603 (3 each).
         // The actual length in chars matters for the user, but our check is byte-len.
         // 가.len() = 3 bytes per char; 201 hangul = 603 bytes, well over 200.
+        let s = "가".repeat(201);
         let err = RoadAddress::try_new(&s).unwrap_err();
         assert!(matches!(err, AddressError::TooLong { .. }));
     }
@@ -202,7 +203,9 @@ mod tests {
     fn from_str_round_trips() {
         use std::str::FromStr;
         assert_eq!(
-            RoadAddress::from_str("서울 종로구 종로 1").unwrap().as_str(),
+            RoadAddress::from_str("서울 종로구 종로 1")
+                .unwrap()
+                .as_str(),
             "서울 종로구 종로 1"
         );
         assert_eq!(
