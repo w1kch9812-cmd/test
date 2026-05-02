@@ -151,7 +151,10 @@ mod tests {
 
     #[test]
     fn display_matches_as_str() {
-        assert_eq!(format!("{}", ListingStatus::PendingReview), "pending_review");
+        assert_eq!(
+            format!("{}", ListingStatus::PendingReview),
+            "pending_review"
+        );
     }
 
     #[test]
@@ -289,7 +292,10 @@ mod tests {
             ListingStatus::Expired,
             ListingStatus::Rejected,
         ] {
-            assert!(!v.can_transition_to(v), "{v:?} → {v:?} should not be allowed");
+            assert!(
+                !v.can_transition_to(v),
+                "{v:?} → {v:?} should not be allowed"
+            );
         }
     }
 
