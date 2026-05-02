@@ -243,7 +243,7 @@ impl User {
 
     /// 사업자 검증 취소. `business_verified_at`만 비우고 `business_number`는 보존해요
     /// (재검증 가능).
-    pub fn revoke_business_verification(&mut self, at: DateTime<Utc>) {
+    pub const fn revoke_business_verification(&mut self, at: DateTime<Utc>) {
         self.business_verified_at = None;
         self.bump_version(at);
     }
@@ -257,25 +257,25 @@ impl User {
     }
 
     /// 중개사 검증 취소. `broker_verified_at`만 비우고 `broker_license_number`는 보존.
-    pub fn revoke_broker_verification(&mut self, at: DateTime<Utc>) {
+    pub const fn revoke_broker_verification(&mut self, at: DateTime<Utc>) {
         self.broker_verified_at = None;
         self.bump_version(at);
     }
 
     /// `NICE` 본인인증 기록.
-    pub fn record_nice_verification(&mut self, at: DateTime<Utc>) {
+    pub const fn record_nice_verification(&mut self, at: DateTime<Utc>) {
         self.nice_verified_at = Some(at);
         self.bump_version(at);
     }
 
     /// 마케팅 동의 기록.
-    pub fn record_marketing_consent(&mut self, at: DateTime<Utc>) {
+    pub const fn record_marketing_consent(&mut self, at: DateTime<Utc>) {
         self.marketing_consent_at = Some(at);
         self.bump_version(at);
     }
 
     /// 마케팅 동의 철회.
-    pub fn revoke_marketing_consent(&mut self, at: DateTime<Utc>) {
+    pub const fn revoke_marketing_consent(&mut self, at: DateTime<Utc>) {
         self.marketing_consent_at = None;
         self.bump_version(at);
     }
@@ -315,7 +315,7 @@ impl User {
     /// `PIPA` `RTBF` Soft-delete. `deleted_at` 설정 + `version` bump.
     ///
     /// 이미 삭제된 경우 무시해요 (idempotent).
-    pub fn soft_delete(&mut self, at: DateTime<Utc>) {
+    pub const fn soft_delete(&mut self, at: DateTime<Utc>) {
         if self.deleted_at.is_none() {
             self.deleted_at = Some(at);
             self.bump_version(at);
