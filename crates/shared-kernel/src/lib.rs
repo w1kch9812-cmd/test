@@ -12,5 +12,6 @@ pub mod business_number;
 pub mod email;
 pub mod id;
 pub mod money;
+pub mod phone_kr;
 pub mod pnu;
 pub mod time;
