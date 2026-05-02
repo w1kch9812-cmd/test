@@ -54,6 +54,13 @@ impl IdPrefix for SearchHistoryMarker {
     const PREFIX: &'static str = "srh";
 }
 
+/// `AnalysisReport` aggregate ID marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AnalysisReportMarker;
+impl IdPrefix for AnalysisReportMarker {
+    const PREFIX: &'static str = "rpt";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -199,6 +206,13 @@ mod tests {
         let id: Id<SearchHistoryMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("srh_"));
+    }
+
+    #[test]
+    fn new_analysis_report_id_has_rpt_prefix() {
+        let id: Id<AnalysisReportMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("rpt_"));
     }
 
     #[test]
