@@ -3,6 +3,9 @@
 //! 형식: 10자리 ASCII 숫자 (`123-45-67890` 또는 `1234567890`).
 //! 국세청 (`NTS`) 체크섬 알고리즘으로 검증해요.
 //!
+//! 추가 구조 검증: 첫 3자리는 *세무서 코드*로 `101` 이상이어야 해요.
+//! `000xxxxxxx` / `100xxxxxxx` 등 미할당 prefix는 체크섬과 무관하게 거부.
+//!
 //! ⚠️ 알고리즘은 학습 데이터 기반이라 운영 전 공식 명세 교차 확인 필요해요.
 
 use serde::{Deserialize, Serialize};
@@ -28,6 +31,15 @@ pub enum BusinessNumberError {
     /// 국세청 체크섬 불일치.
     #[error("business number checksum invalid")]
     InvalidChecksum,
+    /// 예약/미할당 prefix (첫 3자리 < `101`).
+    ///
+    /// 국세청 사업자번호 할당 규칙: 첫 3자리는 *세무서 코드*로 `101` 이상.
+    /// `000xxxxxxx`/`100xxxxxxx` 등은 구조적으로 무효.
+    #[error("business number reserved prefix: first 3 digits must be ≥ 101 (got {prefix})")]
+    ReservedPrefix {
+        /// 실제 첫 3자리.
+        prefix: String,
+    },
 }
 
 impl BusinessNumber {
@@ -39,6 +51,7 @@ impl BusinessNumber {
     ///
     /// 길이 ≠ 10 → [`BusinessNumberError::InvalidLength`].
     /// 숫자 외 문자 → [`BusinessNumberError::NonDigit`].
+    /// 첫 3자리 < 101 → [`BusinessNumberError::ReservedPrefix`].
     /// 체크섬 실패 → [`BusinessNumberError::InvalidChecksum`].
     pub fn try_new(s: &str) -> Result<Self, BusinessNumberError> {
         let cleaned: String = s
@@ -53,6 +66,19 @@ impl BusinessNumber {
         if !cleaned.chars().all(|c| c.is_ascii_digit()) {
             return Err(BusinessNumberError::NonDigit);
         }
+
+        // Reserved prefix check: NTS tax-office codes start at 101.
+        // `as u8 - b'0'` is infallible since `is_ascii_digit` was just verified.
+        let prefix_str = &cleaned[..3];
+        let prefix_num: u32 = prefix_str
+            .chars()
+            .fold(0u32, |acc, c| acc * 10 + u32::from(c as u8 - b'0'));
+        if prefix_num < 101 {
+            return Err(BusinessNumberError::ReservedPrefix {
+                prefix: prefix_str.to_owned(),
+            });
+        }
+
         if !verify_checksum(&cleaned) {
             return Err(BusinessNumberError::InvalidChecksum);
         }
@@ -205,5 +231,45 @@ mod tests {
         use std::str::FromStr;
         let bn = BusinessNumber::from_str(VALID_WITH_HYPHEN).expect("ok");
         assert_eq!(bn.as_str(), VALID_NO_HYPHEN);
+    }
+
+    // ── Reserved prefix (`< 101`) 거부 ───────────────────────────
+    //
+    // 국세청 사업자번호 할당 규칙: 첫 3자리는 세무서 코드로 `101` 이상.
+    // `000`/`001`/`100` 등은 미할당이라 체크섬과 관계없이 무효.
+    //
+    // "1011234562" 검증 (수동 계산):
+    //   digits:   [1,0,1,1,2,3,4,5,6,2]
+    //   weights:  [1,3,7,1,3,7,1,3,5]
+    //   weighted: 1*1 + 0*3 + 1*7 + 1*1 + 2*3 + 3*7 + 4*1 + 5*3 + 6*5
+    //           = 1 + 0 + 7 + 1 + 6 + 21 + 4 + 15 + 30 = 85
+    //   carry:    floor(6*5 / 10) = floor(30/10) = 3
+    //   sum:      85 + 3 = 88
+    //   check:    (10 - 88%10) % 10 = (10 - 8) % 10 = 2  → matches D₁₀ = 2
+    // → VALID with prefix=101 (lowest legal)
+
+    #[test]
+    fn rejects_all_zeros() {
+        let err = BusinessNumber::try_new("0000000000").unwrap_err();
+        assert!(matches!(err, BusinessNumberError::ReservedPrefix { .. }));
+    }
+
+    #[test]
+    fn rejects_zero_prefix_001() {
+        let err = BusinessNumber::try_new("0011234567").unwrap_err();
+        assert!(matches!(err, BusinessNumberError::ReservedPrefix { .. }));
+    }
+
+    #[test]
+    fn rejects_below_101_prefix() {
+        let err = BusinessNumber::try_new("1001234567").unwrap_err();
+        assert!(matches!(err, BusinessNumberError::ReservedPrefix { .. }));
+    }
+
+    #[test]
+    fn accepts_minimum_valid_prefix_101() {
+        // "101" is the lowest valid tax-office code. See manual checksum trace above.
+        let bn = BusinessNumber::try_new("1011234562").expect("valid prefix=101 + valid checksum");
+        assert_eq!(bn.as_str(), "1011234562");
     }
 }
