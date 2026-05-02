@@ -191,16 +191,9 @@ mod tests {
 
     #[test]
     fn rejects_empty_correlation_id() {
-        let err = SearchHistory::try_new(
-            Id::new(),
-            None,
-            "공장",
-            sample_filters(),
-            0,
-            "",
-            Utc::now(),
-        )
-        .unwrap_err();
+        let err =
+            SearchHistory::try_new(Id::new(), None, "공장", sample_filters(), 0, "", Utc::now())
+                .unwrap_err();
         assert!(matches!(err, SearchHistoryError::EmptyCorrelationId));
     }
 
