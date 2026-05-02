@@ -315,12 +315,12 @@ git commit -m "feat(db): V001_01 — Core BC 3 tables (user, listing, listing_ph
 
 **스펙 참조:** spec § 5.2 (lines 239–321). 5개 테이블: `bookmark_listing`, `bookmark_external`, `search_history`, `analysis_report`, `notification`.
 
-핵심 패턴 (spec 인용):
-- `bookmark_listing` — 매물 FK (composite PK `(user_id, listing_id)`)
-- `bookmark_external` — polymorphic (target_type ∈ {parcel, building, industrial_complex, manufacturer, real_transaction, court_auction}, target_key는 R2 식별자)
-- `search_history` — 24시간 retention (운영 시 cron으로 정리)
-- `analysis_report` — payload jsonb + 7일 expires_at
-- `notification` — read_at IS NULL 부분 인덱스
+핵심 패턴 (spec 발췌 — 정확한 컬럼/제약은 spec § 5.2 직접 참조):
+- `bookmark_listing` — 매물 FK + composite PK `(user_id, listing_id)` + on delete cascade
+- `bookmark_external` — polymorphic. `target_kind` ∈ {`parcel`, `court_auction`, `manufacturer`, `industrial_complex`} (4종). `target_id`는 PNU 또는 R2 식별자. UNIQUE `(user_id, target_kind, target_id)`
+- `search_history` — `query text` + `filters jsonb` + `correlation_id` + BRIN index on `created_at`. retention: 90일 후 user_id 가명화, 1년 후 삭제 (PIPA)
+- `analysis_report` — `title`, `target_pnus char(19)[]`, `snapshot jsonb` (R2 데이터 시점 고정 캐시), `version` (optimistic locking). expires_at 없음
+- `notification` — `kind` + `payload jsonb` + `where read_at is null` 부분 인덱스. retention: 365일
 
 - [ ] **Step 1-2:** 테스트 작성 + 실패 확인 (Task 4 패턴 따름, EXPECTED 배열 5개 테이블로 갱신)
 
