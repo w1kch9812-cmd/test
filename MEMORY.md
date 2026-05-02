@@ -7,3 +7,4 @@
 - [SSS급 기준 피드백](memory/feedback_sss_standard.md) — 미개함·꼼수 0
 - [기술 스택 확정](memory/tech_stack_confirmed.md) — Rust + Next.js + Postgres+PostGIS + Zitadel + Biome v2.4
 - [Sub-project 2a 작업 패턴 교훈](memory/feedback_subproject_2a_lessons.md) — spec verbatim 강제, 값 객체 dispatch 표준, 마이그 파일명, tarpaulin strict
+- [프로젝트 진행 현황](memory/project_progress.md) — Sub-project 1, 2a, 2a-fixup, WS, 2b-i 완료, 348 테스트, Rust 1.88
