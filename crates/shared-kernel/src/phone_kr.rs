@@ -58,10 +58,10 @@ impl PhoneKr {
         }
 
         if !digits.starts_with('0') {
-            let prefix = match digits.chars().next() {
-                Some(c) => c.to_string(),
-                None => String::new(),
-            };
+            let prefix = digits
+                .chars()
+                .next()
+                .map_or_else(String::new, |c| c.to_string());
             return Err(PhoneKrError::MustStartWithZero { prefix });
         }
 
