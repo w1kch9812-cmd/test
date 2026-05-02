@@ -7,26 +7,27 @@
 
 ## 명명 규칙
 
-`V<major>_<minor>__<snake_case>.sql` 형식을 따라요.
+`<MMmmm>_<snake_case>.sql` 형식이에요. `MMmmm`은 5자리 정수 버전이에요
+(`MM` = major × 10000, `mmm` = minor). sqlx-cli가 첫 번째 `_` 앞을 i64로
+파싱하기 때문에 정수만 허용돼요.
 
 예시:
 
-- `V001_01__core_tables.sql`
-- `V001_02__listing_tables.sql`
-- `V002_01__db_roles.sql`
+- `10001_core_tables.sql` — major 1, minor 1
+- `10002_insights_tables.sql` — major 1, minor 2
+- `20001_db_roles.sql` — major 2, minor 1
 
 규칙:
 
-- **major** — 큰 변경 묶음 (V001 = 초기 18 테이블, V002 = role/권한)
+- **major** — 큰 변경 묶음 (1xxxx = 초기 18 테이블, 2xxxx = role/권한)
 - **minor** — major 내부 분할. 1500줄 룰을 강제하기 위해 ≤500줄/파일을 권장해요
 - **snake_case 이름** — *변경 의도*를 표현해요 (`add_listing_index`,
   `drop_legacy_column` 등). 테이블 이름이 아니라 "이 PR이 무엇을 하는가"를 적어요
 
 ## 적용 순서
 
-SQLx는 파일명 알파벳 정렬 순으로 적용해요
-(`V001_01__...` < `V001_02__...` < `V002_01__...`).
-새 마이그레이션은 항상 *마지막* 번호 다음에 추가하세요.
+SQLx는 정수 버전 오름차순으로 적용해요 (`10001 < 10002 < 20001`).
+새 마이그레이션은 항상 *마지막* 버전 다음에 추가하세요.
 
 ## 롤백 정책 — Forward-only
 
@@ -34,7 +35,7 @@ SQLx는 파일명 알파벳 정렬 순으로 적용해요
 파일은 immutable이에요.
 
 실수를 정정하려면 *새* 마이그레이션을 추가해 되돌려요
-(예: `V003_01__revert_X.sql`).
+(예: `30001_revert_X.sql`).
 
 로컬 개발에서는 다음 한 줄로 DB를 처음부터 재구성할 수 있어요:
 

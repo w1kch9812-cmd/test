@@ -4,29 +4,31 @@ PostgreSQL 17 + PostGIS 3.5 마이그레이션 운영을 위한 실무 안내예
 
 ## 1. 명명 규칙
 
-`V<major>_<minor>__<snake_case>.sql` 형식이에요.
+`<MMmmm>_<snake_case>.sql` 형식이에요. 5자리 정수 버전(`MM` = major × 10000,
+`mmm` = minor)에 snake_case 의도를 붙여요. sqlx-cli가 첫 번째 `_` 앞을 i64로
+파싱하기 때문에 정수만 허용돼요.
 
-- **major**: 큰 변경 묶음 (V001 = 초기 18 테이블, V002 = role + 트리거)
+- **major (만 단위)**: 큰 변경 묶음 (1xxxx = 초기 18 테이블, 2xxxx = role + 트리거)
 - **minor**: major 내부 분할. 한 파일이 500줄을 넘지 않게 강제하기 위한 분리예요
 - **snake_case 이름**: *변경 의도*를 짧게 표현 (`add_listing_index`, `drop_legacy_column` 등)
 
 예:
 
-- `V001_01__core_tables.sql` — Core BC 3 테이블 (user, listing, listing_photo)
-- `V001_02__insights_tables.sql` — Insights BC 5 테이블
-- `V002_01__db_roles.sql` — 3 role
-- `V002_02__audit_immutable_trigger.sql` — UPDATE/DELETE 박탈 트리거
+- `10001_core_tables.sql` — Core BC 3 테이블 (user, listing, listing_photo)
+- `10002_insights_tables.sql` — Insights BC 5 테이블
+- `20001_db_roles.sql` — 3 role
+- `20002_audit_immutable_trigger.sql` — UPDATE/DELETE 박탈 트리거
 
 ## 2. 적용 순서
 
-`sqlx`는 알파벳 정렬 순으로 적용해요 (`V001_01__...` < `V001_02__...` < `V002_01__...`).
-새 마이그레이션은 항상 *마지막* 번호 다음에 추가해요.
+`sqlx`는 정수 버전 오름차순으로 적용해요 (`10001` < `10002` < `20001`).
+새 마이그레이션은 항상 *마지막* 버전 다음에 추가해요.
 
 ## 3. Forward-only 정책
 
 운영에서는 절대 과거 마이그레이션 SQL을 수정하지 않아요. 한 번 머지된 파일은 immutable.
 
-실수를 정정하려면 *새* 마이그레이션을 추가해 되돌려요 (예: `V003_01__revert_X.sql`).
+실수를 정정하려면 *새* 마이그레이션을 추가해 되돌려요 (예: `30001_revert_X.sql`).
 
 로컬 개발에서는 다음 한 줄로 DB를 처음부터 재구성할 수 있어요:
 
@@ -58,7 +60,7 @@ cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features
 `.github/workflows/db-migrations.yml`이 PR/main push마다 자동 실행해요.
 
 - PG17+PostGIS 서비스 컨테이너 기동
-- 모든 V001/V002 적용
+- 모든 마이그레이션(`1xxxx` Core/Insights/System/Pipeline/Operations + `2xxxx` role/트리거) 적용
 - `tests/migrations/test_v001_full.sh` 실행 (18 테이블 + 인덱스 + SRID 4326 검증)
 - `tests/migrations/test_v002_audit_immutable.sh` 실행 (3 role + 트리거 + 권한 매트릭스 검증)
 
@@ -85,7 +87,7 @@ sqlx migrate info --source migrations    # 적용 상태 확인
 복구 절차:
 
 - **로컬**: `sqlx database drop -y && sqlx database create && sqlx migrate run` (DB 처음부터 재구성)
-- **운영**: 절대 손으로 `_sqlx_migrations`을 건드리지 마세요. 새 *fix-forward* 마이그레이션(`V<next>__fix_<원인>.sql`)을 PR로 올려서 진행하세요
+- **운영**: 절대 손으로 `_sqlx_migrations`을 건드리지 마세요. 새 *fix-forward* 마이그레이션(`<MMmmm>_fix_<원인>.sql`)을 PR로 올려서 진행하세요
 
 ## 8. retention + archive
 
