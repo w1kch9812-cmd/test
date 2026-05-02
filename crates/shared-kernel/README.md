@@ -15,7 +15,7 @@
 - `geo-types` — Geometry 좌표
 - `serde` — 직렬화 (DB·HTTP 양쪽)
 - `thiserror` — 에러 enum
-- `regex` / `once_cell` — Email, PhoneKr 검증
+- `regex` + `std::sync::LazyLock` — Email, PhoneKr 검증
 
 ## 추가/변경 흐름
 

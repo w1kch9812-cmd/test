@@ -6,7 +6,8 @@
 //! 일부 `RFC 5322` 엣지 케이스(따옴표 묶인 local part, IP literal 도메인)는
 //! 의도적으로 거부해요 — 실무에서 거의 사용 안 되고 `ReDoS` 위험을 줄이기 위해서예요.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
+
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -26,7 +27,7 @@ fn build_email_regex() -> Regex {
 }
 
 /// `RFC 5322` 간소화 패턴 (lazy 컴파일, 1회만).
-static EMAIL_RE: Lazy<Regex> = Lazy::new(build_email_regex);
+static EMAIL_RE: LazyLock<Regex> = LazyLock::new(build_email_regex);
 
 /// 이메일 주소.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

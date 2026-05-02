@@ -28,6 +28,8 @@ allow = [
     "CC0-1.0",
     "Zlib",
     "MPL-2.0",
+    # webpki-roots (Mozilla CA bundle, sqlx → rustls 경로) — Linux Foundation 데이터 라이선스
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.93
 exceptions = []
