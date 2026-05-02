@@ -480,7 +480,8 @@ create table business_verification_queue (
     reviewer_note text,
     submitted_at timestamptz not null default now(),
     reviewed_at timestamptz,
-    sla_due_at timestamptz                              -- SLA (24h)
+    sla_due_at timestamptz,                             -- SLA (24h)
+    version bigint not null default 1                   -- OCC (concurrent admin edit 방어)
 );
 
 create index bvq_pending_idx on business_verification_queue(submitted_at)
@@ -501,7 +502,8 @@ create table listing_review_queue (
     reviewer_note text,
     decision varchar(20) check (decision in ('approve', 'reject', 'request_changes')),
     decided_at timestamptz,
-    sla_due_at timestamptz                              -- SLA (12h)
+    sla_due_at timestamptz,                             -- SLA (12h)
+    version bigint not null default 1                   -- OCC (concurrent admin edit 방어)
 );
 
 create index lrq_pending_idx on listing_review_queue(submitted_at)

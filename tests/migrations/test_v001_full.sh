@@ -57,5 +57,17 @@ if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='
   echo "FAIL: listing_transaction_fields_chk missing (V003_01)" >&2; exit 1
 fi
 
+# V003_02: BVQ + LRQ optimistic locking — version column exists with default 1
+for tbl in business_verification_queue listing_review_queue; do
+  EXISTS=$(psql "$DATABASE_URL" -t -A -c "select 1 from information_schema.columns where table_schema='public' and table_name='$tbl' and column_name='version' and data_type='bigint' and is_nullable='NO';")
+  if [ "$EXISTS" != "1" ]; then
+    echo "FAIL: $tbl.version missing or wrong type/nullability (V003_02)" >&2; exit 1
+  fi
+  DEFAULT=$(psql "$DATABASE_URL" -t -A -c "select column_default from information_schema.columns where table_schema='public' and table_name='$tbl' and column_name='version';")
+  if [ "$DEFAULT" != "1" ]; then
+    echo "FAIL: $tbl.version default expected '1', got '$DEFAULT'" >&2; exit 1
+  fi
+done
+
 echo "PASS: V001 18 RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0
