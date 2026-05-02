@@ -13,7 +13,7 @@ use crate::employee_count_band::EmployeeCountBand;
 /// 한국 제조업체 (산단 입주기업 포함). 식별은 `BusinessNumber` (10자리).
 /// `R2` 정적이므로 다른 BC 와 cross-BC `FK` 관계 *없음* —
 /// `industrial_complex_code` / `pnu` 는 *단순 참조 문자열/`Pnu`*.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manufacturer {
     /// 사업자등록번호 (`PK`, `FK` 아님 — `R2` 정적).
     pub business_number: BusinessNumber,
