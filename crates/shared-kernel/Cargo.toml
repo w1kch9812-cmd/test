@@ -1,0 +1,19 @@
+[package]
+name = "shared-kernel"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 도메인 공유 값 객체 — Pnu, Money, Area 등 BC 간 공통 타입."
+
+[dependencies]
+ulid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+geo-types = { workspace = true }
+once_cell = { workspace = true }
+regex = { workspace = true }
+
+[lints]
+workspace = true

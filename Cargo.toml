@@ -1,9 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/_placeholder",
+    "crates/shared-kernel",
     # services/* 와 다른 crates/* 는 sub-project 2+에서 추가됨.
-    # _placeholder는 sub-project 2 첫 도메인 추가 시 삭제.
 ]
 
 [workspace.package]
@@ -31,7 +30,12 @@ print_stdout = "deny"
 print_stderr = "deny"
 
 [workspace.dependencies]
-# 추가 예정 (Plan 2b/2c): axum, tokio, serde, tracing, utoipa
+# 추가 예정 (Plan 2b/2c): axum, tokio, tracing, utoipa
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+geo-types = "0.7"
+once_cell = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
 sqlx = { version = "0.8", default-features = false, features = [
     "runtime-tokio-rustls",
     "postgres",
@@ -42,6 +46,8 @@ sqlx = { version = "0.8", default-features = false, features = [
     "json",
     "migrate",
 ] }
+thiserror = "1"
+ulid = "1.1"
 
 [profile.release]
 lto = "thin"
