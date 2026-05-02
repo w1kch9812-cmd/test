@@ -17,6 +17,7 @@ members = [
     "crates/domain/insights/notification",
     "crates/domain/audit/audit-log",
     "crates/domain/audit/outbox-event",
+    "crates/operations/admin-action",
     "crates/data-pipeline-control",
     "crates/db",
     "services/api",

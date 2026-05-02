@@ -107,6 +107,16 @@ impl IdPrefix for PipelineRunMarker {
     const PREFIX: &'static str = "plr";
 }
 
+/// `AdminAction` aggregate ID marker.
+///
+/// Spec § 5.5 `admin_action.id` inline comment (`ada_...`). Append-only — admin
+/// 액션은 immutable (like `AuditLog`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AdminActionMarker;
+impl IdPrefix for AdminActionMarker {
+    const PREFIX: &'static str = "ada";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -294,6 +304,13 @@ mod tests {
         let id: Id<PipelineRunMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("plr_"));
+    }
+
+    #[test]
+    fn new_admin_action_id_has_ada_prefix() {
+        let id: Id<AdminActionMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("ada_"));
     }
 
     #[test]
