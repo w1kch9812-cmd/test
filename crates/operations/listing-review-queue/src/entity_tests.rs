@@ -9,14 +9,8 @@ fn sample_flags() -> serde_json::Value {
 }
 
 fn make_pending(at: DateTime<Utc>) -> ListingReviewQueue {
-    ListingReviewQueue::try_new_pending(
-        Id::new(),
-        Id::new(),
-        Some(80),
-        Some(sample_flags()),
-        at,
-    )
-    .expect("valid pending lrq")
+    ListingReviewQueue::try_new_pending(Id::new(), Id::new(), Some(80), Some(sample_flags()), at)
+        .expect("valid pending lrq")
 }
 
 // ── try_new_pending ───────────────────────────────────────────
