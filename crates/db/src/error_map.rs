@@ -69,6 +69,88 @@ impl MapFromSqlx for listing_photo_domain::repository::RepoError {
     }
 }
 
+// `AuditLog` domain `RepoError` — no `Conflict` variant
+impl MapFromSqlx for audit_log_domain::repository::RepoError {
+    fn conflict() -> Self {
+        // `audit_log` 는 immutable, `OCC` 없음. unique violation 도 `ULID` 자동
+        // 생성으로 발생 안 해요. 여기 도달했다면 비정상 — `Database` 로 fallback.
+        Self::Database("unexpected conflict in audit_log".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `OutboxEvent` domain `RepoError` — no `Conflict` variant
+impl MapFromSqlx for outbox_event_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in outbox_event".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// Pipeline domain `RepoError` — has `Conflict` variant
+impl MapFromSqlx for data_pipeline_control::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Conflict
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `AdminAction` domain `RepoError` — no `Conflict` variant
+impl MapFromSqlx for admin_action_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in admin_action".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `BVQ` domain `RepoError` — has `Conflict` variant
+impl MapFromSqlx for business_verification_queue_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Conflict
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `LRQ` domain `RepoError` — has `Conflict` variant
+impl MapFromSqlx for lrq_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Conflict
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `ListingReport` domain `RepoError` — no `Conflict` variant
+impl MapFromSqlx for listing_report_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in listing_report".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `OperationsMeta` domain `RepoError` — no `Conflict` variant
+impl MapFromSqlx for operations_meta_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in operations_meta".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]

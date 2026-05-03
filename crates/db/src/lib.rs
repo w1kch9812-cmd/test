@@ -6,7 +6,15 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod admin_action;
+pub mod audit_log;
+pub mod bvq;
 pub mod error_map;
 pub mod listing;
 pub mod listing_photo;
+pub mod listing_report;
+pub mod lrq;
+pub mod operations_meta;
+pub mod outbox;
+pub mod pipeline;
 pub mod user;

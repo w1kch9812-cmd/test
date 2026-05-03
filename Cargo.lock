@@ -455,12 +455,20 @@ dependencies = [
 name = "db"
 version = "0.1.0"
 dependencies = [
+ "admin-action-domain",
  "async-trait",
+ "audit-log-domain",
  "bigdecimal",
+ "business-verification-queue-domain",
  "chrono",
+ "data-pipeline-control",
  "geo-types",
  "listing-domain",
  "listing-photo-domain",
+ "listing-report-domain",
+ "lrq-domain",
+ "operations-meta-domain",
+ "outbox-event-domain",
  "shared-kernel",
  "sqlx",
  "thiserror 1.0.69",

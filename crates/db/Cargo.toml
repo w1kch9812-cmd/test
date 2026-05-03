@@ -14,6 +14,14 @@ shared-kernel = { path = "../domain/core/shared-kernel", version = "0.1.0" }
 user-domain = { path = "../domain/core/user", version = "0.1.0" }
 listing-domain = { path = "../domain/core/listing", version = "0.1.0" }
 listing-photo-domain = { path = "../domain/core/listing-photo", version = "0.1.0" }
+admin-action-domain = { path = "../operations/admin-action", version = "0.1.0" }
+audit-log-domain = { path = "../domain/audit/audit-log", version = "0.1.0" }
+business-verification-queue-domain = { path = "../operations/business-verification-queue", version = "0.1.0" }
+data-pipeline-control = { path = "../data-pipeline-control", version = "0.1.0" }
+listing-report-domain = { path = "../operations/listing-report", version = "0.1.0" }
+lrq-domain = { path = "../operations/listing-review-queue", version = "0.1.0" }
+operations-meta-domain = { path = "../operations/operations-meta", version = "0.1.0" }
+outbox-event-domain = { path = "../domain/audit/outbox-event", version = "0.1.0" }
 sqlx = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }
