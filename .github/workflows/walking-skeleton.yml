@@ -22,7 +22,7 @@ env:
 
 jobs:
   e2e:
-    name: API + Auth E2E (Zitadel JWT round-trip)
+    name: API + Auth E2E (mock JWT mode)
     runs-on: ubuntu-latest
 
     services:
@@ -39,9 +39,6 @@ jobs:
           --health-timeout 3s
           --health-retries 20
 
-    # Zitadel은 service container 가 아니라 step 에서 직접 `docker run` 합니다.
-    # 이유: Zitadel image entrypoint 가 subcommand 를 요구하는데
-    # GitHub Actions service container 는 CMD 인자를 못 넘김 ("Error: no additional command provided").
     env:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
 
@@ -54,10 +51,10 @@ jobs:
         with:
           shared-key: walking-skeleton
 
-      - name: Install jq + sqlx-cli + postgres client
+      - name: Install sqlx-cli + postgres client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y jq postgresql-client
+          sudo apt-get install -y postgresql-client
           cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features postgres,rustls
 
       - name: Wait for Postgres
@@ -70,142 +67,12 @@ jobs:
       - name: Apply gongzzang migrations
         run: sqlx migrate run --source migrations
 
-      - name: Create zitadel database (Zitadel requires its own DB)
-        run: |
-          PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang \
-            -c "CREATE DATABASE zitadel;"
-
-      - name: Start Zitadel container (docker run, joining postgres network)
-        id: zitadel_id
-        run: |
-          # GitHub Actions service container 가 만든 docker network 이름을 찾음
-          NET=$(docker network ls --filter "name=github_network_" --format '{{.Name}}' | head -1)
-          if [ -z "$NET" ]; then
-            echo "ERROR: github_network not found" >&2
-            docker network ls >&2
-            exit 1
-          fi
-          echo "Joining network: $NET"
-
-          # PAT 를 호스트 파일시스템에 쓰도록 ZITADEL_FIRSTINSTANCE_PATPATH 사용
-          # /zitadel-pat 는 컨테이너 내부 경로, /tmp/zitadel-pat 는 호스트 마운트
-          mkdir -p /tmp/zitadel-pat
-          chmod 777 /tmp/zitadel-pat
-
-          # Zitadel 을 master-key 와 함께 start-from-init 으로 실행
-          # 주의: Zitadel 은 [::]:8080 (dual-stack) 에 listen 하므로 IPv6 비활성화 금지
-          # gateway → grpc backend 통신은 같은 컨테이너 내 loopback 으로 이뤄짐
-          ZID=$(docker run -d \
-            --name zitadel-ci \
-            --network "$NET" \
-            --network-alias zitadel \
-            -p 8081:8080 \
-            -v /tmp/zitadel-pat:/zitadel-pat \
-            -e ZITADEL_DATABASE_POSTGRES_HOST=postgres \
-            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
-            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
-            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=gongzzang \
-            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ci_only_changeme \
-            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
-            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=gongzzang \
-            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ci_only_changeme \
-            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
-            -e ZITADEL_EXTERNALSECURE=false \
-            -e ZITADEL_EXTERNALDOMAIN=localhost \
-            -e ZITADEL_EXTERNALPORT=8081 \
-            -e ZITADEL_PORT=8080 \
-            -e ZITADEL_TLS_ENABLED=false \
-            -e ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED=false \
-            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=zitadel-admin-sa \
-            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=Admin \
-            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-01-01T00:00:00Z \
-            -e ZITADEL_FIRSTINSTANCE_PATPATH=/zitadel-pat/pat.txt \
-            ghcr.io/zitadel/zitadel:latest \
-            start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled)
-
-          echo "Zitadel container ID: $ZID"
-          echo "container_id=$ZID" >> "$GITHUB_OUTPUT"
-          # 1초 후 컨테이너가 살아있는지 확인 (초기 immediate exit 잡기)
-          sleep 3
-          if ! docker ps --filter "id=$ZID" --filter status=running -q | grep -q .; then
-            echo "ERROR: Zitadel exited immediately" >&2
-            docker logs "$ZID" >&2
-            exit 1
-          fi
-
-      - name: Wait for Zitadel ready (healthz + management API)
-        run: |
-          ZID="${{ steps.zitadel_id.outputs.container_id }}"
-          # Step 1: HTTP healthz (basic listen)
-          for i in {1..180}; do
-            if curl -sf http://localhost:8081/debug/healthz >/dev/null 2>&1; then
-              echo "[1/2] Zitadel healthz OK after ${i}s"
-              break
-            fi
-            if [ "$i" = "180" ]; then
-              echo "ERROR: Zitadel did not become healthy in 180s" >&2
-              docker logs --tail 200 "$ZID" >&2 || true
-              exit 1
-            fi
-            sleep 1
-          done
-          # Step 2: management API 가 503 안 나올 때까지 대기 — gRPC backend 실제 ready
-          for i in {1..240}; do
-            HTTP=$(curl -s -o /tmp/mgmt_probe.json -w "%{http_code}" http://localhost:8081/management/v1/iam 2>&1 || true)
-            # 401 (no auth) 또는 200 이면 gRPC OK. 503 만 대기.
-            if [ "$HTTP" = "401" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "403" ]; then
-              echo "[2/2] Zitadel management API responsive (HTTP $HTTP) after ${i}s"
-              break
-            fi
-            if [ "$i" = "240" ]; then
-              echo "ERROR: Zitadel management API still 503 after 240s (last HTTP $HTTP)" >&2
-              echo "last body: $(cat /tmp/mgmt_probe.json)" >&2
-              docker logs --tail 300 "$ZID" >&2 || true
-              exit 1
-            fi
-            sleep 2
-          done
-
-      - name: Read Zitadel admin PAT from mounted file
-        id: zitadel_admin
-        run: |
-          ZID="${{ steps.zitadel_id.outputs.container_id }}"
-          PAT=""
-          for i in {1..120}; do
-            if [ -f /tmp/zitadel-pat/pat.txt ] && [ -s /tmp/zitadel-pat/pat.txt ]; then
-              PAT=$(cat /tmp/zitadel-pat/pat.txt | tr -d '\r\n')
-              if [ -n "$PAT" ] && [ "${#PAT}" -gt 30 ]; then
-                echo "PAT file ready after ${i}s (len=${#PAT})"
-                break
-              fi
-            fi
-            sleep 2
-          done
-          if [ -z "$PAT" ]; then
-            echo "ERROR: PAT file not produced at /tmp/zitadel-pat/pat.txt" >&2
-            ls -la /tmp/zitadel-pat/ >&2 || true
-            echo "=== Zitadel logs (tail 200) ===" >&2
-            docker logs --tail 200 "$ZID" 2>&1 >&2 || true
-            exit 1
-          fi
-          echo "::add-mask::$PAT"
-          echo "pat=$PAT" >> "$GITHUB_OUTPUT"
-          echo "Got admin PAT (length=${#PAT})"
-
-      - name: Setup Zitadel project + OIDC app + machine user
-        id: zitadel
-        env:
-          ZITADEL_ADMIN_PAT: ${{ steps.zitadel_admin.outputs.pat }}
-          ZITADEL_URL: http://localhost:8081
-        run: bash tests/walking-skeleton/zitadel-setup.sh
-
       - name: Build API
         run: cargo build --package api --release
 
-      - name: Run API in background
+      - name: Run API in background (AUTH_DEV_MODE=true)
         env:
-          ZITADEL_ISSUER: ${{ steps.zitadel.outputs.issuer }}
-          ZITADEL_AUDIENCE: ${{ steps.zitadel.outputs.audience }}
+          AUTH_DEV_MODE: "true"
         run: |
           ./target/release/api > /tmp/api.log 2>&1 &
           API_PID=$!
@@ -219,13 +86,13 @@ jobs:
           done
           curl -sf http://localhost:8080/healthz || (echo "API failed to start"; cat /tmp/api.log; exit 1)
 
-      - name: E2E [1/4] — public /healthz no auth → 200
+      - name: E2E [1/6] — public /healthz no auth
         run: |
           BODY=$(curl -sf http://localhost:8080/healthz)
           if [ "$BODY" != "ok" ]; then echo "FAIL: /healthz expected 'ok', got '$BODY'"; exit 1; fi
           echo "PASS: /healthz=ok"
 
-      - name: E2E [2/4] — protected /users/me without token → 401
+      - name: E2E [2/6] — protected without token returns 401
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/users/me)
           if [ "$STATUS" != "401" ]; then
@@ -235,29 +102,37 @@ jobs:
           fi
           echo "PASS: /users/me without auth returns 401"
 
-      - name: E2E [3/4] — first sign-in auto-creates User
-        env:
-          TOKEN: ${{ steps.zitadel.outputs.token }}
+      - name: E2E [3/6] — invalid token returns 401
         run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer bogus.token" http://localhost:8080/users/me)
+          if [ "$STATUS" != "401" ]; then
+            echo "FAIL: bad token expected 401, got $STATUS"
+            cat /tmp/api.log
+            exit 1
+          fi
+          echo "PASS: bad token returns 401"
+
+      - name: E2E [4/6] — first sign-in auto-creates User (DEV.<sub> token)
+        run: |
+          TOKEN="DEV.test-user-1"
           RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me) || {
-            echo "FAIL: GET /users/me with token failed"
+            echo "FAIL: GET /users/me with mock token failed"
             cat /tmp/api.log
             exit 1
           }
-          echo "$RESP" | jq .
-          USER_ID=$(echo "$RESP" | jq -r .id)
-          ZSUB=$(echo "$RESP" | jq -r .zitadel_sub)
-          if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then echo "FAIL: no id"; exit 1; fi
-          if [ -z "$ZSUB" ] || [ "$ZSUB" = "null" ]; then echo "FAIL: no zitadel_sub"; exit 1; fi
+          echo "$RESP"
+          USER_ID=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+          ZSUB=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['zitadel_sub'])")
+          if [ -z "$USER_ID" ]; then echo "FAIL: no id"; exit 1; fi
+          if [ "$ZSUB" != "test-user-1" ]; then echo "FAIL: zitadel_sub mismatch: $ZSUB"; exit 1; fi
           echo "USER_ID=$USER_ID" >> $GITHUB_ENV
           echo "PASS: first sign-in id=$USER_ID sub=$ZSUB"
 
-      - name: E2E [4/4] — second call with same token returns same User (no duplicate)
-        env:
-          TOKEN: ${{ steps.zitadel.outputs.token }}
+      - name: E2E [5/6] — second call returns same User (no duplicate)
         run: |
+          TOKEN="DEV.test-user-1"
           RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me)
-          USER_ID2=$(echo "$RESP" | jq -r .id)
+          USER_ID2=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
           if [ "$USER_ID2" != "$USER_ID" ]; then
             echo "FAIL: duplicate user — first=$USER_ID second=$USER_ID2"
             exit 1
@@ -267,18 +142,28 @@ jobs:
             echo "FAIL: expected 1 user row, got $ROW_COUNT"
             exit 1
           fi
-          echo "PASS: same id ($USER_ID), 1 user row"
+          echo "PASS: same id, 1 user row"
+
+      - name: E2E [6/6] — different sub creates different User
+        run: |
+          TOKEN2="DEV.test-user-2"
+          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN2" http://localhost:8080/users/me)
+          USER_ID3=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
+          if [ "$USER_ID3" = "$USER_ID" ]; then echo "FAIL: different sub should create different user"; exit 1; fi
+          ROW_COUNT=$(PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang -t -A -c 'select count(*) from "user";')
+          if [ "$ROW_COUNT" != "2" ]; then
+            echo "FAIL: expected 2 user rows, got $ROW_COUNT"
+            exit 1
+          fi
+          echo "PASS: different sub creates different user, 2 rows"
 
       - name: Dump API log on failure
         if: failure()
         run: |
           echo "=== api.log ==="
           cat /tmp/api.log || true
-          echo "=== Zitadel logs (tail 200) ==="
-          docker logs --tail 200 "${{ steps.zitadel_id.outputs.container_id }}" || true
 
-      - name: Stop API and Zitadel
+      - name: Stop API
         if: always()
         run: |
           if [ -n "${API_PID:-}" ]; then kill $API_PID || true; fi
-          docker rm -f zitadel-ci 2>/dev/null || true

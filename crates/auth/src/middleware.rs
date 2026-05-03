@@ -16,7 +16,7 @@ use user_domain::repository::UserRepository;
 
 use crate::claims::Claims;
 use crate::errors::AuthError;
-use crate::verifier::JwtVerifier;
+use crate::verifier::Verifier;
 
 /// 핸들러로 주입되는 인증된 사용자 컨텍스트.
 #[derive(Debug, Clone)]
@@ -30,15 +30,15 @@ pub struct AuthenticatedUser {
 /// 미들웨어 의존 — `verifier` + `user_repo`.
 #[derive(Clone)]
 pub struct AuthState {
-    /// `JWT` 검증기.
-    pub verifier: Arc<JwtVerifier>,
+    /// 토큰 검증기 (`Real` 또는 `Dev`).
+    pub verifier: Arc<Verifier>,
     /// `User` 저장소.
     pub user_repo: Arc<dyn UserRepository>,
 }
 
 /// `Bearer <jwt>` 검증 + `User` 자동 생성 + `Extension<AuthenticatedUser>` 주입.
 ///
-/// `Authorization` 헤더에서 `Bearer ` 접두 토큰을 꺼내 [`JwtVerifier`] 로 검증한 뒤,
+/// `Authorization` 헤더에서 `Bearer ` 접두 토큰을 꺼내 [`Verifier`] 로 검증한 뒤,
 /// `zitadel_sub` 으로 [`UserRepository`] 를 조회해요. 처음 보는 sub 이면 `User` 를
 /// 자동 생성해 저장하고, 동시 첫 로그인으로 인한 save 충돌이 발생하면 한 번 더
 /// fetch 해서 흡수해요. 인증된 컨텍스트는 [`AuthenticatedUser`] 로 요청 extension

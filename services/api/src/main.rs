@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use auth::jwks_cache::JwksCache;
 use auth::middleware::{auth_layer, AuthState, AuthenticatedUser};
-use auth::verifier::JwtVerifier;
+use auth::verifier::{JwtVerifier, Verifier};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::get;
@@ -118,9 +118,7 @@ async fn main() {
         .init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let issuer = env::var("ZITADEL_ISSUER").expect("ZITADEL_ISSUER must be set");
-    let audience = env::var("ZITADEL_AUDIENCE").expect("ZITADEL_AUDIENCE must be set");
-    let jwks_url = format!("{issuer}/oauth/v2/keys");
+    let dev_mode = env::var("AUTH_DEV_MODE").unwrap_or_default() == "true";
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -133,12 +131,22 @@ async fn main() {
         user_repo: user_repo.clone(),
     };
 
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .expect("reqwest");
-    let jwks = Arc::new(JwksCache::new(jwks_url, http));
-    let verifier = Arc::new(JwtVerifier::new(issuer, audience, jwks));
+    let verifier = if dev_mode {
+        tracing::warn!(
+            "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
+        );
+        Arc::new(Verifier::Dev)
+    } else {
+        let issuer = env::var("ZITADEL_ISSUER").expect("ZITADEL_ISSUER must be set");
+        let audience = env::var("ZITADEL_AUDIENCE").expect("ZITADEL_AUDIENCE must be set");
+        let jwks_url = format!("{issuer}/oauth/v2/keys");
+        let http = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .expect("reqwest");
+        let jwks = Arc::new(JwksCache::new(jwks_url, http));
+        Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
+    };
     let auth_state = AuthState {
         verifier,
         user_repo,

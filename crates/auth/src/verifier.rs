@@ -115,3 +115,86 @@ mod tests {
         assert_eq!(err, AuthError::MalformedToken);
     }
 }
+
+/// 토큰 검증기 — production (`Real(JwtVerifier)`) 또는 dev mock (`Dev`).
+///
+/// `Dev` 모드는 토큰이 `DEV.<sub>` 형식 시 sub 만 추출해 fake [`Claims`] 반환해요.
+/// `JwtVerifier` 의 `RS256`+`JWKS` 검증을 우회하므로 `CI` 빠른 e2e 전용. 실제
+/// Zitadel 통합 검증은 별도 sub-project (staging integration test) 에서 처리.
+pub enum Verifier {
+    /// 진짜 Zitadel `JWT` 검증.
+    Real(JwtVerifier),
+    /// Dev mock — `DEV.<sub>` 형식 토큰 수용.
+    Dev,
+}
+
+impl Verifier {
+    /// 토큰 검증. `Real` 은 [`JwtVerifier::verify`] 위임, `Dev` 는 `DEV.<sub>` 파싱.
+    ///
+    /// # Errors
+    ///
+    /// `Real`: [`JwtVerifier::verify`] 동일.
+    /// `Dev`: 형식 불일치 시 [`AuthError::MalformedToken`], `sub` 빈 시 [`AuthError::MissingSubject`].
+    pub async fn verify(&self, token: &str) -> Result<Claims, AuthError> {
+        match self {
+            Self::Real(v) => v.verify(token).await,
+            Self::Dev => Self::verify_dev(token),
+        }
+    }
+
+    fn verify_dev(token: &str) -> Result<Claims, AuthError> {
+        let sub = token
+            .strip_prefix("DEV.")
+            .ok_or(AuthError::MalformedToken)?
+            .trim();
+        if sub.is_empty() {
+            return Err(AuthError::MissingSubject);
+        }
+        Ok(Claims {
+            sub: sub.to_owned(),
+            email: Some(format!("{sub}@dev.local")),
+            name: Some(sub.to_owned()),
+            preferred_username: None,
+            exp: i64::MAX, // dev 모드는 만료 안 함
+            nbf: None,
+            iss: "dev-mode".to_owned(),
+            aud: crate::claims::Audience::Single("dev-mode".to_owned()),
+        })
+    }
+}
+
+#[cfg(test)]
+mod verifier_enum_tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
+    use super::*;
+
+    #[tokio::test]
+    async fn dev_verify_extracts_sub_and_generates_claims() {
+        let v = Verifier::Dev;
+        let claims = v.verify("DEV.test-user-1").await.expect("ok");
+        assert_eq!(claims.sub, "test-user-1");
+        assert_eq!(claims.email.as_deref(), Some("test-user-1@dev.local"));
+        assert_eq!(claims.name.as_deref(), Some("test-user-1"));
+    }
+
+    #[tokio::test]
+    async fn dev_rejects_non_dev_prefix() {
+        let v = Verifier::Dev;
+        let err = match v.verify("eyJ.something").await {
+            Err(e) => e,
+            Ok(_) => panic!("expected error"),
+        };
+        assert_eq!(err, AuthError::MalformedToken);
+    }
+
+    #[tokio::test]
+    async fn dev_rejects_empty_sub() {
+        let v = Verifier::Dev;
+        let err = match v.verify("DEV.").await {
+            Err(e) => e,
+            Ok(_) => panic!("expected error"),
+        };
+        assert_eq!(err, AuthError::MissingSubject);
+    }
+}
