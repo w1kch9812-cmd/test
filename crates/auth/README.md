@@ -1,6 +1,6 @@
 # crates/auth
 
-Zitadel JWT 검증 + RBAC 미들웨어 + 세션 관리.
+공짱 인증 핵심 게이트 — Zitadel access_token JWT 검증 + first-sign-in 자동 생성.
 
 ## 책임
 - JWT 검증 (Zitadel 발급, JWK 캐시)
@@ -9,6 +9,15 @@ Zitadel JWT 검증 + RBAC 미들웨어 + 세션 관리.
 - 사업자등록번호 검증 호출 (홈택스 진위확인 — sub-project 3)
 - 공인중개사 자격 식별 (사업자 업종 코드)
 - NICE 본인인증 (Phase 3+, sub-project 3)
+
+## Modules (sub-project 3)
+- [errors](src/errors.rs) — `AuthError` + `IntoResponse`
+- [claims](src/claims.rs) — `Claims` struct (T2)
+- [jwks_cache](src/jwks_cache.rs) — JWKS 1h TTL 캐시 (T3)
+- [verifier](src/verifier.rs) — `JwtVerifier` (T4)
+- [middleware](src/middleware.rs) — Axum tower layer (T5)
+- [extractor](src/extractor.rs) — `AuthenticatedUser` (T6)
+- [role_guard](src/role_guard.rs) — `require_role` (T6)
 
 ## 의존
 - `crates/cache` — Redis 세션
@@ -22,5 +31,7 @@ Zitadel JWT 검증 + RBAC 미들웨어 + 세션 관리.
 - 토큰 만료 시 자동 refresh (clientside)
 - 세션 무효화 = Redis Pub/Sub 즉시 전파
 - 모든 인증 시도/성공/실패 = audit log
+
+Spec: [docs/superpowers/specs/2026-05-03-sub-project-3-auth-zitadel-jwt-design.md](../../docs/superpowers/specs/2026-05-03-sub-project-3-auth-zitadel-jwt-design.md)
 
 → ADR-0005, → @docs/auth/README.md
