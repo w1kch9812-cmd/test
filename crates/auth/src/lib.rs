@@ -1,4 +1,4 @@
-//! 공짱 인증 핵심 게이트 — Zitadel access_token `JWT` 검증.
+//! 공짱 인증 핵심 게이트 — Zitadel `access_token` `JWT` 검증.
 //!
 //! - [`verifier::JwtVerifier`] — `JWKS` 캐시 + 서명·exp·iss·aud 검증
 //! - [`middleware`] — Axum tower layer (`Bearer` → `Extension<AuthenticatedUser>`)
