@@ -244,6 +244,8 @@ async fn update_bumps_version_in_db() {
     let pool = setup_test_pool().await;
     truncate_all(&pool).await;
     let user_id = seed_user(&pool, "zsub-bvq-5", "bvq5@example.com").await;
+    // approve 의 reviewer_id 는 user FK — admin 도 함께 시드해야 FK 통과
+    let admin_id = seed_user(&pool, "zsub-bvq-5-admin", "bvq5admin@example.com").await;
     let repo = PgBvqRepository::new(pool.clone());
 
     // 1) 첫 INSERT — version=1
@@ -260,7 +262,6 @@ async fn update_bumps_version_in_db() {
     assert_eq!(v_after_insert, 1);
 
     // 2) 도메인 메서드 approve — entity 가 version 을 1 → 2 로 bump
-    let admin_id: Id<UserMarker> = Id::new();
     bvq.approve(admin_id, None, Utc::now()).expect("approve");
     assert_eq!(bvq.version, 2);
 
