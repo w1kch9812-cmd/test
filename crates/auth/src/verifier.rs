@@ -57,7 +57,7 @@ impl JwtVerifier {
                 E::ExpiredSignature => AuthError::Expired,
                 E::ImmatureSignature => AuthError::NotYetValid,
                 E::InvalidIssuer => AuthError::InvalidIssuer,
-                E::InvalidSignature => AuthError::InvalidSignature,
+                // `InvalidSignature` 는 fallback 과 같으므로 명시 안 함 (`clippy::match_same_arms`).
                 _ => AuthError::InvalidSignature,
             }
         })?;
