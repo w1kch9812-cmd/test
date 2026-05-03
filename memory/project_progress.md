@@ -89,6 +89,32 @@ type: project
 - 2FA / WebAuthn
 - endpoint 별 RBAC 매트릭스
 
+### Sub-project 5-i: Core BC RDS Repository SQLx (완료, T1-T6)
+
+- 신규: `crates/db/src/error_map.rs` (`MapFromSqlx` trait + `map_sqlx_err` helper)
+- 신규: `crates/db/src/listing.rs` (`PgListingRepository` — 21 필드, `PostGIS` `ST_X`/`ST_Y` round-trip, `OCC`, `ListingMarker` projection)
+- 신규: `crates/db/src/listing_photo.rs` (`PgListingPhotoRepository` — 12 필드, soft-delete, hard delete with `NotFound`, `cascade` 검증)
+- 보강: `crates/db/src/user.rs` 8 필드 → 18 필드 (roles/business_number/broker_license/*_verified_at 모두)
+- 보강: `listing-photo-domain` `RepoError` 에 `Conflict` variant 추가 (T1 fallback 해소, SSS 일관성)
+- 모든 repo 메서드 `#[tracing::instrument]` (`skip(self)` PII 미노출 패턴)
+- `Cargo.toml` `[features] integration = []` + `walking-skeleton.yml` 에 `cargo test --features integration` 단계 + 통합 테스트 후 `truncate cascade` reset
+- `bigdecimal` dep 추가 (`numeric(12,2)` ↔ `f64` bridge)
+- 통합 테스트 23 (User 6 + Listing 9 + ListingPhoto 6 + error_map 2) + 단위 2 (error_map) → 누적 ~1075
+
+**SP5-i 미포함 (후속)**:
+- `Outbox` 트랜잭션 → SP5-iii
+- `audit_log` 자동 INSERT → SP5-iii
+- `R2` Reader 6 (Parcel/Building/IC/Mfr/RealTransaction/CourtAuction) → SP4 (외부 API ingestion)
+- `sqlx::query!()` macro 채택 → 별도 ADR
+- HTTP 응답 매핑 (`RepoError → IntoResponse`) → 별도 sub-project
+
+**SP5-i 발견 사항 (lessons)**:
+- T1: listing-photo `RepoError` 에 `Conflict` variant 부재 — T4 에서 추가하며 해소
+- T3: spec plan 의 `PointSrid::new(Point<f64>)` 가정 틀림 — 실제 `PointSrid::try_new_wgs84(lng, lat) + pub fields lng/lat`
+- T3: `MoneyKrw::as_i64()` 사용 (plan 의 `i64::from(...)` 가정 틀림)
+- T3: `AreaM2::as_f64()` + `BigDecimal` bridge (plan 의 `Decimal` 가정 틀림)
+- T5: 통합 테스트가 `psql truncate cascade` 로 격리 + `--test-threads=1` 직렬 실행 + reset step 으로 후속 E2E 보호
+
 ## 워크스페이스 구조 (현재)
 
 ```
