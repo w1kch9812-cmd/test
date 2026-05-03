@@ -21,8 +21,8 @@ env:
   POSTGRES_DB: gongzzang
 
 jobs:
-  smoke:
-    name: WS smoke (POST/GET /users round-trip)
+  e2e:
+    name: API + Auth E2E (Zitadel JWT round-trip)
     runs-on: ubuntu-latest
 
     services:
@@ -37,7 +37,40 @@ jobs:
           --health-cmd "pg_isready -U gongzzang"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 10
+          --health-retries 20
+
+      zitadel:
+        image: ghcr.io/zitadel/zitadel:latest
+        env:
+          ZITADEL_DATABASE_POSTGRES_HOST: postgres
+          ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+          ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+          ZITADEL_DATABASE_POSTGRES_USER_USERNAME: gongzzang
+          ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ci_only_changeme
+          ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+          ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: gongzzang
+          ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ci_only_changeme
+          ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+          ZITADEL_EXTERNALSECURE: "false"
+          ZITADEL_EXTERNALDOMAIN: localhost
+          ZITADEL_EXTERNALPORT: "8081"
+          ZITADEL_PORT: "8080"
+          ZITADEL_TLS_ENABLED: "false"
+          ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: zitadel-admin-sa
+          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Admin
+          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+        # Zitadel container 가 listen 하는 포트는 8080 (기본). 호스트는 8081 매핑.
+        ports: ["8081:8080"]
+        # GitHub Actions 가 service 시작 후 health 통과를 기다리지만, Zitadel 이미지엔
+        # curl/wget 이 없을 수 있어 healthcheck 는 포기하고 워크플로우 step 에서 폴링.
+        # 빈 cmd 대신 항상 성공하는 명령으로 health 통과 처리.
+        options: >-
+          --health-cmd "exit 0"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 1
+          --health-start-period 5s
 
     env:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
@@ -51,8 +84,11 @@ jobs:
         with:
           shared-key: walking-skeleton
 
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features postgres,rustls
+      - name: Install jq + sqlx-cli + postgres client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y jq postgresql-client
+          cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features postgres,rustls
 
       - name: Wait for Postgres
         run: |
@@ -61,26 +97,151 @@ jobs:
             sleep 1
           done
 
-      - name: Apply migrations
+      - name: Apply gongzzang migrations
         run: sqlx migrate run --source migrations
 
-      - name: Build api binary
+      - name: Locate Zitadel container
+        id: zitadel_id
+        run: |
+          ZID=$(docker ps --filter "ancestor=ghcr.io/zitadel/zitadel:latest" --format '{{.ID}}' | head -1)
+          if [ -z "$ZID" ]; then
+            echo "ERROR: Zitadel container not found" >&2
+            docker ps -a >&2
+            exit 1
+          fi
+          echo "container_id=$ZID" >> "$GITHUB_OUTPUT"
+          echo "Zitadel container: $ZID"
+
+      - name: Wait for Zitadel HTTP healthz
+        run: |
+          for i in {1..180}; do
+            if curl -sf http://localhost:8081/debug/healthz >/dev/null 2>&1; then
+              echo "Zitadel healthz OK after ${i}s"
+              break
+            fi
+            if [ "$i" = "180" ]; then
+              echo "ERROR: Zitadel did not become healthy in 180s" >&2
+              docker logs --tail 200 "${{ steps.zitadel_id.outputs.container_id }}" >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Extract Zitadel admin PAT from container logs
+        id: zitadel_admin
+        run: |
+          ZID="${{ steps.zitadel_id.outputs.container_id }}"
+          PAT=""
+          for i in {1..60}; do
+            LOGS=$(docker logs "$ZID" 2>&1 || true)
+            # PAT 는 "PAT_EXPIRATIONDATE" 가 설정된 firstinstance machine user 로 발급되어 stdout 에 출력됨.
+            # 형식 예시 (zitadel v2.x): "Token: <jwt-or-opaque>" 또는 "PAT: ..."
+            # 탐색 패턴들:
+            for pat_re in 'PAT[: ]+\K[A-Za-z0-9_\-=.]+' 'pat[: ]+\K[A-Za-z0-9_\-=.]+' 'Token[: ]+\K[A-Za-z0-9_\-=.]+' 'token[: ]+\K[A-Za-z0-9_\-=.]+'; do
+              CAND=$(echo "$LOGS" | grep -oP "$pat_re" | head -1 || true)
+              if [ -n "$CAND" ] && [ "${#CAND}" -gt 30 ]; then
+                PAT="$CAND"
+                break 2
+              fi
+            done
+            sleep 2
+          done
+          if [ -z "$PAT" ]; then
+            echo "ERROR: could not extract PAT from Zitadel logs" >&2
+            echo "=== Zitadel logs (full) ===" >&2
+            docker logs "$ZID" 2>&1 | tail -500 >&2
+            exit 1
+          fi
+          echo "::add-mask::$PAT"
+          echo "pat=$PAT" >> "$GITHUB_OUTPUT"
+          echo "Got admin PAT (length=${#PAT})"
+
+      - name: Setup Zitadel project + OIDC app + machine user
+        id: zitadel
+        env:
+          ZITADEL_ADMIN_PAT: ${{ steps.zitadel_admin.outputs.pat }}
+          ZITADEL_URL: http://localhost:8081
+        run: bash tests/walking-skeleton/zitadel-setup.sh
+
+      - name: Build API
         run: cargo build --package api --release
 
-      - name: Start api in background
-        run: |
-          ./target/release/api &
-          echo $! > /tmp/api.pid
-          sleep 1
-
-      - name: Run smoke test
-        run: bash tests/walking-skeleton/smoke.sh
+      - name: Run API in background
         env:
-          API_URL: http://localhost:8080
+          ZITADEL_ISSUER: ${{ steps.zitadel.outputs.issuer }}
+          ZITADEL_AUDIENCE: ${{ steps.zitadel.outputs.audience }}
+        run: |
+          ./target/release/api > /tmp/api.log 2>&1 &
+          API_PID=$!
+          echo "API_PID=$API_PID" >> $GITHUB_ENV
+          for i in {1..30}; do
+            if curl -sf http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "API ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8080/healthz || (echo "API failed to start"; cat /tmp/api.log; exit 1)
 
-      - name: Stop api
+      - name: E2E [1/4] — public /healthz no auth → 200
+        run: |
+          BODY=$(curl -sf http://localhost:8080/healthz)
+          if [ "$BODY" != "ok" ]; then echo "FAIL: /healthz expected 'ok', got '$BODY'"; exit 1; fi
+          echo "PASS: /healthz=ok"
+
+      - name: E2E [2/4] — protected /users/me without token → 401
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/users/me)
+          if [ "$STATUS" != "401" ]; then
+            echo "FAIL: /users/me expected 401, got $STATUS"
+            cat /tmp/api.log
+            exit 1
+          fi
+          echo "PASS: /users/me without auth returns 401"
+
+      - name: E2E [3/4] — first sign-in auto-creates User
+        env:
+          TOKEN: ${{ steps.zitadel.outputs.token }}
+        run: |
+          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me) || {
+            echo "FAIL: GET /users/me with token failed"
+            cat /tmp/api.log
+            exit 1
+          }
+          echo "$RESP" | jq .
+          USER_ID=$(echo "$RESP" | jq -r .id)
+          ZSUB=$(echo "$RESP" | jq -r .zitadel_sub)
+          if [ -z "$USER_ID" ] || [ "$USER_ID" = "null" ]; then echo "FAIL: no id"; exit 1; fi
+          if [ -z "$ZSUB" ] || [ "$ZSUB" = "null" ]; then echo "FAIL: no zitadel_sub"; exit 1; fi
+          echo "USER_ID=$USER_ID" >> $GITHUB_ENV
+          echo "PASS: first sign-in id=$USER_ID sub=$ZSUB"
+
+      - name: E2E [4/4] — second call with same token returns same User (no duplicate)
+        env:
+          TOKEN: ${{ steps.zitadel.outputs.token }}
+        run: |
+          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me)
+          USER_ID2=$(echo "$RESP" | jq -r .id)
+          if [ "$USER_ID2" != "$USER_ID" ]; then
+            echo "FAIL: duplicate user — first=$USER_ID second=$USER_ID2"
+            exit 1
+          fi
+          ROW_COUNT=$(PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang -t -A -c 'select count(*) from "user";')
+          if [ "$ROW_COUNT" != "1" ]; then
+            echo "FAIL: expected 1 user row, got $ROW_COUNT"
+            exit 1
+          fi
+          echo "PASS: same id ($USER_ID), 1 user row"
+
+      - name: Dump API log on failure
+        if: failure()
+        run: |
+          echo "=== api.log ==="
+          cat /tmp/api.log || true
+          echo "=== Zitadel logs (tail 200) ==="
+          docker logs --tail 200 "${{ steps.zitadel_id.outputs.container_id }}" || true
+
+      - name: Stop API
         if: always()
         run: |
-          if [ -f /tmp/api.pid ]; then
-            kill "$(cat /tmp/api.pid)" 2>/dev/null || true
-          fi
+          if [ -n "${API_PID:-}" ]; then kill $API_PID || true; fi
