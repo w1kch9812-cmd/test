@@ -1,8 +1,17 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-03)
-description: Sub-project 1 + 2 (Core + Market + Insights + Operations + Pipeline + Audit + Outbox) 완료, Sub-project 3 진입 대기
+description: SP1+2 완료, SP3 T1-T9 코드 푸시 + 로컬 1050 tests 그린, repo public 전환 (test) — CI 그린 검증 진행 중
 type: project
 ---
+
+## ⚠️ 인프라 변경 (2026-05-03)
+
+- **Repo rename + visibility**: `w1kch9812-cmd/gongzzang3` (private) → `w1kch9812-cmd/test` (public)
+- **이유**: GH Actions free-tier 빌링 소진 (5월 31일까지 reset 대기) → 무료 CI 위해 임시 public
+- **새 origin**: `https://github.com/w1kch9812-cmd/test.git`
+- **MSVC Build Tools 2022 설치 완료** — 로컬 cargo check/clippy/test/fmt 모두 작동, 더 이상 CI 단독 게이트 아님
+- **로컬 검증 1050 tests 그린** (`cargo test --workspace`), `cargo clippy --workspace --all-features -- -D warnings` 5초 만에 통과 (CI 동일 명령)
+- 후속: production 운영 단계 직전에 다시 private 전환 — `docs/auth/staging-zitadel-integration.md` 와 동일한 deferred infra 처리 항목
 
 ## 완료된 Sub-projects
 
@@ -100,10 +109,15 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## CI 상태
 
-3 workflow 모두 그린 (commit `51647a5` 시점):
+- SP2 종료 (`51647a5`)까지 3 workflow 그린
+- SP3 T1-T8 (`51b4b50`-`30b9c47`) 진행 중 모두 그린 유지 (T7 의 walking-skeleton 일시 빨강 의도 — Zitadel 미통합 상태)
+- SP3 T9 first attempt (`9ad70e2`-`1c39b96`) 7 iter 실패 후 GH Actions billing block
+- SP3 T9 재작업 (`447d767`) Mock JWT 모드로 푸시 완료, billing block 으로 검증 미완
+
+3 workflow 정의:
 - CI (7 jobs): lint, clippy, fmt, cargo-check, cargo-deny, tarpaulin ≥90%, secret scan
 - db-migrations: PG17+PostGIS 컨테이너 + V001-V003 마이그 + immutable trigger 검증
-- walking-skeleton: 실제 HTTP API 빌드 + 백그라운드 실행 + curl POST/GET round-trip
+- walking-skeleton: HTTP API 빌드 + `AUTH_DEV_MODE=true` 로 mock JWT round-trip 6단계 (T9 재작업 후)
 
 ## Rust 툴체인
 
@@ -111,7 +125,8 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **Sub-project 3 (Auth)**: Zitadel JWT 미들웨어 (Axum tower) + User Aggregate 연결
+- **즉시**: GH Actions billing 복구 → `gh run rerun` 또는 빈 commit 푸시 → 3 workflow 그린 확인 → SP3 T10 (project_progress 갱신, 누적 카운트 확정)
+- **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 에 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
 - **Sub-project 4 (외부 API)**: Reader trait 구현체 (V-World, 법제처, data.go.kr)
 - **Sub-project 5 (Repository SQLx 구현)**: 도메인 → DB 통합 (3개 BC 모두)
 - 6: Frontend (Next.js)
@@ -132,3 +147,4 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 - Windows 로컬 빌드: MSVC Build Tools 부재로 cargo build/test/clippy 실행 불가. CI Linux가 최후 진실
 - Postgres 포트 5432: Windows 예약 포트 범위 (5360-5459) 충돌 가능 — 로컬 시연 시 6432 같은 다른 포트 임시 사용
+- **GH Actions billing**: 7-iter Zitadel 시도 후 한도 도달. 매 PR 마다 무거운 인프라 부팅 (Zitadel 컨테이너 5 분+) 은 SSS 비용 효율 미달 — staging 환경에 분리하는 게 합리
