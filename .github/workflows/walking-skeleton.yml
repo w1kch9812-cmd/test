@@ -39,39 +39,9 @@ jobs:
           --health-timeout 3s
           --health-retries 20
 
-      zitadel:
-        image: ghcr.io/zitadel/zitadel:latest
-        env:
-          ZITADEL_DATABASE_POSTGRES_HOST: postgres
-          ZITADEL_DATABASE_POSTGRES_PORT: "5432"
-          ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
-          ZITADEL_DATABASE_POSTGRES_USER_USERNAME: gongzzang
-          ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: ci_only_changeme
-          ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
-          ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: gongzzang
-          ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: ci_only_changeme
-          ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
-          ZITADEL_EXTERNALSECURE: "false"
-          ZITADEL_EXTERNALDOMAIN: localhost
-          ZITADEL_EXTERNALPORT: "8081"
-          ZITADEL_PORT: "8080"
-          ZITADEL_TLS_ENABLED: "false"
-          ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
-          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: zitadel-admin-sa
-          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Admin
-          ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
-        # Zitadel container 가 listen 하는 포트는 8080 (기본). 호스트는 8081 매핑.
-        ports: ["8081:8080"]
-        # GitHub Actions 가 service 시작 후 health 통과를 기다리지만, Zitadel 이미지엔
-        # curl/wget 이 없을 수 있어 healthcheck 는 포기하고 워크플로우 step 에서 폴링.
-        # 빈 cmd 대신 항상 성공하는 명령으로 health 통과 처리.
-        options: >-
-          --health-cmd "exit 0"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 1
-          --health-start-period 5s
-
+    # Zitadel은 service container 가 아니라 step 에서 직접 `docker run` 합니다.
+    # 이유: Zitadel image entrypoint 가 subcommand 를 요구하는데
+    # GitHub Actions service container 는 CMD 인자를 못 넘김 ("Error: no additional command provided").
     env:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
 
@@ -100,17 +70,60 @@ jobs:
       - name: Apply gongzzang migrations
         run: sqlx migrate run --source migrations
 
-      - name: Locate Zitadel container
+      - name: Create zitadel database (Zitadel requires its own DB)
+        run: |
+          PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang \
+            -c "CREATE DATABASE zitadel;"
+
+      - name: Start Zitadel container (docker run, joining postgres network)
         id: zitadel_id
         run: |
-          ZID=$(docker ps --filter "ancestor=ghcr.io/zitadel/zitadel:latest" --format '{{.ID}}' | head -1)
-          if [ -z "$ZID" ]; then
-            echo "ERROR: Zitadel container not found" >&2
-            docker ps -a >&2
+          # GitHub Actions service container 가 만든 docker network 이름을 찾음
+          NET=$(docker network ls --filter "name=github_network_" --format '{{.Name}}' | head -1)
+          if [ -z "$NET" ]; then
+            echo "ERROR: github_network not found" >&2
+            docker network ls >&2
             exit 1
           fi
+          echo "Joining network: $NET"
+
+          # Zitadel 을 master-key 와 함께 start-from-init 으로 실행
+          # postgres 호스트는 service 컨테이너 alias 'postgres'
+          ZID=$(docker run -d \
+            --name zitadel-ci \
+            --network "$NET" \
+            --network-alias zitadel \
+            -p 8081:8080 \
+            -e ZITADEL_DATABASE_POSTGRES_HOST=postgres \
+            -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
+            -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
+            -e ZITADEL_DATABASE_POSTGRES_USER_USERNAME=gongzzang \
+            -e ZITADEL_DATABASE_POSTGRES_USER_PASSWORD=ci_only_changeme \
+            -e ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE=disable \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME=gongzzang \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD=ci_only_changeme \
+            -e ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE=disable \
+            -e ZITADEL_EXTERNALSECURE=false \
+            -e ZITADEL_EXTERNALDOMAIN=localhost \
+            -e ZITADEL_EXTERNALPORT=8081 \
+            -e ZITADEL_PORT=8080 \
+            -e ZITADEL_TLS_ENABLED=false \
+            -e ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED=false \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=zitadel-admin-sa \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=Admin \
+            -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-01-01T00:00:00Z \
+            ghcr.io/zitadel/zitadel:latest \
+            start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled)
+
+          echo "Zitadel container ID: $ZID"
           echo "container_id=$ZID" >> "$GITHUB_OUTPUT"
-          echo "Zitadel container: $ZID"
+          # 1초 후 컨테이너가 살아있는지 확인 (초기 immediate exit 잡기)
+          sleep 3
+          if ! docker ps --filter "id=$ZID" --filter status=running -q | grep -q .; then
+            echo "ERROR: Zitadel exited immediately" >&2
+            docker logs "$ZID" >&2
+            exit 1
+          fi
 
       - name: Wait for Zitadel HTTP healthz
         run: |
@@ -241,7 +254,8 @@ jobs:
           echo "=== Zitadel logs (tail 200) ==="
           docker logs --tail 200 "${{ steps.zitadel_id.outputs.container_id }}" || true
 
-      - name: Stop API
+      - name: Stop API and Zitadel
         if: always()
         run: |
           if [ -n "${API_PID:-}" ]; then kill $API_PID || true; fi
+          docker rm -f zitadel-ci 2>/dev/null || true
