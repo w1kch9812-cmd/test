@@ -74,5 +74,10 @@ if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='
   echo "FAIL: featured_content_time_bound_chk missing (V003_03)" >&2; exit 1
 fi
 
+# V003_05: user.roles CHECK 제약 (UserRole 7 enum 값)
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='\"user\"'::regclass and conname='user_roles_valid_chk';" | grep -q '^1$'; then
+  echo "FAIL: user_roles_valid_chk missing (V003_05)" >&2; exit 1
+fi
+
 echo "PASS: V001 18 RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0
