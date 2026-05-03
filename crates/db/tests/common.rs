@@ -31,7 +31,7 @@ pub async fn setup_test_pool() -> PgPool {
 /// `cascade` 옵션으로 한꺼번에 비워요. `audit_log` 는 `V002` immutable 트리거가
 /// `UPDATE`/`DELETE` 만 차단하고 `TRUNCATE` (DDL) 는 통과해요.
 pub async fn truncate_all(pool: &PgPool) {
-    sqlx::query(r#"truncate "user", listing, listing_photo, audit_log cascade"#)
+    sqlx::query(r#"truncate "user", listing, listing_photo, audit_log, outbox_event cascade"#)
         .execute(pool)
         .await
         .expect("truncate failed");
