@@ -131,19 +131,35 @@ jobs:
             exit 1
           fi
 
-      - name: Wait for Zitadel HTTP healthz
+      - name: Wait for Zitadel ready (debug/ready + management API)
         run: |
+          ZID="${{ steps.zitadel_id.outputs.container_id }}"
+          # Step 1: HTTP healthz (basic listen)
           for i in {1..180}; do
             if curl -sf http://localhost:8081/debug/healthz >/dev/null 2>&1; then
-              echo "Zitadel healthz OK after ${i}s"
+              echo "[1/2] Zitadel healthz OK after ${i}s"
               break
             fi
             if [ "$i" = "180" ]; then
               echo "ERROR: Zitadel did not become healthy in 180s" >&2
-              docker logs --tail 200 "${{ steps.zitadel_id.outputs.container_id }}" >&2 || true
+              docker logs --tail 200 "$ZID" >&2 || true
               exit 1
             fi
             sleep 1
+          done
+          # Step 2: /debug/ready — Zitadel 의 모든 component (DB + gRPC + projections) 준비
+          for i in {1..180}; do
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/debug/ready 2>&1 || true)
+            if [ "$HTTP" = "200" ]; then
+              echo "[2/2] Zitadel /debug/ready OK after ${i}s"
+              break
+            fi
+            if [ "$i" = "180" ]; then
+              echo "ERROR: Zitadel /debug/ready did not return 200 in 180s (last HTTP $HTTP)" >&2
+              docker logs --tail 200 "$ZID" >&2 || true
+              exit 1
+            fi
+            sleep 2
           done
 
       - name: Read Zitadel admin PAT from mounted file
