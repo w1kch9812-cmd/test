@@ -18,7 +18,7 @@ const MAX_TITLE_LEN: usize = 200;
 /// `snapshot`은 `R2` 데이터의 시점 고정 캐시(`JSONB`). 재분석 시
 /// [`AnalysisReport::update_snapshot`]로 갱신하며 `version` bump.
 ///
-/// `updated_at` 컬럼은 마이그레이션 30004 (V003_04) 에서 DB 에 추가되어
+/// `updated_at` 컬럼은 마이그레이션 30004 (`V003_04`) 에서 DB 에 추가되어
 /// 도메인-DB 스키마가 일치해요.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnalysisReport {
