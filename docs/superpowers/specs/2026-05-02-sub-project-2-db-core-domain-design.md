@@ -536,7 +536,7 @@ create index listing_report_listing_idx on listing_report(listing_id);
 
 ```sql
 create table featured_content (
-    id char(30) primary key,                            -- fc_...
+    id char(30) primary key,                            -- fea_... (3-char prefix invariant; was `fc_` in earlier drafts)
     target_kind varchar(30) not null check (target_kind in
         ('listing', 'industrial_complex', 'manufacturer')),
     target_id varchar(50) not null,

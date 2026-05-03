@@ -18,11 +18,8 @@ const MAX_TITLE_LEN: usize = 200;
 /// `snapshot`은 `R2` 데이터의 시점 고정 캐시(`JSONB`). 재분석 시
 /// [`AnalysisReport::update_snapshot`]로 갱신하며 `version` bump.
 ///
-/// # `updated_at` 주의
-///
-/// Spec § 5.2 DB 스키마는 `created_at`만 갖지만, 도메인은 optimistic locking
-/// 추적을 위해 `updated_at`를 함께 운영해요. DB 마이그레이션에 컬럼 추가가
-/// 별도 follow-up으로 필요해요.
+/// `updated_at` 컬럼은 마이그레이션 30004 (V003_04) 에서 DB 에 추가되어
+/// 도메인-DB 스키마가 일치해요.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AnalysisReport {
     /// 식별자 (`rpt_<26 ULID>`).

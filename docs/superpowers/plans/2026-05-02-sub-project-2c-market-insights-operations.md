@@ -359,7 +359,7 @@ git commit -m "feat(audit-domain): AuditLog Aggregate + insert-only Repository (
 
 ```rust
 pub struct OutboxEvent {
-    pub id: Id<OutboxEventMarker>,                    // oev_<26 ULID>
+    pub id: Id<OutboxEventMarker>,                    // evt_<26 ULID> (per spec § 5.3)
     pub event_type: String,                           // 'listing.approved' (≤50자)
     pub aggregate_kind: String,                       // 'listing' (≤30자)
     pub aggregate_id: String,                         // ≤50자
@@ -376,7 +376,7 @@ impl OutboxEvent {
 }
 ```
 
-`OutboxEventMarker` (PREFIX `"oev"`).
+`OutboxEventMarker` (PREFIX `"evt"` per spec § 5.3 inline; earlier plan draft mistakenly used `"oev"`).
 
 ### Task 10: OutboxRepository trait
 
