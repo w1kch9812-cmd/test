@@ -87,13 +87,18 @@ jobs:
           fi
           echo "Joining network: $NET"
 
+          # PAT 를 호스트 파일시스템에 쓰도록 ZITADEL_FIRSTINSTANCE_PATPATH 사용
+          # /zitadel-pat 는 컨테이너 내부 경로, /tmp/zitadel-pat 는 호스트 마운트
+          mkdir -p /tmp/zitadel-pat
+          chmod 777 /tmp/zitadel-pat
+
           # Zitadel 을 master-key 와 함께 start-from-init 으로 실행
-          # postgres 호스트는 service 컨테이너 alias 'postgres'
           ZID=$(docker run -d \
             --name zitadel-ci \
             --network "$NET" \
             --network-alias zitadel \
             -p 8081:8080 \
+            -v /tmp/zitadel-pat:/zitadel-pat \
             -e ZITADEL_DATABASE_POSTGRES_HOST=postgres \
             -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
             -e ZITADEL_DATABASE_POSTGRES_DATABASE=zitadel \
@@ -112,6 +117,7 @@ jobs:
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME=zitadel-admin-sa \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME=Admin \
             -e ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE=2099-01-01T00:00:00Z \
+            -e ZITADEL_FIRSTINSTANCE_PATPATH=/zitadel-pat/pat.txt \
             ghcr.io/zitadel/zitadel:latest \
             start-from-init --masterkey "MasterkeyNeedsToHave32Characters" --tlsMode disabled)
 
@@ -140,29 +146,26 @@ jobs:
             sleep 1
           done
 
-      - name: Extract Zitadel admin PAT from container logs
+      - name: Read Zitadel admin PAT from mounted file
         id: zitadel_admin
         run: |
           ZID="${{ steps.zitadel_id.outputs.container_id }}"
           PAT=""
-          for i in {1..60}; do
-            LOGS=$(docker logs "$ZID" 2>&1 || true)
-            # PAT 는 "PAT_EXPIRATIONDATE" 가 설정된 firstinstance machine user 로 발급되어 stdout 에 출력됨.
-            # 형식 예시 (zitadel v2.x): "Token: <jwt-or-opaque>" 또는 "PAT: ..."
-            # 탐색 패턴들:
-            for pat_re in 'PAT[: ]+\K[A-Za-z0-9_\-=.]+' 'pat[: ]+\K[A-Za-z0-9_\-=.]+' 'Token[: ]+\K[A-Za-z0-9_\-=.]+' 'token[: ]+\K[A-Za-z0-9_\-=.]+'; do
-              CAND=$(echo "$LOGS" | grep -oP "$pat_re" | head -1 || true)
-              if [ -n "$CAND" ] && [ "${#CAND}" -gt 30 ]; then
-                PAT="$CAND"
-                break 2
+          for i in {1..120}; do
+            if [ -f /tmp/zitadel-pat/pat.txt ] && [ -s /tmp/zitadel-pat/pat.txt ]; then
+              PAT=$(cat /tmp/zitadel-pat/pat.txt | tr -d '\r\n')
+              if [ -n "$PAT" ] && [ "${#PAT}" -gt 30 ]; then
+                echo "PAT file ready after ${i}s (len=${#PAT})"
+                break
               fi
-            done
+            fi
             sleep 2
           done
           if [ -z "$PAT" ]; then
-            echo "ERROR: could not extract PAT from Zitadel logs" >&2
-            echo "=== Zitadel logs (full) ===" >&2
-            docker logs "$ZID" 2>&1 | tail -500 >&2
+            echo "ERROR: PAT file not produced at /tmp/zitadel-pat/pat.txt" >&2
+            ls -la /tmp/zitadel-pat/ >&2 || true
+            echo "=== Zitadel logs (tail 200) ===" >&2
+            docker logs --tail 200 "$ZID" 2>&1 >&2 || true
             exit 1
           fi
           echo "::add-mask::$PAT"
