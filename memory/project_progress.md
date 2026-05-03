@@ -66,10 +66,28 @@ type: project
 - T15 ListingReviewQueue (Operations BC, optimistic locking)
 - T16 ListingReport (Operations BC)
 - T17 OperationsMeta (FeaturedContent + AlertHistory, 단일 crate)
-- T18 통합 검증 + memory 갱신 (현재)
+- T18 통합 검증 + memory 갱신
 
 **누적**: 14 신규 crate (Market 2 + Insights 4 + Audit 2 + Pipeline 1 + Operations 5),
 1017 단위 테스트, Rust 1.88, 24 workspace member.
+
+### Sub-project 3: Auth — Zitadel JWT 핵심 게이트 (완료, T1-T10)
+
+- 신규 crate: `crates/auth` (`Verifier` enum + `JwksCache` + middleware + extractor + `require_role`)
+- `Verifier::Real(JwtVerifier)` — Zitadel `RS256` + `JWKS` 검증
+- `Verifier::Dev` — Mock JWT (`DEV.<sub>` 형식, `AUTH_DEV_MODE=true` 시 사용)
+- `services/api`: 미들웨어 적용 (`/healthz` public, `/users/me`/`/users/:id` 인증 보호), `POST /users` 제거
+- migration `30005`: `user.roles` CHECK 제약 (7 enum 값)
+- walking-skeleton.yml: Zitadel 컨테이너 대신 Mock JWT 6단계 e2e (healthz / 401-no-token / 401-bad / first-sign-in / no-dup / different-sub)
+- T9 첫 시도 (Zitadel 컨테이너) 7 iter 실패 → docs/auth/staging-zitadel-integration.md 에 deferred 기록
+- 누적 테스트: 1017 → **1050** (auth crate +33), 25 crate
+
+**SP3 미포함 (후속)**:
+- 진짜 Zitadel staging 통합 테스트 (deferred)
+- 소셜 로그인 (Google/Kakao/Naver/Apple)
+- NICE 본인인증
+- 2FA / WebAuthn
+- endpoint 별 RBAC 매트릭스
 
 ## 워크스페이스 구조 (현재)
 
