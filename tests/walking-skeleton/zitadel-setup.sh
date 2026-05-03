@@ -28,24 +28,35 @@ fi
 
 AUTH="Authorization: Bearer ${ZITADEL_ADMIN_PAT}"
 
-# admin PAT 검증 — /auth/v1/users/me 호출
-echo "Validating admin PAT..."
-ME_RESP=$(curl -sf -H "$AUTH" "$ZITADEL_URL/auth/v1/users/me" || true)
+# admin PAT 검증 — 여러 endpoint 시도 (Zitadel API 버전마다 paths 가 다름)
+echo "Validating admin PAT (PAT len=${#ZITADEL_ADMIN_PAT})..."
+ME_RESP=""
+for endpoint in "/auth/v1/users/me" "/management/v1/iam"; do
+  echo "Trying $endpoint ..."
+  HTTP_CODE=$(curl -s -o /tmp/me_resp.json -w "%{http_code}" -H "$AUTH" "$ZITADEL_URL$endpoint" || true)
+  echo "  HTTP $HTTP_CODE"
+  if [ "$HTTP_CODE" = "200" ]; then
+    ME_RESP=$(cat /tmp/me_resp.json)
+    echo "  OK: $ME_RESP" | head -c 300
+    echo
+    break
+  fi
+  echo "  body: $(head -c 300 /tmp/me_resp.json)"
+done
 if [ -z "$ME_RESP" ]; then
-  echo "ERROR: admin PAT validation failed (auth/v1/users/me)" >&2
-  exit 1
+  echo "WARN: admin PAT validation didn't return 200 — proceeding to project create anyway"
 fi
-echo "admin PAT OK"
 
 # 3) Project 생성
 echo "Creating project..."
-PROJECT_RESP=$(curl -sf -X POST "$ZITADEL_URL/management/v1/projects" \
+HTTP_CODE=$(curl -s -o /tmp/proj.json -w "%{http_code}" -X POST "$ZITADEL_URL/management/v1/projects" \
   -H "$AUTH" -H "Content-Type: application/json" \
   -d '{"name":"gongzzang-ci"}')
-echo "Project resp: $PROJECT_RESP"
-PROJECT_ID=$(echo "$PROJECT_RESP" | jq -r .id)
+PROJECT_RESP=$(cat /tmp/proj.json)
+echo "Project HTTP $HTTP_CODE resp: $PROJECT_RESP"
+PROJECT_ID=$(echo "$PROJECT_RESP" | jq -r .id 2>/dev/null || true)
 if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "null" ]; then
-  echo "ERROR: project create failed" >&2
+  echo "ERROR: project create failed (HTTP $HTTP_CODE)" >&2
   exit 1
 fi
 echo "PROJECT_ID=$PROJECT_ID"
