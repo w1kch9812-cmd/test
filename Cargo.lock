@@ -469,6 +469,7 @@ dependencies = [
  "lrq-domain",
  "operations-meta-domain",
  "outbox-event-domain",
+ "serde_json",
  "shared-kernel",
  "sqlx",
  "thiserror 1.0.69",

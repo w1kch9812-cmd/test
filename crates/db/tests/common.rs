@@ -28,9 +28,10 @@ pub async fn setup_test_pool() -> PgPool {
 /// 테스트 격리: 각 테스트 시작 전 모든 도메인 테이블 truncate.
 ///
 /// `FK CASCADE` 활용 — `listing_photo` 가 `listing` 의 `FK on delete cascade` 라
-/// `cascade` 옵션으로 한꺼번에 비워요.
+/// `cascade` 옵션으로 한꺼번에 비워요. `audit_log` 는 `V002` immutable 트리거가
+/// `UPDATE`/`DELETE` 만 차단하고 `TRUNCATE` (DDL) 는 통과해요.
 pub async fn truncate_all(pool: &PgPool) {
-    sqlx::query(r#"truncate "user", listing, listing_photo cascade"#)
+    sqlx::query(r#"truncate "user", listing, listing_photo, audit_log cascade"#)
         .execute(pool)
         .await
         .expect("truncate failed");
