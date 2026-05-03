@@ -9,6 +9,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shared_kernel::id::{FeaturedContentMarker, Id, SystemAlertMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::alert::SystemAlert;
@@ -24,7 +25,11 @@ pub trait OperationsMetaRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn save_featured(&self, fc: &FeaturedContent) -> Result<(), RepoError>;
+    async fn save_featured(
+        &self,
+        fc: &FeaturedContent,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 
     /// `id` 로 단건 조회. 없으면 `Ok(None)`.
     ///
@@ -55,7 +60,7 @@ pub trait OperationsMetaRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn save_alert(&self, alert: &SystemAlert) -> Result<(), RepoError>;
+    async fn save_alert(&self, alert: &SystemAlert, ctx: MutationContext) -> Result<(), RepoError>;
 
     /// `id` 로 단건 조회. 없으면 `Ok(None)`.
     ///

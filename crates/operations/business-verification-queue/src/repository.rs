@@ -7,6 +7,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{BvqMarker, Id, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::BusinessVerificationQueue;
@@ -46,7 +47,11 @@ pub trait BvqRepository: Send + Sync {
     /// # Errors
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
-    async fn save(&self, bvq: &BusinessVerificationQueue) -> Result<(), RepoError>;
+    async fn save(
+        &self,
+        bvq: &BusinessVerificationQueue,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.

@@ -7,6 +7,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{Id, ListingMarker, ListingReportMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::ListingReport;
@@ -47,7 +48,7 @@ pub trait ListingReportRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn save(&self, report: &ListingReport) -> Result<(), RepoError>;
+    async fn save(&self, report: &ListingReport, ctx: MutationContext) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러. **No `Conflict` variant** — `ListingReport` 는 OCC 사용 안 함.

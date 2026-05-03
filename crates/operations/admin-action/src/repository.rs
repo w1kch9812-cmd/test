@@ -8,6 +8,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shared_kernel::id::{Id, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::AdminAction;
@@ -22,7 +23,7 @@ pub trait AdminActionRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn insert(&self, action: &AdminAction) -> Result<(), RepoError>;
+    async fn insert(&self, action: &AdminAction, ctx: MutationContext) -> Result<(), RepoError>;
 
     /// 어드민 사용자별 `AdminAction` 조회 (composite index
     /// `admin_action_admin_idx (admin_id, created_at desc)` 활용).

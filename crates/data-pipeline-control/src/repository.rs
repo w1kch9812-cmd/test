@@ -8,6 +8,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{Id, PipelineRunMarker, PipelineScheduleMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::run::PipelineRun;
@@ -51,7 +52,11 @@ pub trait PipelineRepository: Send + Sync {
     ///
     /// - 동시 갱신으로 `version` 어긋남 → [`RepoError::Conflict`].
     /// - DB 통신 실패 → [`RepoError::Database`].
-    async fn save_schedule(&self, schedule: &PipelineSchedule) -> Result<(), RepoError>;
+    async fn save_schedule(
+        &self,
+        schedule: &PipelineSchedule,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 
     // ── PipelineRun ───────────────────────────────────────────
 
@@ -88,7 +93,7 @@ pub trait PipelineRepository: Send + Sync {
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn save_run(&self, run: &PipelineRun) -> Result<(), RepoError>;
+    async fn save_run(&self, run: &PipelineRun, ctx: MutationContext) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.

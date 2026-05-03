@@ -24,6 +24,7 @@ pub mod listing_status;
 pub mod listing_title;
 pub mod listing_type;
 pub mod money;
+pub mod mutation;
 pub mod phone_kr;
 pub mod pnu;
 pub mod srid;

@@ -7,6 +7,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{Id, ListingMarker, LrqMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::ListingReviewQueue;
@@ -44,7 +45,7 @@ pub trait LrqRepository: Send + Sync {
     /// # Errors
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
-    async fn save(&self, lrq: &ListingReviewQueue) -> Result<(), RepoError>;
+    async fn save(&self, lrq: &ListingReviewQueue, ctx: MutationContext) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.
