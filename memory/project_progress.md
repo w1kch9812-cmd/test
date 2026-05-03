@@ -115,6 +115,39 @@ type: project
 - T3: `AreaM2::as_f64()` + `BigDecimal` bridge (plan 의 `Decimal` 가정 틀림)
 - T5: 통합 테스트가 `psql truncate cascade` 로 격리 + `--test-threads=1` 직렬 실행 + reset step 으로 후속 E2E 보호
 
+### Sub-project 5-iii: Audit + Pipeline + Operations BC RDS Repo + 트랜잭션 Outbox (완료, T1-T11)
+
+- 신규: `MutationContext` (`crates/domain/core/shared-kernel/src/mutation.rs`) + 6 단위 테스트
+  · `actor_id` (Option), `correlation_id`, `action`, `metadata`, `events: Vec<Arc<dyn DomainEvent>>`, `client_ip`, `user_agent`, `occurred_at`
+  · `new_user_action` / `new_system_action` / `with_metadata` / `with_events` / `with_client_info` / `with_occurred_at`
+- 6 도메인 trait 시그니처 변경 — `save`/`insert` 메서드에 `ctx: MutationContext` 추가 (pipeline / admin-action / bvq / lrq / listing-report / operations-meta)
+- 8 신규 PgRepository (`crates/db/src/{audit_log,outbox,admin_action,bvq,lrq,listing_report,operations_meta,pipeline}.rs`)
+- `error_map.rs` 8 신규 도메인 `MapFromSqlx` impl
+- **트랜잭션 패턴**: PgRepository.save() 가 tx 안에서 `[INSERT/UPDATE Aggregate + INSERT audit_log + INSERT outbox_event for each event]` 모두 atomic. 부분 실패 → 모두 rollback (자동)
+- AuditLog/Outbox 자체 repo 는 transactional 패턴 *대상 아님* (recursion 방지)
+- `audit_log` V002 immutable trigger 동작 검증 (UPDATE/DELETE 차단)
+- 통합 테스트 39 신규 (audit 5 + outbox 6 + admin_action 4 + bvq 5 + lrq 5 + listing_report 4 + operations_meta 5 + pipeline 5) + 단위 6 → 누적 ~1120
+
+**SSS 7기둥 결함 닫음**:
+- 추적성: 모든 mutation 이 audit_log 자동 + correlation_id + actor_id 추적
+- 일관성: OutboxEvent 패턴 작동 (이전엔 trait 정의만, 실제 INSERT 0)
+- 안전성: tx atomic — audit 실패 = 전체 실패
+
+**SP5-iii 발견 사항 (lessons)**:
+- Trait doc stale 다수: `find_by_resource(limit)` `find_by_actor(since)` 등 spec 문서가 실제 trait 보다 뒤짐 → 코드가 SSOT
+- Entity-DB asymmetry: BVQ/LRQ entity 의 `updated_at` 필드는 DB 미존재 → SELECT 시 합성 (`reviewed_at.unwrap_or(submitted_at)`) → spec FU 14 후보
+- OCC API 한계: `RepoRepo::save(aggregate, ctx)` 가 caller 의 read-시점 version 을 묵시 의존 → `expected_version` 명시 인자가 더 명확 → spec FU 15 후보
+- AuditLog 컬럼 mismatch: spec § 4.3 mock 의 `metadata` 컬럼 → 실제 schema 는 `before_state`/`after_state`/`ip_address` (plan 에서 정정해 따름)
+- LRQ `find_by_listing` 은 multi-row corruption 시 silent shadow → `UNIQUE INDEX listing_review_queue(listing_id) WHERE decision IS NULL` 추가 검토 → spec FU 16 후보
+- AuthCrate clippy 빚: `crates/auth/src/verifier.rs` 의 pre-existing `clippy::panic` + `clippy::manual_let_else` — SP3 잔재, 별도 정리 필요
+
+**SP5-iii 미포함 (후속)**:
+- SP5-iv: SP5-i 의 User/Listing/ListingPhoto save() 에 MutationContext 추가
+- SP5-ii: Insights BC RDS (Bookmark/SearchHistory/AnalysisReport/Notification)
+- SP4: 외부 API ingestion + R2 Reader + Outbox publisher worker
+- AuditLog full diff capture (before_state + after_state) — 별도
+- OperationsMeta `find_unacknowledged_alerts` trait doc 갱신 (created_at ASC → severity DESC + created_at DESC)
+
 ## 워크스페이스 구조 (현재)
 
 ```
