@@ -32,7 +32,7 @@ pub async fn setup_test_pool() -> PgPool {
 /// `UPDATE`/`DELETE` 만 차단하고 `TRUNCATE` (DDL) 는 통과해요.
 pub async fn truncate_all(pool: &PgPool) {
     sqlx::query(
-        r#"truncate "user", listing, listing_photo, audit_log, outbox_event, admin_action cascade"#,
+        r#"truncate "user", listing, listing_photo, audit_log, outbox_event, admin_action, business_verification_queue cascade"#,
     )
     .execute(pool)
     .await
