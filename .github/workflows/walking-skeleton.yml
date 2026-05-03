@@ -93,14 +93,13 @@ jobs:
           chmod 777 /tmp/zitadel-pat
 
           # Zitadel 을 master-key 와 함께 start-from-init 으로 실행
-          # IPv6 비활성화: Zitadel grpc gateway 가 dial "localhost:8080" 시 [::1] 로 가서
-          # IPv4-only 백엔드와 connection refused 발생. sysctl 로 IPv6 끄면 IPv4 로 fallback.
+          # 주의: Zitadel 은 [::]:8080 (dual-stack) 에 listen 하므로 IPv6 비활성화 금지
+          # gateway → grpc backend 통신은 같은 컨테이너 내 loopback 으로 이뤄짐
           ZID=$(docker run -d \
             --name zitadel-ci \
             --network "$NET" \
             --network-alias zitadel \
             -p 8081:8080 \
-            --sysctl net.ipv6.conf.all.disable_ipv6=1 \
             -v /tmp/zitadel-pat:/zitadel-pat \
             -e ZITADEL_DATABASE_POSTGRES_HOST=postgres \
             -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
@@ -134,7 +133,7 @@ jobs:
             exit 1
           fi
 
-      - name: Wait for Zitadel ready (debug/ready + management API)
+      - name: Wait for Zitadel ready (healthz + management API)
         run: |
           ZID="${{ steps.zitadel_id.outputs.container_id }}"
           # Step 1: HTTP healthz (basic listen)
@@ -150,16 +149,18 @@ jobs:
             fi
             sleep 1
           done
-          # Step 2: /debug/ready — Zitadel 의 모든 component (DB + gRPC + projections) 준비
-          for i in {1..180}; do
-            HTTP=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/debug/ready 2>&1 || true)
-            if [ "$HTTP" = "200" ]; then
-              echo "[2/2] Zitadel /debug/ready OK after ${i}s"
+          # Step 2: management API 가 503 안 나올 때까지 대기 — gRPC backend 실제 ready
+          for i in {1..240}; do
+            HTTP=$(curl -s -o /tmp/mgmt_probe.json -w "%{http_code}" http://localhost:8081/management/v1/iam 2>&1 || true)
+            # 401 (no auth) 또는 200 이면 gRPC OK. 503 만 대기.
+            if [ "$HTTP" = "401" ] || [ "$HTTP" = "200" ] || [ "$HTTP" = "403" ]; then
+              echo "[2/2] Zitadel management API responsive (HTTP $HTTP) after ${i}s"
               break
             fi
-            if [ "$i" = "180" ]; then
-              echo "ERROR: Zitadel /debug/ready did not return 200 in 180s (last HTTP $HTTP)" >&2
-              docker logs --tail 200 "$ZID" >&2 || true
+            if [ "$i" = "240" ]; then
+              echo "ERROR: Zitadel management API still 503 after 240s (last HTTP $HTTP)" >&2
+              echo "last body: $(cat /tmp/mgmt_probe.json)" >&2
+              docker logs --tail 300 "$ZID" >&2 || true
               exit 1
             fi
             sleep 2
