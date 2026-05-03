@@ -1,12 +1,11 @@
-//! 공짱 `HTTP` `API` service — Walking Skeleton.
+//! 공짱 `HTTP` `API` service — `Walking Skeleton` + `Auth` (`SP3`).
 //!
-//! 3 endpoint:
-//! - `GET /healthz` — liveness probe
-//! - `POST /users` — `User` 생성
-//! - `GET /users/:id` — `User` 조회
+//! 라우트:
+//! - `GET /healthz` — public liveness probe
+//! - `GET /users/me` — 인증된 자신 조회 (`AuthenticatedUser` extractor)
+//! - `GET /users/:id` — 인증된 자신만 (`auth.user.id == path id`), 다른 id 는 `403`
 //!
-//! 인증·관측성·에러 매핑 등은 sub-project 3, 5, 7에서. Walking Skeleton은
-//! *작동 확인*만이 목표예요.
+//! `POST /users` 는 제거 — first-sign-in 자동 생성으로 대체.
 
 #![forbid(unsafe_code)]
 // `main.rs`: init failure panic은 정답이라 expect/unwrap 허용해요.
@@ -15,17 +14,16 @@
 use std::env;
 use std::sync::Arc;
 
-use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
-};
+use auth::jwks_cache::JwksCache;
+use auth::middleware::{auth_layer, AuthState, AuthenticatedUser};
+use auth::verifier::JwtVerifier;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::routing::get;
+use axum::{middleware, Json, Router};
 use db::user::PgUserRepository;
-use serde::{Deserialize, Serialize};
-use shared_kernel::email::Email;
+use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
-use shared_kernel::time::now_utc;
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use user_domain::entity::{User, UserKind};
@@ -37,16 +35,6 @@ struct AppState {
     user_repo: Arc<dyn UserRepository>,
 }
 
-/// `POST /users` 요청 본문.
-#[derive(Deserialize)]
-struct CreateUserRequest {
-    zitadel_sub: String,
-    email: String,
-    display_name: String,
-    /// `"individual"` | `"corporation"`.
-    user_kind: String,
-}
-
 /// `User` 응답 직렬화 형태.
 #[derive(Serialize)]
 struct UserResponse {
@@ -55,6 +43,7 @@ struct UserResponse {
     email: String,
     display_name: String,
     user_kind: String,
+    roles: Vec<String>,
     created_at: String,
     updated_at: String,
     version: i64,
@@ -71,6 +60,7 @@ impl From<User> for UserResponse {
                 UserKind::Individual => "individual".to_owned(),
                 UserKind::Corporation => "corporation".to_owned(),
             },
+            roles: u.roles.iter().map(|r| r.as_str().to_owned()).collect(),
             created_at: u.created_at.to_rfc3339(),
             updated_at: u.updated_at.to_rfc3339(),
             version: u.version,
@@ -83,54 +73,27 @@ async fn health() -> &'static str {
     "ok"
 }
 
-/// `POST /users` — `User`를 생성해요.
-async fn create_user(
-    State(state): State<AppState>,
-    Json(req): Json<CreateUserRequest>,
-) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, String)> {
-    let email = Email::try_new(&req.email)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid email: {e}")))?;
-
-    let kind = match req.user_kind.as_str() {
-        "individual" => UserKind::Individual,
-        "corporation" => UserKind::Corporation,
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "user_kind must be 'individual' or 'corporation'".into(),
-            ));
-        }
-    };
-
-    let now = now_utc();
-    let user = User::try_new(
-        Id::new(),
-        &req.zitadel_sub,
-        email,
-        &req.display_name,
-        kind,
-        now,
-    )
-    .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid user: {e}")))?;
-
-    state.user_repo.save(&user).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("save failed: {e}"),
-        )
-    })?;
-
-    Ok((StatusCode::CREATED, Json(user.into())))
+/// `GET /users/me` — 인증된 사용자 자신 조회.
+async fn me(auth: AuthenticatedUser) -> Json<UserResponse> {
+    Json(auth.user.into())
 }
 
-/// `GET /users/:id` — `id`로 `User`를 조회해요.
+/// `GET /users/:id` — `auth.user.id == path id` 인 경우만 허용 (`403` otherwise).
+///
+/// 다른 사용자 조회 권한은 후속 sub-project 에서 admin/operator 역할에 부여.
 async fn get_user(
     State(state): State<AppState>,
+    auth: AuthenticatedUser,
     Path(id): Path<String>,
 ) -> Result<Json<UserResponse>, (StatusCode, String)> {
     let id = Id::<UserMarker>::try_from_str(&id)
         .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid id: {e}")))?;
-
+    if id.as_str() != auth.user.id.as_str() {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "이 사용자 정보는 조회할 권한이 없어요".to_owned(),
+        ));
+    }
     let user = state
         .user_repo
         .find_by_id(&id)
@@ -141,8 +104,7 @@ async fn get_user(
                 format!("find failed: {e}"),
             )
         })?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "user not found".into()))?;
-
+        .ok_or_else(|| (StatusCode::NOT_FOUND, "user not found".to_owned()))?;
     Ok(Json(user.into()))
 }
 
@@ -156,6 +118,9 @@ async fn main() {
         .init();
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let issuer = env::var("ZITADEL_ISSUER").expect("ZITADEL_ISSUER must be set");
+    let audience = env::var("ZITADEL_AUDIENCE").expect("ZITADEL_AUDIENCE must be set");
+    let jwks_url = format!("{issuer}/oauth/v2/keys");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -164,14 +129,29 @@ async fn main() {
         .expect("connect to Postgres");
 
     let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool));
-    let state = AppState { user_repo };
+    let app_state = AppState {
+        user_repo: user_repo.clone(),
+    };
 
-    let app = Router::new()
-        .route("/healthz", get(health))
-        .route("/users", post(create_user))
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .expect("reqwest");
+    let jwks = Arc::new(JwksCache::new(jwks_url, http));
+    let verifier = Arc::new(JwtVerifier::new(issuer, audience, jwks));
+    let auth_state = AuthState {
+        verifier,
+        user_repo,
+    };
+
+    let public: Router<()> = Router::new().route("/healthz", get(health));
+    let protected: Router<()> = Router::new()
+        .route("/users/me", get(me))
         .route("/users/:id", get(get_user))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(app_state)
+        .layer(middleware::from_fn_with_state(auth_state, auth_layer));
+
+    let app = public.merge(protected).layer(TraceLayer::new_for_http());
 
     let addr = "0.0.0.0:8080";
     tracing::info!("api listening on {addr}");

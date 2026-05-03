@@ -7,6 +7,7 @@ license = "Apache-2.0"
 description = "공짱 HTTP API service (Walking Skeleton)"
 
 [dependencies]
+auth = { path = "../../crates/auth", version = "0.1.0" }
 shared-kernel = { path = "../../crates/domain/core/shared-kernel", version = "0.1.0" }
 user-domain = { path = "../../crates/domain/core/user", version = "0.1.0" }
 db = { path = "../../crates/db", version = "0.1.0" }
@@ -16,6 +17,7 @@ sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
+reqwest = { workspace = true }
 tower-http = { workspace = true, features = ["trace"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
