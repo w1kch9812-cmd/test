@@ -67,6 +67,11 @@ jobs:
       - name: Apply gongzzang migrations
         run: sqlx migrate run --source migrations
 
+      - name: Run integration tests (DB Repository)
+        env:
+          DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
+        run: cargo test --workspace --features integration --no-fail-fast -- --test-threads=1
+
       - name: Build API
         run: cargo build --package api --release
 
