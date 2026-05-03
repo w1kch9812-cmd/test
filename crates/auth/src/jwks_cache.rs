@@ -93,22 +93,26 @@ impl JwksCache {
             .json()
             .await
             .map_err(|e| AuthError::JwksFetchFailed(e.to_string()))?;
-        let mut entries = self.entries.write().await;
+        // 새 entry 들을 먼저 빌드 (write-lock 보유 시간 최소화).
         let now = Instant::now();
-        entries.clear();
+        let mut new_entries: HashMap<String, Entry> = HashMap::new();
         for k in jwks.keys {
             if k.kty != "RSA" {
                 continue;
             }
             let key = DecodingKey::from_rsa_components(&k.n, &k.e)
                 .map_err(|e| AuthError::JwksFetchFailed(e.to_string()))?;
-            entries.insert(
+            new_entries.insert(
                 k.kid,
                 Entry {
                     key: Arc::new(key),
                     fetched_at: now,
                 },
             );
+        }
+        {
+            let mut entries = self.entries.write().await;
+            *entries = new_entries;
         }
         Ok(())
     }
@@ -125,20 +129,29 @@ mod tests {
         assert_eq!(TTL.as_secs(), 3600);
     }
 
+    /// `Arc<DecodingKey>` 가 `Debug` 를 구현하지 않아 `unwrap_err`/`{:?}` 사용 불가 →
+    /// 결과를 `Err(AuthError)` 로 좁혀 반환하는 helper.
+    async fn expect_err(cache: &JwksCache, kid: &str) -> AuthError {
+        match cache.get_or_fetch(kid).await {
+            Ok(_) => panic!("expected error, got Ok"),
+            Err(e) => e,
+        }
+    }
+
     #[tokio::test]
     async fn fetch_failure_when_jwks_unreachable() {
         let cache = JwksCache::new(
             "http://127.0.0.1:1/jwks".into(), // 의도적으로 닫힌 포트
             reqwest::Client::new(),
         );
-        let err = cache.get_or_fetch("any-kid").await.unwrap_err();
+        let err = expect_err(&cache, "any-kid").await;
         assert!(matches!(err, AuthError::JwksFetchFailed(_)));
     }
 
     #[tokio::test]
     async fn fetch_failure_with_invalid_url_scheme() {
         let cache = JwksCache::new("not-a-url".into(), reqwest::Client::new());
-        let err = cache.get_or_fetch("any-kid").await.unwrap_err();
+        let err = expect_err(&cache, "any-kid").await;
         assert!(matches!(err, AuthError::JwksFetchFailed(_)));
     }
 }
