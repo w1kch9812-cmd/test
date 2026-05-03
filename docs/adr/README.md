@@ -58,3 +58,4 @@
 | [0009](./0009-iac-pulumi.md) | IaC — Pulumi (TypeScript) | Accepted |
 | [0010](./0010-scope-information-platform-option-a.md) | 범위 — 산업용 부동산 정보 플랫폼 (옵션 A) | Accepted |
 | [0011](./0011-embedding-gemini-pgvector.md) | 임베딩 — Gemini + pgvector (Phase 3+) | Accepted |
+| [0012](./0012-pipeline-visualization-react-flow.md) | 파이프라인 시각화 — React Flow (xyflow) | Accepted |
