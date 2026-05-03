@@ -93,11 +93,14 @@ jobs:
           chmod 777 /tmp/zitadel-pat
 
           # Zitadel 을 master-key 와 함께 start-from-init 으로 실행
+          # IPv6 비활성화: Zitadel grpc gateway 가 dial "localhost:8080" 시 [::1] 로 가서
+          # IPv4-only 백엔드와 connection refused 발생. sysctl 로 IPv6 끄면 IPv4 로 fallback.
           ZID=$(docker run -d \
             --name zitadel-ci \
             --network "$NET" \
             --network-alias zitadel \
             -p 8081:8080 \
+            --sysctl net.ipv6.conf.all.disable_ipv6=1 \
             -v /tmp/zitadel-pat:/zitadel-pat \
             -e ZITADEL_DATABASE_POSTGRES_HOST=postgres \
             -e ZITADEL_DATABASE_POSTGRES_PORT=5432 \
