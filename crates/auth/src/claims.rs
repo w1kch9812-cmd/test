@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Zitadel access_token claims (`OIDC` 표준 + 일부 옵션).
+/// Zitadel `access_token` claims (`OIDC` 표준 + 일부 옵션).
 ///
 /// `aud` 는 단일 문자열 또는 배열 모두 허용 (Zitadel 은 배열로 발급).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
