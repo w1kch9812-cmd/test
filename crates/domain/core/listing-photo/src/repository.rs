@@ -45,7 +45,10 @@ pub enum RepoError {
     /// 대상 미존재.
     #[error("not found")]
     NotFound,
-    /// DB 통신/SQL 에러 (정보 누설 방지로 메시지만).
+    /// `Unique` 제약 위반 (drop-in 호환 — `User`/`Listing` `RepoError` 와 동일 enum 모양).
+    #[error("conflict")]
+    Conflict,
+    /// `DB` 통신/`SQL` 에러 (정보 누설 방지로 메시지만).
     #[error("database error: {0}")]
     Database(String),
 }

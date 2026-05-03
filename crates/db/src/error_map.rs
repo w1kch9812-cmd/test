@@ -10,9 +10,10 @@ use sqlx::Error as SqlxError;
 /// 본 trait 는 본 crate (`db`) 안에서 정의되어 외부 타입에 impl 가능해요 (orphan
 /// rule 우회).
 pub trait MapFromSqlx: Sized {
-    /// Unique 제약 위반 — `Conflict` 의미.
+    /// `Unique` 제약 위반 — `Conflict` 의미.
     ///
-    /// `Conflict` variant 가 없는 도메인은 `Database` 로 fallback 매핑할 수 있어요.
+    /// `Conflict` variant 가 없는 도메인은 `Database` 로 fallback 매핑할 수 있어요
+    /// (현재는 모든 도메인이 `Conflict` 를 가져요).
     fn conflict() -> Self;
     /// 일반 `DB` 에러 — 메시지만 보존 (정보 누설 방지).
     fn database(msg: String) -> Self;
@@ -58,11 +59,10 @@ impl MapFromSqlx for listing_domain::repository::RepoError {
     }
 }
 
-// ListingPhoto domain RepoError — `Conflict` variant 없음 →
-// unique violation 은 `Database("unique constraint violation")` 로 매핑.
+// ListingPhoto domain RepoError
 impl MapFromSqlx for listing_photo_domain::repository::RepoError {
     fn conflict() -> Self {
-        Self::Database("unique constraint violation".into())
+        Self::Conflict
     }
     fn database(msg: String) -> Self {
         Self::Database(msg)
