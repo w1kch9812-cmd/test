@@ -1,0 +1,23 @@
+[package]
+name = "outbox-publisher-service"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 outbox 이벤트 발행 daemon (services)"
+
+[[bin]]
+name = "outbox-publisher"
+path = "src/main.rs"
+
+[dependencies]
+db = { path = "../../crates/db", version = "0.1.0" }
+outbox-event-domain = { path = "../../crates/domain/audit/outbox-event", version = "0.1.0" }
+outbox-publisher = { path = "../../crates/outbox-publisher", version = "0.1.0" }
+sqlx = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
+
+[lints]
+workspace = true
