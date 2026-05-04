@@ -178,6 +178,26 @@ disallowed-types = [
 - 신규 enum variant 가 필요하면 도메인에 추가 (Spec 변경)
 - 단위 테스트로 라벨→enum 변환 검증
 
+#### 2026-05-04 실 API 검증 결과 — Cd primary 전략 채택
+
+실제 `BldRgstHubService/getBrTitleInfo` 호출 (역삼동 본번 sweep 9건 → 5 fixture, 6 케이스 검증):
+
+1. **응답에 `mainPurpsCd` 5자리 표준 코드** 가 `mainPurpsCdNm` 한글과 함께 옴 (예: `"14000"` + `"업무시설"`)
+2. **표준 코드 = 건축법 시행령 별표1 의 29분류** (`01000` 단독주택 ~ `29000` 야영장시설). 법령 개정 외 안 바뀜
+3. **한글 라벨이 spec 추정과 다름**: `근린생활시설` (단일) → 실제 `제1종근린생활시설` / `제2종근린생활시설` (분리)
+4. `strctCd` 도 2자리 표준 코드 (`42` 철골철근콘크리트 등)
+
+**매핑 전략 변경**: Cd primary + CdNm fallback 하이브리드.
+- 1단계: `mainPurpsCd` / `strctCd` 표준 코드 → 도메인 enum (안정적)
+- 2단계: 코드 미상 / 신규 코드일 때 `*CdNm` 한글 → enum (확장)
+- 3단계: 둘 다 미매핑 → `Other` (안전망)
+
+**Fixture 위치**: `crates/data-clients/data-go-kr/tests/fixtures/real_*.json` (5건, 6 케이스).
+
+**Prerequisite — endpoint URL fix (같은 PR)**:
+- `crates/data-clients/data-go-kr/src/building_register/client.rs:27` `BR_TITLE_PATH = "/1613000/BldRgstService_v2/..."` deprecated 확인 (HTTP 200 + body "Unexpected errors")
+- 실제 작동 endpoint: `/1613000/BldRgstHubService/...` 로 fix
+
 ---
 
 ## 5. 데이터 흐름

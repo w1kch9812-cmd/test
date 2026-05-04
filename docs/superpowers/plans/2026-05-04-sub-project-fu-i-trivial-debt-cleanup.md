@@ -366,10 +366,19 @@ CI 그린 확인.
 
 ## Phase D: 한글 매핑 확장
 
-### Task 4: FU 41 — data.go.kr 한글 라벨 매핑 확장
+> **2026-05-04 갱신 — 실 API 검증 결과 적용 (spec § 4.6 footnote 참조)**:
+> T4 매핑 전략을 "30+ 한글 라벨 매핑" → **"Cd primary (5자리 표준코드) + CdNm fallback"** 하이브리드로 변경.
+> 검증 fixture 5건 (`crates/data-clients/data-go-kr/tests/fixtures/real_*.json`).
+> 추가로 `BR_TITLE_PATH` deprecated bug 발견 — `BldRgstService_v2` → `BldRgstHubService` 같이 fix (FU 41 prerequisite, 같은 PR).
+> 아래 step 들의 한글 라벨 30+ 표기는 deprecated. 실제 구현은 commit 메시지 참조.
+
+### Task 4: FU 41 — data.go.kr 한글 라벨 매핑 확장 → Cd primary + endpoint fix
 
 **Files:**
 - Modify: `crates/data-clients/data-go-kr/src/building_register/parser.rs`
+- Modify: `crates/data-clients/data-go-kr/src/building_register/client.rs` (endpoint URL fix prerequisite)
+- Add: `crates/data-clients/data-go-kr/tests/fixtures/real_*.json` (5건 실 API 응답)
+- Add: `crates/data-clients/data-go-kr/tests/real_response_integration.rs` (fixture 기반 테스트)
 
 - [ ] **Step 1: 현재 매핑 파악**
 

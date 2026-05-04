@@ -29,7 +29,7 @@ use vworld_client::{VWorldClient, VWorldConfig};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-const BR_PATH: &str = "/1613000/BldRgstService_v2/getBrTitleInfo";
+const BR_PATH: &str = "/1613000/BldRgstHubService/getBrTitleInfo";
 const VWORLD_PATH: &str = "/req/data";
 const SAMPLE_PNU: &str = "1111010100100010000";
 

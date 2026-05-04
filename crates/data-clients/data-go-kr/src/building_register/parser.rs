@@ -156,18 +156,62 @@ fn parse_optional_string(item: &Value, field: &str) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-/// data.go.kr `mainPurpsCdNm` (한글) → 도메인 `BuildingPurposeCode`.
+/// data.go.kr 응답 → 도메인 `BuildingPurposeCode`.
 ///
-/// FU 41 — 28+ 개의 한글 라벨 매핑표. 현재는 산업용 핵심 + 흔한 케이스만
-/// 명시 매핑하고 나머지는 `Other` fallback. 명시 매핑 외 라벨이 들어와도
-/// `ParseError` 가 아니라 `Other` 로 흡수 — 외부 스키마 확장에 견고.
+/// FU 41 — Cd primary + CdNm fallback 하이브리드 (2026-05-04 실 API 검증).
+///
+/// 1. **Cd primary**: `mainPurpsCd` 5자리 표준 코드 (건축법 시행령 별표1 의 29분류) →
+///    [`map_purpose_cd`]. 정부 표준이라 법령 개정 외 안 바뀜
+/// 2. **CdNm fallback**: 코드 미상 / 비매핑 시 `mainPurpsCdNm` 한글 라벨 →
+///    [`map_purpose_label`]. 산업 도메인 특수 분류 (지식산업센터 / 물류시설 등) 흡수
+/// 3. **Other 안전망**: 둘 다 미매핑이면 `Other` (외부 schema 확장에 견고)
+///
+/// Fixture 기반 검증: `tests/fixtures/real_*.json` (5건, 6 케이스).
 fn parse_purpose(item: &Value) -> Result<BuildingPurposeCode, ParseError> {
+    // 1) Cd primary
+    if let Some(cd) = item.get("mainPurpsCd").and_then(Value::as_str) {
+        let trimmed = cd.trim();
+        if !trimmed.is_empty() {
+            if let Some(domain) = map_purpose_cd(trimmed) {
+                return Ok(domain);
+            }
+        }
+    }
+    // 2) CdNm fallback (mainPurpsCdNm 누락 = Malformed)
     let label = item
         .get("mainPurpsCdNm")
         .and_then(Value::as_str)
         .ok_or_else(|| ParseError::Malformed("item.mainPurpsCdNm missing".into()))?
         .trim();
-    Ok(match label {
+    Ok(map_purpose_label(label))
+}
+
+/// `mainPurpsCd` 5자리 표준 코드 → 산업 도메인 enum (None = 비매핑 → CdNm fallback).
+///
+/// 건축법 시행령 별표1 의 29분류 중 산업 부동산 핵심 분류만 명시 매핑.
+/// 비산업 분류 (의료/숙박/문화/종교/등) 는 `None` 반환 → 호출 측에서 한글 fallback
+/// 시도 → 그것도 미매핑이면 `Other`.
+fn map_purpose_cd(cd: &str) -> Option<BuildingPurposeCode> {
+    match cd {
+        "01000" => Some(BuildingPurposeCode::SingleHouse),
+        "02000" => Some(BuildingPurposeCode::MultiHouse),
+        "03000" | "04000" | "07000" => Some(BuildingPurposeCode::Retail),
+        "10000" => Some(BuildingPurposeCode::Educational),
+        "14000" => Some(BuildingPurposeCode::Office),
+        "17000" => Some(BuildingPurposeCode::Factory),
+        "18000" => Some(BuildingPurposeCode::Warehouse),
+        _ => None,
+    }
+}
+
+/// `mainPurpsCdNm` 한글 라벨 → 산업 도메인 enum (fallback).
+///
+/// Cd primary 매핑 외 케이스 흡수:
+/// - 산업 특수 분류 (지식산업센터 / 물류시설) — 별도 mainPurpsCd 없음
+/// - 행정 표기 변형 ("아파트", "사무소" 등)
+/// - 미매핑 → `Other`
+fn map_purpose_label(label: &str) -> BuildingPurposeCode {
+    match label {
         "단독주택" => BuildingPurposeCode::SingleHouse,
         "공동주택" | "다세대주택" | "다가구주택" | "아파트" | "연립주택" => {
             BuildingPurposeCode::MultiHouse
@@ -175,24 +219,56 @@ fn parse_purpose(item: &Value) -> Result<BuildingPurposeCode, ParseError> {
         "공장" => BuildingPurposeCode::Factory,
         "창고" | "창고시설" => BuildingPurposeCode::Warehouse,
         "업무시설" | "사무소" => BuildingPurposeCode::Office,
-        "판매시설" | "근린생활시설" => BuildingPurposeCode::Retail,
-        "지식산업센터" => BuildingPurposeCode::KnowledgeIndustryCenter,
-        "물류시설" | "물류창고" => BuildingPurposeCode::LogisticsCenter,
+        "제1종근린생활시설" | "제2종근린생활시설" | "근린생활시설" | "판매시설" => {
+            BuildingPurposeCode::Retail
+        }
+        "지식산업센터" | "지식산업센터(아파트형공장)" | "아파트형공장" => {
+            BuildingPurposeCode::KnowledgeIndustryCenter
+        }
+        "물류시설" | "물류창고" | "물류터미널" => BuildingPurposeCode::LogisticsCenter,
         "교육연구시설" => BuildingPurposeCode::Educational,
         _ => BuildingPurposeCode::Other,
-    })
+    }
 }
 
-/// data.go.kr `strctCdNm` (한글) → 도메인 `BuildingStructureCode`.
+/// data.go.kr 응답 → 도메인 `BuildingStructureCode`.
 ///
-/// FU 41 — 매핑표 확장. `mainPurpsCdNm` 와 동일 fallback 정책.
+/// FU 41 — Cd primary + CdNm fallback (`parse_purpose` 와 동일 정책).
 fn parse_structure(item: &Value) -> Result<BuildingStructureCode, ParseError> {
+    // 1) Cd primary
+    if let Some(cd) = item.get("strctCd").and_then(Value::as_str) {
+        let trimmed = cd.trim();
+        if !trimmed.is_empty() {
+            if let Some(domain) = map_structure_cd(trimmed) {
+                return Ok(domain);
+            }
+        }
+    }
+    // 2) CdNm fallback
     let label = item
         .get("strctCdNm")
         .and_then(Value::as_str)
         .ok_or_else(|| ParseError::Malformed("item.strctCdNm missing".into()))?
         .trim();
-    Ok(match label {
+    Ok(map_structure_label(label))
+}
+
+/// `strctCd` 2자리 표준 코드 → 도메인 enum.
+///
+/// 검증된 코드만 명시 매핑 (실 API 5건 fixture). 미검증 코드는 `None` →
+/// 한글 fallback 안전망. 미매핑 표기 변형 은 `map_structure_label` 가 흡수.
+fn map_structure_cd(cd: &str) -> Option<BuildingStructureCode> {
+    match cd {
+        "11" => Some(BuildingStructureCode::Brick),
+        "21" => Some(BuildingStructureCode::ReinforcedConcrete),
+        "42" => Some(BuildingStructureCode::SteelReinforcedConcrete),
+        _ => None,
+    }
+}
+
+/// `strctCdNm` 한글 라벨 → 도메인 enum (fallback).
+fn map_structure_label(label: &str) -> BuildingStructureCode {
+    match label {
         "철근콘크리트구조" | "철근콘크리트" => {
             BuildingStructureCode::ReinforcedConcrete
         }
@@ -205,48 +281,88 @@ fn parse_structure(item: &Value) -> Result<BuildingStructureCode, ParseError> {
         "목구조" | "목조" => BuildingStructureCode::Wood,
         "경량철골구조" | "경량철골조" => BuildingStructureCode::LightSteel,
         _ => BuildingStructureCode::Other,
-    })
+    }
 }
 
-/// `totArea` — 문자열 → f64 → `AreaM2`. 0 이하 / NaN 모두 도메인 거부.
+/// `totArea` → f64 → `AreaM2`. 0 이하 / NaN 모두 도메인 거부.
+///
+/// 실 API 응답이 number 또는 string 둘 다 가능 — JSON spec 의 `Number` 타입 직접 가능 +
+/// 일부 정부 endpoint 는 `_type=json` 이어도 정수만 string 으로 wrap. 둘 다 처리.
 fn parse_total_area(item: &Value) -> Result<AreaM2, ParseError> {
-    let raw = item
-        .get("totArea")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ParseError::Malformed("item.totArea missing or not string".into()))?;
-    let value: f64 = raw
-        .trim()
-        .parse()
-        .map_err(|e| ParseError::Domain(format!("totArea '{raw}' not f64: {e}")))?;
+    let value = read_f64_field(item, "totArea")?
+        .ok_or_else(|| ParseError::Malformed("item.totArea missing or empty".into()))?;
     AreaM2::try_new(value).map_err(|e| ParseError::Domain(format!("totArea: {e}")))
 }
 
-/// `grndFlrCnt` / `ugrndFlrCnt` — 문자열 → u8. 음수 / 비숫자 → Domain error.
-/// data.go.kr 가 종종 빈 문자열 보냄 → 0 으로 fallback.
+/// `grndFlrCnt` / `ugrndFlrCnt` → u8. 음수 / 비숫자 → Domain error. 빈/누락 → 0 fallback.
+///
+/// 실 API 가 number (`45`) 또는 string (`"45"`) 둘 다 보냄 — 둘 다 처리.
 fn parse_floor_count(item: &Value, field: &str) -> Result<u8, ParseError> {
-    let Some(raw) = item.get(field).and_then(Value::as_str) else {
+    let Some(node) = item.get(field) else {
         return Ok(0);
     };
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Ok(0);
+    match node {
+        Value::Null => Ok(0),
+        Value::String(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Ok(0)
+            } else {
+                trimmed
+                    .parse::<u8>()
+                    .map_err(|e| ParseError::Domain(format!("{field} '{s}' not u8: {e}")))
+            }
+        }
+        Value::Number(n) => n
+            .as_u64()
+            .and_then(|v| u8::try_from(v).ok())
+            .ok_or_else(|| ParseError::Domain(format!("{field} '{n}' not u8"))),
+        other => Err(ParseError::Domain(format!(
+            "{field} unexpected type: {other:?}"
+        ))),
     }
-    trimmed
-        .parse::<u8>()
-        .map_err(|e| ParseError::Domain(format!("{field} '{raw}' not u8: {e}")))
 }
 
-/// `heit` — 문자열 → f64. "0" 또는 비숫자 → None (선택 필드).
+/// `heit` → f64. "0" / 비숫자 / 빈 → None (선택 필드). number/string 둘 다 처리.
 fn parse_optional_height(item: &Value) -> Option<f64> {
-    let raw = item.get("heit").and_then(Value::as_str)?.trim();
-    if raw.is_empty() {
-        return None;
-    }
-    let value: f64 = raw.parse().ok()?;
+    let value = read_f64_field(item, "heit").ok().flatten()?;
     if !value.is_finite() || value <= 0.0 {
-        return None;
+        None
+    } else {
+        Some(value)
     }
-    Some(value)
+}
+
+/// 정부 API 가 number 또는 string 둘 다로 보내는 숫자 필드 → f64.
+///
+/// - `Value::Number` → `as_f64()`
+/// - `Value::String` → `parse::<f64>()` (빈 문자열 → `Ok(None)`)
+/// - `Value::Null` / 누락 → `Ok(None)`
+/// - 그 외 타입 → `ParseError::Domain`
+///
+/// 호출 측이 누락 vs 0 vs invalid 분기 결정. 본 함수는 unwrap 안 함.
+fn read_f64_field(item: &Value, field: &str) -> Result<Option<f64>, ParseError> {
+    let Some(node) = item.get(field) else {
+        return Ok(None);
+    };
+    match node {
+        Value::Null => Ok(None),
+        Value::Number(n) => Ok(n.as_f64()),
+        Value::String(s) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Ok(None)
+            } else {
+                trimmed
+                    .parse::<f64>()
+                    .map(Some)
+                    .map_err(|e| ParseError::Domain(format!("{field} '{s}' not f64: {e}")))
+            }
+        }
+        other => Err(ParseError::Domain(format!(
+            "{field} unexpected type: {other:?}"
+        ))),
+    }
 }
 
 /// `useAprDay` — `YYYYMMDD` → `NaiveDate`. 8자리 아니거나 invalid 면 None.
@@ -485,5 +601,258 @@ mod tests {
         let buildings =
             parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert_eq!(buildings[0].underground_floors, 0);
+    }
+
+    // ─── FU 41: Cd primary + CdNm fallback 하이브리드 매핑 ───
+    //
+    // 실 API 검증 (2026-05-04, 역삼동 본번 sweep 9건 → 5 fixture, 6 케이스):
+    // - mainPurpsCd 5자리 (`14000` 업무 / `02000` 공동주택 / `10000` 교육 / `01000` 단독 /
+    //   `03000` 제1종근린 / `04000` 제2종근린)
+    // - strctCd 2자리 (`11` 벽돌 / `21` RC / `42` SRC)
+
+    #[test]
+    fn map_purpose_cd_industrial_codes() {
+        assert_eq!(map_purpose_cd("17000"), Some(BuildingPurposeCode::Factory));
+        assert_eq!(
+            map_purpose_cd("18000"),
+            Some(BuildingPurposeCode::Warehouse)
+        );
+        assert_eq!(map_purpose_cd("14000"), Some(BuildingPurposeCode::Office));
+        assert_eq!(
+            map_purpose_cd("01000"),
+            Some(BuildingPurposeCode::SingleHouse)
+        );
+        assert_eq!(
+            map_purpose_cd("02000"),
+            Some(BuildingPurposeCode::MultiHouse)
+        );
+        assert_eq!(
+            map_purpose_cd("10000"),
+            Some(BuildingPurposeCode::Educational)
+        );
+    }
+
+    #[test]
+    fn map_purpose_cd_retail_collapses_three_codes() {
+        // 03000 제1종근린 / 04000 제2종근린 / 07000 판매시설 모두 Retail
+        assert_eq!(map_purpose_cd("03000"), Some(BuildingPurposeCode::Retail));
+        assert_eq!(map_purpose_cd("04000"), Some(BuildingPurposeCode::Retail));
+        assert_eq!(map_purpose_cd("07000"), Some(BuildingPurposeCode::Retail));
+    }
+
+    #[test]
+    fn map_purpose_cd_non_industrial_returns_none() {
+        // 09000 의료 / 06000 종교 / 15000 숙박 / 13000 운동 → None (CdNm fallback 시도)
+        assert_eq!(map_purpose_cd("09000"), None);
+        assert_eq!(map_purpose_cd("06000"), None);
+        assert_eq!(map_purpose_cd("15000"), None);
+        assert_eq!(map_purpose_cd("13000"), None);
+    }
+
+    #[test]
+    fn map_purpose_cd_unknown_returns_none() {
+        assert_eq!(map_purpose_cd("99999"), None);
+        assert_eq!(map_purpose_cd(""), None);
+        assert_eq!(map_purpose_cd("abc"), None);
+    }
+
+    #[test]
+    fn map_purpose_label_kunrin_split_variants() {
+        // 실 API: "근린생활시설" 단일 X — "제1종/제2종근린생활시설" 분리 (검증됨)
+        assert_eq!(
+            map_purpose_label("제1종근린생활시설"),
+            BuildingPurposeCode::Retail
+        );
+        assert_eq!(
+            map_purpose_label("제2종근린생활시설"),
+            BuildingPurposeCode::Retail
+        );
+        // legacy / 단일 표기 호환
+        assert_eq!(
+            map_purpose_label("근린생활시설"),
+            BuildingPurposeCode::Retail
+        );
+        assert_eq!(map_purpose_label("판매시설"), BuildingPurposeCode::Retail);
+    }
+
+    #[test]
+    fn map_purpose_label_industrial_special() {
+        // 별도 mainPurpsCd 없는 산업 도메인 분류 (CdNm fallback 으로만 검출)
+        assert_eq!(
+            map_purpose_label("지식산업센터"),
+            BuildingPurposeCode::KnowledgeIndustryCenter
+        );
+        assert_eq!(
+            map_purpose_label("지식산업센터(아파트형공장)"),
+            BuildingPurposeCode::KnowledgeIndustryCenter
+        );
+        assert_eq!(
+            map_purpose_label("아파트형공장"),
+            BuildingPurposeCode::KnowledgeIndustryCenter
+        );
+        assert_eq!(
+            map_purpose_label("물류시설"),
+            BuildingPurposeCode::LogisticsCenter
+        );
+        assert_eq!(
+            map_purpose_label("물류창고"),
+            BuildingPurposeCode::LogisticsCenter
+        );
+        assert_eq!(
+            map_purpose_label("물류터미널"),
+            BuildingPurposeCode::LogisticsCenter
+        );
+    }
+
+    #[test]
+    fn map_purpose_label_apartment_variants() {
+        for label in ["공동주택", "다세대주택", "다가구주택", "아파트", "연립주택"]
+        {
+            assert_eq!(map_purpose_label(label), BuildingPurposeCode::MultiHouse);
+        }
+    }
+
+    #[test]
+    fn map_purpose_label_unknown_returns_other() {
+        assert_eq!(map_purpose_label("의료시설"), BuildingPurposeCode::Other);
+        assert_eq!(map_purpose_label("종교시설"), BuildingPurposeCode::Other);
+        assert_eq!(map_purpose_label("문화시설"), BuildingPurposeCode::Other);
+        assert_eq!(map_purpose_label(""), BuildingPurposeCode::Other);
+    }
+
+    #[test]
+    fn parse_purpose_cd_primary_overrides_label() {
+        // Cd "14000" (업무) + CdNm "공장" — Cd primary 우선 → Office
+        let item = serde_json::json!({
+            "mainPurpsCd": "14000",
+            "mainPurpsCdNm": "공장"
+        });
+        assert_eq!(parse_purpose(&item).unwrap(), BuildingPurposeCode::Office);
+    }
+
+    #[test]
+    fn parse_purpose_cd_missing_falls_back_to_label() {
+        // Cd 누락 → CdNm "공장" → Factory
+        let item = serde_json::json!({ "mainPurpsCdNm": "공장" });
+        assert_eq!(parse_purpose(&item).unwrap(), BuildingPurposeCode::Factory);
+    }
+
+    #[test]
+    fn parse_purpose_cd_unmapped_falls_back_to_label() {
+        // Cd "99999" 비매핑 → CdNm "공장" → Factory
+        let item = serde_json::json!({
+            "mainPurpsCd": "99999",
+            "mainPurpsCdNm": "공장"
+        });
+        assert_eq!(parse_purpose(&item).unwrap(), BuildingPurposeCode::Factory);
+    }
+
+    #[test]
+    fn parse_purpose_cd_non_industrial_falls_back_to_other() {
+        // Cd "09000" 의료 (None) → CdNm "의료시설" (Other) → Other
+        let item = serde_json::json!({
+            "mainPurpsCd": "09000",
+            "mainPurpsCdNm": "의료시설"
+        });
+        assert_eq!(parse_purpose(&item).unwrap(), BuildingPurposeCode::Other);
+    }
+
+    #[test]
+    fn parse_purpose_industrial_special_via_label_fallback() {
+        // Cd 누락 + CdNm "지식산업센터" → KnowledgeIndustryCenter
+        let item = serde_json::json!({ "mainPurpsCdNm": "지식산업센터" });
+        assert_eq!(
+            parse_purpose(&item).unwrap(),
+            BuildingPurposeCode::KnowledgeIndustryCenter
+        );
+    }
+
+    #[test]
+    fn parse_purpose_missing_label_returns_malformed() {
+        // Cd 누락 + CdNm 도 누락 → Malformed
+        let item = serde_json::json!({});
+        let err = parse_purpose(&item).unwrap_err();
+        assert!(matches!(err, ParseError::Malformed(s) if s.contains("mainPurpsCdNm")));
+    }
+
+    #[test]
+    fn parse_purpose_empty_cd_falls_back_to_label() {
+        // Cd 빈 문자열 (정부 API 가 종종 반환) → label fallback
+        let item = serde_json::json!({
+            "mainPurpsCd": "  ",
+            "mainPurpsCdNm": "공장"
+        });
+        assert_eq!(parse_purpose(&item).unwrap(), BuildingPurposeCode::Factory);
+    }
+
+    #[test]
+    fn map_structure_cd_verified_codes() {
+        // 실 fixture 검증된 3 코드
+        assert_eq!(map_structure_cd("11"), Some(BuildingStructureCode::Brick));
+        assert_eq!(
+            map_structure_cd("21"),
+            Some(BuildingStructureCode::ReinforcedConcrete)
+        );
+        assert_eq!(
+            map_structure_cd("42"),
+            Some(BuildingStructureCode::SteelReinforcedConcrete)
+        );
+    }
+
+    #[test]
+    fn map_structure_cd_unverified_returns_none() {
+        // 미검증 코드 → None → CdNm fallback
+        assert_eq!(map_structure_cd("31"), None);
+        assert_eq!(map_structure_cd("99"), None);
+        assert_eq!(map_structure_cd(""), None);
+    }
+
+    #[test]
+    fn map_structure_label_steel_variants() {
+        assert_eq!(
+            map_structure_label("철골구조"),
+            BuildingStructureCode::Steel
+        );
+        assert_eq!(map_structure_label("철골"), BuildingStructureCode::Steel);
+    }
+
+    #[test]
+    fn map_structure_label_src_variants() {
+        assert_eq!(
+            map_structure_label("철골철근콘크리트구조"),
+            BuildingStructureCode::SteelReinforcedConcrete
+        );
+        assert_eq!(
+            map_structure_label("SRC구조"),
+            BuildingStructureCode::SteelReinforcedConcrete
+        );
+    }
+
+    #[test]
+    fn map_structure_label_unknown_returns_other() {
+        assert_eq!(map_structure_label("조립식"), BuildingStructureCode::Other);
+        assert_eq!(map_structure_label(""), BuildingStructureCode::Other);
+    }
+
+    #[test]
+    fn parse_structure_cd_primary_overrides_label() {
+        // Cd "21" (RC) + CdNm "철골" — Cd primary 우선 → RC
+        let item = serde_json::json!({
+            "strctCd": "21",
+            "strctCdNm": "철골"
+        });
+        assert_eq!(
+            parse_structure(&item).unwrap(),
+            BuildingStructureCode::ReinforcedConcrete
+        );
+    }
+
+    #[test]
+    fn parse_structure_cd_missing_falls_back_to_label() {
+        let item = serde_json::json!({ "strctCdNm": "철근콘크리트구조" });
+        assert_eq!(
+            parse_structure(&item).unwrap(),
+            BuildingStructureCode::ReinforcedConcrete
+        );
     }
 }

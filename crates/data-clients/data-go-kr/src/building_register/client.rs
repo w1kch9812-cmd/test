@@ -2,7 +2,7 @@
 //!
 //! API URL 형식 (`docs/data-sources/data-go-kr.md`):
 //! ```text
-//! GET {base_url}/1613000/BldRgstService_v2/getBrTitleInfo
+//! GET {base_url}/1613000/BldRgstHubService/getBrTitleInfo
 //!   ?ServiceKey={key}
 //!   &sigunguCd={5}
 //!   &bjdongCd={5}
@@ -13,6 +13,10 @@
 //!   &pageNo=1
 //!   &_type=json
 //! ```
+//!
+//! **Endpoint history (FU 41 검증)**: 이전 `BldRgstService_v2` 는 deprecated —
+//! HTTP 200 + body `"Unexpected errors"` 반환. 현재 활성 endpoint 는
+//! `BldRgstHubService` (실 API 호출로 검증, 2026-05-04 fixture 5건).
 
 #![allow(clippy::module_name_repetitions, clippy::doc_markdown)]
 
@@ -24,7 +28,11 @@ use crate::client::DataGoKrClient;
 use crate::pnu_split::PnuParts;
 
 /// 건축물대장 표제부 endpoint path — base_url 뒤에 붙어 최종 URL 형성.
-const BR_TITLE_PATH: &str = "/1613000/BldRgstService_v2/getBrTitleInfo";
+///
+/// `BldRgstHubService` (Hub) 가 현재 활성 endpoint. 이전 `BldRgstService_v2` 는
+/// deprecated — HTTP 200 으로 응답하지만 body 가 `"Unexpected errors"` 텍스트라
+/// JSON parse 실패. 2026-05-04 실 API 검증 (FU 41) 으로 발견.
+const BR_TITLE_PATH: &str = "/1613000/BldRgstHubService/getBrTitleInfo";
 
 /// 건축물대장 표제부 호출 client.
 ///
