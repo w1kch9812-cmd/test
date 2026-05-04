@@ -9,6 +9,8 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+// FU 26 — legitimate HTTP client wrapper (Zitadel JWKS fetcher).
+#![allow(clippy::disallowed_types)]
 
 pub mod claims;
 pub mod errors;

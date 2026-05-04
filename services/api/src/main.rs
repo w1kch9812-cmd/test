@@ -10,6 +10,8 @@
 #![forbid(unsafe_code)]
 // `main.rs`: init failure panic은 정답이라 expect/unwrap 허용해요.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+// FU 26 — JWKS reqwest::Client 초기화는 legitimate (auth crate 가 wrapper).
+#![allow(clippy::disallowed_types)]
 
 use std::env;
 use std::sync::Arc;

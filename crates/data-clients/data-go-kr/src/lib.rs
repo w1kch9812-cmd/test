@@ -11,6 +11,8 @@
 #![forbid(unsafe_code)]
 // data_go_kr / data.go.kr 등 외부 식별자 표기 패턴 false-positive 차단.
 #![allow(clippy::doc_markdown)]
+// FU 26 — legitimate HTTP client wrapper (data.go.kr 외부 API 통합, Breaker 경유).
+#![allow(clippy::disallowed_types)]
 
 pub mod building_register;
 pub mod client;

@@ -2,3 +2,15 @@ cognitive-complexity-threshold = 15
 too-many-arguments-threshold = 5
 type-complexity-threshold = 250
 too-many-lines-threshold = 100
+
+# FU 26: 모든 외부 HTTP 호출은 circuit-breaker::Breaker 통과 강제.
+# legitimate wrapper crate (data-clients/*, auth, services/api JWKS) 는
+# crate-level `#![allow(clippy::disallowed_types)]` 로 명시 허용.
+#
+# Note: workspace 의 reqwest 는 default-features = false (rustls-tls + json 만).
+# `blocking` feature 가 없어 `reqwest::blocking::Client` 경로 자체가 존재하지 않음 →
+# disallowed-types 에 추가 시 "does not refer to an existing type" 경고 발생.
+# blocking 사용 자체가 불가능하므로 추가 차단 불필요.
+disallowed-types = [
+    { path = "reqwest::Client", reason = "use circuit-breaker::Breaker wrapping reqwest, not direct (FU 26)" },
+]

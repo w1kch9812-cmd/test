@@ -13,6 +13,8 @@
 #![forbid(unsafe_code)]
 // raw_response, V-World 등 lowercase + 외부 식별자 표기 패턴 false-positive 차단.
 #![allow(clippy::doc_markdown)]
+// FU 26 — legitimate HTTP client wrapper (V-World 외부 API 통합, Breaker 경유).
+#![allow(clippy::disallowed_types)]
 
 pub mod client;
 pub mod error;
