@@ -1,4 +1,4 @@
--- V003_05: parcel_external_data 테이블 — 외부 API raw_response 보존 (SP4-iii-d).
+-- V003_06: parcel_external_data 테이블 — 외부 API raw_response 보존 (SP4-iii-d).
 --
 -- 모든 외부 API 응답을 raw 그대로 보존해 1년 후에도 *원본 그대로 재현* 가능
 -- (감사·재현·분쟁 시 증빙). (pnu, source) 합성 PK — 같은 필지 같은 source 는
