@@ -16,9 +16,10 @@ use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::pnu::Pnu;
 use tracing::{instrument, warn};
 
+use raw_capture_client::RawCapture;
+
 use crate::client::VWorldClient;
 use crate::parser;
-use crate::raw_capture::RawCapture;
 
 /// V-World 용도지역 레이어 — `LT_C_UQ111` (도시지역 용도지역).
 ///
@@ -98,7 +99,7 @@ mod tests {
     use shared_kernel::bounding_box::BoundingBox;
 
     use super::*;
-    use crate::raw_capture::NoOpRawCapture;
+    use raw_capture_client::NoOpRawCapture;
 
     fn dummy_client() -> Arc<VWorldClient> {
         let config = crate::client::VWorldConfig {

@@ -10,6 +10,7 @@ description = "공짱 V-World 외부 API 클라이언트 + ParcelReader 구현�
 parcel-domain = { path = "../../domain/core/parcel", version = "0.1.0" }
 shared-kernel = { path = "../../domain/core/shared-kernel", version = "0.1.0" }
 circuit-breaker = { path = "../../circuit-breaker", version = "0.1.0" }
+raw-capture-client = { path = "../raw-capture", version = "0.1.0" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 geo-types = { workspace = true }

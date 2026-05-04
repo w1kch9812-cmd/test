@@ -17,10 +17,10 @@
 pub mod client;
 pub mod error;
 pub mod parser;
-pub mod raw_capture;
 pub mod reader;
 
 pub use client::{VWorldClient, VWorldConfig};
-pub use error::{ConfigError, ParseError, RawCaptureError};
-pub use raw_capture::{NoOpRawCapture, RawCapture};
+pub use error::{ConfigError, ParseError};
+// raw_capture는 SP4-iii-d 에서 별도 crate 로 추출. 호환성 위해 re-export.
+pub use raw_capture_client::{NoOpRawCapture, RawCapture, RawCaptureError};
 pub use reader::VWorldParcelReader;

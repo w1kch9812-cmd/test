@@ -24,10 +24,5 @@ pub enum ParseError {
     Domain(String),
 }
 
-/// `RawCapture::capture` 실패. 정상 흐름엔 영향 없음 (warn 후 진행).
-#[derive(Debug, Error)]
-pub enum RawCaptureError {
-    /// 저장소 통신 실패.
-    #[error("raw capture sink failure: {0}")]
-    Sink(String),
-}
+// `RawCaptureError` 는 SP4-iii-d 에서 raw-capture-client crate 로 이동.
+// 본 crate 의 lib.rs 가 re-export 해 호환성 유지.
