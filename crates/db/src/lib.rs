@@ -8,6 +8,7 @@
 
 pub mod admin_action;
 pub mod audit_log;
+pub mod bookmark;
 pub mod bvq;
 pub mod error_map;
 pub mod listing;
