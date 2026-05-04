@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shared_kernel::id::{Id, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::SearchHistory;
@@ -25,19 +26,28 @@ pub trait SearchHistoryRepository: Send + Sync {
 
     /// 단일 검색 기록 `INSERT` (대량 — 매 검색마다).
     ///
+    /// `ctx` 의 actor/action/events 가 같은 트랜잭션 안에서 `audit_log` 와
+    /// `outbox_event` 로 자동 기록돼요 (SP5-ii transactional 패턴).
+    ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn insert(&self, history: &SearchHistory) -> Result<(), RepoError>;
+    async fn insert(&self, history: &SearchHistory, ctx: MutationContext) -> Result<(), RepoError>;
 
     /// `PIPA` 가명화 — `created_at < cutoff`인 모든 기록의 `user_id` → `NULL`.
     ///
     /// 90일 retention 워커가 호출. 결과는 가명화된 row 수.
+    /// bulk operation 이라 `ctx.action` 은 system action 권장 — `audit_log` 에
+    /// 단일 row 만 기록되며 `metadata` 에 `rows_pseudonymized` 카운트 보존.
     ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn pseudonymize_older_than(&self, cutoff: DateTime<Utc>) -> Result<u64, RepoError>;
+    async fn pseudonymize_older_than(
+        &self,
+        cutoff: DateTime<Utc>,
+        ctx: MutationContext,
+    ) -> Result<u64, RepoError>;
 }
 
 /// `Repository` 에러.

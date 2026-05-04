@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use shared_kernel::id::{Id, NotificationMarker, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::Notification;
@@ -37,15 +38,23 @@ pub trait NotificationRepository: Send + Sync {
 
     /// 단일 알림 `INSERT` (대량 — 이벤트 발생 시).
     ///
+    /// `ctx` 의 actor/action/events 가 같은 트랜잭션 안에서 `audit_log` 와
+    /// `outbox_event` 로 자동 기록돼요 (SP5-ii transactional 패턴).
+    ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn insert(&self, notification: &Notification) -> Result<(), RepoError>;
+    async fn insert(
+        &self,
+        notification: &Notification,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 
     /// 단일 알림 읽음 처리.
     ///
     /// 멱등 — 이미 읽은 알림이어도 에러가 아니고, `read_at`는 보존돼요
-    /// (`UPDATE ... WHERE read_at IS NULL`).
+    /// (`UPDATE ... WHERE read_at IS NULL`). row 미존재여도 멱등하게 `Ok(())`
+    /// — caller 는 row 존재 검증을 별도 `find_by_id` 로 수행해요.
     ///
     /// # Errors
     ///
@@ -54,11 +63,14 @@ pub trait NotificationRepository: Send + Sync {
         &self,
         id: &Id<NotificationMarker>,
         at: DateTime<Utc>,
+        ctx: MutationContext,
     ) -> Result<(), RepoError>;
 
     /// 사용자의 특정 `kind` 알림 모두 읽음 처리 (batch). 결과는 갱신된 row 수.
     ///
-    /// 멱등 — 이미 읽은 row는 영향 없음 (`WHERE read_at IS NULL`).
+    /// 멱등 — 이미 읽은 row는 영향 없음 (`WHERE read_at IS NULL`). bulk
+    /// operation 이라 `audit_log` 는 단일 row 만 기록되며 `metadata` 에
+    /// `rows_marked` / `kind` 보존.
     ///
     /// # Errors
     ///
@@ -68,6 +80,7 @@ pub trait NotificationRepository: Send + Sync {
         user_id: &Id<UserMarker>,
         kind: &str,
         at: DateTime<Utc>,
+        ctx: MutationContext,
     ) -> Result<u64, RepoError>;
 }
 

@@ -151,6 +151,47 @@ impl MapFromSqlx for operations_meta_domain::repository::RepoError {
     }
 }
 
+// `Bookmark` domain `RepoError` — no `Conflict` variant (UPSERT 패턴)
+impl MapFromSqlx for bookmark_domain::repository::RepoError {
+    fn conflict() -> Self {
+        // unique violation 은 UPSERT 로 처리되므로 정상 흐름엔 도달 안 함.
+        Self::Database("unexpected conflict in bookmark".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `SearchHistory` domain `RepoError` — no `Conflict` variant (insert-only)
+impl MapFromSqlx for search_history_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in search_history".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `AnalysisReport` domain `RepoError` — has `Conflict` variant (OCC)
+impl MapFromSqlx for analysis_report_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Conflict
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
+// `Notification` domain `RepoError` — no `Conflict` variant (mark_read 멱등)
+impl MapFromSqlx for notification_domain::repository::RepoError {
+    fn conflict() -> Self {
+        Self::Database("unexpected conflict in notification".to_owned())
+    }
+    fn database(msg: String) -> Self {
+        Self::Database(msg)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]

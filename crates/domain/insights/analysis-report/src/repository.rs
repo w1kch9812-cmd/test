@@ -4,6 +4,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{AnalysisReportMarker, Id, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::AnalysisReport;
@@ -34,19 +35,26 @@ pub trait AnalysisReportRepository: Send + Sync {
 
     /// `INSERT` or `UPDATE`. Optimistic lock(`version`) 충돌 시 [`RepoError::Conflict`].
     ///
+    /// `ctx` 의 actor/action/events 가 같은 트랜잭션 안에서 `audit_log` 와
+    /// `outbox_event` 로 자동 기록돼요 (SP5-ii transactional 패턴).
+    ///
     /// # Errors
     ///
     /// - 동시 갱신으로 `version`이 어긋난 경우 [`RepoError::Conflict`].
     /// - DB 통신 실패 시 [`RepoError::Database`].
-    async fn save(&self, report: &AnalysisReport) -> Result<(), RepoError>;
+    async fn save(&self, report: &AnalysisReport, ctx: MutationContext) -> Result<(), RepoError>;
 
-    /// 삭제 (사용자 요청 또는 retention).
+    /// 삭제 (사용자 요청 또는 retention) — hard delete 도 audit 대상.
     ///
     /// # Errors
     ///
     /// - 대상 미존재 시 [`RepoError::NotFound`].
     /// - DB 통신 실패 시 [`RepoError::Database`].
-    async fn delete(&self, id: &Id<AnalysisReportMarker>) -> Result<(), RepoError>;
+    async fn delete(
+        &self,
+        id: &Id<AnalysisReportMarker>,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.

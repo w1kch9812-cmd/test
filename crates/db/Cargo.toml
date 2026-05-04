@@ -22,6 +22,10 @@ listing-report-domain = { path = "../operations/listing-report", version = "0.1.
 lrq-domain = { path = "../operations/listing-review-queue", version = "0.1.0" }
 operations-meta-domain = { path = "../operations/operations-meta", version = "0.1.0" }
 outbox-event-domain = { path = "../domain/audit/outbox-event", version = "0.1.0" }
+bookmark-domain = { path = "../domain/insights/bookmark", version = "0.1.0" }
+search-history-domain = { path = "../domain/insights/search-history", version = "0.1.0" }
+analysis-report-domain = { path = "../domain/insights/analysis-report", version = "0.1.0" }
+notification-domain = { path = "../domain/insights/notification", version = "0.1.0" }
 sqlx = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }
