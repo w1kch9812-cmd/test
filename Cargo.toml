@@ -24,6 +24,7 @@ members = [
     "crates/operations/operations-meta",
     "crates/auth",
     "crates/circuit-breaker",
+    "crates/data-clients/raw-capture",
     "crates/data-clients/vworld",
     "crates/data-pipeline-control",
     "crates/db",

@@ -1,0 +1,20 @@
+[package]
+name = "raw-capture-client"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 외부 API raw_response 보존 표준 trait"
+
+[dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true
