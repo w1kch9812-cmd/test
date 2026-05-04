@@ -459,6 +459,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "data-go-kr-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "building-domain",
+ "chrono",
+ "circuit-breaker",
+ "geo-types",
+ "parcel-domain",
+ "raw-capture-client",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "shared-kernel",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "vworld-client",
+ "wiremock",
+]
+
+[[package]]
 name = "data-pipeline-control"
 version = "0.1.0"
 dependencies = [

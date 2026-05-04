@@ -1,0 +1,31 @@
+[package]
+name = "data-go-kr-client"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 data.go.kr 외부 API 클라이언트 + BuildingReader 구현체"
+
+[dependencies]
+building-domain = { path = "../../domain/core/building", version = "0.1.0" }
+parcel-domain = { path = "../../domain/core/parcel", version = "0.1.0" }
+shared-kernel = { path = "../../domain/core/shared-kernel", version = "0.1.0" }
+circuit-breaker = { path = "../../circuit-breaker", version = "0.1.0" }
+raw-capture-client = { path = "../raw-capture", version = "0.1.0" }
+vworld-client = { path = "../vworld", version = "0.1.0" }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+geo-types = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+wiremock = { workspace = true }
+
+[lints]
+workspace = true

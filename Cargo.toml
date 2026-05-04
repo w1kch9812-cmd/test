@@ -26,6 +26,7 @@ members = [
     "crates/circuit-breaker",
     "crates/data-clients/raw-capture",
     "crates/data-clients/vworld",
+    "crates/data-clients/data-go-kr",
     "crates/data-pipeline-control",
     "crates/db",
     "crates/outbox-publisher",
