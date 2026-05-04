@@ -1,4 +1,4 @@
-//! `PgAnalysisReportRepository` 통합 테스트 (SP5-ii) — OCC + target_pnus[]
+//! `PgAnalysisReportRepository` 통합 테스트 (SP5-ii) — OCC + `target_pnus[]`
 //! + audit/outbox 검증.
 
 #![allow(

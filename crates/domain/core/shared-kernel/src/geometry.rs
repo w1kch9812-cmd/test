@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn wgs84_origin_zero_zero() {
         let p = PointSrid::try_new_wgs84(0.0, 0.0).expect("origin valid");
-        assert_eq!(p.lng, 0.0);
-        assert_eq!(p.lat, 0.0);
+        assert!(p.lng.abs() < f64::EPSILON);
+        assert!(p.lat.abs() < f64::EPSILON);
     }
 
     #[test]
@@ -271,7 +271,7 @@ mod tests {
         let p = PointSrid::try_new_wgs84(0.0, 0.0).expect("ok");
         let q = p; // Copy
         assert_eq!(p.srid, q.srid);
-        assert_eq!(p.lng, q.lng);
+        assert!((p.lng - q.lng).abs() < f64::EPSILON);
     }
 
     // ── PolygonSrid ────────────────────────────────────────────────

@@ -200,7 +200,7 @@ fn enable_disable_toggles_and_bumps_version() {
     assert_eq!(s.updated_by.as_ref(), Some(&by));
 
     let t2 = t1 + Duration::seconds(60);
-    s.enable(Some(by.clone()), t2);
+    s.enable(Some(by), t2);
     assert!(s.enabled);
     assert_eq!(s.version, 3);
     assert_eq!(s.updated_at, t2);

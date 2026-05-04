@@ -74,7 +74,7 @@ impl JwtVerifier {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
     use super::*;
 
@@ -165,7 +165,7 @@ impl Verifier {
 
 #[cfg(test)]
 mod verifier_enum_tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
     use super::*;
 
@@ -181,9 +181,8 @@ mod verifier_enum_tests {
     #[tokio::test]
     async fn dev_rejects_non_dev_prefix() {
         let v = Verifier::Dev;
-        let err = match v.verify("eyJ.something").await {
-            Err(e) => e,
-            Ok(_) => panic!("expected error"),
+        let Err(err) = v.verify("eyJ.something").await else {
+            panic!("expected error");
         };
         assert_eq!(err, AuthError::MalformedToken);
     }
@@ -191,9 +190,8 @@ mod verifier_enum_tests {
     #[tokio::test]
     async fn dev_rejects_empty_sub() {
         let v = Verifier::Dev;
-        let err = match v.verify("DEV.").await {
-            Err(e) => e,
-            Ok(_) => panic!("expected error"),
+        let Err(err) = v.verify("DEV.").await else {
+            panic!("expected error");
         };
         assert_eq!(err, AuthError::MissingSubject);
     }

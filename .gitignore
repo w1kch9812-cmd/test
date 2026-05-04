@@ -59,3 +59,5 @@ reference/*/
 
 # === 백업 / 아카이브 ===
 _archive/
+.claude/scheduled_tasks.lock
+

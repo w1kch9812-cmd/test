@@ -113,10 +113,7 @@ mod tests {
     fn new_user_action_sets_actor() {
         let actor: Id<UserMarker> = Id::new();
         let ctx = MutationContext::new_user_action(actor.clone(), "req-1", "approve");
-        assert_eq!(
-            ctx.actor_id.as_ref().map(|i| i.as_str()),
-            Some(actor.as_str())
-        );
+        assert_eq!(ctx.actor_id.as_ref().map(Id::as_str), Some(actor.as_str()));
         assert_eq!(ctx.correlation_id, "req-1");
         assert_eq!(ctx.action, "approve");
         assert!(ctx.events.is_empty());

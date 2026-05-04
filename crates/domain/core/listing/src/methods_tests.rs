@@ -49,14 +49,14 @@ fn sample_draft(now: DateTime<Utc>) -> Listing {
     .expect("valid draft")
 }
 
-/// `PendingReview` 상태 매물 (Draft → submit_for_review).
+/// `PendingReview` 상태 매물 (Draft → `submit_for_review`).
 fn pending_review(now: DateTime<Utc>) -> Listing {
     let mut l = sample_draft(now);
     l.submit_for_review(now).expect("draft -> pending");
     l
 }
 
-/// `Active` 상태 매물 (Draft → PendingReview → Active).
+/// `Active` 상태 매물 (Draft → `PendingReview` → Active).
 fn active(now: DateTime<Utc>) -> Listing {
     let mut l = pending_review(now);
     l.approve(now).expect("pending -> active");
@@ -77,7 +77,7 @@ fn expired(now: DateTime<Utc>) -> Listing {
     l
 }
 
-/// `Rejected` 상태 매물 (Draft → PendingReview → Rejected).
+/// `Rejected` 상태 매물 (Draft → `PendingReview` → Rejected).
 fn rejected(now: DateTime<Utc>) -> Listing {
     let mut l = pending_review(now);
     l.reject(now).expect("pending -> rejected");

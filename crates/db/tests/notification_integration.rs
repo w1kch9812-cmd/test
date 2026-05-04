@@ -1,5 +1,5 @@
 //! `PgNotificationRepository` 통합 테스트 (SP5-ii) — insert + idempotent
-//! mark_read + bulk mark_all_read_by_kind + audit 검증.
+//! `mark_read` + bulk `mark_all_read_by_kind` + audit 검증.
 
 #![allow(
     clippy::expect_used,

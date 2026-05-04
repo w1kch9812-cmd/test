@@ -1,12 +1,12 @@
 //! V-World HTTP 통합 테스트 (SP4-ii) — wiremock 으로 fake V-World server.
 //!
 //! 6 시나리오:
-//! 1. fetch_by_pnu happy path — 200 + 유효 JSON → Some(Parcel)
-//! 2. fetch_by_pnu empty featureCollection → Ok(None) (PNU 미존재)
-//! 3. fetch_by_pnu 5xx 재시도 후 모두 실패 → ReaderError::Fetch
-//! 4. fetch_by_pnu malformed JSON → ReaderError::Parse
-//! 5. fetch_by_pnu circuit open after threshold failures
-//! 6. fetch_markers_in_bbox returns deferred error (honest failure)
+//! 1. `fetch_by_pnu` happy path — 200 + 유효 JSON → Some(Parcel)
+//! 2. `fetch_by_pnu` empty featureCollection → Ok(None) (PNU 미존재)
+//! 3. `fetch_by_pnu` 5xx 재시도 후 모두 실패 → `ReaderError::Fetch`
+//! 4. `fetch_by_pnu` malformed JSON → `ReaderError::Parse`
+//! 5. `fetch_by_pnu` circuit open after threshold failures
+//! 6. `fetch_markers_in_bbox` returns deferred error (honest failure)
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
@@ -62,7 +62,7 @@ fn empty_response() -> serde_json::Value {
 }
 
 /// 통합 테스트용 빠른 정책 — 짧은 timeout, retry 1, 빠른 backoff.
-fn fast_policy() -> Policy {
+const fn fast_policy() -> Policy {
     Policy {
         timeout_ms: 2_000,
         max_retries: 1,

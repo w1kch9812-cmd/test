@@ -32,7 +32,7 @@ fn verify_business_idempotent_updates_to_latest() {
     let t2 = now + chrono::Duration::seconds(120);
 
     user.verify_business(bn.clone(), t1);
-    user.verify_business(bn.clone(), t2);
+    user.verify_business(bn, t2);
 
     assert_eq!(user.business_verified_at, Some(t2));
     assert_eq!(user.version, 3);

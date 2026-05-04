@@ -9,6 +9,7 @@ use crate::errors::UserError;
 
 // ── try_new (minimal, 6 args) ─────────────────────────────────────────────
 
+#[allow(clippy::cognitive_complexity)]
 #[test]
 fn try_new_happy_path() {
     let id = Id::<UserMarker>::new();

@@ -1,5 +1,5 @@
-//! `PgListingRepository` 통합 테스트 — 21 필드 round-trip + `PostGIS` + `OCC`
-//! + `ListingMarker` projection + SP5-iv transactional `audit_log` /
+//! `PgListingRepository` 통합 테스트 — 21 필드 round-trip, `PostGIS`, `OCC`,
+//! `ListingMarker` projection, SP5-iv transactional `audit_log` /
 //! `outbox_event` 검증.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]

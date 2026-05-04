@@ -5,7 +5,7 @@
 //! `#[test]` 함수들은 `entity_tests/<group>.rs` 에 있어요.
 //!
 //! 그룹:
-//! - `constructors` — `try_new` (minimal 6-arg) + display_name / zitadel_sub 검증 + `UserKind`.
+//! - `constructors` — `try_new` (minimal 6-arg) + `display_name` / `zitadel_sub` 검증 + `UserKind`.
 //! - `full_and_serde` — `try_new_full` (14-arg) + `UserRole` + 전체 serde round-trip.
 //! - `mutations` — 도메인 mutation 메서드 (`verify_*`, `revoke_*`, `add_role`, `soft_delete` 등).
 //!
