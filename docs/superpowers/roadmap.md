@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP5-ii 종료 직후)
-> **현재 main**: `a76d52c` (CI #191 + walking-skeleton #134 + db-migrations #159 모두 그린)
+> **갱신일**: 2026-05-04 (SP4-ii 종료 직후)
+> **현재 main**: `1d4c9be` (CI #197 + walking-skeleton #140 + db-migrations #165 모두 그린)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -23,8 +23,9 @@
 | **5-iv** | Core BC `MutationContext` 일원화 | 3 trait 시그니처 + 3 PgImpl tx + auth middleware first_sign_in + 10 신규 통합 테스트 | ✅ |
 | **4-i** | Outbox Publisher Worker | `crates/outbox-publisher` (Sink/tick/LoggingSink/CountingSink) + `services/outbox-publisher` daemon + 4 신규 통합 테스트 | ✅ |
 | **5-ii** | Insights BC RDS Repository | PgBookmarkRepository (composite PK + polymorphic) + PgSearchHistoryRepository (bulk pseudonymize) + PgAnalysisReportRepository (OCC + target_pnus[]) + PgNotificationRepository (멱등 mark_read) + 22 통합 테스트 | ✅ |
+| **4-ii** | V-World 외부 API + Circuit Breaker | `crates/circuit-breaker` (Policy + 3-state Breaker + execute) + `crates/data-clients/vworld` (Client + ParcelReader + ACL parser + RawCapture) + 23 단위 + 6 wiremock 통합 | ✅ |
 
-**누적**: 27 crate, ~1166 tests (1063 단위 + 103 통합), 3 CI workflow 그린.
+**누적**: 29 crate, ~1195 tests (1098 단위 + 109 통합), 3 CI workflow 그린.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -34,16 +35,26 @@
 
 ## 다음 sub-project (사용자 결정)
 
-### A. SP4-ii — 첫 외부 API 통합 (V-World)
+### A. SP4-iii — data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장
 
-**목표**: V-World 단일 API (필지 polygon + 행정 정보) 를 `Parcel` Reader 구현체로 통합. Circuit Breaker + retry + raw_response 보존.
+**목표**: SP4-ii 의 V-World 패턴을 답습해 나머지 외부 API + R2 Reader 통합. `parcel_external_data` 테이블 + DB 저장 RawCapture 구현체 (FU 27).
 
-**작업**: SP4-i 의 단순 sink 패턴 답습 — 외부 API client 도 동일 추상화 가능. data.go.kr / 법제처는 SP4-iii+ 분해.
+**작업**:
+- data.go.kr (실거래가, 사업자번호 검증) — `crates/data-clients/data-go-kr/`
+- 법제처 (법령 API) — `crates/data-clients/korean-law/`
+- R2 PMTiles Reader 6: Parcel(bbox markers), Building, IndustrialComplex, Manufacturer, RealTransaction, CourtAuction
+- `parcel_external_data` 테이블 마이그 + DB RawCapture impl
+- FU 26: `clippy::disallowed_types` 로 reqwest::Client 직접 호출 차단
+- FU 30: `fetch_markers_in_bbox` PMTiles 또는 V-World BBOX WFS
 
-**추정**: 6-8 task, 1-2일.
+**추정**: 분해 필요 (SP4-iii-a/b/c 각 1-2일, 총 3-5일).
 **Spec status**: 미작성.
 
-### B. SP6 — Frontend (Next.js + React 19)
+### B. FU 일괄 정리 (작은 빚 닫기)
+
+FU 4/6/8/12/13/14/15/16/17/18/26/27/28/29/30/31/32/33/34 — production 전 필수. 특히 FU 34 (workspace `--all-targets` clippy 가 잡는 기존 부채: shared-kernel `float_cmp`, user-domain `redundant_clone`, `redundant_closure_for_method_calls` 등) 는 SP4-iii 시작 전 권장.
+
+### C. SP6 — Frontend (Next.js + React 19)
 
 **목표**: 인증/매물/북마크/알림 핸들러가 SP5-* 의 PgRepository 를 사용하는 첫 사용자 화면.
 
@@ -61,12 +72,13 @@ FU 4/6/8/12/13/14/15/16/17/18 — 9건 미해소. production 전 필수.
 ## 추천 순서
 
 ```
-A (SP4-ii, 1-2일)
-  ↓ 첫 실제 외부 데이터 흐름 + Circuit Breaker 패턴 첫 도입
-SP4-iii (data.go.kr + 법제처 + R2 Reader 6, 3-5일)
-B (SP6 분해, 4-7일)
+B (FU 일괄, 0.5-1일)
+  ↓ 기존 부채 정리 (특히 FU 34: --all-targets 강화)
+A (SP4-iii 분해, 3-5일)
+  ↓ 나머지 외부 API + R2 Reader 6 + raw_response DB 저장
+C (SP6 분해, 4-7일)
   ↓ 첫 사용자 화면 — SP5-* 의 모든 Repository 가 활용됨
-SP7 (관측성 — Grafana / Tempo / Sentry — Outbox publisher 도 metrics 추가)
+SP7 (관측성 — Grafana / Tempo / Sentry — Outbox publisher metrics + circuit breaker open alert)
 SP8 (IaC — Pulumi)
 ```
 

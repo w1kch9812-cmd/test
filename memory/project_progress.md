@@ -1,6 +1,6 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-04)
-description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii 완료 (27 crate, ~1166 tests). SP5 시리즈 완전 종료 — 13 BC 모두 정합 + outbox read side 작동.
+description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii 완료 (29 crate, ~1195 tests). 첫 실제 외부 API 통합 (V-World) + Circuit Breaker 패턴 도입.
 type: project
 ---
 
@@ -304,6 +304,75 @@ type: project
 - FU 24: SearchHistory NLP / 임베딩 (Phase 3+)
 - FU 25: 365일 알림 retention 워커 (`services/worker/notification_retention`)
 
+### Sub-project 4-ii: V-World 외부 API + Circuit Breaker (완료, T1-T7)
+
+- 신규 lib `crates/circuit-breaker` (~600 lines):
+  · `Policy` (Copy) — `timeout_ms`, `max_retries`, `retry_base_ms`,
+    `open_threshold`, `open_window_ms`, `open_cooldown_ms`. `vworld_default()` 상수
+  · `Breaker` — `std::sync::Mutex<Inner>` + 3-state machine (Closed/Open/HalfOpen)
+    + sliding window failure 카운터 (VecDeque<Instant>) + cooldown 자동 전이
+  · `prune_window` 헬퍼 추출 (cognitive_complexity 분해)
+  · `execute(breaker, policy, op_name, op)` — timeout(`tokio::time::timeout`) +
+    attempt loop (지수 백오프 `retry_base_ms * 2^attempt`) + state 추적
+  · `BreakerError<E: Display>` (where 절) — Open/Timeout/MaxRetriesExceeded/Inner
+  · 23 단위 테스트 (state transitions / retries / timeouts)
+- 신규 lib `crates/data-clients/vworld` (~700 lines):
+  · `VWorldConfig` + `from_env()` (VWORLD_API_KEY/DOMAIN/BASE_URL)
+  · `VWorldClient` (reqwest::Client + Breaker + Policy) — `fetch_feature_by_pnu`
+    이 WFS GetFeature URL build + `circuit_breaker::execute` 통과
+  · `parser::parse_parcel` — V-World JSON → 도메인 `Parcel` ACL:
+    pnu/admin(시도/시군구/읍면동)/jibun_address/lndcgr_nm 한글 지목 매핑/
+    uq_nm 한글 용도지역 매핑/lndpcl_ar/geometry.coordinates → PolygonSrid
+  · `RawCapture` trait + `NoOpRawCapture` (tracing event "vworld.raw"). DB
+    저장 구현체는 SP4-iii (FU 27)
+  · `VWorldParcelReader` impl `ParcelReader::fetch_by_pnu` —
+    client → raw_capture (best-effort) → parser → Parcel
+  · `fetch_markers_in_bbox` 는 honest failure (`Err(Fetch("deferred to SP4-iii"))`)
+  · 12 단위 테스트 + 6 wiremock 통합 (happy path / empty / 5xx / malformed /
+    circuit open / deferred bbox)
+- workspace.members + wiremock dev-dep 추가
+- 누적 테스트: 1166 → ~1195 (단위 +29 / 통합 +6)
+
+**SSS 7기둥 결함 닫음**:
+- 1 일관성: 모든 외부 API 호출이 `circuit_breaker::execute` 통과 — 후속 API 도
+  같은 패턴 강제 (SP4-iii data.go.kr/법제처 도입 시)
+- 4 안전성: timeout + retry + circuit open — 외부 장애 격리. Honest failure
+  (5xx 를 mock 으로 덮지 않음)
+- 5 가시성: 모든 호출 `tracing::instrument` + state 전이 시 warn/info
+
+**SP4-ii 발견 사항 (lessons)**:
+- **Iteration 비용**: CI 4번 (193/194/195/196) clippy 빨강 → MSVC 부재로 로컬
+  진단 불가 → 추측 fix → 또 빨강. 결국 사용자 승인으로 winget 으로 MSVC
+  Build Tools 2022 silent install 후 정확 진단 1회 → 1d4c9be 그린.
+  **로컬 빌드 환경이 SP 시작의 사전조건**.
+- 실제 lint 1건: `Breaker::record_failure` cognitive_complexity 20/15
+  (clippy.toml threshold 15). `prune_window` helper 분리 후 18, 추가 분리는
+  readability 손해 → `#[allow]` + 사유 doc
+- vworld-client `lib.rs` 의 `clippy::doc_markdown` 1건 (raw_response 등
+  lowercase identifier) → file-level allow
+- CI 가 `--all-targets` 미사용 — 통합 테스트는 lint 안 됨. 로컬 `--all-targets`
+  시 기존 crate 들 (shared-kernel float_cmp, user-domain redundant_clone) 의
+  잠복 부채 발견 — FU 34
+- wiremock 6.0 통합: `MockServer::start()` + `Mock::given(method+path).respond_with`
+  + `.mount(&server)`. base_url override 로 클라이언트가 mock 가리킴 — clean
+
+**SP4-ii 미포함 (후속)**:
+- FU 26: `clippy::disallowed_types` 로 reqwest::Client 직접 호출 차단 (data-clients
+  외 다른 crate 가 우회 못 하게)
+- FU 27: `parcel_external_data` 테이블 마이그 + DB 저장 RawCapture 구현체
+- FU 28: Redis 캐시 레이어 (TTL 24h)
+- FU 29: Sentry alert on Breaker open
+- FU 30: `fetch_markers_in_bbox` PMTiles 또는 WFS BBOX
+- FU 31: Distributed circuit breaker (Redis 공유 state)
+- FU 32: `governor` rate limit (V-World 일일 쿼터)
+- FU 33: vworld-client clippy specific allow 분해 (현재는 doc_markdown 만)
+- FU 34: workspace 기존 부채 일괄 정리 (`--all-targets` clippy):
+  · shared-kernel/src/geometry.rs `float_cmp` 3건 (assert_eq! for f64)
+  · shared-kernel/src/mutation.rs `redundant_closure_for_method_calls`
+  · user-domain/src/entity_tests/mutations.rs `redundant_clone`
+  · data-pipeline-control 테스트 추가 lint
+  → CI workflow 강화 (`--all-targets` 추가) 후 일괄 fix
+
 ## 워크스페이스 구조 (현재)
 
 ```
@@ -338,7 +407,7 @@ crates/db/                 PgUserRepository (Walking Skeleton)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
 
-총 **27 crate, ~1142 tests (1063 단위 + 79 통합), Rust 1.88.**
+총 **29 crate, ~1195 tests (1098 단위 + 109 통합), Rust 1.88.**
 
 ## CI 상태
 
@@ -358,15 +427,25 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **SP4-ii** (추천 다음): 첫 외부 API 통합 — V-World Parcel Reader (1-2일).
-  Circuit Breaker + retry + raw_response 보존 패턴 첫 도입
-- **SP4-iii+**: data.go.kr + 법제처 + R2 Reader 6 (3-5일)
+- **FU 일괄 정리** (추천 다음, 0.5-1일): 기존 부채 (FU 4/6/8/12/13/14/15/16/17/18/26-34).
+  특히 FU 34 (workspace `--all-targets` clippy 부채) — CI workflow 강화하면서
+  shared-kernel/user-domain/data-pipeline-control 잠복 lint fix
+- **SP4-iii** (분해): data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장
+  + parcel_external_data 마이그 (3-5일)
 - **SP6 분해**: Frontend (Next.js + React 19, 4-7일) — 인증/매물/북마크/알림
-  핸들러가 SP5-* 의 PgRepository 활용. 사용자 경험 첫 검증 시점
+  핸들러가 SP5-* 의 PgRepository + V-World ParcelReader 활용
 - **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
-- 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry — Outbox publisher 도 metrics 추가)
+- 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry — Outbox publisher metrics + Breaker open alert)
 - 8: IaC (Pulumi RDS/R2/ECS)
 - 9-12: 데이터 파이프라인, AI 어시스턴트, 검색, etc.
+
+## 환경 (2026-05-04 SP4-ii 종료 시점)
+
+- **MSVC Build Tools 2022 설치 완료** — winget silent install (사용자 승인).
+  `cl.exe` / `link.exe` 위치: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx86\x86\`
+- **로컬 `cargo clippy --workspace --all-features -- -D warnings`** 가능 (CI 동일 명령)
+  · 단, dev shell 활성화 필요: `& "${vsPath}\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation`
+- 다음 SP 시작 시 로컬 진단 → 1번 push 로 CI 그린 가능
 
 ## 알려진 deferred items (production 배포 전 처리)
 
