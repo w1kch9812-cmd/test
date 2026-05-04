@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use shared_kernel::id::{Id, ListingMarker, ListingPhotoMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::ListingPhoto;
@@ -25,18 +26,29 @@ pub trait ListingPhotoRepository: Send + Sync {
 
     /// 저장 (insert or update).
     ///
+    /// `ctx` 의 `actor_id` / `action` / `metadata` / `events` 가 같은 트랜잭션
+    /// 안에서 `audit_log` 와 `outbox_event` 로 자동 기록돼요 (SP5-iv 의
+    /// transactional 패턴).
+    ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn save(&self, photo: &ListingPhoto) -> Result<(), RepoError>;
+    async fn save(&self, photo: &ListingPhoto, ctx: MutationContext) -> Result<(), RepoError>;
 
     /// 삭제 (hard delete — 일반 흐름은 `soft_delete` 후 별도 archive job).
+    ///
+    /// `ctx` 의 actor/action/correlation 도 같은 트랜잭션 안에서 `audit_log`
+    /// 로 기록돼요 — hard delete 도 추적성 유지가 SSS 약속.
     ///
     /// # Errors
     ///
     /// 대상 미존재 → [`RepoError::NotFound`].
     /// DB 통신 실패 → [`RepoError::Database`].
-    async fn delete(&self, id: &Id<ListingPhotoMarker>) -> Result<(), RepoError>;
+    async fn delete(
+        &self,
+        id: &Id<ListingPhotoMarker>,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.
