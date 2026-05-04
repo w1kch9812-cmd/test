@@ -7,4 +7,4 @@
 - [SSS급 기준 피드백](memory/feedback_sss_standard.md) — 미개함·꼼수 0
 - [기술 스택 확정](memory/tech_stack_confirmed.md) — Rust + Next.js + Postgres+PostGIS + Zitadel + Biome v2.4
 - [Sub-project 2a 작업 패턴 교훈](memory/feedback_subproject_2a_lessons.md) — spec verbatim 강제, 값 객체 dispatch 표준, 마이그 파일명, tarpaulin strict
-- [프로젝트 진행 현황](memory/project_progress.md) — SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d 완료 (30 crate, ~1198 tests), FU 27/34 closed, CI clippy --all-targets 강화, 3 CI workflow 그린
+- [프로젝트 진행 현황](memory/project_progress.md) — SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d+4-iii-a 완료 (31 crate, ~1232 tests), FU 27/34 closed, SP4-iii-a = data.go.kr 건축물대장 (V-World geom 합성)

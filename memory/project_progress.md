@@ -1,6 +1,6 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-04)
-description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d 완료 (30 crate, ~1198 tests). FU 27/34 closed. CI clippy --all-targets 강화.
+description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d+4-iii-a 완료 (31 crate, ~1230 tests). FU 27/34 closed. SP4-iii-a = data.go.kr 건축물대장.
 type: project
 ---
 
@@ -359,19 +359,110 @@ type: project
 **SP4-ii 미포함 (후속)**:
 - FU 26: `clippy::disallowed_types` 로 reqwest::Client 직접 호출 차단 (data-clients
   외 다른 crate 가 우회 못 하게)
-- FU 27: `parcel_external_data` 테이블 마이그 + DB 저장 RawCapture 구현체
+- FU 27: ✅ **완료 (SP4-iii-d)** — `parcel_external_data` 마이그 + `PgRawCapture`
 - FU 28: Redis 캐시 레이어 (TTL 24h)
 - FU 29: Sentry alert on Breaker open
 - FU 30: `fetch_markers_in_bbox` PMTiles 또는 WFS BBOX
 - FU 31: Distributed circuit breaker (Redis 공유 state)
 - FU 32: `governor` rate limit (V-World 일일 쿼터)
 - FU 33: vworld-client clippy specific allow 분해 (현재는 doc_markdown 만)
-- FU 34: workspace 기존 부채 일괄 정리 (`--all-targets` clippy):
-  · shared-kernel/src/geometry.rs `float_cmp` 3건 (assert_eq! for f64)
-  · shared-kernel/src/mutation.rs `redundant_closure_for_method_calls`
-  · user-domain/src/entity_tests/mutations.rs `redundant_clone`
-  · data-pipeline-control 테스트 추가 lint
-  → CI workflow 강화 (`--all-targets` 추가) 후 일괄 fix
+- FU 34: ✅ **완료** — workspace `--all-targets` 부채 일괄 정리 + CI 강화
+
+### Sub-project 4-iii-d: RawCapture trait 분리 + PgRawCapture (완료, T1-T7)
+
+- 신규 lib `crates/data-clients/raw-capture` — `RawCapture` trait, `RawCaptureError`,
+  `NoOpRawCapture` (target=`raw.capture`). vworld-client 이 re-export 유지
+- vworld-client 의존 갱신 — `raw-capture-client` crate dep 추가, 로컬
+  `raw_capture.rs` 삭제, error.rs 의 `RawCaptureError` 도 이동
+- 마이그 `V003_06` (`migrations/30006_parcel_external_data.sql`) — 단일 테이블:
+  `(pnu char(19), source varchar(50), raw_response jsonb, fetched_at timestamptz,
+  expires_at timestamptz)`. PK `(pnu, source)`. CHECK source IN
+  (`vworld`, `data_go_kr_building`, `data_go_kr_land`, `data_go_kr_tx`, `lawmaking`).
+  BRIN idx `parcel_external_data_fetched_brin_idx` (cold storage 친화)
+- 신규 `crates/db/src/raw_capture.rs` — `PgRawCapture` impl `RawCapture`,
+  UPSERT `(pnu, source)` 갱신 시 raw_response + fetched_at 덮어쓰기
+- 통합 테스트 신규 3 (`crates/db/tests/raw_capture_integration.rs`):
+  capture_inserts_new_row / capture_upserts_existing_row /
+  capture_persists_complex_json
+- `tests/migrations/test_v001_full.sh` — EXPECTED_18 → 19, V003_06 검증 추가
+  (PK / source CHECK / BRIN idx)
+- `truncate_all` 에 `parcel_external_data` 추가
+- 누적 테스트: 1198 → ~1201 (통합 +3)
+
+**SSS 7기둥 결함 닫음**:
+- 1 일관성: `RawCapture` trait 가 vworld 외 data-go-kr / 법제처 등 후속 source
+  까지 동일 인터페이스로 통합
+- 3 추적성: raw_response 가 DB 영구 보존 → 외부 API 디버깅 / 재처리 가능
+
+**SP4-iii-d 발견 사항 (lessons)**:
+- migration number 충돌: 처음 `30005_parcel_external_data` 로 작성했으나 SP3 의
+  `30005_user_roles_check` 와 충돌 → V003_06 으로 rename
+- markdownlint MD004/MD007: `memory/project_progress.md` 의 indented `+` 가
+  unordered-list 로 해석되어 빨강 → comma-joined text 로 정리
+
+### Sub-project 4-iii-a: data.go.kr 건축물대장 + BuildingReader (완료, T1-T7)
+
+- 신규 lib `crates/data-clients/data-go-kr` (~1200 lines):
+  · `DataGoKrConfig` + `from_env` (ODP_SERVICE_KEY/ODP_BASE_URL)
+  · `DataGoKrClient` (reqwest + Breaker + `Policy::data_go_kr_default`)
+  · `pnu_split` — PNU 19자리 → sigunguCd(5) / bjdongCd(5) / platGbCd(1) /
+    bun(4) / ji(4) 무할당 슬라이스 분해 (Pnu invariant 가 panic-free 보장)
+  · `building_register::BuildingRegisterClient::fetch_title_info(parts)` —
+    `getBrTitleInfo` URL build + `circuit_breaker::execute` 통과
+  · `building_register::parser::parse_building_title` — data.go.kr JSON →
+    `Vec<Building>` ACL. `mainPurpsCdNm` / `strctCdNm` 한글 라벨 → enum 매핑
+    (Other fallback), `totArea` 문자열 → `AreaM2`, `useAprDay` YYYYMMDD →
+    `NaiveDate`, `items.item` 단일/배열/빈 문자열 다형 처리,
+    `resultCode != "00"` → `ApiError(code, msg)`
+  · `building_register::DataGoKrBuildingReader` impl `BuildingReader::fetch_by_pnu`
+    — 1) `getBrTitleInfo` raw → 2) `raw_capture(source="data_go_kr_building")` →
+    3) V-World `LT_C_UQ111` 폴리곤 fetch (geom 합성, FU 40 까지 approximation) →
+    4) parse → `Vec<Building>`. 빈 items 분기는 V-World 호출 회피.
+    `fetch_by_id` → FU 42 (mgmBldrgstPk 별도 endpoint)
+  · `circuit-breaker::Policy::data_go_kr_default` — 15s timeout, retry 2회
+    (1s/2s/4s), threshold 5, window 5s, cooldown 30s. V-World 보다 timeout 길고
+    retry 더 (응답 본문 무거움)
+- 통합 테스트 6 (`tests/building_register_integration.rs`) — 한 `MockServer` 가
+  data.go.kr (`/1613000/...`) + V-World (`/req/data`) path 동시 처리:
+  happy_path / multi_buildings / empty_returns_empty_vec /
+  5xx_retries_then_fails / malformed_returns_parse_error /
+  circuit_opens_after_threshold
+- 단위 테스트 25 (parser 13 + pnu_split 4 + client 3 + error 3 + reader 1 +
+  br_client 1) + Policy::data_go_kr_default 단위 2
+- workspace.members + `crates/data-clients/data-go-kr` 추가
+- 누적 테스트: ~1201 → ~1232 (단위 +27 / 통합 +6, +1 crate)
+
+**SSS 7기둥 결함 닫음**:
+- 1 일관성: data.go.kr 도 V-World 와 동일 패턴 (Config + Client + Breaker +
+  ACL parser + Reader). 후속 외부 API (법제처/실거래가) 도 같은 골격
+- 3 추적성: `parcel_external_data.source = "data_go_kr_building"` 행 자동
+  INSERT (PgRawCapture 1차 실사용)
+- 4 안전성: timeout 15s + retry 2회 + circuit. `Building.geom` 폴리곤 합성은
+  명시적 trade-off 로 spec/README 에 기록 (정확한 footprint 는 FU 40)
+- 7 명확성: `Building.geom` 합성 (V-World 필지 폴리곤 = 건물 폴리곤 가정) 가
+  *추측이 아닌 결정* — spec § 3.3 / 위험 요소 / FU 40 모두 일관 명시
+
+**SP4-iii-a 발견 사항 (lessons)**:
+- `Building.geom: PolygonSrid` required → data.go.kr 응답에 폴리곤 0건 →
+  V-World 합성 강제. 도메인 변경 (Option<PolygonSrid>) 보다 합성이 SSS-등급
+  명확함 (정확한 footprint 가 누락이 아니라 *근사값으로 채워졌음* 이 명시)
+- 한글 라벨 → enum 매핑은 `Other` fallback 정책으로 외부 스키마 확장에
+  견고. 명시 매핑 외 라벨도 `ParseError` 가 아니라 흡수 (FU 41 매핑표 확장
+  여지)
+- items.item 다형 (단일 객체 vs 배열 vs 빈 문자열) 처리는 `serde_json::Value`
+  match 로 type-safe 분기
+- 통합 테스트 한 `MockServer` 가 두 외부 API path 동시 처리 → spec 의
+  *분리 또는 path-based dispatch* 중 후자 채택 (간결)
+- 빈 items 분기는 `polygon` fetch 회피 — V-World 호출 비용 절약 (parse_building_title
+  signature 가 받지만 사용 안 됨, 호출 측이 미리 분기)
+
+**SP4-iii-a 미포함 (후속)**:
+- FU 40: `Building.geom` 정확한 footprint — V-World AL_D194 건물 레이어 또는
+  R2 PMTiles (SP4-iii-e)
+- FU 41: `mainPurpsCdNm` / `strctCdNm` 한글 매핑표 확장 (28+ 케이스)
+- FU 42: `fetch_by_id` 구현 — `mgmBldrgstPk` 문자열 키 별도 endpoint
+- FU 43: 캐시 정책 (`expires_at = fetched_at + 30 days` per data.go.kr docs)
+- FU 44: 토지대장 (`getLandRegInfo` 등) — SP4-iii-a-2 또는 SP4-iii-b 와 묶음
 
 ## 워크스페이스 구조 (현재)
 
@@ -403,11 +494,17 @@ crates/operations/
 ├── listing-review-queue/  LRQ (46 tests, optimistic locking)
 ├── listing-report/        ListingReport (59 tests)
 └── operations-meta/       FeaturedContent + AlertHistory (86 tests)
-crates/db/                 PgUserRepository (Walking Skeleton)
+crates/data-clients/
+├── raw-capture/           RawCapture trait + NoOpRawCapture (SP4-iii-d)
+├── vworld/                V-World 외부 API 클라이언트 (SP4-ii)
+└── data-go-kr/            data.go.kr 건축물대장 + DataGoKrBuildingReader (SP4-iii-a)
+crates/circuit-breaker/    Policy + Breaker + execute (SP4-ii)
+crates/db/                 8+ PgRepository + PgRawCapture (SP4-iii-d)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
+services/outbox-publisher/ Outbox publisher binary (SP4-i)
 ```
 
-총 **30 crate, ~1198 tests (1101 단위 + 112 통합), Rust 1.88.**
+총 **31 crate, ~1232 tests (1130 단위 + 102 통합), Rust 1.88.**
 
 ## CI 상태
 
@@ -427,11 +524,11 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **FU 일괄 정리** (추천 다음, 0.5-1일): 기존 부채 (FU 4/6/8/12/13/14/15/16/17/18/26-34).
-  특히 FU 34 (workspace `--all-targets` clippy 부채) — CI workflow 강화하면서
-  shared-kernel/user-domain/data-pipeline-control 잠복 lint fix
-- **SP4-iii** (분해): data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장,
-  parcel_external_data 마이그 (3-5일)
+- **SP4-iii-b** (실거래가, 1-2일): data.go.kr 실거래가 API + RealTransactionReader.
+  같은 패턴 (DataGoKrClient 재사용 + 실거래가 endpoint 추가)
+- **SP4-iii-c** (법제처, 1-2일): 법제처 API + 도시계획 텍스트 fetch
+- **SP4-iii-e** (R2 Reader 6, 2-3일): PMTiles 정적 ETL + IndustrialComplexReader,
+  ManufacturerReader, 정확한 BuildingFootprintReader (FU 40)
 - **SP6 분해**: Frontend (Next.js + React 19, 4-7일) — 인증/매물/북마크/알림
   핸들러가 SP5-* 의 PgRepository + V-World ParcelReader 활용
 - **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)

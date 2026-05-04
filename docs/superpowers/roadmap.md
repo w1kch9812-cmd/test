@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP4-iii-d 종료 직후)
-> **현재 main**: `315af85` 위 SSOT 갱신 commit (FU 27 + FU 34 closed)
+> **갱신일**: 2026-05-04 (SP4-iii-a 종료 직후)
+> **현재 main**: `c210801` (SP4-iii-a T5) 후 SSOT 갱신 commit
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -26,8 +26,9 @@
 | **4-ii** | V-World 외부 API + Circuit Breaker | `crates/circuit-breaker` (Policy + 3-state Breaker + execute) + `crates/data-clients/vworld` (Client + ParcelReader + ACL parser + RawCapture) + 23 단위 + 6 wiremock 통합 | ✅ |
 | **FU 34** | 잠복 lint 부채 일괄 정리 + CI 강화 | shared-kernel/user-domain/listing-domain/data-pipeline-control/auth/db tests 14건 lint fix + workflow `--all-targets` 추가 | ✅ |
 | **4-iii-d** | RawCapture trait 분리 + PgRawCapture (FU 27 closed) | `crates/data-clients/raw-capture` 신규 + 마이그 V003_06 (`parcel_external_data` 테이블) + `PgRawCapture` UPSERT + 3 통합 테스트 | ✅ |
+| **4-iii-a** | data.go.kr 건축물대장 + DataGoKrBuildingReader | `crates/data-clients/data-go-kr` 신규 + `Policy::data_go_kr_default` + pnu_split + ACL parser (한글→enum 매핑) + V-World geom 합성 + 25 단위 + 6 wiremock 통합 | ✅ |
 
-**누적**: 30 crate, ~1198 tests (1101 단위 + 112 통합), 3 CI workflow 그린, CI clippy `--all-targets` 강화.
+**누적**: 31 crate, ~1232 tests (1130 단위 + 102 통합), 3 CI workflow 그린, CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -37,20 +38,31 @@
 
 ## 다음 sub-project (사용자 결정)
 
-### A. SP4-iii — data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장
+### A. SP4-iii — data.go.kr + 법제처 + R2 Reader 6 (남은 분해)
 
-**목표**: SP4-ii 의 V-World 패턴을 답습해 나머지 외부 API + R2 Reader 통합. `parcel_external_data` 테이블 + DB 저장 RawCapture 구현체 (FU 27).
+**목표**: SP4-iii-d (RawCapture infra) + SP4-iii-a (data.go.kr 건축물대장)
+완료. 남은 sub-task:
 
-**작업**:
-- data.go.kr (실거래가, 사업자번호 검증) — `crates/data-clients/data-go-kr/`
-- 법제처 (법령 API) — `crates/data-clients/korean-law/`
-- R2 PMTiles Reader 6: Parcel(bbox markers), Building, IndustrialComplex, Manufacturer, RealTransaction, CourtAuction
-- `parcel_external_data` 테이블 마이그 + DB RawCapture impl
-- FU 26: `clippy::disallowed_types` 로 reqwest::Client 직접 호출 차단
-- FU 30: `fetch_markers_in_bbox` PMTiles 또는 V-World BBOX WFS
+| Sub | 영역 | 상태 |
+|---|---|---|
+| 4-iii-d | RawCapture trait + PgRawCapture | ✅ (2026-05-04) |
+| 4-iii-a | data.go.kr 건축물대장 + DataGoKrBuildingReader | ✅ (2026-05-04) |
+| 4-iii-b | data.go.kr 실거래가 + RealTransactionReader | 미착수 (1-2일) |
+| 4-iii-c | 법제처 (도시계획 텍스트) | 미착수 (1-2일) |
+| 4-iii-e | R2 PMTiles Reader 6 (Parcel bbox markers, Building footprint, IC, Mfr, ...) + FU 40 | 미착수 (2-3일) |
 
-**추정**: 분해 필요 (SP4-iii-a/b/c 각 1-2일, 총 3-5일).
-**Spec status**: 미작성.
+**미해소 follow-up (SP4-ii 잔여)**:
+- FU 26: `clippy::disallowed_types` reqwest::Client 직접 호출 차단
+- FU 28: Redis 캐시 (TTL 24h)
+- FU 29: Sentry alert on Breaker open
+- FU 30: `fetch_markers_in_bbox` PMTiles 또는 V-World BBOX WFS (SP4-iii-e)
+
+**SP4-iii-a 발견 follow-up**:
+- FU 40: `Building.geom` 정확한 footprint (V-World AL_D194 또는 R2 PMTiles)
+- FU 41: 한글 라벨 매핑표 확장 (28+ 케이스)
+- FU 42: `BuildingReader::fetch_by_id` (mgmBldrgstPk endpoint)
+- FU 43: 캐시 정책 (`expires_at = fetched_at + 30 days`)
+- FU 44: 토지대장 endpoint
 
 ### B. FU 일괄 정리 (작은 빚 닫기)
 
@@ -122,5 +134,6 @@ SP8 (IaC — Pulumi)
 - **로컬 cargo 작동** (MSVC Build Tools 설치 완료, 2026-05-03)
 - **Repo public** (`w1kch9812-cmd/test`) — GH Actions 무료
 - **CI 3 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset)
-- **마지막 commit**: `215826a` (SP5-iii 종료)
+- **마지막 commit**: `c210801` (SP4-iii-a T5 — wiremock integration tests) +
+  로컬 SSOT 갱신 commit (push 대기)
 - **다음 commit 시 항상**: 본 문서 갱신 → SP 진행 상태 SSOT 유지
