@@ -25,7 +25,9 @@ members = [
     "crates/auth",
     "crates/data-pipeline-control",
     "crates/db",
+    "crates/outbox-publisher",
     "services/api",
+    "services/outbox-publisher",
     # 다른 services/* 와 crates/* 는 sub-project 2+에서 추가됨.
 ]
 
