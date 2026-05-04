@@ -195,4 +195,19 @@ mod verifier_enum_tests {
         };
         assert_eq!(err, AuthError::MissingSubject);
     }
+
+    #[tokio::test]
+    async fn real_dispatches_to_inner_verifier() {
+        // Verifier::Real arm 디스패치 자체를 커버 — 토큰 형식 불량으로 즉시 MalformedToken
+        let cache = Arc::new(JwksCache::new(
+            "http://127.0.0.1:1/jwks".into(),
+            reqwest::Client::new(),
+        ));
+        let inner = JwtVerifier::new("http://issuer".into(), "aud".into(), cache);
+        let v = Verifier::Real(inner);
+        let Err(err) = v.verify("not-a-jwt").await else {
+            panic!("expected error");
+        };
+        assert_eq!(err, AuthError::MalformedToken);
+    }
 }
