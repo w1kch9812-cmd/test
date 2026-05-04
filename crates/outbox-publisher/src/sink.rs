@@ -4,6 +4,9 @@
 //! (Kafka / Webhook / SQS / NATS) 은 후속 sub-project 에서 같은 trait 구현체로
 //! 추가해요.
 
+// `Sink` / `LoggingSink` 등 의도된 공개 API 형태 — 모듈명 중복 허용.
+#![allow(clippy::module_name_repetitions)]
+
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use async_trait::async_trait;

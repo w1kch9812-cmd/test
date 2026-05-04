@@ -4,6 +4,9 @@
 //! `mark_published`. 어느 단계든 실패는 batch 격리 — row 가 미발행 상태로 남아
 //! 다음 tick 에 재시도.
 
+// `PublisherError` 등 의도된 공개 API 형태.
+#![allow(clippy::module_name_repetitions)]
+
 use chrono::Utc;
 use outbox_event_domain::repository::{OutboxRepository, RepoError};
 use thiserror::Error;
