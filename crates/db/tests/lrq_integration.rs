@@ -35,7 +35,7 @@ use shared_kernel::transaction_type::TransactionType;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 /// `User` + `Listing` 시드 — `listing_review_queue.listing_id` `FK` 충족.
 async fn seed_listing_with_owner(
@@ -55,7 +55,7 @@ async fn seed_listing_with_owner(
     )
     .unwrap();
     let owner_id = owner.id.clone();
-    user_repo.save(&owner).await.unwrap();
+    user_repo.save(&owner, test_ctx()).await.unwrap();
 
     let listing_repo = PgListingRepository::new(pool.clone());
     let listing = Listing::try_new_draft(
@@ -75,7 +75,7 @@ async fn seed_listing_with_owner(
     )
     .expect("listing");
     let listing_id = listing.id.clone();
-    listing_repo.save(&listing).await.unwrap();
+    listing_repo.save(&listing, test_ctx()).await.unwrap();
 
     (owner_id, listing_id)
 }
@@ -94,7 +94,7 @@ async fn seed_admin(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMark
     )
     .unwrap();
     let admin_id = admin.id.clone();
-    repo.save(&admin).await.unwrap();
+    repo.save(&admin, test_ctx()).await.unwrap();
     admin_id
 }
 

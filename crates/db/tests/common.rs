@@ -11,6 +11,7 @@
 )]
 #![cfg(feature = "integration")]
 
+use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 
@@ -37,4 +38,13 @@ pub async fn truncate_all(pool: &PgPool) {
     .execute(pool)
     .await
     .expect("truncate failed");
+}
+
+/// 테스트용 시스템 액션 [`MutationContext`] — seed 호출에 표준화된 ctx 제공.
+///
+/// `correlation_id = "test-seed"`, `action = "create"`. `actor_id = None`
+/// (시스템 액션). audit_log row 가 들어가지만 테스트가 검증하지 않는 한 무시해요.
+#[must_use]
+pub fn test_ctx() -> MutationContext {
+    MutationContext::new_system_action("test-seed", "create")
 }

@@ -10,6 +10,7 @@ use axum::response::Response;
 use chrono::Utc;
 use shared_kernel::email::Email;
 use shared_kernel::id::Id;
+use shared_kernel::mutation::MutationContext;
 use tracing::warn;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
@@ -102,8 +103,13 @@ async fn resolve_or_create_user(state: &AuthState, claims: &Claims) -> Result<Us
     )
     .map_err(|e| AuthError::UserProvisioningFailed(format!("domain validation: {e}")))?;
 
+    // SP5-iv: first-sign-in 은 시스템 액션 — `actor_id = None`, `action = "first_sign_in"`.
+    // `correlation_id` 는 zitadel sub (HTTP request_id 자동 주입은 SP7 후속).
+    let ctx = MutationContext::new_system_action(claims.sub.clone(), "first_sign_in")
+        .with_metadata(serde_json::json!({"zitadel_sub": &claims.sub}));
+
     // race: 동시 첫 로그인 — save 실패 시 fetch 재시도
-    if let Err(save_err) = state.user_repo.save(&user).await {
+    if let Err(save_err) = state.user_repo.save(&user, ctx).await {
         warn!(?save_err, sub = %claims.sub, "save failed, retrying find");
         if let Some(existing) = state
             .user_repo

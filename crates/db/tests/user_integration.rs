@@ -12,7 +12,7 @@ use shared_kernel::id::{Id, UserMarker};
 use user_domain::entity::{User, UserKind, UserRole};
 use user_domain::repository::{RepoError, UserRepository};
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 fn make_user(zsub: &str, email: &str) -> User {
     let now = Utc::now();
@@ -42,7 +42,7 @@ async fn round_trip_user_with_18_fields() {
     let repo = PgUserRepository::new(pool);
 
     let user = make_user("zsub-1", "alice@example.com");
-    repo.save(&user).await.expect("save");
+    repo.save(&user, test_ctx()).await.expect("save");
 
     let fetched = repo
         .find_by_id(&user.id)
@@ -66,7 +66,7 @@ async fn find_by_zitadel_sub_returns_user() {
     let repo = PgUserRepository::new(pool);
 
     let user = make_user("zsub-2", "bob@example.com");
-    repo.save(&user).await.expect("save");
+    repo.save(&user, test_ctx()).await.expect("save");
 
     let fetched = repo
         .find_by_zitadel_sub("zsub-2")
@@ -83,7 +83,7 @@ async fn find_by_email_returns_user() {
     let repo = PgUserRepository::new(pool);
 
     let user = make_user("zsub-3", "carol@example.com");
-    repo.save(&user).await.expect("save");
+    repo.save(&user, test_ctx()).await.expect("save");
 
     let email = Email::try_new("carol@example.com").unwrap();
     let fetched = repo
@@ -102,9 +102,9 @@ async fn duplicate_zitadel_sub_returns_conflict() {
 
     let u1 = make_user("zsub-dup", "u1@example.com");
     let u2 = make_user("zsub-dup", "u2@example.com");
-    repo.save(&u1).await.expect("first save ok");
+    repo.save(&u1, test_ctx()).await.expect("first save ok");
 
-    let err = repo.save(&u2).await.unwrap_err();
+    let err = repo.save(&u2, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::Conflict));
 }
 
@@ -115,11 +115,11 @@ async fn occ_version_mismatch_returns_conflict() {
     let repo = PgUserRepository::new(pool);
 
     let mut user = make_user("zsub-occ", "occ@example.com");
-    repo.save(&user).await.expect("save v1");
+    repo.save(&user, test_ctx()).await.expect("save v1");
 
     // 직접 version 을 안 맞게 조작 — 동시 update 시뮬레이션
     user.version = 99;
-    let err = repo.save(&user).await.unwrap_err();
+    let err = repo.save(&user, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::Conflict));
 }
 

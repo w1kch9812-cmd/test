@@ -26,7 +26,7 @@ use shared_kernel::transaction_type::TransactionType;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 /// `User` + `Listing` 시드 — `listing_photo` 의 `FK` 충족.
 async fn seed_listing(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<ListingMarker> {
@@ -42,7 +42,7 @@ async fn seed_listing(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<Listin
     )
     .unwrap();
     let owner_id = owner.id.clone();
-    user_repo.save(&owner).await.unwrap();
+    user_repo.save(&owner, test_ctx()).await.unwrap();
 
     let listing_repo = PgListingRepository::new(pool.clone());
     let listing = Listing::try_new_draft(
@@ -62,7 +62,7 @@ async fn seed_listing(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<Listin
     )
     .expect("listing");
     let listing_id = listing.id.clone();
-    listing_repo.save(&listing).await.unwrap();
+    listing_repo.save(&listing, test_ctx()).await.unwrap();
     listing_id
 }
 
@@ -92,7 +92,7 @@ async fn round_trip_via_find_by_listing() {
     let repo = PgListingPhotoRepository::new(pool);
 
     let photo = make_photo(listing_id.clone(), 0);
-    repo.save(&photo).await.expect("save");
+    repo.save(&photo, test_ctx()).await.expect("save");
 
     let photos = repo.find_by_listing(&listing_id).await.expect("find");
     assert_eq!(photos.len(), 1);
@@ -112,9 +112,15 @@ async fn find_by_listing_orders_by_display_order_asc() {
     let listing_id = seed_listing(&pool, "zsub-photo-2", "photo2@example.com").await;
     let repo = PgListingPhotoRepository::new(pool);
 
-    repo.save(&make_photo(listing_id.clone(), 2)).await.unwrap();
-    repo.save(&make_photo(listing_id.clone(), 0)).await.unwrap();
-    repo.save(&make_photo(listing_id.clone(), 1)).await.unwrap();
+    repo.save(&make_photo(listing_id.clone(), 2), test_ctx())
+        .await
+        .unwrap();
+    repo.save(&make_photo(listing_id.clone(), 0), test_ctx())
+        .await
+        .unwrap();
+    repo.save(&make_photo(listing_id.clone(), 1), test_ctx())
+        .await
+        .unwrap();
 
     let photos = repo.find_by_listing(&listing_id).await.unwrap();
     assert_eq!(photos.len(), 3);
@@ -131,7 +137,7 @@ async fn soft_deleted_photo_excluded_from_find() {
     let repo = PgListingPhotoRepository::new(pool.clone());
 
     let photo = make_photo(listing_id.clone(), 0);
-    repo.save(&photo).await.unwrap();
+    repo.save(&photo, test_ctx()).await.unwrap();
 
     sqlx::query("update listing_photo set deleted_at = now() where id = $1")
         .bind(photo.id.as_str())
@@ -151,9 +157,9 @@ async fn delete_removes_photo() {
     let repo = PgListingPhotoRepository::new(pool);
 
     let photo = make_photo(listing_id.clone(), 0);
-    repo.save(&photo).await.unwrap();
+    repo.save(&photo, test_ctx()).await.unwrap();
 
-    repo.delete(&photo.id).await.expect("delete ok");
+    repo.delete(&photo.id, test_ctx()).await.expect("delete ok");
     let photos = repo.find_by_listing(&listing_id).await.unwrap();
     assert_eq!(photos.len(), 0);
 }
@@ -164,7 +170,7 @@ async fn delete_nonexistent_returns_not_found() {
     truncate_all(&pool).await;
     let repo = PgListingPhotoRepository::new(pool);
     let id: Id<ListingPhotoMarker> = Id::new();
-    let err = repo.delete(&id).await.unwrap_err();
+    let err = repo.delete(&id, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::NotFound));
 }
 
@@ -176,7 +182,7 @@ async fn cascade_delete_on_listing_removal() {
     let repo = PgListingPhotoRepository::new(pool.clone());
 
     let photo = make_photo(listing_id.clone(), 0);
-    repo.save(&photo).await.unwrap();
+    repo.save(&photo, test_ctx()).await.unwrap();
 
     // listing 삭제 → ON DELETE CASCADE 가 listing_photo 도 제거.
     sqlx::query("delete from listing where id = $1")

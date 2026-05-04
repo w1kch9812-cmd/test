@@ -12,7 +12,7 @@ use shared_kernel::id::Id;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::{RepoError, UserRepository};
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 #[tokio::test]
 async fn unique_violation_zitadel_sub_maps_to_conflict() {
@@ -40,8 +40,8 @@ async fn unique_violation_zitadel_sub_maps_to_conflict() {
     )
     .unwrap();
 
-    repo.save(&u1).await.expect("first save");
-    let err = repo.save(&u2).await.unwrap_err();
+    repo.save(&u1, test_ctx()).await.expect("first save");
+    let err = repo.save(&u2, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::Conflict));
 }
 
@@ -71,7 +71,7 @@ async fn unique_violation_email_maps_to_conflict() {
     )
     .unwrap();
 
-    repo.save(&u1).await.expect("first save");
-    let err = repo.save(&u2).await.unwrap_err();
+    repo.save(&u1, test_ctx()).await.expect("first save");
+    let err = repo.save(&u2, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::Conflict));
 }

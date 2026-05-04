@@ -26,7 +26,7 @@ use shared_kernel::transaction_type::TransactionType;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 async fn seed_owner(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMarker> {
     let repo = PgUserRepository::new(pool.clone());
@@ -41,7 +41,7 @@ async fn seed_owner(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMark
     )
     .unwrap();
     let owner_id = owner.id.clone();
-    repo.save(&owner).await.unwrap();
+    repo.save(&owner, test_ctx()).await.unwrap();
     owner_id
 }
 
@@ -73,7 +73,7 @@ async fn round_trip_listing_with_postgis() {
     let repo = PgListingRepository::new(pool);
 
     let listing = make_listing_sale(owner);
-    repo.save(&listing).await.expect("save");
+    repo.save(&listing, test_ctx()).await.expect("save");
 
     let fetched = repo.find(&listing.id).await.expect("find").expect("Some");
     assert_eq!(fetched.id.as_str(), listing.id.as_str());
@@ -102,7 +102,7 @@ async fn save_without_geom_point() {
 
     let mut listing = make_listing_sale(owner);
     listing.geom_point = None;
-    repo.save(&listing).await.expect("save");
+    repo.save(&listing, test_ctx()).await.expect("save");
     let fetched = repo.find(&listing.id).await.unwrap().unwrap();
     assert!(fetched.geom_point.is_none());
 }
@@ -116,8 +116,8 @@ async fn find_by_owner_returns_owner_listings() {
 
     let l1 = make_listing_sale(owner.clone());
     let l2 = make_listing_sale(owner.clone());
-    repo.save(&l1).await.unwrap();
-    repo.save(&l2).await.unwrap();
+    repo.save(&l1, test_ctx()).await.unwrap();
+    repo.save(&l2, test_ctx()).await.unwrap();
 
     let results = repo.find_by_owner(&owner, None).await.expect("ok");
     assert_eq!(results.len(), 2);
@@ -131,7 +131,7 @@ async fn find_by_owner_with_status_filter() {
     let repo = PgListingRepository::new(pool);
 
     let l1 = make_listing_sale(owner.clone());
-    repo.save(&l1).await.unwrap();
+    repo.save(&l1, test_ctx()).await.unwrap();
 
     // Draft 만 있음.
     let drafts = repo
@@ -165,9 +165,9 @@ async fn occ_version_mismatch_returns_conflict() {
     let repo = PgListingRepository::new(pool);
 
     let mut listing = make_listing_sale(owner);
-    repo.save(&listing).await.unwrap();
+    repo.save(&listing, test_ctx()).await.unwrap();
     listing.version = 99;
-    let err = repo.save(&listing).await.unwrap_err();
+    let err = repo.save(&listing, test_ctx()).await.unwrap_err();
     assert!(matches!(err, RepoError::Conflict));
 }
 
@@ -179,11 +179,11 @@ async fn update_bumps_version() {
     let repo = PgListingRepository::new(pool);
 
     let mut listing = make_listing_sale(owner);
-    repo.save(&listing).await.unwrap();
+    repo.save(&listing, test_ctx()).await.unwrap();
 
     listing.view_count = 5;
     listing.version = 1;
-    repo.save(&listing).await.unwrap();
+    repo.save(&listing, test_ctx()).await.unwrap();
 
     let fetched = repo.find(&listing.id).await.unwrap().unwrap();
     assert_eq!(fetched.version, 2);
@@ -215,7 +215,7 @@ async fn save_monthly_rent_with_deposit_and_rent() {
     )
     .expect("listing");
 
-    repo.save(&listing).await.expect("save");
+    repo.save(&listing, test_ctx()).await.expect("save");
     let fetched = repo.find(&listing.id).await.unwrap().unwrap();
     assert_eq!(fetched.deposit, listing.deposit);
     assert_eq!(fetched.monthly_rent, listing.monthly_rent);
@@ -231,7 +231,7 @@ async fn find_markers_in_bbox_returns_active_only() {
 
     // Draft 매물 — bbox 안 — markers 에 안 잡힘 (status='active' 필터).
     let l1 = make_listing_sale(owner.clone());
-    repo.save(&l1).await.unwrap();
+    repo.save(&l1, test_ctx()).await.unwrap();
 
     let bbox = BoundingBox::try_new_wgs84(126.9, 37.4, 127.1, 37.6).unwrap();
     let markers = repo.find_markers_in_bbox(bbox).await.expect("ok");

@@ -28,7 +28,7 @@ use shared_kernel::mutation::MutationContext;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
-use common::{setup_test_pool, truncate_all};
+use common::{setup_test_pool, test_ctx, truncate_all};
 
 /// 테스트용 단순 도메인 이벤트.
 #[derive(Debug)]
@@ -68,7 +68,7 @@ async fn seed_user(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMarke
     )
     .unwrap();
     let user_id = user.id.clone();
-    repo.save(&user).await.unwrap();
+    repo.save(&user, test_ctx()).await.unwrap();
     user_id
 }
 
