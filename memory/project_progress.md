@@ -1,8 +1,15 @@
 ---
-name: 프로젝트 진행 현황 (2026-05-03)
-description: SP1+2 완료, SP3 T1-T9 코드 푸시 + 로컬 1050 tests 그린, repo public 전환 (test) — CI 그린 검증 진행 중
+name: 프로젝트 진행 현황 (2026-05-04)
+description: SP1+2+3+5-i+5-iii+5-iv 완료 (25 crate, ~1130 tests). SP5 시리즈 종료 — 9 BC 모두 transactional audit/outbox 패턴.
 type: project
 ---
+
+## ⚠️ 환경 변경 (2026-05-04)
+
+- **로컬 머신 변경**: 어제 (2026-05-03) MSVC Build Tools 설치된 머신과 다른 환경에서 fresh `git clone` 진행 → cargo / rustup 미설치
+- **결과**: SP5-iv (T1-T10) 작업이 로컬 cargo 검증 없이 진행됨 → **CI 그린 검증 필수**
+- **검증 경로**: 사용자가 push 결정 시 GitHub Actions 3 workflow (CI / db-migrations / walking-skeleton) 가 진실 — 빨강 시 즉시 fix commit
+- 다음 SP 시작 전 rustup 설치 권장 (1.88.0 + rustfmt + clippy + rust-analyzer)
 
 ## ⚠️ 인프라 변경 (2026-05-03)
 
@@ -142,11 +149,50 @@ type: project
 - AuthCrate clippy 빚: `crates/auth/src/verifier.rs` 의 pre-existing `clippy::panic` + `clippy::manual_let_else` — SP3 잔재, 별도 정리 필요
 
 **SP5-iii 미포함 (후속)**:
-- SP5-iv: SP5-i 의 User/Listing/ListingPhoto save() 에 MutationContext 추가
+- SP5-iv: SP5-i 의 User/Listing/ListingPhoto save() 에 MutationContext 추가 → ✅ **완료** (2026-05-04)
 - SP5-ii: Insights BC RDS (Bookmark/SearchHistory/AnalysisReport/Notification)
 - SP4: 외부 API ingestion + R2 Reader + Outbox publisher worker
 - AuditLog full diff capture (before_state + after_state) — 별도
 - OperationsMeta `find_unacknowledged_alerts` trait doc 갱신 (created_at ASC → severity DESC + created_at DESC)
+
+### Sub-project 5-iv: Core BC `MutationContext` 일원화 (완료, T1-T10)
+
+- 3 도메인 trait 시그니처 변경: `UserRepository::save` / `ListingRepository::save` /
+  `ListingPhotoRepository::save` 모두 `(agg, ctx: MutationContext)`. `ListingPhotoRepository::delete`
+  도 `(id, ctx)` 로 — hard delete 도 audit 대상.
+- 3 PgImpl 트랜잭션화 (`crates/db/src/{user,listing,listing_photo}.rs`):
+  · 1) `pool.begin()` → 2) Aggregate UPSERT (또는 hard delete) → 3) `audit_log` INSERT
+  (`resource_kind = 'user' / 'listing' / 'listing_photo'`) → 4) `ctx.events` 마다 `outbox_event`
+  INSERT (`aggregate_kind` 동일) → 5) `tx.commit()`. 부분 실패 → 자동 rollback (tx Drop)
+  · `PgListingPhotoRepository` 만 `write_audit_log` + `write_outbox_events` 모듈-private
+  헬퍼로 추출 (save / delete 공유)
+- `crates/auth/src/middleware.rs`: first-sign-in 이 `MutationContext::new_system_action(claims.sub,
+  "first_sign_in").with_metadata({"zitadel_sub": ...})` 호출 후 `repo.save(&user, ctx)`. race
+  재시도는 find 재호출만 — 추가 ctx 불필요
+- `crates/db/tests/common.rs` 신규 helper `pub fn test_ctx() -> MutationContext` →
+  `new_system_action("test-seed", "create")`. seed 호출 일괄 통일
+- 통합 테스트 신규 10 (User 4 + Listing 3 + ListingPhoto 3):
+  · `save_inserts_<kind>_audit_log_in_one_tx` — audit_log 1 row 검증
+  · `save_<kind>_with_events_inserts_outbox_per_event` — outbox row 수 검증
+  · `save_<kind>_system_action_records_null_actor` — actor_id NULL
+  · User 만: `save_user_with_metadata_writes_to_after_state` — metadata → after_state JSON
+  · ListingPhoto 만: `delete_photo_audit_logs_with_action_delete` — hard delete 도 audit
+- 기존 통합 테스트 9 파일 (user / listing / listing_photo / error_map / bvq / lrq /
+  listing_report / operations_meta / admin_action) seed 호출 모두 `test_ctx()` 사용. PgOutboxRepository
+  call sites 는 의도적으로 미변경 (Outbox 자체는 transactional 패턴 대상 아님)
+- 누적 테스트: 1120 → ~1130 (단위 1058 + 통합 72)
+- 환경 한계: 본 작업 머신에 cargo / rustup 미설치 → 로컬 검증 0. CI 푸시로 검증 필요
+
+**SSS 7 기둥 결함 닫음 (SP5-iii 가 6 BC 에서 닫은 것 + Core BC 3 BC 추가)**:
+- 1 일관성: 9 BC 모두 동일 `save(agg, ctx)` 시그니처 + transactional 패턴. SP5 시리즈 종료
+- 3 추적성: User/Listing/ListingPhoto 의 save (+ photo delete) 모두 audit_log row 자동 INSERT
+- 6 SSOT: Repository trait 시그니처 단일화 — 신규 BC 도 같은 패턴 채택 강제
+
+**SP5-iv 미포함 (후속)**:
+- SP6 시작 시: `MutationContext` 가 application layer 에서 자주 쓰이므로 `services/api` 에
+  `http_user_action(req, action)` 류 helper 추가 검토 (FU 19)
+- HTTP X-Request-ID → `correlation_id` 자동 주입 (Axum middleware) → SP7 관측성과 묶음
+- AuditLog full diff (`before_state` + `after_state`) — 9 BC 공통 후속
 
 ## 워크스페이스 구조 (현재)
 
@@ -182,7 +228,7 @@ crates/db/                 PgUserRepository (Walking Skeleton)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
 
-총 **24 crate, 1017 단위 테스트, Rust 1.88.**
+총 **25 crate, ~1130 tests (1058 단위 + 72 통합), Rust 1.88.**
 
 ## CI 상태
 
@@ -202,10 +248,10 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **즉시**: GH Actions billing 복구 → `gh run rerun` 또는 빈 commit 푸시 → 3 workflow 그린 확인 → SP3 T10 (project_progress 갱신, 누적 카운트 확정)
-- **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 에 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
-- **Sub-project 4 (외부 API)**: Reader trait 구현체 (V-World, 법제처, data.go.kr)
-- **Sub-project 5 (Repository SQLx 구현)**: 도메인 → DB 통합 (3개 BC 모두)
+- **즉시**: 사용자가 push 결정 시 GitHub Actions 3 workflow 그린 검증 (cargo / clippy / test 모두 CI 가 진실)
+- **SP5-ii** (추천 다음): Insights BC RDS Repository — Bookmark/SearchHistory/AnalysisReport/Notification (2-3일)
+- **SP4** (분해 필요): 외부 API + R2 Reader + Outbox publisher (4-7일)
+- **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
 - 6: Frontend (Next.js)
 - 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry)
 - 8: IaC (Pulumi RDS/R2/ECS)

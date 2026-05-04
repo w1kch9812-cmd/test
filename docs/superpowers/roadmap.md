@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP5-iii 종료 직후)
-> **현재 main**: `215826a`
+> **갱신일**: 2026-05-04 (SP5-iv 종료 직후)
+> **현재 main**: 로컬 (cargo 미설치 환경 — CI 검증 대기)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -20,36 +20,26 @@
 | **3** | Auth — Zitadel JWT 핵심 게이트 | `crates/auth` (Verifier enum + JwksCache + middleware), Mock JWT CI mode | ✅ |
 | **5-i** | Core BC RDS Repository SQLx | PgListingRepository + PgListingPhotoRepository + PgUserRepository 18 필드 보강 | ✅ |
 | **5-iii** | Audit + Pipeline + Operations RDS Repo + 트랜잭션 Outbox | MutationContext + 8 PgRepository + audit_log/outbox transactional 패턴 | ✅ |
+| **5-iv** | Core BC `MutationContext` 일원화 | 3 trait 시그니처 + 3 PgImpl tx + auth middleware first_sign_in + 10 신규 통합 테스트 | ✅ |
 
-**누적**: 25 crate, ~1120 tests (1058 단위 + 62 통합), 3 CI workflow 그린.
+**누적**: 25 crate, ~1130 tests (1058 단위 + 72 통합), 3 CI workflow (검증 대기 — 로컬 머신 cargo 미설치).
+
+**SP5 시리즈 닫음**: 9 BC 모두 동일 transactional `save(agg, ctx)` 패턴 — 모든 mutation 이 audit_log INSERT 와 같은 tx.
 
 ---
 
 ## 다음 sub-project (사용자 결정)
 
-### A. SP5-iv — SP5-i refactor (가장 작음, 가시적)
-
-**목표**: SP5-i 의 `User`/`Listing`/`ListingPhoto` PgRepository `save()` 에 `MutationContext` 추가 — SSS 약속 ("모든 mutation audit") 완전 닫음.
-
-**작업**:
-1. 3 도메인 trait 시그니처 변경: `save(aggregate, ctx)` 형태로
-2. PgUserRepository / PgListingRepository / PgListingPhotoRepository 의 `save()` 가 SP5-iii 의 transactional 패턴 따름 (audit_log + outbox INSERT 같은 tx)
-3. `services/api` 의 AuthMiddleware first-sign-in 자동 생성 시 `MutationContext::new_system_action(...)` 구성
-4. 통합 테스트 갱신 (audit_log row 검증 추가)
-
-**추정**: 5-8 task, 1-2일.
-**Spec status**: 미작성 — brainstorming 필요.
-
-### B. SP5-ii — Insights BC RDS Repository (패턴 반복)
+### A. SP5-ii — Insights BC RDS Repository (패턴 반복)
 
 **목표**: Bookmark / SearchHistory / AnalysisReport / Notification 4 repo 의 PgImpl.
 
-**작업**: SP5-i + SP5-iii 패턴 답습. 새 도메인 4개. Bookmark 는 2 aggregate (BookmarkListing + BookmarkExternal).
+**작업**: SP5-i + SP5-iii + SP5-iv 패턴 답습. 새 도메인 4개. Bookmark 는 2 aggregate (BookmarkListing + BookmarkExternal).
 
 **추정**: 8-10 task, 2-3일.
 **Spec status**: 미작성.
 
-### C. SP4 — 외부 API ingestion + R2 Reader + Outbox publisher worker (가장 큼)
+### B. SP4 — 외부 API ingestion + R2 Reader + Outbox publisher worker (가장 큼)
 
 **목표**: V-World / data.go.kr / 법제처 API 통합 + 6 R2 Reader 구현체 + Outbox row 를 외부로 발행하는 워커.
 
@@ -63,11 +53,9 @@
 ## 추천 순서
 
 ```
-A (SP5-iv, 1-2일)
-  ↓ "모든 mutation audit" 진짜 완성
-B (SP5-ii, 2-3일)
-  ↓ RDS Repo 패턴 마무리 (SP5 시리즈 종료)
-C (SP4 분해, 4-7일)
+A (SP5-ii, 2-3일)
+  ↓ RDS Repo 패턴 마무리 (SP5 시리즈 완전 종료)
+B (SP4 분해, 4-7일)
   ↓ 실제 데이터 흐름 시작
 SP6 (Frontend Next.js)
 SP7 (관측성 — Grafana / Tempo / Sentry)
