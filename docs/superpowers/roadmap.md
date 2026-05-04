@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP4-i 종료 직후)
-> **현재 main**: `0008182` (CI #189 + walking-skeleton #132 + db-migrations #157 모두 그린)
+> **갱신일**: 2026-05-04 (SP5-ii 종료 직후)
+> **현재 main**: `a76d52c` (CI #191 + walking-skeleton #134 + db-migrations #159 모두 그린)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -22,8 +22,11 @@
 | **5-iii** | Audit + Pipeline + Operations RDS Repo + 트랜잭션 Outbox | MutationContext + 8 PgRepository + audit_log/outbox transactional 패턴 | ✅ |
 | **5-iv** | Core BC `MutationContext` 일원화 | 3 trait 시그니처 + 3 PgImpl tx + auth middleware first_sign_in + 10 신규 통합 테스트 | ✅ |
 | **4-i** | Outbox Publisher Worker | `crates/outbox-publisher` (Sink/tick/LoggingSink/CountingSink) + `services/outbox-publisher` daemon + 4 신규 통합 테스트 | ✅ |
+| **5-ii** | Insights BC RDS Repository | PgBookmarkRepository (composite PK + polymorphic) + PgSearchHistoryRepository (bulk pseudonymize) + PgAnalysisReportRepository (OCC + target_pnus[]) + PgNotificationRepository (멱등 mark_read) + 22 통합 테스트 | ✅ |
 
-**누적**: 27 crate, ~1142 tests (1063 단위 + 79 통합), 3 CI workflow 그린.
+**누적**: 27 crate, ~1166 tests (1063 단위 + 103 통합), 3 CI workflow 그린.
+
+**SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
 **SSS read side 완성**: outbox 약속의 read side 도 채워짐 — Aggregate save → audit_log + outbox_event INSERT (write) → publisher tick → Sink (read) 의 chain 이 양쪽 모두 작동.
 
@@ -31,22 +34,22 @@
 
 ## 다음 sub-project (사용자 결정)
 
-### A. SP5-ii — Insights BC RDS Repository (패턴 반복)
-
-**목표**: Bookmark / SearchHistory / AnalysisReport / Notification 4 repo 의 PgImpl.
-
-**작업**: SP5-i + SP5-iii + SP5-iv 패턴 답습. 새 도메인 4개. Bookmark 는 2 aggregate (BookmarkListing + BookmarkExternal).
-
-**추정**: 8-10 task, 2-3일.
-**Spec status**: 미작성.
-
-### B. SP4-ii — 첫 외부 API 통합 (V-World)
+### A. SP4-ii — 첫 외부 API 통합 (V-World)
 
 **목표**: V-World 단일 API (필지 polygon + 행정 정보) 를 `Parcel` Reader 구현체로 통합. Circuit Breaker + retry + raw_response 보존.
 
 **작업**: SP4-i 의 단순 sink 패턴 답습 — 외부 API client 도 동일 추상화 가능. data.go.kr / 법제처는 SP4-iii+ 분해.
 
 **추정**: 6-8 task, 1-2일.
+**Spec status**: 미작성.
+
+### B. SP6 — Frontend (Next.js + React 19)
+
+**목표**: 인증/매물/북마크/알림 핸들러가 SP5-* 의 PgRepository 를 사용하는 첫 사용자 화면.
+
+**작업**: Next.js 16 + React 19 + Naver Maps SDK + Zitadel OIDC 클라이언트. `services/api` 의 핸들러 추가 + `apps/web` 화면. `MutationContext::new_user_action(...)` helper (`services/api`) 도입.
+
+**추정**: 분해 필요 (SP6-i 인증 / SP6-ii 매물 검색 / SP6-iii 북마크 / SP6-iv 알림 등 4-7일).
 **Spec status**: 미작성.
 
 ### C. 누적 FU 일괄 정리 (작은 빚 닫기)
@@ -58,12 +61,11 @@ FU 4/6/8/12/13/14/15/16/17/18 — 9건 미해소. production 전 필수.
 ## 추천 순서
 
 ```
-A (SP5-ii, 2-3일)
-  ↓ RDS Repo 패턴 마무리 (SP5 시리즈 완전 종료, 13 BC 모두 정합)
-B (SP4-ii, 1-2일)
-  ↓ 첫 실제 외부 데이터 흐름
+A (SP4-ii, 1-2일)
+  ↓ 첫 실제 외부 데이터 흐름 + Circuit Breaker 패턴 첫 도입
 SP4-iii (data.go.kr + 법제처 + R2 Reader 6, 3-5일)
-SP6 (Frontend Next.js)
+B (SP6 분해, 4-7일)
+  ↓ 첫 사용자 화면 — SP5-* 의 모든 Repository 가 활용됨
 SP7 (관측성 — Grafana / Tempo / Sentry — Outbox publisher 도 metrics 추가)
 SP8 (IaC — Pulumi)
 ```

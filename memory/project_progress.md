@@ -1,6 +1,6 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-04)
-description: SP1+2+3+5-i+5-iii+5-iv+4-i 완료 (27 crate, ~1142 tests). SP5 시리즈 종료 + outbox publisher 도입으로 약속의 read side 채움.
+description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii 완료 (27 crate, ~1166 tests). SP5 시리즈 완전 종료 — 13 BC 모두 정합 + outbox read side 작동.
 type: project
 ---
 
@@ -237,6 +237,73 @@ type: project
 - Circuit breaker 통합 — 외부 sink 도입 시
 - Prometheus metrics (`outbox_published_total{aggregate_kind, sink}`) — SP7
 
+### Sub-project 5-ii: Insights BC RDS Repository (완료, T1-T9)
+
+- 4 도메인 trait 시그니처 변경 — mutation 메서드에 `MutationContext` 추가:
+  · `BookmarkRepository`: save_listing/external + delete_listing/external
+  · `SearchHistoryRepository`: insert + pseudonymize_older_than
+  · `AnalysisReportRepository`: save (OCC) + delete
+  · `NotificationRepository`: insert + mark_read + mark_all_read_by_kind
+- 4 신규 PgRepository (`crates/db/src/`):
+  · `bookmark.rs` (~370 lines) — composite PK `(user_id, listing_id)` UPSERT +
+    polymorphic external (id PK + UNIQUE `(user_id, target_kind, target_id)`).
+    write_audit_log/outbox 헬퍼 가 `resource_kind` / `aggregate_kind` 인자화로
+    listing/external 두 Aggregate 처리
+  · `search_history.rs` (~250 lines) — append-mostly + bulk pseudonymize.
+    `pseudonymize_older_than` 단일 audit row + override_metadata
+    `{cutoff_iso, rows_pseudonymized}` 보존
+  · `analysis_report.rs` (~280 lines) — OCC + `target_pnus char(19)[]` ↔
+    `Vec<Pnu>` round-trip via `Vec<&str>` bind. SP5-iv 와 동일 OCC 패턴
+  · `notification.rs` (~310 lines) — append + 멱등 `mark_read` + bulk
+    `mark_all_read_by_kind`. mark_read 는 rows_affected 검증 없이 멱등 (이미
+    읽음 / row 미존재 모두 OK). bulk metadata `{kind, rows_marked, marked_at_iso}` 보존
+- 4 도메인 `MapFromSqlx` impl in `error_map.rs` (Bookmark/SearchHistory/Notification
+  은 fallback `Database`, AnalysisReport 는 OCC `Conflict`)
+- `crates/db/Cargo.toml` 4 도메인 dep 추가
+- `crates/db/tests/common.rs` `truncate_all` 에 5 테이블 추가
+- 통합 테스트 신규 22 (`crates/db/tests/`):
+  · `bookmark_integration.rs` (6): listing/external round-trip + delete audit +
+    delete NotFound + outbox events + UPSERT updates note
+  · `search_history_integration.rs` (4): insert audit + anonymous null
+    user_id + bulk pseudonymize (rows + bulk audit) + metadata 검증
+  · `analysis_report_integration.rs` (6): target_pnus[] round-trip + version
+    bump + OCC conflict + delete audit + delete NotFound + find_by_user
+  · `notification_integration.rs` (4): insert audit + mark_read + 멱등
+    mark_read + bulk mark_all_read_by_kind (rows + audit metadata)
+- 누적 테스트: 1142 → ~1166 (단위 1063 + 통합 103)
+
+**SSS 7기둥 결함 닫음**:
+- 1 일관성: 13 BC 모두 동일 `save(agg, ctx)` / `insert(agg, ctx)` 패턴. SP5
+  시리즈 완전 종료
+- 3 추적성: Insights BC mutation 도 audit_log 자동 기록. bulk operation
+  (pseudonymize / mark_all_read_by_kind) 도 단일 audit row + metadata 로 추적
+- 6 SSOT: Repository trait 시그니처 일원화
+
+**SP5-ii 발견 사항 (lessons)**:
+- T1-T7 모두 한 번에 push 후 CI 그린 (clippy 빨강 0). SP4-i 의 4 iter 빨강
+  (module_name_repetitions, match_wildcard, ignored_unit_patterns) 학습 효과
+  — 미리 차단
+- 로컬 cargo clippy 4 도메인 crate (proc-macro 만 의존) 는 link 가능 →
+  `cargo +1.88.0-x86_64-pc-windows-gnu clippy -p bookmark-domain
+  -p search-history-domain -p analysis-report-domain -p notification-domain
+  --all-features --all-targets -- -D warnings` 그린 검증 후 push (PgImpl 은
+  여전히 sqlx/ring 으로 link 불가 — CI 가 진실)
+- bookmark composite PK delete 의 `audit_log.resource_id` 는 listing_id (30
+  chars) 만 — varchar(50) 안전. user_id 는 actor_id 가 별도 capture
+- bulk operation audit metadata 패턴 검증 — `pseudonymize_older_than` 의
+  `{cutoff_iso, rows_pseudonymized}` + `mark_all_read_by_kind` 의 `{kind,
+  rows_marked, marked_at_iso}`
+- target_pnus char(19)[] round-trip: write 는 `Vec<&str>`, read 는
+  `Vec<String>` → `Pnu::try_new` 도메인 검증. sqlx 가 text[] 호환 처리
+
+**SP5-ii 미포함 (후속)**:
+- FU 21: Bookmark count denormalization (`listing.bookmark_count` 동기) —
+  outbox consumer 또는 trigger
+- FU 22: AnalysisReport `target_pnus` GIN 인덱스 — 사용자 통계 쿼리 시
+- FU 23: Notification push delivery (FCM/APNS/WebPush) — Outbox sink 추가
+- FU 24: SearchHistory NLP / 임베딩 (Phase 3+)
+- FU 25: 365일 알림 retention 워커 (`services/worker/notification_retention`)
+
 ## 워크스페이스 구조 (현재)
 
 ```
@@ -291,11 +358,12 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **SP5-ii** (추천 다음): Insights BC RDS Repository — Bookmark/SearchHistory/AnalysisReport/Notification (2-3일). SP5 시리즈 완전 종료
-- **SP4-ii**: 첫 외부 API 통합 — V-World Parcel Reader (1-2일). Circuit Breaker + retry + raw_response 보존 패턴 첫 도입
+- **SP4-ii** (추천 다음): 첫 외부 API 통합 — V-World Parcel Reader (1-2일).
+  Circuit Breaker + retry + raw_response 보존 패턴 첫 도입
 - **SP4-iii+**: data.go.kr + 법제처 + R2 Reader 6 (3-5일)
+- **SP6 분해**: Frontend (Next.js + React 19, 4-7일) — 인증/매물/북마크/알림
+  핸들러가 SP5-* 의 PgRepository 활용. 사용자 경험 첫 검증 시점
 - **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
-- 6: Frontend (Next.js)
 - 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry — Outbox publisher 도 metrics 추가)
 - 8: IaC (Pulumi RDS/R2/ECS)
 - 9-12: 데이터 파이프라인, AI 어시스턴트, 검색, etc.
