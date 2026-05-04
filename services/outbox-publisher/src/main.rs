@@ -10,7 +10,14 @@
 
 #![forbid(unsafe_code)]
 // `main.rs`: init failure panic은 정답이라 expect/unwrap 허용해요.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+// pedantic: `tokio::select!` 매크로 안 redundant_pub_crate / 비공개 main 의
+// missing_panics_doc / cfg-gated future 의 redundant_async_block 등 false-positive 차단.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::redundant_pub_crate,
+    clippy::redundant_async_block
+)]
 
 use std::env;
 use std::sync::Arc;
@@ -101,6 +108,6 @@ async fn shutdown_signal() {
 
     tokio::select! {
         () = ctrl_c => {}
-        _ = term => {}
+        () = term => {}
     }
 }

@@ -6,7 +6,16 @@
 //! 3. `tick_returns_zero_when_no_rows` — 빈 테이블에서 tick → 0
 //! 4. `tick_failure_leaves_row_unpublished` — `FailingSink` → row 그대로
 
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+// pedantic 광범위 허용: 통합 테스트는 panic-on-bug 가 정상 동작 + DB 접근 시
+// must_use return 무시 / similar_names (aggregate_id vs aggregate_kind) 등
+// 일상적이라 차단.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::similar_names,
+    clippy::let_underscore_must_use
+)]
 #![cfg(feature = "integration")]
 
 mod common;
