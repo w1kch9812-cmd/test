@@ -25,7 +25,7 @@
 | **5-ii** | Insights BC RDS Repository | PgBookmarkRepository (composite PK + polymorphic) + PgSearchHistoryRepository (bulk pseudonymize) + PgAnalysisReportRepository (OCC + target_pnus[]) + PgNotificationRepository (멱등 mark_read) + 22 통합 테스트 | ✅ |
 | **4-ii** | V-World 외부 API + Circuit Breaker | `crates/circuit-breaker` (Policy + 3-state Breaker + execute) + `crates/data-clients/vworld` (Client + ParcelReader + ACL parser + RawCapture) + 23 단위 + 6 wiremock 통합 | ✅ |
 | **FU 34** | 잠복 lint 부채 일괄 정리 + CI 강화 | shared-kernel/user-domain/listing-domain/data-pipeline-control/auth/db tests 14건 lint fix + workflow `--all-targets` 추가 | ✅ |
-| **4-iii-d** | RawCapture trait 분리 + PgRawCapture (FU 27 closed) | `crates/data-clients/raw-capture` 신규 + 마이그 V003_05 (`parcel_external_data` 테이블) + `PgRawCapture` UPSERT + 3 통합 테스트 | ✅ |
+| **4-iii-d** | RawCapture trait 분리 + PgRawCapture (FU 27 closed) | `crates/data-clients/raw-capture` 신규 + 마이그 V003_06 (`parcel_external_data` 테이블) + `PgRawCapture` UPSERT + 3 통합 테스트 | ✅ |
 
 **누적**: 30 crate, ~1198 tests (1101 단위 + 112 통합), 3 CI workflow 그린, CI clippy `--all-targets` 강화.
 

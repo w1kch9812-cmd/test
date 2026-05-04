@@ -46,12 +46,12 @@ crates/data-clients/raw-capture/
 
 ---
 
-## T4 — 마이그레이션 V003_05 + db Cargo dep
+## T4 — 마이그레이션 V003_06 + db Cargo dep
 
-- `migrations/30005_parcel_external_data.sql` 신규
+- `migrations/30006_parcel_external_data.sql` 신규
 - `crates/db/Cargo.toml` deps 에 `raw-capture-client` 추가
 
-**commit**: `feat(sp4-iii-d-t4): migration V003_05 — parcel_external_data table`
+**commit**: `feat(sp4-iii-d-t4): migration V003_06 — parcel_external_data table`
 
 ---
 
@@ -91,7 +91,7 @@ crates/data-clients/raw-capture/
 | 분류 | 파일 | 변경 |
 |---|---|---|
 | 신규 lib | `crates/data-clients/raw-capture/{Cargo.toml, src/lib.rs}` | 신규 |
-| 신규 마이그 | `migrations/30005_parcel_external_data.sql` | 신규 |
+| 신규 마이그 | `migrations/30006_parcel_external_data.sql` | 신규 |
 | 신규 PgImpl | `crates/db/src/raw_capture.rs` | 신규 |
 | 신규 test | `crates/db/tests/raw_capture_integration.rs` | 신규 |
 | workspace | `Cargo.toml` | members 추가 |
@@ -106,7 +106,7 @@ crates/data-clients/raw-capture/
 
 ## 위험 요소
 
-- **`db-migrations.yml` workflow** 가 마이그레이션 적용 후 schema 검증 — V003_05 추가 시 자동 실행
+- **`db-migrations.yml` workflow** 가 마이그레이션 적용 후 schema 검증 — V003_06 추가 시 자동 실행
 - **`truncate_all`** 에 `parcel_external_data` 추가 안 하면 통합 테스트 격리 깨짐
 - **vworld-client backward compat**: 기존 호출자 (현재 0) 가 `vworld_client::RawCapture` 임포트하면 — re-export 유지
 - **vworld-client `crates/data-clients/vworld/src/error.rs`** 의 `RawCaptureError` 이미 정의 — raw-capture-client 로 이동 후 vworld error.rs 에서 re-export
