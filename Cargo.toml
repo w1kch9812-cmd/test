@@ -23,6 +23,7 @@ members = [
     "crates/operations/listing-report",
     "crates/operations/operations-meta",
     "crates/auth",
+    "crates/circuit-breaker",
     "crates/data-pipeline-control",
     "crates/db",
     "crates/outbox-publisher",
