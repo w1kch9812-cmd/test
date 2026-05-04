@@ -4,7 +4,7 @@
 //! v1 (SP4-ii) 은 `NoOpRawCapture` (`tracing::info!` 로 메타데이터만 발행) — DB
 //! `parcel_external_data` 테이블 저장 구현은 SP4-iii (FU 27).
 
-#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_name_repetitions, clippy::doc_markdown)]
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

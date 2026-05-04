@@ -98,8 +98,8 @@ pub fn parse_parcel(raw: &Value, fetched_at: DateTime<Utc>) -> Result<Option<Par
 
     let jibun_address = parse_jibun_address(props)?;
 
-    let land_use_type = parse_land_use_type(props)?;
-    let zoning = parse_zoning(props)?;
+    let land_use_type = parse_land_use_type(props);
+    let zoning = parse_zoning(props);
 
     let area = parse_area(props)?;
     let polygon = parse_polygon(first)?;
@@ -143,13 +143,14 @@ fn parse_jibun_address(props: &Value) -> Result<JibunAddress, ParseError> {
     JibunAddress::try_new(addr).map_err(|e| ParseError::Domain(format!("jibun address: {e}")))
 }
 
-/// V-World `lndcgr_nm` (한글 지목) → 도메인 `LandUseType`.
-fn parse_land_use_type(props: &Value) -> Result<LandUseType, ParseError> {
+/// V-World `lndcgr_nm` (한글 지목) → 도메인 `LandUseType`. 알 수 없는 값은
+/// `Other` fallback — 외부 enum 확장에 견고.
+fn parse_land_use_type(props: &Value) -> LandUseType {
     let lndcgr = props
         .get("lndcgr_nm")
         .and_then(Value::as_str)
         .unwrap_or("기타");
-    Ok(match lndcgr.trim() {
+    match lndcgr.trim() {
         "대" => LandUseType::Building,
         "전" => LandUseType::Field,
         "답" => LandUseType::Paddy,
@@ -159,14 +160,14 @@ fn parse_land_use_type(props: &Value) -> Result<LandUseType, ParseError> {
         "도로" => LandUseType::Road,
         "공원" => LandUseType::Park,
         _ => LandUseType::Other,
-    })
+    }
 }
 
-/// V-World `uq_nm` (한글 용도지역) → 도메인 `Zoning` (4 대분류).
-fn parse_zoning(props: &Value) -> Result<Zoning, ParseError> {
+/// V-World `uq_nm` (한글 용도지역) → 도메인 `Zoning` (4 대분류 + Other).
+fn parse_zoning(props: &Value) -> Zoning {
     let uq = props.get("uq_nm").and_then(Value::as_str).unwrap_or("기타");
     let trimmed = uq.trim();
-    Ok(if trimmed.contains("주거") {
+    if trimmed.contains("주거") {
         Zoning::Residential
     } else if trimmed.contains("상업") {
         Zoning::Commercial
@@ -176,7 +177,7 @@ fn parse_zoning(props: &Value) -> Result<Zoning, ParseError> {
         Zoning::Green
     } else {
         Zoning::Other
-    })
+    }
 }
 
 fn parse_area(props: &Value) -> Result<AreaM2, ParseError> {

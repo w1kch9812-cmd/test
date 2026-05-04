@@ -3,7 +3,7 @@
 //! `fetch_by_pnu` 만 구현 — `fetch_markers_in_bbox` 는 SP4-iii (PMTiles 또는
 //! WFS BBOX 후속).
 
-#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_name_repetitions, clippy::doc_markdown)]
 
 use std::sync::Arc;
 

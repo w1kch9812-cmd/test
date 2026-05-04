@@ -19,7 +19,7 @@
 //!   &crs=EPSG:4326
 //! ```
 
-#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_name_repetitions, clippy::doc_markdown)]
 
 use std::env;
 use std::time::Duration;
@@ -120,9 +120,11 @@ impl VWorldClient {
         layer: &str,
         pnu: &str,
     ) -> Result<Value, BreakerError<reqwest::Error>> {
+        let base = &self.config.base_url;
+        let key = &self.config.api_key;
+        let domain = &self.config.domain;
         let url = format!(
-            "{}/req/data?service=data&request=GetFeature&data={}&key={}&domain={}&attrFilter=pnu:=:{}&format=json&size=10&geometry=true&crs=EPSG:4326",
-            self.config.base_url, layer, self.config.api_key, self.config.domain, pnu
+            "{base}/req/data?service=data&request=GetFeature&data={layer}&key={key}&domain={domain}&attrFilter=pnu:=:{pnu}&format=json&size=10&geometry=true&crs=EPSG:4326"
         );
 
         execute(
