@@ -1,4 +1,8 @@
 //! `UserRepository` `Postgres` 구현체 (spec § 5.1 — 18 필드 + `OCC` + `tracing`).
+//!
+//! SP5-iv: `save` 가 트랜잭션 안에서 `user` UPSERT + `audit_log` INSERT +
+//! `outbox_event` INSERT 를 함께 수행 — `MutationContext` 의 actor/action/
+//! events 매핑은 SP5-iii `PgAdminActionRepository` 와 동일한 패턴이에요.
 
 // `PgUserRepository` 처럼 모듈명 반복은 의도된 공개 API 형태.
 #![allow(clippy::module_name_repetitions)]
@@ -8,7 +12,8 @@ use chrono::{DateTime, Utc};
 use shared_kernel::broker_license::BrokerLicense;
 use shared_kernel::business_number::BusinessNumber;
 use shared_kernel::email::Email;
-use shared_kernel::id::{Id, UserMarker};
+use shared_kernel::id::{AuditLogMarker, Id, OutboxEventMarker, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 use tracing::instrument;
@@ -204,14 +209,38 @@ impl UserRepository for PgUserRepository {
         row.as_ref().map(row_to_user).transpose()
     }
 
-    #[instrument(skip(self, user), fields(user_id = %user.id.as_str(), version = user.version))]
-    async fn save(&self, user: &User) -> Result<(), RepoError> {
+    /// 트랜잭션 안에서 `user` UPSERT + `audit_log` + `outbox_event` 를 함께 기록.
+    ///
+    /// SP5-iv 패턴 (SP5-iii 의 `PgAdminActionRepository.insert` 와 동일):
+    /// 1. `pool.begin()` 으로 트랜잭션 시작
+    /// 2. `user` UPSERT (`OCC` — `version` 일치 시 `version + 1`)
+    /// 3. `audit_log` INSERT (`resource_kind = 'user'`)
+    /// 4. `ctx.events` 마다 `outbox_event` INSERT (`aggregate_kind = 'user'`)
+    /// 5. `tx.commit()` — 어느 단계 실패든 자동 rollback (`tx` `Drop`)
+    ///
+    /// `MutationContext` 매핑:
+    /// - `ctx.actor_id` → `audit_log.actor_id` (`None` → `NULL` 시스템 액션)
+    /// - `ctx.action` → `audit_log.action`
+    /// - `ctx.metadata` → `audit_log.after_state`
+    /// - `ctx.client_ip` → `audit_log.ip_address` (`$N::inet`)
+    /// - `ctx.user_agent` → `audit_log.user_agent`
+    /// - `ctx.correlation_id` → `audit_log.correlation_id`
+    /// - `ctx.occurred_at` → `audit_log.created_at` (`None` → `Utc::now()`)
+    #[allow(clippy::needless_pass_by_value)]
+    #[instrument(skip(self, user, ctx), fields(
+        user_id = %user.id.as_str(),
+        version = user.version,
+        ctx_action = %ctx.action,
+        correlation_id = %ctx.correlation_id,
+        events_count = ctx.events.len(),
+    ))]
+    async fn save(&self, user: &User, ctx: MutationContext) -> Result<(), RepoError> {
         let kind_str = user.user_kind.as_str();
         let role_strs: Vec<&str> = user.roles.iter().copied().map(UserRole::as_str).collect();
 
-        // INSERT or UPDATE with optimistic-lock check.
-        // - On INSERT (first save): all 18 columns explicit.
-        // - On UPDATE: enforce version match + bump.
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 1. user UPSERT with OCC.
         let result = sqlx::query(
             r#"
             insert into "user" (
@@ -263,15 +292,67 @@ impl UserRepository for PgUserRepository {
         .bind(user.last_login_at)
         .bind(user.deleted_at)
         .bind(user.version)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
 
         if result.rows_affected() == 0 {
-            // Either ON CONFLICT path with version mismatch (no row updated)
-            // or insert blocked by RLS. Treat as Conflict.
+            // ON CONFLICT path with version mismatch (no row updated). tx Drop → rollback.
             return Err(RepoError::Conflict);
         }
+
+        // 2. audit_log INSERT — same tx.
+        let audit_id = Id::<AuditLogMarker>::new();
+        let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
+        sqlx::query(
+            r"
+            insert into audit_log (
+                id, actor_id, action, resource_kind, resource_id,
+                before_state, after_state,
+                ip_address, user_agent,
+                correlation_id, created_at
+            )
+            values ($1, $2, $3, 'user', $4, NULL, $5, $6::inet, $7, $8, $9)
+            ",
+        )
+        .bind(audit_id.as_str())
+        .bind(ctx.actor_id.as_ref().map(Id::as_str))
+        .bind(&ctx.action)
+        .bind(user.id.as_str())
+        .bind(&ctx.metadata)
+        .bind(ctx.client_ip.as_deref())
+        .bind(ctx.user_agent.as_deref())
+        .bind(&ctx.correlation_id)
+        .bind(occurred_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        // 3. outbox_event INSERT for each ctx.events — same tx.
+        for event in &ctx.events {
+            let outbox_id = Id::<OutboxEventMarker>::new();
+            sqlx::query(
+                r"
+                insert into outbox_event (
+                    id, aggregate_kind, aggregate_id, event_type, payload,
+                    correlation_id, created_at, published_at
+                )
+                values ($1, 'user', $2, $3, $4, $5, $6, NULL)
+                ",
+            )
+            .bind(outbox_id.as_str())
+            .bind(user.id.as_str())
+            .bind(event.event_type())
+            .bind(event.payload())
+            .bind(&ctx.correlation_id)
+            .bind(event.occurred_at())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+
+        // 4. commit — failure → tx Drop → rollback.
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 }
