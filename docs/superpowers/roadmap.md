@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP5-iv 종료 직후)
-> **현재 main**: 로컬 (cargo 미설치 환경 — CI 검증 대기)
+> **갱신일**: 2026-05-04 (SP4-i 종료 직후)
+> **현재 main**: `0008182` (CI #189 + walking-skeleton #132 + db-migrations #157 모두 그린)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -21,10 +21,11 @@
 | **5-i** | Core BC RDS Repository SQLx | PgListingRepository + PgListingPhotoRepository + PgUserRepository 18 필드 보강 | ✅ |
 | **5-iii** | Audit + Pipeline + Operations RDS Repo + 트랜잭션 Outbox | MutationContext + 8 PgRepository + audit_log/outbox transactional 패턴 | ✅ |
 | **5-iv** | Core BC `MutationContext` 일원화 | 3 trait 시그니처 + 3 PgImpl tx + auth middleware first_sign_in + 10 신규 통합 테스트 | ✅ |
+| **4-i** | Outbox Publisher Worker | `crates/outbox-publisher` (Sink/tick/LoggingSink/CountingSink) + `services/outbox-publisher` daemon + 4 신규 통합 테스트 | ✅ |
 
-**누적**: 25 crate, ~1130 tests (1058 단위 + 72 통합), 3 CI workflow (검증 대기 — 로컬 머신 cargo 미설치).
+**누적**: 27 crate, ~1142 tests (1063 단위 + 79 통합), 3 CI workflow 그린.
 
-**SP5 시리즈 닫음**: 9 BC 모두 동일 transactional `save(agg, ctx)` 패턴 — 모든 mutation 이 audit_log INSERT 와 같은 tx.
+**SSS read side 완성**: outbox 약속의 read side 도 채워짐 — Aggregate save → audit_log + outbox_event INSERT (write) → publisher tick → Sink (read) 의 chain 이 양쪽 모두 작동.
 
 ---
 
@@ -39,14 +40,18 @@
 **추정**: 8-10 task, 2-3일.
 **Spec status**: 미작성.
 
-### B. SP4 — 외부 API ingestion + R2 Reader + Outbox publisher worker (가장 큼)
+### B. SP4-ii — 첫 외부 API 통합 (V-World)
 
-**목표**: V-World / data.go.kr / 법제처 API 통합 + 6 R2 Reader 구현체 + Outbox row 를 외부로 발행하는 워커.
+**목표**: V-World 단일 API (필지 polygon + 행정 정보) 를 `Parcel` Reader 구현체로 통합. Circuit Breaker + retry + raw_response 보존.
 
-**작업**: 새 기술 다수 — Circuit Breaker, retry, raw_response JSONB 보존, R2 PMTiles 파싱, AWS S3 client (R2), Outbox publisher 워커.
+**작업**: SP4-i 의 단순 sink 패턴 답습 — 외부 API client 도 동일 추상화 가능. data.go.kr / 법제처는 SP4-iii+ 분해.
 
-**추정**: 20-30 task, 4-7일. 사실상 sub-sub-project 분해 필요 (SP4-i / SP4-ii / ...).
-**Spec status**: 미작성, 분해 결정 필요.
+**추정**: 6-8 task, 1-2일.
+**Spec status**: 미작성.
+
+### C. 누적 FU 일괄 정리 (작은 빚 닫기)
+
+FU 4/6/8/12/13/14/15/16/17/18 — 9건 미해소. production 전 필수.
 
 ---
 
@@ -54,11 +59,12 @@
 
 ```
 A (SP5-ii, 2-3일)
-  ↓ RDS Repo 패턴 마무리 (SP5 시리즈 완전 종료)
-B (SP4 분해, 4-7일)
-  ↓ 실제 데이터 흐름 시작
+  ↓ RDS Repo 패턴 마무리 (SP5 시리즈 완전 종료, 13 BC 모두 정합)
+B (SP4-ii, 1-2일)
+  ↓ 첫 실제 외부 데이터 흐름
+SP4-iii (data.go.kr + 법제처 + R2 Reader 6, 3-5일)
 SP6 (Frontend Next.js)
-SP7 (관측성 — Grafana / Tempo / Sentry)
+SP7 (관측성 — Grafana / Tempo / Sentry — Outbox publisher 도 metrics 추가)
 SP8 (IaC — Pulumi)
 ```
 

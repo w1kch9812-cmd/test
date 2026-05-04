@@ -1,6 +1,6 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-04)
-description: SP1+2+3+5-i+5-iii+5-iv 완료 (25 crate, ~1130 tests). SP5 시리즈 종료 — 9 BC 모두 transactional audit/outbox 패턴.
+description: SP1+2+3+5-i+5-iii+5-iv+4-i 완료 (27 crate, ~1142 tests). SP5 시리즈 종료 + outbox publisher 도입으로 약속의 read side 채움.
 type: project
 ---
 
@@ -194,6 +194,49 @@ type: project
 - HTTP X-Request-ID → `correlation_id` 자동 주입 (Axum middleware) → SP7 관측성과 묶음
 - AuditLog full diff (`before_state` + `after_state`) — 9 BC 공통 후속
 
+### Sub-project 4-i: Outbox Publisher Worker (완료, T1-T7)
+
+- 신규 lib crate `crates/outbox-publisher`:
+  · `Sink` trait — outbox event 발행 추상화 (멱등성 의무 명시)
+  · `LoggingSink` default — `tracing::info!` target=`outbox.publish` 구조화 발행
+  · `CountingSink` 테스트용 `AtomicU64` 카운터
+  · `tick(repo, sink, limit) -> TickReport { fetched, published, failed }` — 1 사이클 단위
+  · `SinkError`, `PublisherError` enum
+- 신규 binary crate `services/outbox-publisher` (binary name: `outbox-publisher`):
+  · env: DATABASE_URL, OUTBOX_POLL_INTERVAL_MS=1000, OUTBOX_BATCH_SIZE=100
+  · `tracing-subscriber` JSON output (Loki 친화)
+  · `tokio::time::interval (MissedTickBehavior::Skip)` → 매 tick `outbox_publisher::tick`
+  · 빈 tick silent (운영 spam 방지)
+  · `SIGTERM` (Unix) / `Ctrl+C` graceful shutdown — Windows 는 `#[cfg(not(unix))] pending`
+- 통합 테스트 신규 4 (`crates/db/tests/outbox_publisher_integration.rs`):
+  · `tick_publishes_unpublished_rows` — 3 row INSERT → tick → published_at 모두 NOT NULL
+  · `tick_skips_already_published` — 이미 mark 된 row 는 fetch 안 잡힘
+  · `tick_returns_zero_when_no_rows` — 빈 테이블 → 0
+  · `tick_failure_leaves_row_unpublished` — `FailingSink` (file inline) → row 미발행 유지
+- 단위 테스트 신규 6 (sink: 3 + publisher: 3)
+
+**SSS 7 기둥 결함 닫음**:
+- 1 일관성: Outbox 약속의 read side 채움. SP5-iii/iv 의 outbox INSERT 가 publisher 로 발행됨
+- 4 안전성: at-least-once 발행 + 멱등성 의무 명시. tick 단위 격리 — 개별 sink 실패가 batch 막지 않음
+- 5 가시성: tick report (fetched/published/failed) + LoggingSink target 으로 운영 dashboard 즉시 활용
+
+**SP4-i 발견 사항 (lessons)**:
+- T1 코드 자체는 단순 — SP5-iii 패턴 답습, 1시간 분량
+- T6 CI 검증에서 clippy 빨강 4 iter:
+  · iter 1: `clippy::module_name_repetitions` (Sink/LoggingSink/SinkError 가 module sink 내에) → file-level allow
+  · iter 2: `clippy::match_wildcard_for_single_variants` (`PublisherError` single-variant) → 명시적 패턴
+  · iter 3: `clippy::ignored_unit_patterns` (services/outbox-publisher main.rs `_ = term => {}`) → `() = term => {}`
+  · iter 3 동시 적용: `redundant_async_block`, `redundant_pub_crate` allow
+- **로컬 cargo 검증 한계**: rustup x86_64-pc-windows-gnu 설치 + bundled rust-mingw 만 으론 cc1 부재 → sqlx/ring 같은 C-dep crate 빌드 불가. 시스템 MSVC Build Tools 또는 portable WinLibs MinGW 다운로드는 모두 hook 차단. 결과: services/outbox-publisher 빌드는 push 후 CI 가 진실
+- **CI clippy 범위**: `cargo clippy --workspace --all-features -- -D warnings` 는 `--all-targets` 없이 lib + bin 만 lint. tests/examples/benches 미포함. 실제 빨강 위치 좁히는 데 시간 절약 가능
+
+**SP4-i 미포함 (후속)**:
+- 분산 락 (`SELECT FOR UPDATE SKIP LOCKED` 또는 advisory lock) — 멀티 인스턴스 시
+- 외부 sink 구현체 (Kafka / Webhook HTTP POST / SQS / NATS) — SP4-iii+
+- 재시도 정책 (`attempt_count` 컬럼 + DLQ)
+- Circuit breaker 통합 — 외부 sink 도입 시
+- Prometheus metrics (`outbox_published_total{aggregate_kind, sink}`) — SP7
+
 ## 워크스페이스 구조 (현재)
 
 ```
@@ -228,7 +271,7 @@ crates/db/                 PgUserRepository (Walking Skeleton)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
 
-총 **25 crate, ~1130 tests (1058 단위 + 72 통합), Rust 1.88.**
+총 **27 crate, ~1142 tests (1063 단위 + 79 통합), Rust 1.88.**
 
 ## CI 상태
 
@@ -248,12 +291,12 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 
 ## 다음 단계
 
-- **즉시**: 사용자가 push 결정 시 GitHub Actions 3 workflow 그린 검증 (cargo / clippy / test 모두 CI 가 진실)
-- **SP5-ii** (추천 다음): Insights BC RDS Repository — Bookmark/SearchHistory/AnalysisReport/Notification (2-3일)
-- **SP4** (분해 필요): 외부 API + R2 Reader + Outbox publisher (4-7일)
+- **SP5-ii** (추천 다음): Insights BC RDS Repository — Bookmark/SearchHistory/AnalysisReport/Notification (2-3일). SP5 시리즈 완전 종료
+- **SP4-ii**: 첫 외부 API 통합 — V-World Parcel Reader (1-2일). Circuit Breaker + retry + raw_response 보존 패턴 첫 도입
+- **SP4-iii+**: data.go.kr + 법제처 + R2 Reader 6 (3-5일)
 - **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
 - 6: Frontend (Next.js)
-- 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry)
+- 7: 관측성 (Grafana, Prometheus, Loki, Tempo, Sentry — Outbox publisher 도 metrics 추가)
 - 8: IaC (Pulumi RDS/R2/ECS)
 - 9-12: 데이터 파이프라인, AI 어시스턴트, 검색, etc.
 
