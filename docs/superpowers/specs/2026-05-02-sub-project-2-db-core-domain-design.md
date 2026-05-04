@@ -222,7 +222,7 @@ create index listing_pnu_idx on listing(parcel_pnu);
 
 ```sql
 create table listing_photo (
-    id char(30) primary key,                            -- lph_... (3-char prefix per shared-kernel Id<P>)
+    id char(30) primary key,                            -- lph_... (3-char prefix invariant; was `ph_` in earlier drafts)
     listing_id char(30) not null references listing(id) on delete cascade,
     r2_key text not null,                               -- 'listings/lst_01HXY/photos/p1.jpg'
     thumbnail_r2_key text,
@@ -1105,7 +1105,7 @@ SP2 (DB + Core 도메인)  ← 현재
 
 ### 내부 일관성
 - [ ] § 5 RDS 테이블 18개 = § 4 도메인 분류와 일치
-- [ ] ID prefix 모두 glossary와 일치 (usr_, lst_, ph_, ...)
+- [ ] ID prefix 모두 glossary와 일치 (usr_, lst_, lph_, ...)
 - [ ] DB role (§ 6) = audit_log 정책 (§ 5.3) 일치
 
 ### Scope 검증

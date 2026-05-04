@@ -72,12 +72,16 @@ pub trait OperationsMetaRepository: Send + Sync {
         id: &Id<SystemAlertMarker>,
     ) -> Result<Option<SystemAlert>, RepoError>;
 
-    /// 미 acknowledge 된 알림 (acknowledged_at IS NULL) 을 오래된 순(`created_at`
-    /// ASC)으로 최대 `limit` 건 조회 (어드민 워크큐용).
+    /// 미 acknowledge 된 알림 (`acknowledged_at` `IS NULL`) 을 *severity* 우선
+    /// (`critical` > `error` > `warning` > `info`) + 동순위 내 `created_at` `DESC` 로
+    /// 최대 `limit` 건 조회 (어드민 워크큐용).
+    ///
+    /// spec § 5.5 partial index `system_alert_unack_idx (severity, created_at desc) where acknowledged_at is null`
+    /// 활용.
     ///
     /// # Errors
     ///
-    /// DB 통신 실패 시 [`RepoError::Database`].
+    /// `DB` 통신 실패 시 [`RepoError::Database`].
     async fn find_unacknowledged_alerts(&self, limit: u32) -> Result<Vec<SystemAlert>, RepoError>;
 }
 

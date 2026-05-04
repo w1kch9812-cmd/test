@@ -23,13 +23,14 @@ pub trait AuditLogRepository: Send + Sync {
     /// DB 통신 실패 시 [`RepoError::Database`].
     async fn insert(&self, log: &AuditLog) -> Result<(), RepoError>;
 
-    /// 리소스별 `AuditLog` 조회 (composite index `(resource_kind, resource_id)` 활용).
+    /// `resource_kind` + `resource_id` 로 `AuditLog` 조회.
     ///
-    /// 최신 순. 결과는 최대 `limit` 건.
+    /// 결과는 `created_at` `DESC`, 최대 `limit` 건. admin audit 화면에서 자주 사용.
+    /// composite index `audit_log_resource_idx (resource_kind, resource_id, created_at desc)` 활용.
     ///
     /// # Errors
     ///
-    /// DB 통신 실패 시 [`RepoError::Database`].
+    /// `DB` 통신 실패 시 [`RepoError::Database`].
     async fn find_by_resource(
         &self,
         resource_kind: &str,
@@ -37,13 +38,14 @@ pub trait AuditLogRepository: Send + Sync {
         limit: u32,
     ) -> Result<Vec<AuditLog>, RepoError>;
 
-    /// 행위자별 `AuditLog` 조회 (`actor_id` partial index `WHERE actor_id IS NOT NULL` 활용).
+    /// 특정 사용자가 일으킨 `AuditLog` 조회 (`since` 시점부터).
     ///
-    /// `since` 이후의 row 만, 최신 순, 최대 `limit` 건.
+    /// 결과는 `created_at` `DESC`, 최대 `limit` 건. admin 의 사용자별 활동 추적용.
+    /// partial index `audit_log_actor_idx (actor_id, created_at desc) where actor_id is not null` 활용.
     ///
     /// # Errors
     ///
-    /// DB 통신 실패 시 [`RepoError::Database`].
+    /// `DB` 통신 실패 시 [`RepoError::Database`].
     async fn find_by_actor(
         &self,
         actor_id: &Id<UserMarker>,

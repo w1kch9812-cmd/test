@@ -73,7 +73,8 @@ Audit BC (`AuditLog`, `OutboxEvent`), Pipeline BC (`PipelineSchedule`, `Pipeline
 │  │ │ 1. UPDATE bvq SET ... WHERE version = $X│   │  │
 │  │ │ 2. INSERT audit_log (actor, action,     │   │  │
 │  │ │      resource_kind='bvq', resource_id,  │   │  │
-│  │ │      metadata, correlation_id)          │   │  │
+│  │ │      after_state, correlation_id,       │   │  │
+│  │ │      ip_address, user_agent, created_at)│   │  │
 │  │ │ 3. INSERT outbox_event for each event   │   │  │
 │  │ └─────────────────────────────────────────┘   │  │
 │  │ tx.commit()  // 실패 시 모두 rollback         │  │
@@ -117,7 +118,7 @@ pub struct MutationContext {
     /// 도메인 의미 (예: "create", "update", "approve", "reject", "acknowledge").
     /// "save" 같은 무의미 값 금지 — 도메인 의도 보존.
     pub action: String,
-    /// 추가 메타데이터 (`audit_log.metadata` JSONB).
+    /// 추가 메타데이터 (`audit_log.after_state` JSONB 컬럼으로 저장).
     pub metadata: Option<Value>,
     /// 본 mutation 이 발행하는 도메인 이벤트들 (Outbox 로 전파).
     pub events: Vec<Arc<dyn DomainEvent>>,
@@ -283,25 +284,30 @@ impl BvqRepository for PgBvqRepository {
         }
 
         // 2. AuditLog INSERT — 같은 tx
-        let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
+        // 실제 schema (`migrations/10003_system_tables.sql`) 매핑:
+        //   ctx.metadata    → after_state (JSONB)
+        //   ctx.client_ip   → ip_address  (inet, $N::inet 캐스팅)
+        //   ctx.occurred_at → created_at  (timestamptz; None → DB default now())
+        let created_at = ctx.occurred_at.unwrap_or_else(Utc::now);
         sqlx::query(
             r#"
             INSERT INTO audit_log (
                 id, actor_id, action, resource_kind, resource_id,
-                metadata, correlation_id, occurred_at, client_ip, user_agent
+                before_state, after_state,
+                correlation_id, ip_address, user_agent, created_at
             )
-            VALUES ($1, $2, $3, 'bvq', $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, 'bvq', $4, NULL, $5, $6, $7::inet, $8, $9)
             "#,
         )
         .bind(/* new audit log id */)
         .bind(ctx.actor_id.as_ref().map(|id| id.as_str()))
         .bind(&ctx.action)
         .bind(bvq.id.as_str())
-        .bind(&ctx.metadata)
+        .bind(&ctx.metadata)        // → after_state
         .bind(&ctx.correlation_id)
-        .bind(occurred_at)
-        .bind(&ctx.client_ip)
+        .bind(&ctx.client_ip)       // → ip_address (inet)
         .bind(&ctx.user_agent)
+        .bind(created_at)           // → created_at
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
@@ -538,3 +544,17 @@ PII 미노출:
 - **SP5-ii**: Insights BC RDS Repository (Bookmark/SearchHistory/AnalysisReport/Notification)
 - **SP4**: 외부 API ingestion + R2 Reader 6
 - **SP4 ext**: Outbox publisher worker
+
+---
+
+## 14. FU 13 closed by SP-FU-i (2026-05-04)
+
+본 spec § 4.3 의 `audit_log` INSERT mock 컬럼이 실제 schema (`migrations/10003_system_tables.sql`)
+와 일치하도록 정정. plan 단계에서 발견된 schema mismatch 회복:
+
+- `metadata`     → `after_state` (JSONB; `before_state` 는 update 시 사용, 본 mock 은 `NULL`)
+- `client_ip`    → `ip_address` (`inet` 타입; bind 시 `$N::inet` 캐스팅)
+- `occurred_at`  → `created_at` (`timestamptz`; `None` 이면 DB default `now()`)
+
+`MutationContext` Rust 필드명 (`metadata`/`client_ip`/`occurred_at`) 은 application 측 의미 보존을
+위해 그대로 유지 — SQL 레이어에서만 매핑.
