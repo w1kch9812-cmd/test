@@ -22,7 +22,11 @@ use shared_kernel::id::{Id, OutboxEventMarker};
 use common::{setup_test_pool, truncate_all};
 
 /// 시드용 — 단일 outbox event row INSERT.
-async fn insert_event(pool: &sqlx::PgPool, aggregate_id: &str, kind: &str) -> Id<OutboxEventMarker> {
+async fn insert_event(
+    pool: &sqlx::PgPool,
+    aggregate_id: &str,
+    kind: &str,
+) -> Id<OutboxEventMarker> {
     let repo = PgOutboxRepository::new(pool.clone());
     let event = OutboxEvent {
         id: Id::<OutboxEventMarker>::new(),

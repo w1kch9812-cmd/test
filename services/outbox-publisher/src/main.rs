@@ -87,9 +87,7 @@ async fn main() {
 /// Windows 빌드는 `SIGTERM` 미지원 — `pending::<()>()` 로 대체해 `Ctrl+C` 만 동작.
 async fn shutdown_signal() {
     let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("install ctrl-c handler");
+        signal::ctrl_c().await.expect("install ctrl-c handler");
     };
     #[cfg(unix)]
     let term = async {
