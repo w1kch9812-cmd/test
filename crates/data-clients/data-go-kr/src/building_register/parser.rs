@@ -70,9 +70,9 @@ pub fn parse_building_title(
     fetched_at: DateTime<Utc>,
 ) -> Result<Vec<Building>, ParseError> {
     // 1) header.resultCode 검증 — "00" 외 모두 ApiError.
-    let header = raw.pointer("/response/header").ok_or_else(|| {
-        ParseError::Malformed("missing /response/header".into())
-    })?;
+    let header = raw
+        .pointer("/response/header")
+        .ok_or_else(|| ParseError::Malformed("missing /response/header".into()))?;
     let result_code = header
         .get("resultCode")
         .and_then(Value::as_str)
@@ -193,7 +193,9 @@ fn parse_structure(item: &Value) -> Result<BuildingStructureCode, ParseError> {
         .ok_or_else(|| ParseError::Malformed("item.strctCdNm missing".into()))?
         .trim();
     Ok(match label {
-        "철근콘크리트구조" | "철근콘크리트" => BuildingStructureCode::ReinforcedConcrete,
+        "철근콘크리트구조" | "철근콘크리트" => {
+            BuildingStructureCode::ReinforcedConcrete
+        }
         "철골구조" | "철골" => BuildingStructureCode::Steel,
         "철골철근콘크리트구조" | "철골철근콘크리트" | "SRC구조" => {
             BuildingStructureCode::SteelReinforcedConcrete
@@ -345,8 +347,8 @@ mod tests {
         let raw = ok_response(&serde_json::json!({
             "item": [factory_item(), item2]
         }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert_eq!(buildings.len(), 2);
         assert_eq!(buildings[0].main_purpose_code, BuildingPurposeCode::Factory);
         assert_eq!(
@@ -367,8 +369,8 @@ mod tests {
                 "body": { "items": "", "totalCount": "0", "pageNo": "1", "numOfRows": "100" }
             }
         });
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert!(buildings.is_empty());
     }
 
@@ -380,8 +382,8 @@ mod tests {
                 "body": { "totalCount": "0" }
             }
         });
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert!(buildings.is_empty());
     }
 
@@ -420,8 +422,8 @@ mod tests {
         let mut item = factory_item();
         item["mainPurpsCdNm"] = serde_json::json!("의료시설"); // 매핑표 외 라벨
         let raw = ok_response(&serde_json::json!({ "item": item }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert_eq!(buildings[0].main_purpose_code, BuildingPurposeCode::Other);
     }
 
@@ -450,8 +452,8 @@ mod tests {
         let mut item = factory_item();
         item["heit"] = serde_json::json!("0");
         let raw = ok_response(&serde_json::json!({ "item": item }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert!(buildings[0].height_m.is_none());
     }
 
@@ -460,8 +462,8 @@ mod tests {
         let mut item = factory_item();
         item["useAprDay"] = serde_json::json!("99999999"); // invalid YYYYMMDD
         let raw = ok_response(&serde_json::json!({ "item": item }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert!(buildings[0].use_approval_date.is_none());
     }
 
@@ -470,8 +472,8 @@ mod tests {
         let mut item = factory_item();
         item["bldNm"] = serde_json::json!("");
         let raw = ok_response(&serde_json::json!({ "item": item }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert!(buildings[0].building_name.is_none());
     }
 
@@ -480,8 +482,8 @@ mod tests {
         let mut item = factory_item();
         item["ugrndFlrCnt"] = serde_json::json!("");
         let raw = ok_response(&serde_json::json!({ "item": item }));
-        let buildings = parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now())
-            .expect("ok");
+        let buildings =
+            parse_building_title(&raw, &sample_pnu(), &sample_polygon(), Utc::now()).expect("ok");
         assert_eq!(buildings[0].underground_floors, 0);
     }
 }

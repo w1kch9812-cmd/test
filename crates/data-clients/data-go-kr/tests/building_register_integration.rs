@@ -16,9 +16,9 @@
 
 use std::sync::Arc;
 
-use building_domain::reader::BuildingReader;
 use building_domain::errors::ReaderError;
 use building_domain::purpose_code::BuildingPurposeCode;
+use building_domain::reader::BuildingReader;
 use building_domain::structure_code::BuildingStructureCode;
 use circuit_breaker::Policy;
 use data_go_kr_client::building_register::DataGoKrBuildingReader;
@@ -215,7 +215,10 @@ async fn fetch_by_pnu_multi_buildings() {
 
     assert_eq!(buildings.len(), 3);
     assert_eq!(buildings[0].main_purpose_code, BuildingPurposeCode::Factory);
-    assert_eq!(buildings[1].main_purpose_code, BuildingPurposeCode::Warehouse);
+    assert_eq!(
+        buildings[1].main_purpose_code,
+        BuildingPurposeCode::Warehouse
+    );
     assert_eq!(buildings[2].main_purpose_code, BuildingPurposeCode::Office);
     // 모두 같은 PNU + 같은 (합성된) geom 공유 — V-World 1회 호출.
     assert_eq!(buildings[0].pnu, buildings[1].pnu);

@@ -175,4 +175,127 @@ mod tests {
         let resp = AuthError::InsufficientRole.into_response();
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
+
+    #[test]
+    fn code_for_all_variants() {
+        assert_eq!(AuthError::MissingToken.code(), "AUTH_MISSING_TOKEN");
+        assert_eq!(AuthError::InvalidFormat.code(), "AUTH_INVALID_FORMAT");
+        assert_eq!(AuthError::MalformedToken.code(), "AUTH_MALFORMED_TOKEN");
+        assert_eq!(AuthError::UnknownKey.code(), "AUTH_UNKNOWN_KEY");
+        assert_eq!(AuthError::InvalidSignature.code(), "AUTH_INVALID_SIGNATURE");
+        assert_eq!(AuthError::Expired.code(), "AUTH_TOKEN_EXPIRED");
+        assert_eq!(AuthError::NotYetValid.code(), "AUTH_TOKEN_NOT_YET_VALID");
+        assert_eq!(AuthError::InvalidIssuer.code(), "AUTH_INVALID_ISSUER");
+        assert_eq!(AuthError::InvalidAudience.code(), "AUTH_INVALID_AUDIENCE");
+        assert_eq!(AuthError::MissingSubject.code(), "AUTH_MISSING_SUBJECT");
+        assert_eq!(
+            AuthError::UserProvisioningFailed("x".into()).code(),
+            "AUTH_USER_PROVISION_FAILED"
+        );
+        assert_eq!(AuthError::InsufficientRole.code(), "AUTH_INSUFFICIENT_ROLE");
+        assert_eq!(
+            AuthError::JwksFetchFailed("y".into()).code(),
+            "AUTH_INVALID_SIGNATURE"
+        );
+    }
+
+    #[test]
+    fn message_for_all_variants() {
+        assert_eq!(AuthError::MissingToken.message(), "인증 토큰이 필요해요");
+        assert_eq!(AuthError::InvalidFormat.message(), "토큰 형식이 잘못됐어요");
+        assert_eq!(
+            AuthError::MalformedToken.message(),
+            "토큰을 해석할 수 없어요"
+        );
+        assert_eq!(
+            AuthError::UnknownKey.message(),
+            "토큰 서명 키를 찾을 수 없어요"
+        );
+        assert_eq!(
+            AuthError::InvalidSignature.message(),
+            "토큰이 유효하지 않아요"
+        );
+        assert_eq!(
+            AuthError::Expired.message(),
+            "토큰이 만료됐어요. 다시 로그인해 주세요"
+        );
+        assert_eq!(
+            AuthError::NotYetValid.message(),
+            "토큰이 아직 사용할 수 없어요"
+        );
+        assert_eq!(
+            AuthError::InvalidIssuer.message(),
+            "토큰 발급자가 일치하지 않아요"
+        );
+        assert_eq!(
+            AuthError::InvalidAudience.message(),
+            "토큰 대상이 일치하지 않아요"
+        );
+        assert_eq!(
+            AuthError::MissingSubject.message(),
+            "토큰에 사용자 정보가 없어요"
+        );
+        assert_eq!(
+            AuthError::UserProvisioningFailed("e".into()).message(),
+            "사용자 등록에 실패했어요. 잠시 후 다시 시도해 주세요"
+        );
+        assert_eq!(
+            AuthError::InsufficientRole.message(),
+            "이 작업을 수행할 권한이 부족해요"
+        );
+        assert_eq!(
+            AuthError::JwksFetchFailed("net".into()).message(),
+            "토큰이 유효하지 않아요"
+        );
+    }
+
+    #[test]
+    fn status_for_all_variants() {
+        // 401 cases — 모든 토큰 검증 실패는 UNAUTHORIZED
+        assert_eq!(AuthError::MissingToken.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(AuthError::InvalidFormat.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(AuthError::MalformedToken.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(AuthError::UnknownKey.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            AuthError::InvalidSignature.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(AuthError::Expired.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(AuthError::NotYetValid.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(AuthError::InvalidIssuer.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            AuthError::InvalidAudience.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(AuthError::MissingSubject.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            AuthError::JwksFetchFailed("x".into()).status(),
+            StatusCode::UNAUTHORIZED
+        );
+        // 403
+        assert_eq!(AuthError::InsufficientRole.status(), StatusCode::FORBIDDEN);
+        // 500
+        assert_eq!(
+            AuthError::UserProvisioningFailed("db".into()).status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[tokio::test]
+    async fn into_response_for_all_status_codes() {
+        // 401 sample (provisioning-unrelated branch)
+        let resp = AuthError::MissingToken.into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = AuthError::JwksFetchFailed("network".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // 403
+        let resp = AuthError::InsufficientRole.into_response();
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // 500
+        let resp = AuthError::UserProvisioningFailed("db".into()).into_response();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
