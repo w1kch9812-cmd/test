@@ -36,6 +36,18 @@ pub enum CircuitState {
     HalfOpen,
 }
 
+/// sliding window 에서 `window_ms` 보다 오래된 실패 시각을 pop.
+fn prune_window(failures: &mut VecDeque<Instant>, now: Instant, window_ms: u64) {
+    let window = Duration::from_millis(window_ms);
+    while let Some(&oldest) = failures.front() {
+        if now.duration_since(oldest) > window {
+            failures.pop_front();
+        } else {
+            break;
+        }
+    }
+}
+
 #[derive(Debug)]
 struct Inner {
     state: CircuitState,
@@ -130,6 +142,11 @@ impl Breaker {
 
     /// 실패 기록 — `HalfOpen` 이면 즉시 `Open` 재진입, `Closed` 면 sliding window
     /// 누적 후 threshold 도달 시 `Open` 전이.
+    ///
+    /// 본 함수는 `Closed` / `HalfOpen` 분기 + sliding window prune + threshold
+    /// transition 까지 묶음 — 추가 분리 시 가독성 손해 (clippy threshold 15
+    /// 보다 복잡도 약간 높지만 의도된 단일 흐름).
+    #[allow(clippy::cognitive_complexity)]
     pub fn record_failure(&self, policy: &Policy) {
         let mut inner = match self.inner.lock() {
             Ok(g) => g,
@@ -145,15 +162,7 @@ impl Breaker {
             return;
         }
 
-        // sliding window — 가장 오래된 failure 가 window 밖이면 pop.
-        let window = Duration::from_millis(policy.open_window_ms);
-        while let Some(&oldest) = inner.recent_failures.front() {
-            if now.duration_since(oldest) > window {
-                inner.recent_failures.pop_front();
-            } else {
-                break;
-            }
-        }
+        prune_window(&mut inner.recent_failures, now, policy.open_window_ms);
         inner.recent_failures.push_back(now);
 
         // threshold 도달 시 Open 전이.
