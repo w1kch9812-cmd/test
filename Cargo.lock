@@ -492,6 +492,7 @@ dependencies = [
  "operations-meta-domain",
  "outbox-event-domain",
  "outbox-publisher",
+ "raw-capture-client",
  "search-history-domain",
  "serde_json",
  "shared-kernel",
@@ -1884,6 +1885,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "raw-capture-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "real-transaction-domain"
 version = "0.1.0"
 dependencies = [
@@ -3020,6 +3033,7 @@ dependencies = [
  "circuit-breaker",
  "geo-types",
  "parcel-domain",
+ "raw-capture-client",
  "reqwest",
  "serde",
  "serde_json",

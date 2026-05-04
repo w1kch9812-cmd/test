@@ -38,6 +38,24 @@ impl Policy {
             open_cooldown_ms: 30_000,
         }
     }
+
+    /// data.go.kr 표준 정책 — `docs/data-sources/data-go-kr.md` § Circuit Breaker 정책.
+    ///
+    /// - timeout 15초 / 재시도 2회 (1s, 2s, 4s 지수 백오프)
+    /// - 5초 안 5회 실패 → 30초 차단
+    ///
+    /// V-World 보다 timeout 길고 retry 더 — 응답 본문 (건축물대장 등) 이 무거움.
+    #[must_use]
+    pub const fn data_go_kr_default() -> Self {
+        Self {
+            timeout_ms: 15_000,
+            max_retries: 2,
+            retry_base_ms: 1_000,
+            open_threshold: 5,
+            open_window_ms: 5_000,
+            open_cooldown_ms: 30_000,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -53,6 +71,26 @@ mod tests {
         assert_eq!(p.open_threshold, 5);
         assert_eq!(p.open_window_ms, 5_000);
         assert_eq!(p.open_cooldown_ms, 30_000);
+    }
+
+    #[test]
+    fn data_go_kr_default_matches_doc() {
+        let p = Policy::data_go_kr_default();
+        assert_eq!(p.timeout_ms, 15_000);
+        assert_eq!(p.max_retries, 2);
+        assert_eq!(p.retry_base_ms, 1_000);
+        assert_eq!(p.open_threshold, 5);
+        assert_eq!(p.open_window_ms, 5_000);
+        assert_eq!(p.open_cooldown_ms, 30_000);
+    }
+
+    #[test]
+    fn data_go_kr_has_longer_timeout_than_vworld() {
+        // 건축물대장 응답 본문이 V-World 보다 무거움 — timeout 길게.
+        let v = Policy::vworld_default();
+        let d = Policy::data_go_kr_default();
+        assert!(d.timeout_ms > v.timeout_ms);
+        assert!(d.max_retries > v.max_retries);
     }
 
     #[test]
