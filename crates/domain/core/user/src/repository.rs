@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 use shared_kernel::email::Email;
 use shared_kernel::id::{Id, UserMarker};
+use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::User;
@@ -36,10 +37,15 @@ pub trait UserRepository: Send + Sync {
 
     /// 저장 (insert or update). Optimistic lock 충돌 시 [`RepoError::Conflict`].
     ///
+    /// `ctx` 의 `actor_id` / `action` / `metadata` / `events` 가 같은 트랜잭션
+    /// 안에서 `audit_log` 와 `outbox_event` 로 자동 기록돼요 (SP5-iv 의
+    /// transactional 패턴). 시스템 mutation (예: first-sign-in) 은
+    /// [`MutationContext::new_system_action`].
+    ///
     /// # Errors
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
-    async fn save(&self, user: &User) -> Result<(), RepoError>;
+    async fn save(&self, user: &User, ctx: MutationContext) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.
