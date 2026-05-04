@@ -16,6 +16,7 @@ pub mod listing;
 pub mod listing_photo;
 pub mod listing_report;
 pub mod lrq;
+pub mod notification;
 pub mod operations_meta;
 pub mod outbox;
 pub mod pipeline;
