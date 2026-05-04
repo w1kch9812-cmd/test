@@ -18,4 +18,5 @@ pub mod lrq;
 pub mod operations_meta;
 pub mod outbox;
 pub mod pipeline;
+pub mod search_history;
 pub mod user;
