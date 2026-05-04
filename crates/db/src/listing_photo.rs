@@ -4,6 +4,10 @@
 //! `find_by_listing` 은 `deleted_at is null` 필터 + `display_order asc` 정렬.
 //! `save` 는 upsert (`on conflict (id) do update`). `delete` 는 hard delete —
 //! 일반 흐름은 `soft_delete` 후 별도 archive job, 본 메서드는 관리/테스트용.
+//!
+//! SP5-iv: `save` 와 `delete` 모두 트랜잭션 안에서 `audit_log` + `outbox_event`
+//! 를 함께 기록 — `MutationContext` 패턴 (`PgAdminActionRepository` 와 동일).
+//! hard delete 도 audit 대상 (`action` 은 caller 가 명시 — `"delete"` 권장).
 
 // `PgListingPhotoRepository` 처럼 모듈명 반복은 의도된 공개 API 형태.
 #![allow(clippy::module_name_repetitions)]
@@ -12,7 +16,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use listing_photo_domain::entity::{ListingPhoto, PhotoContentType};
 use listing_photo_domain::repository::{ListingPhotoRepository, RepoError};
-use shared_kernel::id::{Id, ListingMarker, ListingPhotoMarker};
+use shared_kernel::id::{AuditLogMarker, Id, ListingMarker, ListingPhotoMarker, OutboxEventMarker};
+use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 use tracing::instrument;
@@ -130,8 +135,19 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
         rows.iter().map(row_to_photo).collect()
     }
 
-    #[instrument(skip(self, photo), fields(photo_id = %photo.id.as_str(), order = photo.display_order))]
-    async fn save(&self, photo: &ListingPhoto) -> Result<(), RepoError> {
+    /// 트랜잭션 안에서 `listing_photo` UPSERT + `audit_log` + `outbox_event` 를 함께 기록.
+    #[allow(clippy::needless_pass_by_value)]
+    #[instrument(skip(self, photo, ctx), fields(
+        photo_id = %photo.id.as_str(),
+        order = photo.display_order,
+        ctx_action = %ctx.action,
+        correlation_id = %ctx.correlation_id,
+        events_count = ctx.events.len(),
+    ))]
+    async fn save(&self, photo: &ListingPhoto, ctx: MutationContext) -> Result<(), RepoError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 1. listing_photo UPSERT.
         sqlx::query(
             r"
             insert into listing_photo (
@@ -164,22 +180,119 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
         .bind(photo.content_type.as_str())
         .bind(photo.uploaded_at)
         .bind(photo.deleted_at)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
+
+        // 2. audit_log INSERT — same tx.
+        write_audit_log(&mut tx, photo.id.as_str(), &ctx).await?;
+
+        // 3. outbox_event INSERT for each ctx.events — same tx.
+        write_outbox_events(&mut tx, photo.id.as_str(), &ctx).await?;
+
+        // 4. commit.
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 
-    #[instrument(skip(self), fields(photo_id = %id.as_str()))]
-    async fn delete(&self, id: &Id<ListingPhotoMarker>) -> Result<(), RepoError> {
+    /// 트랜잭션 안에서 `listing_photo` hard delete + `audit_log` 기록.
+    /// `ctx.events` 가 있으면 `outbox_event` 도 같은 tx 에 기록.
+    #[allow(clippy::needless_pass_by_value)]
+    #[instrument(skip(self, ctx), fields(
+        photo_id = %id.as_str(),
+        ctx_action = %ctx.action,
+        correlation_id = %ctx.correlation_id,
+        events_count = ctx.events.len(),
+    ))]
+    async fn delete(
+        &self,
+        id: &Id<ListingPhotoMarker>,
+        ctx: MutationContext,
+    ) -> Result<(), RepoError> {
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 1. DELETE listing_photo.
         let result = sqlx::query("delete from listing_photo where id = $1")
             .bind(id.as_str())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
             .map_err(map_sqlx_err)?;
         if result.rows_affected() == 0 {
             return Err(RepoError::NotFound);
         }
+
+        // 2. audit_log INSERT — same tx.
+        write_audit_log(&mut tx, id.as_str(), &ctx).await?;
+
+        // 3. outbox_event INSERT for each ctx.events — same tx.
+        write_outbox_events(&mut tx, id.as_str(), &ctx).await?;
+
+        // 4. commit.
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
+}
+
+/// `audit_log` 1 row INSERT — `resource_kind = 'listing_photo'`.
+async fn write_audit_log(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    photo_id: &str,
+    ctx: &MutationContext,
+) -> Result<(), RepoError> {
+    let audit_id = Id::<AuditLogMarker>::new();
+    let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
+    sqlx::query(
+        r"
+        insert into audit_log (
+            id, actor_id, action, resource_kind, resource_id,
+            before_state, after_state,
+            ip_address, user_agent,
+            correlation_id, created_at
+        )
+        values ($1, $2, $3, 'listing_photo', $4, NULL, $5, $6::inet, $7, $8, $9)
+        ",
+    )
+    .bind(audit_id.as_str())
+    .bind(ctx.actor_id.as_ref().map(Id::as_str))
+    .bind(&ctx.action)
+    .bind(photo_id)
+    .bind(&ctx.metadata)
+    .bind(ctx.client_ip.as_deref())
+    .bind(ctx.user_agent.as_deref())
+    .bind(&ctx.correlation_id)
+    .bind(occurred_at)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    Ok(())
+}
+
+/// `outbox_event` row INSERT — `aggregate_kind = 'listing_photo'`, `ctx.events` 마다 1 row.
+async fn write_outbox_events(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    photo_id: &str,
+    ctx: &MutationContext,
+) -> Result<(), RepoError> {
+    for event in &ctx.events {
+        let outbox_id = Id::<OutboxEventMarker>::new();
+        sqlx::query(
+            r"
+            insert into outbox_event (
+                id, aggregate_kind, aggregate_id, event_type, payload,
+                correlation_id, created_at, published_at
+            )
+            values ($1, 'listing_photo', $2, $3, $4, $5, $6, NULL)
+            ",
+        )
+        .bind(outbox_id.as_str())
+        .bind(photo_id)
+        .bind(event.event_type())
+        .bind(event.payload())
+        .bind(&ctx.correlation_id)
+        .bind(event.occurred_at())
+        .execute(&mut **tx)
+        .await
+        .map_err(map_sqlx_err)?;
+    }
+    Ok(())
 }
