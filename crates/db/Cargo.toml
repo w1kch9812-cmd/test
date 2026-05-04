@@ -26,6 +26,7 @@ bookmark-domain = { path = "../domain/insights/bookmark", version = "0.1.0" }
 search-history-domain = { path = "../domain/insights/search-history", version = "0.1.0" }
 analysis-report-domain = { path = "../domain/insights/analysis-report", version = "0.1.0" }
 notification-domain = { path = "../domain/insights/notification", version = "0.1.0" }
+raw-capture-client = { path = "../data-clients/raw-capture", version = "0.1.0" }
 sqlx = { workspace = true }
 chrono = { workspace = true }
 async-trait = { workspace = true }

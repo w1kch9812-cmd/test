@@ -20,5 +20,6 @@ pub mod notification;
 pub mod operations_meta;
 pub mod outbox;
 pub mod pipeline;
+pub mod raw_capture;
 pub mod search_history;
 pub mod user;
