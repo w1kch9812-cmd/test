@@ -14,6 +14,7 @@ use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
 use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
+use shared_kernel::mutation::MutationContext;
 use shared_kernel::transaction_type::TransactionType;
 use thiserror::Error;
 
@@ -55,10 +56,14 @@ pub trait ListingRepository: Send + Sync {
 
     /// 저장 (insert or update). Optimistic lock 충돌 시 [`RepoError::Conflict`].
     ///
+    /// `ctx` 의 `actor_id` / `action` / `metadata` / `events` 가 같은 트랜잭션
+    /// 안에서 `audit_log` 와 `outbox_event` 로 자동 기록돼요 (SP5-iv 의
+    /// transactional 패턴).
+    ///
     /// # Errors
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
-    async fn save(&self, listing: &Listing) -> Result<(), RepoError>;
+    async fn save(&self, listing: &Listing, ctx: MutationContext) -> Result<(), RepoError>;
 }
 
 /// 지도 마커용 lightweight `Listing` projection.
