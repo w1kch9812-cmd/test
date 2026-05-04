@@ -67,7 +67,11 @@ use crate::error::ParseError;
 ///
 /// `Ok(None)` — featureCollection 이 비어 있을 때 (PNU 미존재).
 /// `Ok(Some(parcel))` — 첫 feature 변환 성공.
-/// `Err(ParseError)` — JSON 형식 깨짐 또는 도메인 invariant 위반.
+///
+/// # Errors
+///
+/// - JSON 형식이 예상과 다름 → [`ParseError::Malformed`]
+/// - 도메인 invariant 위반 (PNU 길이/format, 좌표 등) → [`ParseError::Domain`]
 pub fn parse_parcel(raw: &Value, fetched_at: DateTime<Utc>) -> Result<Option<Parcel>, ParseError> {
     let features = raw
         .pointer("/response/result/featureCollection/features")
