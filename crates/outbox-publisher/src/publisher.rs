@@ -111,7 +111,7 @@ mod tests {
         let e: PublisherError = RepoError::Database("oops".to_owned()).into();
         match e {
             PublisherError::Repo(RepoError::Database(s)) => assert_eq!(s, "oops"),
-            _ => panic!("expected Repo Database variant"),
+            PublisherError::Repo(_) => panic!("expected Repo Database variant"),
         }
     }
 }
