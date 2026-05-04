@@ -33,6 +33,8 @@ bigdecimal = "0.4"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+outbox-publisher = { path = "../outbox-publisher", version = "0.1.0" }
+async-trait = { workspace = true }
 
 [lints]
 workspace = true
