@@ -7,6 +7,7 @@
 #![warn(missing_docs)]
 
 pub mod admin_action;
+pub mod analysis_report;
 pub mod audit_log;
 pub mod bookmark;
 pub mod bvq;
