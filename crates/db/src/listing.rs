@@ -7,6 +7,10 @@
 //! `find_markers_in_bbox` 는 `ListingMarker` projection 만 가져오는 lightweight
 //! 쿼리 — 지도 렌더용. `status = 'active'` + `geom_point is not null` 필터 +
 //! `ST_Within(geom, ST_MakeEnvelope(..., 4326))`.
+//!
+//! SP5-iv: `save` 가 트랜잭션 안에서 `listing` UPSERT + `audit_log` +
+//! `outbox_event` 를 함께 기록 — `MutationContext` 패턴 (`PgAdminActionRepository`
+//! 와 동일).
 
 // `PgListingRepository` 처럼 모듈명 반복은 의도된 공개 API 형태.
 #![allow(clippy::module_name_repetitions)]
@@ -23,11 +27,14 @@ use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::contact_visibility::ContactVisibility;
 use shared_kernel::description::Description;
 use shared_kernel::geometry::PointSrid;
-use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
+use shared_kernel::id::{
+    AuditLogMarker, Id, ListingMarker as ListingIdMarker, OutboxEventMarker, UserMarker,
+};
 use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::listing_title::ListingTitle;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
+use shared_kernel::mutation::MutationContext;
 use shared_kernel::pnu::Pnu;
 use shared_kernel::transaction_type::TransactionType;
 use sqlx::postgres::PgRow;
@@ -360,8 +367,20 @@ impl ListingRepository for PgListingRepository {
         rows.iter().map(row_to_listing).collect()
     }
 
-    #[instrument(skip(self, listing), fields(listing_id = %listing.id.as_str(), version = listing.version))]
-    async fn save(&self, listing: &Listing) -> Result<(), RepoError> {
+    /// 트랜잭션 안에서 `listing` UPSERT + `audit_log` + `outbox_event` 를 함께 기록.
+    ///
+    /// SP5-iv 패턴: 1) tx begin → 2) listing UPSERT (OCC) → 3) audit_log INSERT
+    /// (`resource_kind = 'listing'`) → 4) `ctx.events` 마다 outbox INSERT
+    /// (`aggregate_kind = 'listing'`) → 5) commit. 어느 단계 실패든 자동 rollback.
+    #[allow(clippy::needless_pass_by_value)]
+    #[instrument(skip(self, listing, ctx), fields(
+        listing_id = %listing.id.as_str(),
+        version = listing.version,
+        ctx_action = %ctx.action,
+        correlation_id = %ctx.correlation_id,
+        events_count = ctx.events.len(),
+    ))]
+    async fn save(&self, listing: &Listing, ctx: MutationContext) -> Result<(), RepoError> {
         // numeric(12, 2) — `f64` 를 2 decimal 문자열 → `BigDecimal` 변환.
         let area_str = format!("{:.2}", listing.area.as_f64());
         let area_decimal = BigDecimal::from_str(&area_str)
@@ -373,6 +392,9 @@ impl ListingRepository for PgListingRepository {
         let view_count_i64 = i64::try_from(listing.view_count).unwrap_or(i64::MAX);
         let bookmark_count_i64 = i64::try_from(listing.bookmark_count).unwrap_or(i64::MAX);
 
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 1. listing UPSERT with OCC.
         let result = sqlx::query(
             r"
             insert into listing (
@@ -433,14 +455,67 @@ impl ListingRepository for PgListingRepository {
         .bind(listing.updated_at)
         .bind(listing.expires_at)
         .bind(listing.version)
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
 
         if result.rows_affected() == 0 {
-            // ON CONFLICT DO UPDATE WHERE version 미일치 → 갱신 0건 → Conflict.
+            // ON CONFLICT DO UPDATE WHERE version 미일치 → 갱신 0건 → Conflict (tx Drop → rollback).
             return Err(RepoError::Conflict);
         }
+
+        // 2. audit_log INSERT — same tx.
+        let audit_id = Id::<AuditLogMarker>::new();
+        let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
+        sqlx::query(
+            r"
+            insert into audit_log (
+                id, actor_id, action, resource_kind, resource_id,
+                before_state, after_state,
+                ip_address, user_agent,
+                correlation_id, created_at
+            )
+            values ($1, $2, $3, 'listing', $4, NULL, $5, $6::inet, $7, $8, $9)
+            ",
+        )
+        .bind(audit_id.as_str())
+        .bind(ctx.actor_id.as_ref().map(Id::as_str))
+        .bind(&ctx.action)
+        .bind(listing.id.as_str())
+        .bind(&ctx.metadata)
+        .bind(ctx.client_ip.as_deref())
+        .bind(ctx.user_agent.as_deref())
+        .bind(&ctx.correlation_id)
+        .bind(occurred_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        // 3. outbox_event INSERT for each ctx.events — same tx.
+        for event in &ctx.events {
+            let outbox_id = Id::<OutboxEventMarker>::new();
+            sqlx::query(
+                r"
+                insert into outbox_event (
+                    id, aggregate_kind, aggregate_id, event_type, payload,
+                    correlation_id, created_at, published_at
+                )
+                values ($1, 'listing', $2, $3, $4, $5, $6, NULL)
+                ",
+            )
+            .bind(outbox_id.as_str())
+            .bind(listing.id.as_str())
+            .bind(event.event_type())
+            .bind(event.payload())
+            .bind(&ctx.correlation_id)
+            .bind(event.occurred_at())
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        }
+
+        // 4. commit.
+        tx.commit().await.map_err(map_sqlx_err)?;
         Ok(())
     }
 }
