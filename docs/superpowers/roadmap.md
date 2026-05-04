@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP4-ii 종료 직후)
-> **현재 main**: `1d4c9be` (CI #197 + walking-skeleton #140 + db-migrations #165 모두 그린)
+> **갱신일**: 2026-05-04 (SP4-iii-d 종료 직후)
+> **현재 main**: `315af85` 위 SSOT 갱신 commit (FU 27 + FU 34 closed)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -24,8 +24,10 @@
 | **4-i** | Outbox Publisher Worker | `crates/outbox-publisher` (Sink/tick/LoggingSink/CountingSink) + `services/outbox-publisher` daemon + 4 신규 통합 테스트 | ✅ |
 | **5-ii** | Insights BC RDS Repository | PgBookmarkRepository (composite PK + polymorphic) + PgSearchHistoryRepository (bulk pseudonymize) + PgAnalysisReportRepository (OCC + target_pnus[]) + PgNotificationRepository (멱등 mark_read) + 22 통합 테스트 | ✅ |
 | **4-ii** | V-World 외부 API + Circuit Breaker | `crates/circuit-breaker` (Policy + 3-state Breaker + execute) + `crates/data-clients/vworld` (Client + ParcelReader + ACL parser + RawCapture) + 23 단위 + 6 wiremock 통합 | ✅ |
+| **FU 34** | 잠복 lint 부채 일괄 정리 + CI 강화 | shared-kernel/user-domain/listing-domain/data-pipeline-control/auth/db tests 14건 lint fix + workflow `--all-targets` 추가 | ✅ |
+| **4-iii-d** | RawCapture trait 분리 + PgRawCapture (FU 27 closed) | `crates/data-clients/raw-capture` 신규 + 마이그 V003_05 (`parcel_external_data` 테이블) + `PgRawCapture` UPSERT + 3 통합 테스트 | ✅ |
 
-**누적**: 29 crate, ~1195 tests (1098 단위 + 109 통합), 3 CI workflow 그린.
+**누적**: 30 crate, ~1198 tests (1101 단위 + 112 통합), 3 CI workflow 그린, CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 

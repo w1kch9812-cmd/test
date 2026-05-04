@@ -1,6 +1,6 @@
 ---
 name: 프로젝트 진행 현황 (2026-05-04)
-description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii 완료 (29 crate, ~1195 tests). 첫 실제 외부 API 통합 (V-World) + Circuit Breaker 패턴 도입.
+description: SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d 완료 (30 crate, ~1198 tests). FU 27/34 closed. CI clippy --all-targets 강화.
 type: project
 ---
 
@@ -309,8 +309,8 @@ type: project
 - 신규 lib `crates/circuit-breaker` (~600 lines):
   · `Policy` (Copy) — `timeout_ms`, `max_retries`, `retry_base_ms`,
     `open_threshold`, `open_window_ms`, `open_cooldown_ms`. `vworld_default()` 상수
-  · `Breaker` — `std::sync::Mutex<Inner>` + 3-state machine (Closed/Open/HalfOpen)
-    + sliding window failure 카운터 (VecDeque<Instant>) + cooldown 자동 전이
+  · `Breaker` — `std::sync::Mutex<Inner>` + 3-state machine (Closed/Open/HalfOpen),
+    sliding window failure 카운터 (VecDeque<Instant>) + cooldown 자동 전이
   · `prune_window` 헬퍼 추출 (cognitive_complexity 분해)
   · `execute(breaker, policy, op_name, op)` — timeout(`tokio::time::timeout`) +
     attempt loop (지수 백오프 `retry_base_ms * 2^attempt`) + state 추적
@@ -353,8 +353,8 @@ type: project
 - CI 가 `--all-targets` 미사용 — 통합 테스트는 lint 안 됨. 로컬 `--all-targets`
   시 기존 crate 들 (shared-kernel float_cmp, user-domain redundant_clone) 의
   잠복 부채 발견 — FU 34
-- wiremock 6.0 통합: `MockServer::start()` + `Mock::given(method+path).respond_with`
-  + `.mount(&server)`. base_url override 로 클라이언트가 mock 가리킴 — clean
+- wiremock 6.0 통합: `MockServer::start()` + `Mock::given(method+path).respond_with`,
+  `.mount(&server)`. base_url override 로 클라이언트가 mock 가리킴 — clean
 
 **SP4-ii 미포함 (후속)**:
 - FU 26: `clippy::disallowed_types` 로 reqwest::Client 직접 호출 차단 (data-clients
@@ -407,7 +407,7 @@ crates/db/                 PgUserRepository (Walking Skeleton)
 services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 ```
 
-총 **29 crate, ~1195 tests (1098 단위 + 109 통합), Rust 1.88.**
+총 **30 crate, ~1198 tests (1101 단위 + 112 통합), Rust 1.88.**
 
 ## CI 상태
 
@@ -430,8 +430,8 @@ services/api/              Axum HTTP server (Walking Skeleton, 3 endpoint)
 - **FU 일괄 정리** (추천 다음, 0.5-1일): 기존 부채 (FU 4/6/8/12/13/14/15/16/17/18/26-34).
   특히 FU 34 (workspace `--all-targets` clippy 부채) — CI workflow 강화하면서
   shared-kernel/user-domain/data-pipeline-control 잠복 lint fix
-- **SP4-iii** (분해): data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장
-  + parcel_external_data 마이그 (3-5일)
+- **SP4-iii** (분해): data.go.kr + 법제처 + R2 Reader 6 + raw_response DB 저장,
+  parcel_external_data 마이그 (3-5일)
 - **SP6 분해**: Frontend (Next.js + React 19, 4-7일) — 인증/매물/북마크/알림
   핸들러가 SP5-* 의 PgRepository + V-World ParcelReader 활용
 - **SP3 후속 deferred**: 진짜 Zitadel staging 통합 테스트 (`docs/auth/staging-zitadel-integration.md` 사연 기록 — Zitadel v4 PAT opaque + healthz race + billing 비용)
