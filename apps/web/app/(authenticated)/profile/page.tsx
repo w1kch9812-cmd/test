@@ -15,16 +15,18 @@ export default async function ProfilePage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-6 p-8">
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
-      <dl className="grid grid-cols-[8rem_1fr] gap-2">
-        <dt className="text-muted-foreground">{t("userId")}</dt>
+      <h1 className="text-[length:var(--text-display-sm)] font-semibold tracking-[var(--tracking-display-sm)] text-[var(--color-ink)]">
+        {t("title")}
+      </h1>
+      <dl className="grid grid-cols-[8rem_1fr] gap-2 text-[length:var(--text-body-md)]">
+        <dt className="text-[var(--color-muted)]">{t("userId")}</dt>
         <dd>{session.sub}</dd>
-        <dt className="text-muted-foreground">{t("role")}</dt>
+        <dt className="text-[var(--color-muted)]">{t("role")}</dt>
         <dd>{session.role}</dd>
       </dl>
 
       <form action="/api/auth/logout" method="POST">
-        <Button type="submit" variant="outline">
+        <Button type="submit" variant="secondary">
           {t("logoutButton")}
         </Button>
       </form>

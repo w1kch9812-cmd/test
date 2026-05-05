@@ -17,21 +17,24 @@ export default function Home() {
           <CardTitle>공짱 Foundation Smoke</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <p className="text-sm text-[var(--color-muted-fg)]">
+          <p className="text-[length:var(--text-body-sm)] text-[var(--color-muted)]">
             /api/proxy/healthz → backend /healthz 호출 확인.
           </p>
           {isLoading && <p>불러오는 중이에요…</p>}
           {error && (
-            <p className="text-[var(--color-destructive)]" role="alert">
+            <p className="text-[var(--color-error)]" role="alert">
               호출 실패: {error.message}
             </p>
           )}
           {data && (
-            <p className="font-mono text-sm" data-testid="healthz-response">
+            <p
+              className="font-mono text-[length:var(--text-body-sm)]"
+              data-testid="healthz-response"
+            >
               응답: {data}
             </p>
           )}
-          <Button onClick={() => refetch()} variant="outline">
+          <Button onClick={() => refetch()} variant="secondary">
             다시 호출
           </Button>
         </CardContent>

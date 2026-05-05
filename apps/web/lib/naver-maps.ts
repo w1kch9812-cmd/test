@@ -1,14 +1,11 @@
-import { env } from "@/lib/env";
-
 let _readyPromise: Promise<typeof naver> | null = null;
 
 /**
- * Naver Maps SDK script lazy load. 한 번만 로드.
+ * Naver Maps SDK 는 app/layout.tsx 의 <head> 에서 동기 로드된다 (gl 서브모듈이
+ * WebGL 백엔드를 등록하려면 첫 Map 생성 시점 이전에 이미 로드되어야 함).
  *
- * `naver` 글로벌이 ready 되면 resolve. 두 번째 호출 시 캐시된 Promise 반환.
- *
- * - `ncpKeyId` (NCP 새 API; 구 ncpClientId 는 deprecated)
- * - `submodules=gl,clustering` — WebGL 가속 (3D 지도) + 마커 클러스터링
+ * 이 함수는 SDK 가 ready 될 때까지 polling 한 뒤 `naver` 글로벌을 resolve 한다.
+ * 이미 ready 면 즉시 resolve. 두 번째 호출 시 캐시된 Promise 재사용.
  */
 export function loadNaverMaps(): Promise<typeof naver> {
   if (_readyPromise) return _readyPromise;
@@ -20,12 +17,25 @@ export function loadNaverMaps(): Promise<typeof naver> {
       resolve(naver);
       return;
     }
-    const script = document.createElement("script");
-    script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID}&submodules=gl,clustering`;
-    script.async = true;
-    script.onload = () => resolve(naver);
-    script.onerror = () => reject(new Error("Naver Maps SDK failed to load"));
-    document.head.appendChild(script);
+    let attempts = 0;
+    const max = 100; // 100 * 100ms = 10s
+    const tick = () => {
+      attempts += 1;
+      if (typeof naver !== "undefined" && naver.maps) {
+        resolve(naver);
+        return;
+      }
+      if (attempts >= max) {
+        reject(
+          new Error(
+            "Naver Maps SDK 로드 타임아웃 (10초). app/layout.tsx 의 <head> script 확인 필요.",
+          ),
+        );
+        return;
+      }
+      setTimeout(tick, 100);
+    };
+    tick();
   });
   return _readyPromise;
 }

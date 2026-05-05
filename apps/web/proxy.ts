@@ -66,16 +66,32 @@ export async function proxy(req: NextRequest) {
 
   // 2. CSP nonce 주입
   const nonce = randomBytes(16).toString("base64");
+  const isDev = process.env.NODE_ENV !== "production";
+
+  // Dev: Naver Maps gl 이 일부 tile/cursor 를 HTTP 로 요청 (legacy) → http:/https: 둘 다 허용.
+  // Production: SP6-iam-infra 가 strict allowlist 정리.
+  const imgSrc = isDev
+    ? "'self' data: blob: http: https:"
+    : "'self' data: blob: https://*.map.naver.com https://map.naver.com https://*.map.naver.net https://map.naver.net https://*.pstatic.net";
+  const connectSrc = isDev
+    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
+    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com`;
+
+  // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
+  // 'strict-dynamic' 와 함께 modern browser 에서 호환 (CSP3).
   const cspHeader = [
     `default-src 'self'`,
-    // https://oapi.map.naver.com: Naver Maps SDK script loader
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://oapi.map.naver.com`,
+    // Naver Maps SDK 는 app/layout.tsx 의 <head> 에서 sync 로드되므로 strict-dynamic 을 쓰면
+    // SDK 자체가 차단된다. 대신 명시적 allowlist + nonce + unsafe-eval (gl WebGL 필수) 조합.
+    // Naver gl SDK 는 nrbe.map.naver.net (style json) + auth 등 일부 리소스를 HTTP 로 호출하므로 dev 에서는 http: 도 허용.
+    isDev
+      ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline' http: https:`
+      : `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline' https://oapi.map.naver.com https://*.map.naver.net https://*.pstatic.net`,
+    `worker-src 'self' blob:`,
     `style-src 'self' 'unsafe-inline'`,
-    // *.map.naver.com: map tiles/images; *.pstatic.net: Naver static assets
-    `img-src 'self' data: blob: https://*.map.naver.com https://*.pstatic.net`,
+    `img-src ${imgSrc}`,
     `font-src 'self' data:`,
-    // *.map.naver.com + *.naver.com: Naver Maps API calls and geocoding
-    `connect-src 'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.naver.com`,
+    `connect-src ${connectSrc}`,
     `frame-ancestors 'none'`,
     `base-uri 'self'`,
     `form-action 'self' ${env.ZITADEL_ISSUER}`,

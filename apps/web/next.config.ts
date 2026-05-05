@@ -18,7 +18,9 @@ const productionHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  reactStrictMode: true,
+  // Naver Maps gl 이 React Strict Mode 의 이중 마운트와 호환 안 됨 (지도 이중 렌더링).
+  // Reference: gongzzang-design-lab 의 next.config 패턴 따름.
+  reactStrictMode: false,
   typedRoutes: true,
   async headers() {
     const headers = process.env.NODE_ENV === "production" ? productionHeaders : baseHeaders;

@@ -12,12 +12,16 @@ export default async function LoginPage({
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-2xl font-bold">{t("title")}</h1>
-      <p className="text-center text-muted-foreground">{t("description")}</p>
+      <h1 className="text-[length:var(--text-display-md)] font-semibold tracking-[var(--tracking-display-md)] text-[var(--color-ink)]">
+        {t("title")}
+      </h1>
+      <p className="text-center text-[length:var(--text-body-md)] text-[var(--color-muted)]">
+        {t("description")}
+      </p>
 
       <form action="/api/auth/login" method="POST" className="w-full">
         <input type="hidden" name="returnTo" value={returnTo} />
-        <Button type="submit" className="w-full">
+        <Button type="submit" size="lg" className="w-full">
           {t("loginButton")}
         </Button>
       </form>

@@ -3,27 +3,37 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 import { cn } from "../lib/utils";
 
+/*
+ * Button — Claude.com spec 의 button-primary / button-secondary /
+ * button-secondary-on-dark / button-text-link / button-icon-circular 매핑.
+ *
+ * 기본: rounded-md (8px), height 40px, type-button (14px / 500 / tracking 0).
+ * coral 은 primary 에만. press 시 primary-active 로 어두워짐.
+ * hover state 는 spec 에 별도 정의 없음 → press(active) 만 변형.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-canvas)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-[var(--color-brand-600)] text-white hover:bg-[var(--color-brand-700)]",
-        destructive:
-          "bg-[var(--color-destructive)] text-[var(--color-destructive-fg)] hover:opacity-90",
-        outline:
-          "border border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-muted)]",
-        ghost: "hover:bg-[var(--color-muted)]",
-        link: "text-[var(--color-brand-600)] underline-offset-4 hover:underline",
+        primary:
+          "bg-[var(--color-primary)] text-[var(--color-on-primary)] active:bg-[var(--color-primary-active)]",
+        secondary:
+          "border border-[var(--color-hairline)] bg-[var(--color-canvas)] text-[var(--color-ink)] hover:bg-[var(--color-surface-soft)]",
+        "secondary-on-dark":
+          "bg-[var(--color-surface-dark-elevated)] text-[var(--color-on-dark)] hover:bg-[var(--color-surface-dark-soft)]",
+        ghost: "text-[var(--color-ink)] hover:bg-[var(--color-surface-soft)]",
+        link: "text-[var(--color-primary)] underline-offset-4 hover:underline",
+        destructive: "bg-[var(--color-error)] text-white active:opacity-90",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
+        default: "h-10 rounded-[var(--radius-md)] px-5 text-[length:var(--text-button)]",
+        sm: "h-9 rounded-[var(--radius-sm)] px-3 text-[length:var(--text-button)]",
+        lg: "h-11 rounded-[var(--radius-md)] px-8 text-[length:var(--text-button)]",
+        icon: "h-9 w-9 rounded-[var(--radius-full)] border border-[var(--color-hairline)] bg-[var(--color-canvas)]",
       },
     },
-    defaultVariants: { variant: "default", size: "default" },
+    defaultVariants: { variant: "primary", size: "default" },
   },
 );
 

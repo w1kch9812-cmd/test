@@ -1,9 +1,62 @@
+/*
+ * Typography tokens — Pretendard Variable (한/영 통일)
+ *
+ * Claude.com spec 의 serif display (Copernicus / Tiempos) 는 한국어 글리프가
+ * 없어 적용 불가. 대신 Pretendard Bold 600 + 음수 letter-spacing 으로
+ * editorial voice 의 무게감 유지.
+ *
+ * - display-* : Pretendard 600, 음수 tracking
+ * - title-*   : Pretendard 600, tracking 0
+ * - body-*    : Pretendard 400, tracking 0
+ * - caption   : Pretendard 500
+ * - code      : JetBrains Mono 400
+ */
 :root {
-  /* Pretendard self-host: next/font/local injects --font-pretendard on <html> */
+  /* font-family stack */
   --font-sans:
-    var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
-    "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
+    "Pretendard Variable", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR",
+    "Malgun Gothic", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "D2Coding", Menlo, Consolas, monospace;
+  --font-display: var(--font-sans);
+
+  /* size scale (px → rem 환산은 컴포넌트에서; root font-size 16px 기준) */
+  --text-display-xl: 4rem; /* 64px */
+  --text-display-lg: 3rem; /* 48px */
+  --text-display-md: 2.25rem; /* 36px */
+  --text-display-sm: 1.75rem; /* 28px */
+  --text-title-lg: 1.375rem; /* 22px */
+  --text-title-md: 1.125rem; /* 18px */
+  --text-title-sm: 1rem; /* 16px */
+  --text-body-md: 1rem; /* 16px */
+  --text-body-sm: 0.875rem; /* 14px */
+  --text-caption: 0.8125rem; /* 13px */
+  --text-caption-uppercase: 0.75rem; /* 12px */
+  --text-code: 0.875rem; /* 14px */
+  --text-button: 0.875rem; /* 14px */
+  --text-nav-link: 0.875rem; /* 14px */
+
+  /* line-height */
+  --leading-display-xl: 1.05;
+  --leading-display-lg: 1.1;
+  --leading-display-md: 1.15;
+  --leading-display-sm: 1.2;
+  --leading-title: 1.4;
+  --leading-body: 1.55;
+  --leading-tight: 1;
+
+  /* letter-spacing */
+  --tracking-display-xl: -0.0234em; /* -1.5px / 64px */
+  --tracking-display-lg: -0.0208em; /* -1px / 48px */
+  --tracking-display-md: -0.0139em; /* -0.5px / 36px */
+  --tracking-display-sm: -0.0107em; /* -0.3px / 28px */
+  --tracking-uppercase: 0.125em; /* 1.5px / 12px */
+
+  /* weight */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* legacy alias (점진 제거 예정) */
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;
   --text-base: 1rem;

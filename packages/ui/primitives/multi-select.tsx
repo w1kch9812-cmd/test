@@ -1,6 +1,11 @@
 "use client";
 import { cn } from "../lib/utils";
 
+/*
+ * MultiSelect — Claude.com spec 의 category-tab / category-tab-active 패턴 응용.
+ * 칩 토글 UI: inactive=transparent + muted text, active=cream-card surface + ink text.
+ * pill 모양 (radius-pill) 으로 가벼운 분위기, padding 6px×14px.
+ */
 interface MultiSelectOption {
   value: string;
   label: string;
@@ -19,7 +24,7 @@ export function MultiSelect({ options, value, onValueChange, className }: MultiS
     else onValueChange([...value, v]);
   };
   return (
-    <div className={cn("flex flex-wrap gap-2", className)}>
+    <div className={cn("flex flex-wrap gap-1.5", className)}>
       {options.map((opt) => {
         const selected = value.includes(opt.value);
         return (
@@ -29,10 +34,11 @@ export function MultiSelect({ options, value, onValueChange, className }: MultiS
             aria-pressed={selected}
             onClick={() => toggle(opt.value)}
             className={cn(
-              "rounded-full border px-3 py-1 text-sm transition",
+              "rounded-[var(--radius-pill)] px-3.5 py-1.5 text-[length:var(--text-caption)] font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30 focus-visible:ring-offset-2",
               selected
-                ? "border-[var(--color-brand-600)] bg-[var(--color-brand-600)] text-white"
-                : "border-[var(--color-border)] bg-[var(--color-bg)] hover:bg-[var(--color-muted)]",
+                ? "bg-[var(--color-ink)] text-[var(--color-on-dark)]"
+                : "border border-[var(--color-hairline)] bg-[var(--color-canvas)] text-[var(--color-body)] hover:bg-[var(--color-surface-soft)]",
             )}
           >
             {opt.label}

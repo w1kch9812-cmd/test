@@ -1,6 +1,10 @@
 import * as React from "react";
 import { cn } from "../lib/utils";
 
+/*
+ * Input — Claude.com spec 의 text-input.
+ * 40px height, hairline border, body-md text. focus 시 coral ring (3px / 15% alpha).
+ */
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
@@ -8,7 +12,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     <input
       type={type}
       className={cn(
-        "flex h-10 w-full rounded-md border border-[var(--color-input)] bg-[var(--color-bg)] px-3 py-2 text-sm ring-offset-[var(--color-bg)] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-[var(--color-muted-fg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-brand-500)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-3.5 py-2 text-[length:var(--text-body-md)] text-[var(--color-ink)]",
+        "placeholder:text-[var(--color-muted)]",
+        "focus:border-[var(--color-primary)] focus:outline-none focus:ring-[3px] focus:ring-[var(--color-primary)]/15",
+        "disabled:cursor-not-allowed disabled:opacity-50",
+        "file:border-0 file:bg-transparent file:text-sm file:font-medium",
         className,
       )}
       ref={ref}

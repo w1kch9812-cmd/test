@@ -1,27 +1,73 @@
 @import "tailwindcss";
 @import "@gongzzang/ui/tokens";
 
+/*
+ * Tailwind v4 @theme — CSS 변수를 Tailwind utility (bg-canvas, text-ink 등) 로
+ * 노출. 디자인 시스템 토큰이 SSOT, Tailwind 는 그 위의 사용 layer.
+ */
 @theme {
+  /* ── Color palette ─────────────────────────────────────────────────── */
+  --color-canvas: var(--color-canvas);
+  --color-surface-soft: var(--color-surface-soft);
+  --color-surface-card: var(--color-surface-card);
+  --color-surface-cream-strong: var(--color-surface-cream-strong);
+  --color-surface-dark: var(--color-surface-dark);
+  --color-surface-dark-elevated: var(--color-surface-dark-elevated);
+  --color-surface-dark-soft: var(--color-surface-dark-soft);
+
+  --color-ink: var(--color-ink);
+  --color-body-strong: var(--color-body-strong);
+  --color-body: var(--color-body);
+  --color-muted: var(--color-muted);
+  --color-muted-soft: var(--color-muted-soft);
+  --color-on-primary: var(--color-on-primary);
+  --color-on-dark: var(--color-on-dark);
+  --color-on-dark-soft: var(--color-on-dark-soft);
+
+  --color-primary: var(--color-primary);
+  --color-primary-active: var(--color-primary-active);
+  --color-primary-disabled: var(--color-primary-disabled);
+  --color-accent-teal: var(--color-accent-teal);
+  --color-accent-amber: var(--color-accent-amber);
+
+  --color-hairline: var(--color-hairline);
+  --color-hairline-soft: var(--color-hairline-soft);
+
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+  --color-error: var(--color-error);
+
+  /* shadcn-호환 alias */
+  --color-background: var(--color-canvas);
+  --color-foreground: var(--color-ink);
+  --color-border: var(--color-hairline);
+  --color-input: var(--color-hairline);
+  --color-ring: var(--color-primary);
+
+  /* ── Font ──────────────────────────────────────────────────────────── */
   --font-family-sans: var(--font-sans);
   --font-family-mono: var(--font-mono);
-  --color-background: var(--color-bg);
-  --color-foreground: var(--color-fg);
-  --color-primary: var(--color-brand-600);
-  --color-primary-foreground: white;
-  --color-muted: var(--color-muted);
-  --color-muted-foreground: var(--color-muted-fg);
-  --color-border: var(--color-border);
-  --color-input: var(--color-input);
-  --color-destructive: var(--color-destructive);
-  --color-destructive-foreground: var(--color-destructive-fg);
-  --radius: var(--radius-md);
+
+  /* ── Radius (Tailwind 의 rounded-* 유틸 매핑) ──────────────────────── */
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-pill: var(--radius-pill);
+  --radius-full: var(--radius-full);
 }
 
 html {
   font-family: var(--font-sans);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  /* Pretendard 600 의 무게감 유지를 위한 antialias */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-fg);
+  background: var(--color-canvas);
+  color: var(--color-ink);
 }

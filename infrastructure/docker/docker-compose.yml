@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-gongzzang}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
       POSTGRES_DB: ${POSTGRES_DB:-gongzzang}
-    ports: ["5432:5432"]
+    ports: ["5500:5432"]
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
