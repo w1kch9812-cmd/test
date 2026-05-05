@@ -35,9 +35,17 @@ paths = [
     '''_archive/''',
     '''reference/''',
     '''\.gitleaks\.toml$''',
+    # tests/unit/setup.ts 의 placeholder env 값 (실 secret 아님)
+    '''apps/web/tests/unit/setup\.ts''',
 ]
 regexes = [
     '''your_.*_here''',
     '''<your-.+>''',
     '''ZITADEL_API_KEY=$''',
+    # test-secret-placeholder: SESSION_SECRET 테스트 픽스처, 실 secret 아님
+    '''test-secret-placeholder''',
+]
+stopwords = [
+    # SESSION_SECRET 테스트 픽스처 값, 실 secret 아님
+    "test-secret-placeholder-32-chars-x",
 ]

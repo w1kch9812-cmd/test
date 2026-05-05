@@ -15,13 +15,19 @@ COMPOSE_FILE="${COMPOSE_FILE:-$(dirname "$(realpath "$0")")/docker-compose.yml}"
 PAT_VOLUME="${PAT_VOLUME:-zitadel_zitadel-init-pat}"
 
 echo "==> Waiting for Zitadel readiness at ${ZITADEL_HOST}/debug/healthz ..."
+ZITADEL_READY=0
 for i in {1..60}; do
   if curl -sf "${ZITADEL_HOST}/debug/healthz" >/dev/null; then
     echo "    ready."
+    ZITADEL_READY=1
     break
   fi
   sleep 2
 done
+if [[ "$ZITADEL_READY" -eq 0 ]]; then
+  echo "ERROR: Zitadel not ready after 120s. Check: docker compose -f infra/zitadel/docker-compose.yml logs zitadel"
+  exit 1
+fi
 
 echo "==> Reading machine-user PAT from Docker volume (${PAT_VOLUME})"
 TOKEN=$(docker run --rm -v "${PAT_VOLUME}:/pat-out" alpine:3.19 \
@@ -73,6 +79,22 @@ APP_RESP=$(curl -sf -X POST "${ZITADEL_HOST}/management/v1/projects/${PROJECT_ID
   }')
 
 CLIENT_ID=$(echo "$APP_RESP" | jq -r '.clientId // empty')
+
+if [[ -z "$CLIENT_ID" ]]; then
+  echo "    app may exist; fetching..."
+  CLIENT_ID=$(curl -sf -X POST \
+    "${ZITADEL_HOST}/management/v1/projects/${PROJECT_ID}/apps/_search" \
+    -H "Authorization: Bearer ${TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d '{"queries":[{"nameQuery":{"name":"gongzzang-web-dev","method":"TEXT_QUERY_METHOD_EQUALS"}}]}' \
+    | jq -r '.result[0].oidcConfig.clientId // .result[0].clientId // empty')
+fi
+
+if [[ -z "$CLIENT_ID" ]]; then
+  echo "ERROR: failed to obtain CLIENT_ID after fallback search"
+  exit 1
+fi
+
 echo "    CLIENT_ID=${CLIENT_ID}"
 
 cat <<EOF

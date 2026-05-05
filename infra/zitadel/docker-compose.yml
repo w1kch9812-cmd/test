@@ -1,3 +1,8 @@
+# Dev-only docker-compose. Production 은 SP6-iam-infra 가 Pulumi 화.
+# Ports 18443 (zitadel), 15433 (postgres) 은 Windows Hyper-V exclusion 회피용.
+# Linux/macOS 사용자는 표준 8443/5433 으로 변경 가능 (단 .env.local + init-zitadel.sh
+# 의 ZITADEL_HOST 도 일관 변경 필요).
+
 services:
   zitadel-db:
     image: postgres:16-alpine
@@ -46,6 +51,12 @@ services:
     depends_on:
       zitadel-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/debug/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   redis:
     image: redis:7-alpine
