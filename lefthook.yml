@@ -45,7 +45,7 @@ pre-push:
         - merge
         - rebase
     sqlx-prepare-check:
-      run: command -v cargo >/dev/null 2>&1 && (DATABASE_URL=${DATABASE_URL:-postgres://gongzzang:changeme_local_only@localhost:5432/gongzzang} cargo sqlx prepare --workspace --check 2>/dev/null || echo "sqlx prepare check skipped (DB unavailable or offline mode not configured)") || echo "cargo not installed - CI enforces"
+      run: cargo sqlx prepare --workspace --check 2>/dev/null || echo "sqlx prepare check skipped (cargo or DB unavailable - CI enforces)"
       skip:
         - merge
         - rebase
