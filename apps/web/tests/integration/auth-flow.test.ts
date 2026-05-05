@@ -1,0 +1,68 @@
+// @vitest-environment node
+
+import { NextRequest } from "next/server";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { GET as callbackGET } from "@/app/api/auth/callback/route";
+import { POST as loginPOST } from "@/app/api/auth/login/route";
+import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
+
+vi.mock("@/lib/oidc", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/oidc")>("@/lib/oidc");
+  return {
+    ...actual,
+    exchangeCode: vi.fn(async () => ({
+      access_token: "at-1",
+      refresh_token: "rt-1",
+      id_token: "it-1",
+      expires_in: 300,
+      jti: "jti-1",
+      sub: "user-1",
+      role: "Buyer",
+    })),
+  };
+});
+
+// Mock fetch so emitAuthEvent does not fail in test environment
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async () => new Response(null, { status: 200 })),
+);
+
+describe("auth flow integration", () => {
+  beforeEach(async () => {
+    // db 0 — isolated from unit tests (db 1 store, db 2 single-flight)
+    await getRedis().select(0);
+    await getRedis().flushdb();
+  });
+
+  afterAll(() => {
+    __resetRedisForTest();
+  });
+
+  it("login → 302 → callback → session created", async () => {
+    const loginReq = new NextRequest("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      body: new FormData(),
+    });
+    const loginRes = await loginPOST(loginReq);
+    expect(loginRes.status).toBe(302);
+    const setCookie = loginRes.headers.get("set-cookie") ?? "";
+    expect(setCookie).toContain("__Host-auth-tmp=");
+
+    const tmpMatch = setCookie.match(/__Host-auth-tmp=([^;]+)/);
+    expect(tmpMatch).not.toBeNull();
+    const tmp = String(tmpMatch?.[1]);
+    const decoded = JSON.parse(Buffer.from(tmp, "base64url").toString("utf-8")) as {
+      state: string;
+    };
+
+    const callbackReq = new NextRequest(
+      `http://localhost:3000/api/auth/callback?code=abc&state=${decoded.state}`,
+      { headers: { cookie: `__Host-auth-tmp=${tmp}` } },
+    );
+    const callbackRes = await callbackGET(callbackReq);
+    expect(callbackRes.status).toBe(302);
+    const sidCookie = callbackRes.headers.get("set-cookie") ?? "";
+    expect(sidCookie).toMatch(/__Host-sid=[0-9a-f]{64}/);
+  });
+});
