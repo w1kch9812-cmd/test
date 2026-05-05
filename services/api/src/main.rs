@@ -1,9 +1,10 @@
-//! 공짱 `HTTP` `API` service — `Walking Skeleton` + `Auth` (`SP3`) + `SP6-i`.
+//! 공짱 `HTTP` `API` service — `Walking Skeleton` + `Auth` (`SP3`) + `SP6-i` + `SP6-ii`.
 //!
 //! 라우트:
 //! - `GET /healthz` — public liveness probe
 //! - `GET /users/me` — 인증된 자신 조회 (`AuthenticatedUser` extractor)
 //! - `GET /users/:id` — 인증된 자신만 (`auth.user.id == path id`), 다른 id 는 `403`
+//! - `GET /listings` — 카드 list 검색 (인증 필수, SP6-ii)
 //! - `POST /internal/auth/event` — frontend `AuthEvent` 수신 → `audit_log` INSERT
 //!
 //! `POST /users` 는 제거 — first-sign-in 자동 생성으로 대체.
@@ -24,8 +25,10 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{middleware, Json, Router};
+use db::listing::PgListingRepository;
 use db::user::PgUserRepository;
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
+use listing_domain::repository::ListingRepository;
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
@@ -35,6 +38,7 @@ use user_domain::repository::UserRepository;
 
 mod routes {
     pub mod auth_event;
+    pub mod listings;
 }
 
 /// `Axum` 핸들러에 주입할 공유 상태.
@@ -139,6 +143,9 @@ async fn main() {
         user_repo: user_repo.clone(),
     };
 
+    let listing_repo: Arc<dyn ListingRepository> = Arc::new(PgListingRepository::new(pool.clone()));
+    let listings_state = routes::listings::ListingsState { listing_repo };
+
     let verifier = if dev_mode {
         tracing::warn!(
             "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
@@ -185,6 +192,14 @@ async fn main() {
         .route("/users/me", get(me))
         .route("/users/:id", get(get_user))
         .with_state(app_state)
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
+    // GET /listings — protected (auth_layer 적용), 별도 state (listings_state).
+    let listings_router: Router<()> = Router::new()
+        .route("/listings", get(routes::listings::get_listings))
+        .with_state(listings_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY: /internal/auth/event 는 현재 unauthenticated.
     // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
@@ -199,6 +214,7 @@ async fn main() {
 
     let app = public
         .merge(protected)
+        .merge(listings_router)
         .merge(internal)
         .layer(TraceLayer::new_for_http());
 

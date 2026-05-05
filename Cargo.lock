@@ -116,6 +116,7 @@ dependencies = [
  "chrono",
  "db",
  "deadpool-redis",
+ "listing-domain",
  "reqwest",
  "serde",
  "serde_json",

@@ -336,6 +336,186 @@ impl ListingRepository for PgListingRepository {
         rows.iter().map(row_to_marker).collect()
     }
 
+    #[allow(clippy::too_many_lines)]
+    #[instrument(skip(self, query))]
+    async fn find_card_summaries_in_bbox(
+        &self,
+        query: listing_domain::repository::CardSearchQuery,
+    ) -> Result<(Vec<listing_domain::repository::ListingCardSummary>, u64), RepoError> {
+        use listing_domain::repository::{CardSearchSort, ListingCardSummary};
+
+        // bbox: None → 전체 한국. ST_MakeEnvelope($1=min_lng, $2=min_lat, $3=max_lng, $4=max_lat, 4326).
+        let (min_lng, min_lat, max_lng, max_lat) = query
+            .bbox
+            .map_or((124.0_f64, 33.0_f64, 132.0_f64, 39.0_f64), |b| {
+                (b.min_lng, b.min_lat, b.max_lng, b.max_lat)
+            });
+
+        // listing_type / transaction_type 필터 (None or empty = 전체).
+        let types_array: Option<Vec<&str>> = query
+            .types
+            .as_ref()
+            .filter(|v| !v.is_empty())
+            .map(|v| v.iter().map(|t| t.as_str()).collect());
+        let txns_array: Option<Vec<&str>> = query
+            .transactions
+            .as_ref()
+            .filter(|v| !v.is_empty())
+            .map(|v| v.iter().map(|t| t.as_str()).collect());
+
+        let min_area = query.min_area_m2.unwrap_or(0.0_f64);
+        let max_area = query.max_area_m2.unwrap_or(f64::MAX);
+        let min_price = query.min_price_krw.unwrap_or(0_i64);
+        let max_price = query.max_price_krw.unwrap_or(i64::MAX);
+
+        let order_by = match query.sort {
+            CardSearchSort::CreatedAtDesc => "created_at DESC",
+            CardSearchSort::PriceAsc => "price_krw ASC",
+            CardSearchSort::PriceDesc => "price_krw DESC",
+            CardSearchSort::AreaAsc => "area_m2 ASC",
+            CardSearchSort::AreaDesc => "area_m2 DESC",
+        };
+
+        let size = query.size.clamp(1, 100);
+        let offset = i64::from(query.page) * i64::from(size);
+
+        let sql = format!(
+            r"
+            WITH filtered AS (
+                SELECT id, title, geom_point, listing_type, transaction_type,
+                       price_krw, deposit_krw, monthly_rent_krw, area_m2,
+                       view_count, bookmark_count, created_at
+                FROM listing
+                WHERE status = 'active'
+                  AND geom_point IS NOT NULL
+                  AND ST_Within(geom_point, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+                  AND ($5::text[] IS NULL OR listing_type = ANY($5::text[]))
+                  AND ($6::text[] IS NULL OR transaction_type = ANY($6::text[]))
+                  AND area_m2::float8 BETWEEN $7 AND $8
+                  AND price_krw BETWEEN $9 AND $10
+            )
+            SELECT
+                (SELECT COUNT(*) FROM filtered) AS total_count,
+                f.id, f.title,
+                ST_X(f.geom_point) AS geom_lng, ST_Y(f.geom_point) AS geom_lat,
+                f.listing_type, f.transaction_type,
+                f.price_krw, f.deposit_krw, f.monthly_rent_krw,
+                f.area_m2::float8 AS area_m2,
+                f.view_count, f.bookmark_count, f.created_at
+            FROM filtered f
+            ORDER BY f.{order_by}
+            LIMIT $11 OFFSET $12
+            "
+        );
+
+        let rows = sqlx::query(&sql)
+            .bind(min_lng)
+            .bind(min_lat)
+            .bind(max_lng)
+            .bind(max_lat)
+            .bind(types_array.as_deref())
+            .bind(txns_array.as_deref())
+            .bind(min_area)
+            .bind(max_area)
+            .bind(min_price)
+            .bind(max_price)
+            .bind(i64::from(size))
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| RepoError::Database(e.to_string()))?;
+
+        let mut total_count: u64 = 0;
+        let mut cards: Vec<ListingCardSummary> = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let tc: i64 = row.try_get("total_count").unwrap_or(0_i64);
+            total_count = u64::try_from(tc.max(0)).unwrap_or(0);
+
+            let id_str: String = row
+                .try_get("id")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let id = Id::<ListingIdMarker>::try_from_str(&id_str)
+                .map_err(|e| RepoError::Database(format!("invalid listing id: {e}")))?;
+
+            let title: String = row
+                .try_get("title")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+
+            let geom_lng: f64 = row
+                .try_get("geom_lng")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let geom_lat: f64 = row
+                .try_get("geom_lat")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let geom = PointSrid::try_new_wgs84(geom_lng, geom_lat)
+                .map_err(|e| RepoError::Database(format!("invalid geom in DB: {e}")))?;
+
+            let lt_str: String = row
+                .try_get("listing_type")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let listing_type = parse_listing_type(&lt_str)?;
+
+            let tt_str: String = row
+                .try_get("transaction_type")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let transaction_type = parse_transaction_type(&tt_str)?;
+
+            let price_i: i64 = row
+                .try_get("price_krw")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let price = MoneyKrw::try_new(price_i)
+                .map_err(|e| RepoError::Database(format!("invalid price_krw in DB: {e}")))?;
+
+            let deposit_opt: Option<i64> = row
+                .try_get("deposit_krw")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let deposit = deposit_opt
+                .map(|d| {
+                    MoneyKrw::try_new(d)
+                        .map_err(|e| RepoError::Database(format!("invalid deposit_krw in DB: {e}")))
+                })
+                .transpose()?;
+
+            let rent_opt: Option<i64> = row
+                .try_get("monthly_rent_krw")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let monthly_rent = rent_opt
+                .map(|d| {
+                    MoneyKrw::try_new(d).map_err(|e| {
+                        RepoError::Database(format!("invalid monthly_rent_krw in DB: {e}"))
+                    })
+                })
+                .transpose()?;
+
+            let area_m2: f64 = row
+                .try_get("area_m2")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+            let view_count: i64 = row.try_get("view_count").unwrap_or(0_i64);
+            let bookmark_count: i64 = row.try_get("bookmark_count").unwrap_or(0_i64);
+            let created_at: chrono::DateTime<chrono::Utc> = row
+                .try_get("created_at")
+                .map_err(|e| RepoError::Database(e.to_string()))?;
+
+            cards.push(ListingCardSummary {
+                id,
+                title,
+                geom,
+                listing_type,
+                transaction_type,
+                price,
+                deposit,
+                monthly_rent,
+                area_m2,
+                thumbnail_url: None, // SP6-iii 가 listing-photo 테이블 join 으로 채움
+                view_count,
+                bookmark_count,
+                created_at,
+            });
+        }
+
+        Ok((cards, total_count))
+    }
+
     #[instrument(skip(self), fields(owner_id = %owner_id.as_str()))]
     async fn find_by_owner(
         &self,

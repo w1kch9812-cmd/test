@@ -43,6 +43,18 @@ pub trait ListingRepository: Send + Sync {
         bbox: BoundingBox,
     ) -> Result<Vec<ListingMarker>, RepoError>;
 
+    /// 카드 list 검색 — `status='active'` + `geom_point` not null + filter 적용.
+    ///
+    /// `query.size` 의 max 100 (caller 가 검증). 응답은 (cards, total\_count) 튜플.
+    ///
+    /// # Errors
+    ///
+    /// DB 통신 실패 시 [`RepoError::Database`].
+    async fn find_card_summaries_in_bbox(
+        &self,
+        query: CardSearchQuery,
+    ) -> Result<(Vec<ListingCardSummary>, u64), RepoError>;
+
     /// 소유자별 매물 조회. `status`가 `Some`이면 해당 상태만.
     ///
     /// # Errors
@@ -81,6 +93,80 @@ pub struct ListingMarker {
     pub listing_type: ListingType,
     /// 거래 유형.
     pub transaction_type: TransactionType,
+}
+
+/// 카드 list 용 풍부한 projection (지도 핀 + 우측 카드 양쪽 사용).
+///
+/// 전체 [`Listing`] 의 21 필드 중 list 페이지에 필요한 것만.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListingCardSummary {
+    /// 매물 ID (`lst_...`).
+    pub id: Id<ListingIdMarker>,
+    /// 제목.
+    pub title: String,
+    /// 좌표 (`WGS84`, `geom_point` 가 NULL 인 매물은 응답 제외).
+    pub geom: PointSrid,
+    /// 매물 유형.
+    pub listing_type: ListingType,
+    /// 거래 유형.
+    pub transaction_type: TransactionType,
+    /// 주가격 (sale=매매가, jeonse=보증금, monthly\_rent=월세).
+    pub price: MoneyKrw,
+    /// 보증금 (월세/전세 만; sale 은 None).
+    pub deposit: Option<MoneyKrw>,
+    /// 월세 (monthly\_rent 만; sale/jeonse 는 None).
+    pub monthly_rent: Option<MoneyKrw>,
+    /// 면적 (m²).
+    pub area_m2: f64,
+    /// 사진 thumbnail URL (없으면 None — placeholder UI).
+    pub thumbnail_url: Option<String>,
+    /// 조회수.
+    pub view_count: i64,
+    /// 즐겨찾기 수.
+    pub bookmark_count: i64,
+    /// 등록일.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// 카드 list 검색 조건 (모두 optional, default 는 "전체").
+#[derive(Debug, Clone, Default)]
+pub struct CardSearchQuery {
+    /// 지도 영역 (4326). None 이면 한국 전체.
+    pub bbox: Option<BoundingBox>,
+    /// `listing_type` 필터 (None or empty = 6 종 모두).
+    pub types: Option<Vec<ListingType>>,
+    /// `transaction_type` 필터 (None or empty = 3 종 모두).
+    pub transactions: Option<Vec<TransactionType>>,
+    /// `area_m2 >=` (None = 0).
+    pub min_area_m2: Option<f64>,
+    /// `area_m2 <=` (None = +inf).
+    pub max_area_m2: Option<f64>,
+    /// `price_krw >=` (None = 0).
+    pub min_price_krw: Option<i64>,
+    /// `price_krw <=` (None = +inf).
+    pub max_price_krw: Option<i64>,
+    /// page (0-indexed).
+    pub page: u32,
+    /// page 당 항목 수 (max 100).
+    pub size: u32,
+    /// 정렬.
+    pub sort: CardSearchSort,
+}
+
+/// 정렬 방식.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CardSearchSort {
+    /// 등록일 최신순 (default).
+    #[default]
+    CreatedAtDesc,
+    /// 가격 오름차순.
+    PriceAsc,
+    /// 가격 내림차순.
+    PriceDesc,
+    /// 면적 오름차순.
+    AreaAsc,
+    /// 면적 내림차순.
+    AreaDesc,
 }
 
 /// `Repository` 에러.

@@ -10,6 +10,7 @@ description = "공짱 HTTP API service (Walking Skeleton)"
 auth = { path = "../../crates/auth", version = "0.1.0" }
 shared-kernel = { path = "../../crates/domain/core/shared-kernel", version = "0.1.0" }
 user-domain = { path = "../../crates/domain/core/user", version = "0.1.0" }
+listing-domain = { path = "../../crates/domain/core/listing", version = "0.1.0" }
 db = { path = "../../crates/db", version = "0.1.0" }
 axum = { workspace = true }
 deadpool-redis = { workspace = true }
