@@ -1,6 +1,7 @@
 :root {
+  /* Pretendard self-host: next/font/local injects --font-pretendard on <html> */
   --font-sans:
-    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+    var(--font-pretendard), -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
     "Noto Sans KR", "Malgun Gothic", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "D2Coding", Menlo, Consolas, monospace;
   --text-xs: 0.75rem;

@@ -68,11 +68,14 @@ export async function proxy(req: NextRequest) {
   const nonce = randomBytes(16).toString("base64");
   const cspHeader = [
     `default-src 'self'`,
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    // https://oapi.map.naver.com: Naver Maps SDK script loader
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://oapi.map.naver.com`,
     `style-src 'self' 'unsafe-inline'`,
-    `img-src 'self' data: blob:`,
+    // *.map.naver.com: map tiles/images; *.pstatic.net: Naver static assets
+    `img-src 'self' data: blob: https://*.map.naver.com https://*.pstatic.net`,
     `font-src 'self' data:`,
-    `connect-src 'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER}`,
+    // *.map.naver.com + *.naver.com: Naver Maps API calls and geocoding
+    `connect-src 'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.naver.com`,
     `frame-ancestors 'none'`,
     `base-uri 'self'`,
     `form-action 'self' ${env.ZITADEL_ISSUER}`,
