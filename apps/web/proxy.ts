@@ -1,9 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { checkRate } from "@/lib/ratelimit";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
+import { sanitizeReturnTo } from "@/lib/url";
 
 const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth"];
 const ADMIN_PATHS = ["/admin"];
@@ -70,10 +72,10 @@ export async function proxy(req: NextRequest) {
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
-    `connect-src 'self' ${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""} ${process.env.ZITADEL_ISSUER ?? ""}`,
+    `connect-src 'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER}`,
     `frame-ancestors 'none'`,
     `base-uri 'self'`,
-    `form-action 'self' ${process.env.ZITADEL_ISSUER ?? ""}`,
+    `form-action 'self' ${env.ZITADEL_ISSUER}`,
   ].join("; ");
 
   const reqHeaders = new Headers(req.headers);
@@ -89,14 +91,14 @@ export async function proxy(req: NextRequest) {
   const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
   if (!sid) {
     const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("returnTo", url.pathname);
+    loginUrl.searchParams.set("returnTo", sanitizeReturnTo(url.pathname));
     return NextResponse.redirect(loginUrl);
   }
 
   const session: SessionData | null = await getSession(sid);
   if (!session) {
     const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("returnTo", url.pathname);
+    loginUrl.searchParams.set("returnTo", sanitizeReturnTo(url.pathname));
     const res = NextResponse.redirect(loginUrl);
     res.cookies.delete(SID_COOKIE_NAME);
     return res;
