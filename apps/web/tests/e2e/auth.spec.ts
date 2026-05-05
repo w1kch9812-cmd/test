@@ -28,8 +28,8 @@ test.describe("auth flow", () => {
   // 실 Zitadel container 의존 — 사용자 인증 흐름
   test("login → callback (Zitadel hosted UI) → profile", async ({ page }) => {
     test.skip(
-      !process.env.ZITADEL_ISSUER,
-      "Zitadel not configured — skip in local without container",
+      process.env.ZITADEL_E2E_REAL !== "true",
+      "real Zitadel container required (set ZITADEL_E2E_REAL=true)",
     );
 
     await page.goto("/login");
@@ -47,8 +47,8 @@ test.describe("auth flow", () => {
 
   test("logout returns to root with cookie cleared", async ({ page, context }) => {
     test.skip(
-      !process.env.ZITADEL_ISSUER,
-      "Zitadel not configured — skip in local without container",
+      process.env.ZITADEL_E2E_REAL !== "true",
+      "real Zitadel container required (set ZITADEL_E2E_REAL=true)",
     );
 
     await page.goto("/profile");

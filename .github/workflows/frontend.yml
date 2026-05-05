@@ -94,11 +94,16 @@ jobs:
         run: pnpm --filter=@gongzzang/web test:e2e
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          ZITADEL_ISSUER: http://localhost:8443
+          ZITADEL_CLIENT_ID: ci-placeholder
+          ZITADEL_AUDIENCE: ci-placeholder
+          ZITADEL_REDIRECT_URI: http://localhost:3000/api/auth/callback
           REDIS_URL: redis://localhost:6379
           SESSION_SECRET: ci-test-secret-32-bytes-or-more-padding-padding
-          # ZITADEL_* 미설정 → test runner 의 process.env.ZITADEL_ISSUER 가 falsy
-          # → auth.spec.ts 의 test.skip(!process.env.ZITADEL_ISSUER) 가 작동해 Zitadel 의존 e2e graceful skip.
-          # playwright.config.ts webServer.env 에 URL fallback 이 있어 Next.js dev server 는 정상 기동.
+          # ZITADEL_E2E_REAL 미설정 → auth.spec.ts 의 Zitadel-dependent test (시나리오 4-5) 는
+          # test.skip(ZITADEL_E2E_REAL !== "true") 으로 graceful skip.
+          # 시나리오 1-3 (login UI / 미인증 redirect / forbidden) 는 placeholder env 로 Next.js
+          # dev server 가 정상 기동 후 실행. 진짜 Zitadel e2e 는 SP6-iam-infra 의 ephemeral env.
 
       - name: Upload Playwright report (on failure)
         if: failure()
