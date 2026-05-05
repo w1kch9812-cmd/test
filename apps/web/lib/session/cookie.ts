@@ -1,8 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "@/lib/env";
 
-export const SID_COOKIE_NAME = "__Host-sid";
-export const TEMP_COOKIE_NAME = "__Host-auth-tmp";
+const isProd = process.env.NODE_ENV === "production";
+
+// Production: __Host-/__Secure- prefix + Secure flag (HTTPS strict).
+// Dev (localhost HTTP): prefix + Secure 제거 (browser 가 HTTP 에서 거부).
+export const SID_COOKIE_NAME = isProd ? "__Host-sid" : "sid";
+export const TEMP_COOKIE_NAME = isProd ? "__Secure-auth-tmp" : "auth-tmp";
 
 /**
  * Temp cookie payload 를 HMAC-SHA256 sign + base64url encode.
@@ -35,29 +39,19 @@ export function verifyTempPayload(signed: string): string | null {
   return Buffer.from(payloadB64, "base64url").toString("utf-8");
 }
 
+function buildSidCookie(value: string, maxAgeSec: number): string {
+  const parts = [`${SID_COOKIE_NAME}=${value}`];
+  if (isProd) parts.push("Secure", "Partitioned");
+  parts.push("HttpOnly", "SameSite=Strict", "Path=/", `Max-Age=${maxAgeSec}`);
+  return parts.join("; ");
+}
+
 export function setSidCookie(sid: string, maxAgeSec: number): string {
-  // __Host- prefix 는 Domain 속성 금지, Path=/ 필수, Secure 필수
-  return [
-    `${SID_COOKIE_NAME}=${sid}`,
-    "Secure",
-    "HttpOnly",
-    "SameSite=Strict",
-    "Path=/",
-    `Max-Age=${maxAgeSec}`,
-    "Partitioned",
-  ].join("; ");
+  return buildSidCookie(sid, maxAgeSec);
 }
 
 export function deleteSidCookie(): string {
-  return [
-    `${SID_COOKIE_NAME}=`,
-    "Secure",
-    "HttpOnly",
-    "SameSite=Strict",
-    "Path=/",
-    "Max-Age=0",
-    "Partitioned",
-  ].join("; ");
+  return buildSidCookie("", 0);
 }
 
 export interface TempAuthState {
@@ -67,24 +61,17 @@ export interface TempAuthState {
   return_to: string;
 }
 
+function buildTempCookie(value: string, maxAgeSec: number): string {
+  const parts = [`${TEMP_COOKIE_NAME}=${value}`];
+  if (isProd) parts.push("Secure");
+  parts.push("HttpOnly", "SameSite=Lax", "Path=/api/auth/", `Max-Age=${maxAgeSec}`);
+  return parts.join("; ");
+}
+
 export function setTempCookie(payload: string, maxAgeSec: number): string {
-  return [
-    `${TEMP_COOKIE_NAME}=${payload}`,
-    "Secure",
-    "HttpOnly",
-    "SameSite=Lax", // OAuth callback 은 cross-site GET 이라 Strict 불가
-    "Path=/api/auth/",
-    `Max-Age=${maxAgeSec}`,
-  ].join("; ");
+  return buildTempCookie(payload, maxAgeSec);
 }
 
 export function deleteTempCookie(): string {
-  return [
-    `${TEMP_COOKIE_NAME}=`,
-    "Secure",
-    "HttpOnly",
-    "SameSite=Lax",
-    "Path=/api/auth/",
-    "Max-Age=0",
-  ].join("; ");
+  return buildTempCookie("", 0);
 }

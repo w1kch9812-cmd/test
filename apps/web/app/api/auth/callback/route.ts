@@ -75,17 +75,21 @@ export async function GET(req: NextRequest) {
       issuer: env.ZITADEL_ISSUER,
       clientId: env.ZITADEL_CLIENT_ID,
       redirectUri: env.ZITADEL_REDIRECT_URI,
-      code,
+      callbackUrl: new URL(req.url),
+      expectedState: tmp.state,
       code_verifier: tmp.code_verifier,
       expectedNonce: tmp.nonce,
     });
   } catch (err) {
-    // I4: err.message 노출 제거 — internal info leak 방지
+    // I4: production 에서 err.message 노출 제거 (internal info leak 방지)
+    // dev 에서만 디버깅 detail 표시.
     console.error("[auth/callback] exchangeCode failed:", err);
+    const isDev = process.env.NODE_ENV !== "production";
     return problem({
       type: "auth/idp-unavailable",
       title: "로그인 서버에 연결할 수 없어요",
       status: 503,
+      detail: isDev ? (err instanceof Error ? err.message : String(err)) : undefined,
       instance: req.url,
     }).toResponse();
   }

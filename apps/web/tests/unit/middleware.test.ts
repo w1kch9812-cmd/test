@@ -2,6 +2,7 @@
 
 import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 import { createSession } from "@/lib/session/store";
 import { proxy as middleware } from "@/proxy";
@@ -42,7 +43,7 @@ describe("middleware", () => {
       300,
     );
     const req = new NextRequest("http://localhost:3000/admin/users", {
-      headers: { cookie: `__Host-sid=${sid}` },
+      headers: { cookie: `${SID_COOKIE_NAME}=${sid}` },
     });
     const res = await middleware(req);
     expect(res.status).toBe(307);

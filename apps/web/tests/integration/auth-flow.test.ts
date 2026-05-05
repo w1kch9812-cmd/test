@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as callbackGET } from "@/app/api/auth/callback/route";
 import { POST as loginPOST } from "@/app/api/auth/login/route";
-import { verifyTempPayload } from "@/lib/session/cookie";
+import { SID_COOKIE_NAME, TEMP_COOKIE_NAME, verifyTempPayload } from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 
 vi.mock("@/lib/oidc", async () => {
@@ -48,9 +48,9 @@ describe("auth flow integration", () => {
     const loginRes = await loginPOST(loginReq);
     expect(loginRes.status).toBe(302);
     const setCookie = loginRes.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain("__Host-auth-tmp=");
+    expect(setCookie).toContain(`${TEMP_COOKIE_NAME}=`);
 
-    const tmpMatch = setCookie.match(/__Host-auth-tmp=([^;]+)/);
+    const tmpMatch = setCookie.match(new RegExp(`${TEMP_COOKIE_NAME}=([^;]+)`));
     expect(tmpMatch).not.toBeNull();
     const tmp = String(tmpMatch?.[1]);
     // C2: cookie is now HMAC-signed (payload.mac); use verifyTempPayload to decode
@@ -63,11 +63,11 @@ describe("auth flow integration", () => {
 
     const callbackReq = new NextRequest(
       `http://localhost:3000/api/auth/callback?code=abc&state=${decoded.state}`,
-      { headers: { cookie: `__Host-auth-tmp=${tmp}` } },
+      { headers: { cookie: `${TEMP_COOKIE_NAME}=${tmp}` } },
     );
     const callbackRes = await callbackGET(callbackReq);
     expect(callbackRes.status).toBe(302);
     const sidCookie = callbackRes.headers.get("set-cookie") ?? "";
-    expect(sidCookie).toMatch(/__Host-sid=[0-9a-f]{64}/);
+    expect(sidCookie).toMatch(new RegExp(`${SID_COOKIE_NAME}=[0-9a-f]{64}`));
   });
 });

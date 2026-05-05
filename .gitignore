@@ -59,6 +59,9 @@ reference/*/
 # === 로컬 MCP 빌드 ===
 .mcp-local/
 
+# === Dev verification scripts (local 검증, CI 무관) ===
+apps/web/scripts/
+
 # === 백업 / 아카이브 ===
 _archive/
 .claude/scheduled_tasks.lock

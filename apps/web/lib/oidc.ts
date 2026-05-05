@@ -58,12 +58,21 @@ let _as: oauth.AuthorizationServer | null = null;
 
 export async function discoverAs(issuer: string): Promise<oauth.AuthorizationServer> {
   if (_as && _as.issuer === issuer) return _as;
-  const resp = await oauth.discoveryRequest(new URL(issuer), {
-    algorithm: "oidc",
-  });
+  // Dev (localhost HTTP): oauth4webapi 의 HTTPS 강제 우회.
+  // Production (HTTPS) 에서는 default 동작 (HTTPS only).
+  const isDev = process.env.NODE_ENV !== "production";
+  const discoveryOpts: oauth.DiscoveryRequestOptions = { algorithm: "oidc" };
+  if (isDev) {
+    discoveryOpts[oauth.allowInsecureRequests] = true;
+  }
+  const resp = await oauth.discoveryRequest(new URL(issuer), discoveryOpts);
   _as = await oauth.processDiscoveryResponse(new URL(issuer), resp);
   return _as;
 }
+
+// Dev 에서 oauth4webapi 의 token endpoint HTTPS 강제 우회용.
+const insecureOpts: Record<symbol, true> =
+  process.env.NODE_ENV !== "production" ? { [oauth.allowInsecureRequests]: true } : {};
 
 export interface TokenResult {
   access_token: string;
@@ -79,14 +88,21 @@ export async function exchangeCode(input: {
   issuer: string;
   clientId: string;
   redirectUri: string;
-  code: string;
+  callbackUrl: URL; // /api/auth/callback?code=&state=
+  expectedState: string;
   code_verifier: string;
   expectedNonce: string;
 }): Promise<TokenResult> {
   const as = await discoverAs(input.issuer);
   // Public client (PKCE) — no client secret, use None() auth method
   const client: oauth.Client = { client_id: input.clientId };
-  const callbackParams = new URLSearchParams({ code: input.code });
+  // v3: validateAuthResponse 가 code+state 검증 후 URLSearchParams 반환.
+  const callbackParams = oauth.validateAuthResponse(
+    as,
+    client,
+    input.callbackUrl,
+    input.expectedState,
+  );
   const resp = await oauth.authorizationCodeGrantRequest(
     as,
     client,
@@ -94,6 +110,7 @@ export async function exchangeCode(input: {
     callbackParams,
     input.redirectUri,
     input.code_verifier,
+    insecureOpts as Parameters<typeof oauth.authorizationCodeGrantRequest>[6],
   );
   // v3: processAuthorizationCodeResponse handles OIDC when id_token is present
   const result = await oauth.processAuthorizationCodeResponse(as, client, resp, {
@@ -104,10 +121,13 @@ export async function exchangeCode(input: {
   if (!idClaims) {
     throw new Error("oidc error: id_token claims missing");
   }
-  const jti = idClaims.jti as string | undefined;
+  // jti 는 access_token (JWT) 의 claim — Zitadel access_token 이 JWT 일 때 항상 발급.
+  // id_token 의 jti 는 OIDC 표준상 optional 이라 Zitadel 가 안 발급할 수 있음.
+  const accessClaims = decodeJwtPayload(result.access_token);
+  const jti = accessClaims.jti as string | undefined;
   if (!jti || typeof jti !== "string" || jti.length === 0) {
     throw new Error(
-      "oidc: id_token missing 'jti' claim — check Zitadel project settings (idTokenRoleAssertion / accessTokenType=JWT)",
+      "oidc: access_token missing 'jti' claim — Zitadel app 의 Token Type 을 'JWT' 로 설정해야 함",
     );
   }
   return {
@@ -119,6 +139,20 @@ export async function exchangeCode(input: {
     sub: idClaims.sub,
     role: extractRole(idClaims),
   };
+}
+
+function decodeJwtPayload(jwt: string): Record<string, unknown> {
+  const parts = jwt.split(".");
+  const payloadPart = parts[1];
+  if (!payloadPart) return {};
+  try {
+    return JSON.parse(Buffer.from(payloadPart, "base64url").toString("utf-8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return {};
+  }
 }
 
 function extractRole(claims: Record<string, unknown>): string {
@@ -138,13 +172,20 @@ export async function refreshTokens(input: {
 }): Promise<TokenResult> {
   const as = await discoverAs(input.issuer);
   const client: oauth.Client = { client_id: input.clientId };
-  const resp = await oauth.refreshTokenGrantRequest(as, client, oauth.None(), input.refresh_token);
+  const resp = await oauth.refreshTokenGrantRequest(
+    as,
+    client,
+    oauth.None(),
+    input.refresh_token,
+    insecureOpts as Parameters<typeof oauth.refreshTokenGrantRequest>[4],
+  );
   const result = await oauth.processRefreshTokenResponse(as, client, resp);
   const idClaims = oauth.getValidatedIdTokenClaims(result);
   if (!idClaims) {
     throw new Error("refresh error: id_token claims missing");
   }
-  const jti = idClaims.jti as string | undefined;
+  const accessClaims = decodeJwtPayload(result.access_token);
+  const jti = accessClaims.jti as string | undefined;
   if (!jti || typeof jti !== "string" || jti.length === 0) {
     throw new Error(
       "oidc: id_token missing 'jti' claim — check Zitadel project settings (idTokenRoleAssertion / accessTokenType=JWT)",

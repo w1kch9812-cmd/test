@@ -27,8 +27,6 @@ services:
       - --masterkeyFromEnv
       - --tlsMode
       - disabled
-      - --config
-      - /zitadel-setup.yaml
     environment:
       ZITADEL_MASTERKEY: MasterkeyNeedsToHave32Characters
       ZITADEL_DATABASE_POSTGRES_HOST: zitadel-db
@@ -43,6 +41,14 @@ services:
       ZITADEL_EXTERNALSECURE: "false"
       ZITADEL_EXTERNALDOMAIN: localhost
       ZITADEL_EXTERNALPORT: 18443
+      # FirstInstance admin user — env-based (zitadel-setup.yaml 의 --config flag 가 v2.65.1 에서 적용 안 됨)
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: Admin123!
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME: Admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME: Gongzzang
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS: admin@zitadel.localhost
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_VERIFIED: "true"
     volumes:
       - ./zitadel-setup.yaml:/zitadel-setup.yaml:ro
       - zitadel-init-pat:/pat-out
