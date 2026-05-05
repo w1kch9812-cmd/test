@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.turbo/
+target/
+_archive/
+reference/
+.mcp-local/
+coverage/
+playwright-report/
+test-results/
+out/
+dist/
