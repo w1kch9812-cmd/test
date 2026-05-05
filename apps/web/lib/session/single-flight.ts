@@ -43,7 +43,11 @@ export async function withLock<T>(
       try {
         return await run();
       } finally {
-        await releaseLock(key, tok);
+        releaseLock(key, tok).catch((err: Error) => {
+          // lock 은 TTL 로 자동 만료됨 — log 만 남기고 run() 의 에러 우선
+          // (T4 에서 pino logger 도입 후 이 console.error 교체)
+          console.error(`[single-flight] releaseLock failed for key='${key}':`, err);
+        });
       }
     }
     if (i < maxRetries) await sleep(retryDelayMs);

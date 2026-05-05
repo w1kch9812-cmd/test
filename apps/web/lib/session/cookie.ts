@@ -1,5 +1,5 @@
 export const SID_COOKIE_NAME = "__Host-sid";
-const TEMP_COOKIE_NAME = "__Host-auth-tmp";
+export const TEMP_COOKIE_NAME = "__Host-auth-tmp";
 
 export function setSidCookie(sid: string, maxAgeSec: number): string {
   // __Host- prefix 는 Domain 속성 금지, Path=/ 필수, Secure 필수
@@ -54,5 +54,3 @@ export function deleteTempCookie(): string {
     "Max-Age=0",
   ].join("; ");
 }
-
-export const TEMP_COOKIE = TEMP_COOKIE_NAME;

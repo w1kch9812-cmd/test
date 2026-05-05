@@ -22,7 +22,26 @@ export async function createSession(data: SessionData, ttlSec: number): Promise<
 export async function getSession(sid: string): Promise<SessionData | null> {
   const raw = await getRedis().get(KEY(sid));
   if (!raw) return null;
-  return JSON.parse(raw) as SessionData;
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    typeof data !== "object" ||
+    data === null ||
+    typeof (data as SessionData).sub !== "string" ||
+    typeof (data as SessionData).jti !== "string" ||
+    typeof (data as SessionData).role !== "string" ||
+    typeof (data as SessionData).access_token !== "string" ||
+    typeof (data as SessionData).refresh_token !== "string" ||
+    typeof (data as SessionData).id_token !== "string" ||
+    typeof (data as SessionData).exp !== "number"
+  ) {
+    return null;
+  }
+  return data as SessionData;
 }
 
 export async function deleteSession(sid: string): Promise<void> {

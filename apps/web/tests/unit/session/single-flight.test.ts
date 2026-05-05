@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { getRedis } from "@/lib/session/redis";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 import { acquireLock, releaseLock, withLock } from "@/lib/session/single-flight";
 
 describe("Single-flight Redis mutex", () => {
@@ -7,6 +7,10 @@ describe("Single-flight Redis mutex", () => {
     // db 2 — isolated from store tests (db 1) for parallel vitest workers
     await getRedis().select(2);
     await getRedis().flushdb();
+  });
+
+  afterAll(() => {
+    __resetRedisForTest();
   });
 
   it("acquireLock succeeds on first call", async () => {

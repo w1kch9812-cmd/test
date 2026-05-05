@@ -58,4 +58,16 @@ describe("SessionStore (Redis)", () => {
     await refreshSession(sid, next, 300);
     expect((await getSession(sid))?.jti).toBe("jti-2");
   });
+
+  it("getSession returns null on corrupted JSON", async () => {
+    await getRedis().set("session:bad-sid", "{not valid json", "EX", 300);
+    const got = await getSession("bad-sid");
+    expect(got).toBeNull();
+  });
+
+  it("getSession returns null on missing fields", async () => {
+    await getRedis().set("session:partial-sid", JSON.stringify({ sub: "u1" }), "EX", 300);
+    const got = await getSession("partial-sid");
+    expect(got).toBeNull();
+  });
 });
