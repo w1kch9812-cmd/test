@@ -1,2 +1,2 @@
-// T2 가 primitives + tokens re-export
-export {};
+export { cn } from "./lib/utils";
+export * from "./primitives";
