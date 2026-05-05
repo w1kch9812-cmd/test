@@ -14,6 +14,8 @@ exclude-files = [
     "target/**",
     "**/tests/**",
     "_archive/**",
-    "crates/db/**",          # SQL Repository — tested via integration (Walking Skeleton T4)
-    "services/api/**",       # Binary entrypoint — covered by integration smoke (T4) + manual demo (T5)
+    "crates/db/**",                      # SQL Repository — tested via integration (Walking Skeleton T4)
+    "services/api/**",                   # Binary entrypoint — integration smoke + manual demo
+    "services/outbox-publisher/**",      # Daemon binary entrypoint
+    "crates/api-health-recorder/**",     # SP7-iii binary — GitHub Actions cron 후속 (octocrab + DB record)
 ]
