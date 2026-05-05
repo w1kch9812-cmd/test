@@ -9,6 +9,8 @@
     },
     "profile": {
       "title": "내 정보",
+      "userId": "사용자 ID",
+      "role": "역할",
       "logoutButton": "로그아웃"
     },
     "forbidden": {

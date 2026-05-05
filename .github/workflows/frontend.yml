@@ -41,6 +41,49 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      zitadel-db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zitadel
+          POSTGRES_PASSWORD: zitadel-dev
+          POSTGRES_DB: zitadel
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U zitadel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      zitadel:
+        image: ghcr.io/zitadel/zitadel:v2.65.1
+        env:
+          ZITADEL_MASTERKEY: MasterkeyNeedsToHave32Characters
+          ZITADEL_DATABASE_POSTGRES_HOST: zitadel-db
+          ZITADEL_DATABASE_POSTGRES_PORT: 5432
+          ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+          ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+          ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel-dev
+          ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+          ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: zitadel
+          ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: zitadel-dev
+          ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+          ZITADEL_EXTERNALSECURE: "false"
+          ZITADEL_EXTERNALDOMAIN: localhost
+          ZITADEL_EXTERNALPORT: 8443
+          ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+          ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: Admin123!
+        ports: ["8443:8080"]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -72,10 +115,27 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter=@gongzzang/web exec playwright install chromium --with-deps
 
+      - name: Init Zitadel project + capture CLIENT_ID
+        run: |
+          bash infra/zitadel/init-zitadel.sh > /tmp/zitadel.out
+          cat /tmp/zitadel.out
+          CLIENT_ID=$(grep -E "^  ZITADEL_CLIENT_ID=" /tmp/zitadel.out | cut -d= -f2 | tr -d '[:space:]')
+          test -n "$CLIENT_ID" || (echo "::error::Failed to capture CLIENT_ID" && exit 1)
+          echo "ZITADEL_CLIENT_ID=$CLIENT_ID" >> "$GITHUB_ENV"
+          echo "ZITADEL_AUDIENCE=$CLIENT_ID" >> "$GITHUB_ENV"
+        env:
+          ZITADEL_HOST: http://localhost:8443
+
       - name: Playwright e2e + a11y
         run: pnpm --filter=@gongzzang/web test:e2e
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          ZITADEL_ISSUER: http://localhost:8443
+          ZITADEL_CLIENT_ID: ${{ env.ZITADEL_CLIENT_ID }}
+          ZITADEL_AUDIENCE: ${{ env.ZITADEL_AUDIENCE }}
+          ZITADEL_REDIRECT_URI: http://localhost:3000/api/auth/callback
+          REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: ci-test-secret-32-bytes-or-more-padding-padding
 
       - name: Upload Playwright report (on failure)
         if: failure()
