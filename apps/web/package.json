@@ -1,0 +1,53 @@
+{
+  "name": "@gongzzang/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:bundle": "size-limit"
+  },
+  "dependencies": {
+    "@gongzzang/ui": "workspace:*",
+    "@gongzzang/api-types": "workspace:*",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "next-intl": "^4.11.0",
+    "ky": "^2.0.2",
+    "@tanstack/react-query": "^5.100.9",
+    "zustand": "^5.0.13",
+    "react-hook-form": "^7.75.0",
+    "@hookform/resolvers": "^5.2.2",
+    "zod": "^4.4.3",
+    "lucide-react": "^1.14.0",
+    "sonner": "^2.0.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.14",
+    "@playwright/test": "^1.59.1",
+    "@axe-core/playwright": "^4.11.3",
+    "@tailwindcss/postcss": "^4.2.4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "happy-dom": "^20.9.0",
+    "openapi-typescript": "^7.13.0",
+    "size-limit": "^12.1.0",
+    "@size-limit/preset-app": "^12.1.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
+  }
+}
