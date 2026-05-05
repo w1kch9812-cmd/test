@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { getRedis } from "./redis";
 
+/** Session sid cookie + Redis entry TTL (refresh_token 만료 일치 — 30일). */
+export const REFRESH_TTL_SEC = 30 * 24 * 60 * 60;
+
 export interface SessionData {
   sub: string; // Zitadel sub
   jti: string; // current access_token JTI

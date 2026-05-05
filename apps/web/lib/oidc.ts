@@ -104,12 +104,18 @@ export async function exchangeCode(input: {
   if (!idClaims) {
     throw new Error("oidc error: id_token claims missing");
   }
+  const jti = idClaims.jti as string | undefined;
+  if (!jti || typeof jti !== "string" || jti.length === 0) {
+    throw new Error(
+      "oidc: id_token missing 'jti' claim — check Zitadel project settings (idTokenRoleAssertion / accessTokenType=JWT)",
+    );
+  }
   return {
     access_token: result.access_token,
     refresh_token: result.refresh_token ?? "",
     id_token: result.id_token ?? "",
     expires_in: result.expires_in ?? 300,
-    jti: (idClaims.jti as string | undefined) ?? idClaims.sub,
+    jti,
     sub: idClaims.sub,
     role: extractRole(idClaims),
   };
@@ -138,12 +144,18 @@ export async function refreshTokens(input: {
   if (!idClaims) {
     throw new Error("refresh error: id_token claims missing");
   }
+  const jti = idClaims.jti as string | undefined;
+  if (!jti || typeof jti !== "string" || jti.length === 0) {
+    throw new Error(
+      "oidc: id_token missing 'jti' claim — check Zitadel project settings (idTokenRoleAssertion / accessTokenType=JWT)",
+    );
+  }
   return {
     access_token: result.access_token,
     refresh_token: result.refresh_token ?? "",
     id_token: result.id_token ?? "",
     expires_in: result.expires_in ?? 300,
-    jti: (idClaims.jti as string | undefined) ?? idClaims.sub,
+    jti,
     sub: idClaims.sub,
     role: extractRole(idClaims),
   };

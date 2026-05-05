@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as callbackGET } from "@/app/api/auth/callback/route";
 import { POST as loginPOST } from "@/app/api/auth/login/route";
+import { verifyTempPayload } from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 
 vi.mock("@/lib/oidc", async () => {
@@ -52,7 +53,11 @@ describe("auth flow integration", () => {
     const tmpMatch = setCookie.match(/__Host-auth-tmp=([^;]+)/);
     expect(tmpMatch).not.toBeNull();
     const tmp = String(tmpMatch?.[1]);
-    const decoded = JSON.parse(Buffer.from(tmp, "base64url").toString("utf-8")) as {
+    // C2: cookie is now HMAC-signed (payload.mac); use verifyTempPayload to decode
+    const rawPayload = verifyTempPayload(tmp);
+    expect(rawPayload).not.toBeNull();
+    if (!rawPayload) throw new Error("verifyTempPayload returned null");
+    const decoded = JSON.parse(rawPayload) as {
       state: string;
     };
 

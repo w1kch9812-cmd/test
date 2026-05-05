@@ -1,11 +1,16 @@
+import { timingSafeEqual } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { exchangeCode, type TokenResult } from "@/lib/oidc";
-import { deleteTempCookie, setSidCookie, TEMP_COOKIE_NAME } from "@/lib/session/cookie";
-import { createSession } from "@/lib/session/store";
-
-const REFRESH_TTL_SEC = 30 * 24 * 60 * 60; // 30일
+import {
+  deleteTempCookie,
+  setSidCookie,
+  TEMP_COOKIE_NAME,
+  verifyTempPayload,
+} from "@/lib/session/cookie";
+import { createSession, REFRESH_TTL_SEC } from "@/lib/session/store";
+import { sanitizeReturnTo } from "@/lib/url";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -23,6 +28,17 @@ export async function GET(req: NextRequest) {
     }).toResponse();
   }
 
+  // C2: verify HMAC signature before trusting cookie contents
+  const rawPayload = verifyTempPayload(tmpCookie);
+  if (!rawPayload) {
+    return problem({
+      type: "auth/state-mismatch",
+      title: "로그인 검증에 실패했어요",
+      status: 401,
+      instance: req.url,
+    }).toResponse();
+  }
+
   let tmp: {
     code_verifier: string;
     state: string;
@@ -30,7 +46,7 @@ export async function GET(req: NextRequest) {
     return_to: string;
   };
   try {
-    tmp = JSON.parse(Buffer.from(tmpCookie, "base64url").toString("utf-8")) as typeof tmp;
+    tmp = JSON.parse(rawPayload) as typeof tmp;
   } catch {
     return problem({
       type: "auth/state-mismatch",
@@ -40,12 +56,15 @@ export async function GET(req: NextRequest) {
     }).toResponse();
   }
 
-  if (tmp.state !== state) {
+  // I1: timing-safe state comparison (timing attack prevention)
+  const a = Buffer.from(tmp.state, "utf-8");
+  const b = Buffer.from(state, "utf-8");
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return problem({
       type: "auth/state-mismatch",
       title: "로그인 검증에 실패했어요",
+      // M6: detail 제거 — type 이 식별자 역할 (RFC 7807 SSOT)
       status: 401,
-      detail: "CSRF 검증 실패",
       instance: req.url,
     }).toResponse();
   }
@@ -61,11 +80,12 @@ export async function GET(req: NextRequest) {
       expectedNonce: tmp.nonce,
     });
   } catch (err) {
+    // I4: err.message 노출 제거 — internal info leak 방지
+    console.error("[auth/callback] exchangeCode failed:", err);
     return problem({
       type: "auth/idp-unavailable",
       title: "로그인 서버에 연결할 수 없어요",
       status: 503,
-      detail: err instanceof Error ? err.message : "unknown",
       instance: req.url,
     }).toResponse();
   }
@@ -90,10 +110,13 @@ export async function GET(req: NextRequest) {
     exp,
   }).catch(() => undefined);
 
+  // C1: sanitize return_to before redirect (open redirect prevention — second line of defense)
+  const redirectTo = sanitizeReturnTo(tmp.return_to);
+
   return new NextResponse(null, {
     status: 302,
     headers: [
-      ["Location", tmp.return_to || "/profile"],
+      ["Location", redirectTo],
       ["Set-Cookie", setSidCookie(sid, REFRESH_TTL_SEC)],
       ["Set-Cookie", deleteTempCookie()],
     ],

@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   }
 
   // JTI denylist 추가 (남은 access_token TTL 만큼)
+  // NOTE: getSession → set jti:deny → deleteSession 사이의 사소한 race window 존재.
+  // 동시 요청이 jti denylist set 직전 도착 시 backend verify 통과 가능 (sub-ms window).
+  // access_token TTL 5분 + 동일 jti 재사용 불가 + audit log 기록 으로 mitigation.
+  // 완전한 atomicity 가 필요하면 Redis MULTI/EXEC pipeline 또는 Lua script 로 변경.
   const remainingSec = Math.max(1, session.exp - Math.floor(Date.now() / 1000));
   await getRedis().set(`jti:deny:${session.jti}`, "1", "EX", remainingSec);
 
