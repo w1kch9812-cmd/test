@@ -23,12 +23,15 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
     env: {
-      ZITADEL_ISSUER: process.env.ZITADEL_ISSUER ?? "",
-      ZITADEL_CLIENT_ID: process.env.ZITADEL_CLIENT_ID ?? "",
-      ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE ?? "",
-      ZITADEL_REDIRECT_URI: process.env.ZITADEL_REDIRECT_URI ?? "",
-      REDIS_URL: process.env.REDIS_URL ?? "",
-      SESSION_SECRET: process.env.SESSION_SECRET ?? "",
+      // URL 검증 통과용 fallback — 실 Zitadel 미연결 시 ZITADEL_ISSUER 미설정으로
+      // test.skip(!process.env.ZITADEL_ISSUER) 가 작동해 Zitadel 의존 e2e 는 graceful skip.
+      ZITADEL_ISSUER: process.env.ZITADEL_ISSUER ?? "http://localhost:8443",
+      ZITADEL_CLIENT_ID: process.env.ZITADEL_CLIENT_ID ?? "ci-placeholder",
+      ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE ?? "ci-placeholder",
+      ZITADEL_REDIRECT_URI:
+        process.env.ZITADEL_REDIRECT_URI ?? "http://localhost:3000/api/auth/callback",
+      REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379",
+      SESSION_SECRET: process.env.SESSION_SECRET ?? "ci-placeholder-secret-32-bytes-padding-ok",
     },
   },
 });

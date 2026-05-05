@@ -155,17 +155,28 @@ async fn main() {
         let jwks = Arc::new(JwksCache::new(jwks_url, http));
         Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
     };
-    let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
-    let redis_pool = RedisCfg::from_url(redis_url)
-        .create_pool(Some(RedisRt::Tokio1))
-        .expect("redis pool");
-    let jti_denylist: Arc<dyn auth::jti_denylist::JtiDenylist> =
-        Arc::new(auth::jti_denylist::RedisJtiDenylist::new(redis_pool));
+    let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> =
+        env::var("REDIS_URL").map_or_else(
+            |_| {
+                tracing::warn!(
+                    "REDIS_URL not set — JTI denylist disabled (fail-open). Set REDIS_URL in production."
+                );
+                None
+            },
+            |url| {
+                let pool = RedisCfg::from_url(url)
+                    .create_pool(Some(RedisRt::Tokio1))
+                    .expect("redis pool");
+                let dl: Arc<dyn auth::jti_denylist::JtiDenylist> =
+                    Arc::new(auth::jti_denylist::RedisJtiDenylist::new(pool));
+                Some(dl)
+            },
+        );
 
     let auth_state = AuthState {
         verifier,
         user_repo,
-        jti_denylist: Some(jti_denylist),
+        jti_denylist,
     };
 
     let auth_event_state = routes::auth_event::AuthEventState { pool };
