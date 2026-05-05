@@ -59,3 +59,4 @@
 | [0010](./0010-scope-information-platform-option-a.md) | 범위 — 산업용 부동산 정보 플랫폼 (옵션 A) | Accepted |
 | [0011](./0011-embedding-gemini-pgvector.md) | 임베딩 — Gemini + pgvector (Phase 3+) | Accepted |
 | [0012](./0012-pipeline-visualization-react-flow.md) | 파이프라인 시각화 — React Flow (xyflow) | Accepted |
+| [0013](./0013-listing-search-naver-maps.md) | Listing 검색 지도 vendor — Naver Maps (SP6-ii) | Accepted |
