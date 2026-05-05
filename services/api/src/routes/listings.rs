@@ -15,6 +15,8 @@ use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
 use shared_kernel::transaction_type::TransactionType;
 
+use crate::http::problem::{problem, ProblemResponse};
+
 /// 핸들러 공유 상태.
 #[derive(Clone)]
 pub struct ListingsState {
@@ -72,7 +74,7 @@ pub struct ListingCardResponse {
     pub lat: f64,
     /// 경도.
     pub lng: f64,
-    /// 썸네일 URL.
+    /// 썸네일 URL (SP6-iii 이후 채워짐).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnail_url: Option<String>,
     /// 조회수.
@@ -98,46 +100,32 @@ pub struct ListingsResponse {
     pub has_next: bool,
 }
 
-/// RFC 7807 Problem Details.
-#[derive(Debug, Serialize)]
-pub struct ProblemDetails {
-    /// URI 식별자 (`https://gongzzang.com/errors/<id>`).
-    #[serde(rename = "type")]
-    pub type_: String,
-    /// 사람이 읽는 요약.
-    pub title: String,
-    /// HTTP 상태 코드.
-    pub status: u16,
-    /// 상세 설명 (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-}
-
-/// RFC 7807 응답 생성 헬퍼.
-fn problem(
-    type_id: &str,
-    title: &str,
-    status: StatusCode,
-    detail: Option<String>,
-) -> (StatusCode, Json<ProblemDetails>) {
-    (
-        status,
-        Json(ProblemDetails {
-            type_: format!("https://gongzzang.com/errors/{type_id}"),
-            title: title.to_owned(),
-            status: status.as_u16(),
-            detail,
-        }),
-    )
-}
-
 /// `GET /listings` — 카드 list 검색 (인증 필수).
 #[allow(clippy::too_many_lines)]
+#[tracing::instrument(
+    skip(state, _auth),
+    fields(
+        page = q.page,
+        size = q.size,
+        sort = ?q.sort,
+    ),
+)]
 pub async fn get_listings(
     State(state): State<ListingsState>,
     _auth: AuthenticatedUser,
     Query(q): Query<ListingsQuery>,
-) -> Result<Json<ListingsResponse>, (StatusCode, Json<ProblemDetails>)> {
+) -> Result<Json<ListingsResponse>, ProblemResponse> {
+    // size 검증: 0 은 has_next 무한 루프를 유발, 100 초과는 서버 부하 방지.
+    let size = q.size.unwrap_or(20);
+    if size == 0 || size > 100 {
+        return Err(problem(
+            "listings/invalid-filter",
+            "size 파라미터는 1~100 사이여야 해요",
+            StatusCode::BAD_REQUEST,
+            Some(format!("got size={size}, allowed 1..=100")),
+        ));
+    }
+
     // bounds 파싱: "south,west,north,east" → BoundingBox(min_lng=west, min_lat=south, max_lng=east, max_lat=north).
     let bbox = if let Some(b) = q.bounds.as_deref() {
         let parts: Vec<&str> = b.split(',').collect();
@@ -225,7 +213,6 @@ pub async fn get_listings(
     };
 
     let page = q.page.unwrap_or(0);
-    let size = q.size.unwrap_or(20).min(100);
 
     let query = CardSearchQuery {
         bbox,
@@ -245,11 +232,14 @@ pub async fn get_listings(
         .find_card_summaries_in_bbox(query)
         .await
         .map_err(|e| {
+            // C1: DB 내부 정보(쿼리 구조, 테이블명 등)를 client 에 노출하지 않음.
+            // 서버 log 에만 기록, 응답은 generic message.
+            tracing::error!(error = %e, "listing DB query failed");
             problem(
                 "listings/database",
                 "매물 검색 중 오류가 발생했어요",
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Some(e.to_string()),
+                None, // production 보안 — DB internal 노출 금지
             )
         })?;
 
@@ -282,63 +272,4 @@ pub async fn get_listings(
         size,
         has_next,
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
-
-    use super::*;
-
-    #[test]
-    fn problem_details_serializes_with_type_field() {
-        let p = problem(
-            "listings/invalid-bounds",
-            "잘못된 bounds",
-            StatusCode::BAD_REQUEST,
-            None,
-        );
-        let json = serde_json::to_string(&p.1 .0).unwrap();
-        assert!(
-            json.contains("\"type\":\"https://gongzzang.com/errors/listings/invalid-bounds\""),
-            "type field missing: {json}"
-        );
-        assert!(
-            json.contains("\"status\":400"),
-            "status field missing: {json}"
-        );
-    }
-
-    #[test]
-    fn problem_details_omits_detail_when_none() {
-        let p = problem("listings/test", "t", StatusCode::BAD_REQUEST, None);
-        let json = serde_json::to_string(&p.1 .0).unwrap();
-        assert!(
-            !json.contains("\"detail\""),
-            "detail should be omitted when None: {json}"
-        );
-        assert!(
-            json.contains("\"status\":400"),
-            "status field missing: {json}"
-        );
-    }
-
-    #[test]
-    fn problem_details_includes_detail_when_some() {
-        let p = problem(
-            "listings/test",
-            "t",
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Some("DB connection failed".into()),
-        );
-        let json = serde_json::to_string(&p.1 .0).unwrap();
-        assert!(
-            json.contains("\"detail\":\"DB connection failed\""),
-            "detail missing: {json}"
-        );
-        assert!(
-            json.contains("\"status\":500"),
-            "status field missing: {json}"
-        );
-    }
 }

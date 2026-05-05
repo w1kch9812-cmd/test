@@ -364,7 +364,8 @@ impl ListingRepository for PgListingRepository {
             .map(|v| v.iter().map(|t| t.as_str()).collect());
 
         let min_area = query.min_area_m2.unwrap_or(0.0_f64);
-        let max_area = query.max_area_m2.unwrap_or(f64::MAX);
+        // Korea 의 가장 큰 산업단지도 200M m² 미만. 1e9 m² 캡으로 numeric overflow 안전.
+        let max_area = query.max_area_m2.unwrap_or(1e9_f64);
         let min_price = query.min_price_krw.unwrap_or(0_i64);
         let max_price = query.max_price_krw.unwrap_or(i64::MAX);
 
@@ -376,9 +377,13 @@ impl ListingRepository for PgListingRepository {
             CardSearchSort::AreaDesc => "area_m2 DESC",
         };
 
-        let size = query.size.clamp(1, 100);
+        // handler 가 1..=100 보장. DB layer 는 trust caller.
+        let size = query.size;
         let offset = i64::from(query.page) * i64::from(size);
 
+        // PERF: COUNT(*) over filtered set runs on every paginated request.
+        // For large `listing` tables (millions of rows) this can be slow.
+        // SP6-ii 후속 (또는 SP7-i 의 monitoring) 에서 cached total / approximate count 검토.
         let sql = format!(
             r"
             WITH filtered AS (

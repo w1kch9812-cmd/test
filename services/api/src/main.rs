@@ -36,6 +36,10 @@ use tower_http::trace::TraceLayer;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
+mod http {
+    pub mod problem;
+}
+
 mod routes {
     pub mod auth_event;
     pub mod listings;
