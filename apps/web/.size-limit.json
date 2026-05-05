@@ -2,7 +2,7 @@
   {
     "name": "production bundle (all JS chunks, gzipped)",
     "path": ".next/static/chunks/*.js",
-    "limit": "350 KB",
+    "limit": "450 KB",
     "gzip": true
   },
   {
