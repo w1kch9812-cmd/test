@@ -13,25 +13,27 @@ sqlx database drop -y >/dev/null 2>&1 || true
 sqlx database create
 sqlx migrate run --source migrations
 
-EXPECTED_19=( "user" listing listing_photo \
+EXPECTED_TABLES=( "user" listing listing_photo \
   bookmark_listing bookmark_external search_history analysis_report notification \
   audit_log outbox_event \
   pipeline_schedule pipeline_run \
   admin_action business_verification_queue listing_review_queue listing_report featured_content system_alert \
-  parcel_external_data )
+  parcel_external_data \
+  api_health_check )
 
 # Each table exists
-for t in "${EXPECTED_19[@]}"; do
+for t in "${EXPECTED_TABLES[@]}"; do
   if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_tables where schemaname='public' and tablename='$t';" | grep -q '^1$'; then
     echo "FAIL: missing table $t" >&2; exit 1
   fi
 done
 
-# Exactly 19 public tables (excluding sqlx + PostGIS system tables)
-# 18 base + parcel_external_data (V003_06, SP4-iii-d).
+# Exactly 20 public tables (excluding sqlx + PostGIS system tables)
+# 18 base + parcel_external_data (V003_06, SP4-iii-d) + api_health_check (V003_07 = 30007, SP7-iii).
+EXPECTED_COUNT=${#EXPECTED_TABLES[@]}
 COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_tables where schemaname='public' and tablename not like '\\_sqlx%' and tablename not in ('spatial_ref_sys');")
-if [ "$COUNT" != "19" ]; then
-  echo "FAIL: expected exactly 19 RDS tables (excl _sqlx_*, spatial_ref_sys), got $COUNT" >&2
+if [ "$COUNT" != "$EXPECTED_COUNT" ]; then
+  echo "FAIL: expected exactly $EXPECTED_COUNT RDS tables (excl _sqlx_*, spatial_ref_sys), got $COUNT" >&2
   echo "All public tables:" >&2
   psql "$DATABASE_URL" -c "select tablename from pg_tables where schemaname='public' order by tablename;" >&2
   exit 1
@@ -95,5 +97,5 @@ if [ "$PED_BRIN" != "1" ]; then
   echo "FAIL: parcel_external_data_fetched_brin_idx missing (V003_06)" >&2; exit 1
 fi
 
-echo "PASS: V001 19 RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
+echo "PASS: V001 $EXPECTED_COUNT RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0
