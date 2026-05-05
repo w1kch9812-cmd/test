@@ -9,7 +9,13 @@ no-default-features = false
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+ignore = [
+    # RUSTSEC-2023-0071: rsa crate Marvin Attack timing sidechannel.
+    # sqlx-postgres password auth 호환용 transitive dep — 우리는 RSA 직접 사용 X.
+    # rsa crate fix 미발행 (2026-05 기준), sqlx 의 다음 메이저에서 sqlx-postgres 가 다른 path 로 이전 시 해소 예정.
+    # https://rustsec.org/advisories/RUSTSEC-2023-0071
+    "RUSTSEC-2023-0071",
+]
 
 [licenses]
 # unused allow 항목 = warn만 (빈 workspace에서 fail 안 되도록)
