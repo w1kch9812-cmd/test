@@ -6,6 +6,12 @@ rust-version.workspace = true
 license = "Apache-2.0"
 description = "공짱 V-World 외부 API 클라이언트 + ParcelReader 구현체"
 
+[features]
+default = []
+# SP7-iii T4 — V-World 실 API smoke test (CI nightly cron 전용).
+# `cargo test -p vworld-client --features real-api --test smoke_real_api -- --ignored`
+real-api = []
+
 [dependencies]
 parcel-domain = { path = "../../domain/core/parcel", version = "0.1.0" }
 shared-kernel = { path = "../../domain/core/shared-kernel", version = "0.1.0" }
