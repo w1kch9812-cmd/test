@@ -12,7 +12,7 @@ shared-kernel = { path = "../../crates/domain/core/shared-kernel", version = "0.
 user-domain = { path = "../../crates/domain/core/user", version = "0.1.0" }
 db = { path = "../../crates/db", version = "0.1.0" }
 axum = { workspace = true }
-deadpool-redis = "0.18"
+deadpool-redis = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 sqlx = { workspace = true }
 serde = { workspace = true }

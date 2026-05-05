@@ -64,6 +64,7 @@ print_stderr = "deny"
 [workspace.dependencies]
 # 추가 예정 (Plan 2b/2c): utoipa
 async-trait = "0.1"
+deadpool-redis = "0.18"
 axum = "0.7"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 geo-types = { version = "0.7", features = ["serde"] }

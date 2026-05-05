@@ -1,4 +1,9 @@
 //! `POST /internal/auth/event` — frontend 가 emit 하는 `AuthEvent` 수신 → `audit_log` INSERT.
+//!
+//! # Security
+//!
+//! 현재 unauthenticated. SP6-iam-infra 가 network ACL 로 ingress 차단 필요 (production 배포 전).
+//! 외부 노출 시 임의 `AuthEvent` inject 가능 → `audit_log` 오염.
 
 use auth::audit::{self, AuthEvent};
 use axum::{extract::State, http::StatusCode, Json};

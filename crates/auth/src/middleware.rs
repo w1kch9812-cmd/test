@@ -71,7 +71,14 @@ pub async fn auth_layer(
     let claims = state.verifier.verify(token).await?;
 
     // SP6-i: JTI denylist (logout / refresh rotation / role change 시 즉시 무효).
-    // fail-open: Redis 장애 시 가용성 우선 (JWT 검증만 통과). audit log 만 남김.
+    //
+    // SSS 결정: fail-open 정책 (Redis 장애 시 JWT 검증만 통과).
+    // - spec § 3.1 의 "Redis 다운 시 인증 차단" 은 session SSOT (frontend 의 session lookup) 차원.
+    //   Redis 가 다운되면 Set-Cookie sid → session payload 조회 불가 → frontend 가 401.
+    // - 본 backend 의 jti denylist 는 다른 layer — Redis 장애 시 fail-close 시 모든 backend
+    //   요청이 401 → cascade 장애. 가용성 우선 결정.
+    // - mitigation: access_token TTL 5분 + JWT signature 검증 + audit_log warn.
+    // - SP7-i 가 Sentry alert 추가 시 silent 보안 약화 차단.
     if let Some(dl) = &state.jti_denylist {
         match dl.is_denied(&claims.jti).await {
             Ok(true) => return Err(AuthError::Expired),

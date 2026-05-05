@@ -175,6 +175,10 @@ async fn main() {
         .route("/users/:id", get(get_user))
         .with_state(app_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
+    // SECURITY: /internal/auth/event 는 현재 unauthenticated.
+    // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
+    // network-level 보호 필요 (SP6-iam-infra 가 ingress ACL / VPC 격리 / shared secret).
+    // 외부 노출 시 audit_log 오염 가능 (사용자가 임의 AuthEvent inject).
     let internal: Router<()> = Router::new()
         .route(
             "/internal/auth/event",
