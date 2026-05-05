@@ -1,0 +1,16 @@
+export const REDACT_PATHS = [
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "code_verifier",
+  "ci",
+  "password",
+  "*.access_token",
+  "*.refresh_token",
+  "*.id_token",
+  "*.password",
+  "headers.authorization",
+  'headers["set-cookie"]',
+  "req.headers.cookie",
+  "req.headers.authorization",
+];

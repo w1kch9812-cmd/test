@@ -1,35 +1,34 @@
 import { isHTTPError, type Options as KyOptions } from "ky";
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerApi } from "@/lib/api";
-
-/**
- * SP6-foundation: backend proxy skeleton — auth 검증 X (unauthenticated).
- * SP6-i 가 채울 부분:
- *   1) iron-session cookie 검증
- *   2) Authorization: Bearer <jwt> 헤더 추가
- *   3) 401 → /login redirect
- *
- * 본 sub-project 는 단순 forward 만 — /healthz 같은 unauthenticated endpoint smoke 가능.
- */
+import { problem } from "@/lib/http/problem";
+import { SID_COOKIE_NAME } from "@/lib/session/cookie";
+import { getSession } from "@/lib/session/store";
 
 async function forward(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
   const path = params.path.join("/");
   const url = new URL(req.url);
   const search = url.search;
 
-  // SP6-i 가 cookie 검증 + Authorization 헤더 추가
+  // SP6-i: sid → access_token 변환
+  const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
+  let bearer: string | undefined;
+  if (sid) {
+    const session = await getSession(sid);
+    if (session) bearer = session.access_token;
+  }
+
   const api = createServerApi();
 
   try {
     const requestInit: KyOptions = {
       method: req.method,
+      headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
     };
 
     if (search) {
       const searchParams: Record<string, string> = {};
-      for (const [key, value] of new URLSearchParams(search).entries()) {
-        searchParams[key] = value;
-      }
+      for (const [k, v] of new URLSearchParams(search).entries()) searchParams[k] = v;
       requestInit.searchParams = searchParams;
     }
 
@@ -37,7 +36,7 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
       try {
         requestInit.json = await req.json();
       } catch {
-        // body 없는 POST/PUT/PATCH 도 허용
+        // body 없는 요청 허용
       }
     }
 
@@ -53,7 +52,13 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
       const body = await err.response.text();
       return new NextResponse(body, { status: err.response.status });
     }
-    return NextResponse.json({ error: "Backend unreachable", code: "PROXY_FAIL" }, { status: 502 });
+    return problem({
+      type: "proxy/upstream-unavailable",
+      title: "백엔드 서버에 연결할 수 없어요",
+      status: 502,
+      detail: "잠시 후 다시 시도해 주세요.",
+      instance: req.url,
+    }).toResponse() as unknown as NextResponse;
   }
 }
 
