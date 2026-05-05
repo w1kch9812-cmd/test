@@ -1,12 +1,12 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-04 (SP-FU-i 종료 직후)
-> **현재 main**: `bae883c` (SP-FU-i T4 — FU 41 + 2 critical bug fix)
+> **갱신일**: 2026-05-05 (SP7-iii 종료 직후)
+> **현재 main**: `<T6 commit>` (SP7-iii — 정부 API drift 자동 검출 시스템)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
 
-## 완료 (2026-05-04 기준)
+## 완료 (2026-05-05 기준)
 
 | SP | 영역 | 주요 산출물 | 상태 |
 |---|---|---|---|
@@ -28,8 +28,9 @@
 | **4-iii-d** | RawCapture trait 분리 + PgRawCapture (FU 27 closed) | `crates/data-clients/raw-capture` 신규 + 마이그 V003_06 (`parcel_external_data` 테이블) + `PgRawCapture` UPSERT + 3 통합 테스트 | ✅ |
 | **4-iii-a** | data.go.kr 건축물대장 + DataGoKrBuildingReader | `crates/data-clients/data-go-kr` 신규 + `Policy::data_go_kr_default` + pnu_split + ACL parser (한글→enum 매핑) + V-World geom 합성 + 25 단위 + 6 wiremock 통합 | ✅ |
 | **FU-i** | 누적 spec 부채 일괄 정리 (6 FU) | T1 (FU 12 prefix `lph_` + FU 13 spec mock SQL ↔ schema + FU 17 trait rustdoc, ac4036a) / T2 (FU 18 already closed by FU 34) / T3 (FU 26 clippy.toml `disallowed-types reqwest::Client`, 30515ae) / T4 (FU 41 Cd primary 매핑 + endpoint URL drift fix + 숫자/문자열 dual 파싱 + 5 fixture + 25 신규 테스트, bae883c) | ✅ |
+| **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
 
-**누적**: 31 crate, ~1259 tests (1149 단위 + 110 통합), 3 CI workflow 그린, CI clippy `--all-targets` 강화.
+**누적**: 33 crate, ~1278 tests (1149 단위 + 129 통합), 4 CI workflow 그린, CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -66,8 +67,8 @@
 - FU 44: 토지대장 endpoint
 
 **SP-FU-i T4 발견 follow-up (2026-05-04)**:
-- **FU 45 (제안)**: 정부 API endpoint URL drift 정기 검증 — staging-only smoke test 또는 weekly cron 으로 deprecated endpoint 자동 검출. 이번에 발견된 `BldRgstService_v2` (deprecated, HTTP 200 + body "Unexpected errors") 같은 silent drift 의 wiremock 우회 방지
-- **FU 46 (제안)**: 정부 API JSON Number vs String 응답 schema drift 모니터링 — 이번에 `totArea` / `heit` / `grndFlrCnt` 가 wiremock fixture 는 string 이었으나 실 응답은 number 였음. fixture 자동 갱신 mechanism 또는 schema validation 도입
+- ~~**FU 45 (제안)**: 정부 API endpoint URL drift 정기 검증 — staging-only smoke test 또는 weekly cron 으로 deprecated endpoint 자동 검출~~ → ✅ closed by SP7-iii (`<T6 commit>`)
+- ~~**FU 46 (제안)**: 정부 API JSON Number vs String 응답 schema drift 모니터링~~ → ✅ closed by SP7-iii (`<T6 commit>`)
 - **FU 47 (제안)**: V-World 지오코딩 (주소 → PNU) 통합 — 이번 검증에서 추정 PNU 4건 0 응답 → 시간 낭비. `resolve_parcel(addr)` 도구가 있으면 다음 검증에서 절약. 또는 [korean-land-mcp](https://github.com/UrbanWatcherKr/korean-land-mcp) 같은 외부 도구를 dev session 한정 활용 (메인 시스템 import 금지 — AGENTS.md § 3)
 
 ### B. SP6 — Frontend (Next.js + React 19)
@@ -86,21 +87,32 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 - **FU 14 / 15 / 16** (BVQ/LRQ updated_at / OCC API / find_by_listing UNIQUE INDEX) — DB schema 변경 (별도 SP-FU-OCC 권장)
 - **FU 28 / 29 / 30** (Redis 캐시 / Sentry alert / PMTiles markers) — 인프라 (SP4-iii-e + SP7 관측성)
 - **FU 40 / 42 / 43 / 44** (Building.geom / fetch_by_id / 캐시 정책 / 토지대장) — SP4-iii-a 후속 (SP4-iii-b/e)
-- **FU 45 / 46 / 47** (endpoint drift smoke test / schema drift / 지오코딩) — SP-FU-i T4 발견 (인프라)
+- ~~**FU 45 / 46**~~ (endpoint drift smoke test / schema drift) → ✅ closed by SP7-iii
+- **FU 47** (V-World 지오코딩) — dev session 가속, 미해소
+
+---
+
+### SP7 시리즈 (관측성)
+
+- ✅ SP7-iii: 정부 API drift 자동 검출 (2026-05-05) — `crates/operations/api-health`, `crates/api-health-recorder`, `.github/workflows/api-drift-smoke-test.yml`
+- 미착수 SP7-i: Sentry — 에러 자동 추적 (services/api 통합, 1-2일) — production code panic / breaker open 알림
+- 미착수 SP7-ii: Grafana metrics + Outbox publisher metrics (2-3일) — `api_health_check` 시계열 + Outbox lag
 
 ---
 
 ## 추천 순서
 
-```
+```text
 SP-FU-i (Trivial 6 FU, 2026-05-04 ✅)
   ↓ FU 12/13/17/18/26/41 일괄 정리 + endpoint URL/schema drift 2 critical bug
+SP7-iii (정부 API drift 자동 검출, 2026-05-05 ✅)
+  ↓ FU 45/46 closed, api_health_check 테이블 + nightly cron + GitHub Issue alert
 A (SP4-iii 분해, 3-5일)
   ↓ SP4-iii-b 실거래가, SP4-iii-c 법제처, SP4-iii-e R2 PMTiles + FU 40/42/43/44
 B (SP6 분해, 4-7일) 또는 C (SP-FU-OCC / SP-FU-IdValidation 등)
   ↓ B: 첫 사용자 화면 — SP5-* 모든 Repository 활용
   ↓ C: Medium/Large FU 영역별 닫기
-SP7 (관측성 — Grafana / Tempo / Sentry — Outbox metrics + Breaker alert + FU 45/46 endpoint drift smoke test)
+SP7-i / SP7-ii (Sentry + Grafana — production 알림 + 시계열 metrics)
 SP8 (IaC — Pulumi)
 ```
 
@@ -126,8 +138,8 @@ SP8 (IaC — Pulumi)
 - ~~**FU 18**: AuthCrate clippy 빚~~ → ✅ already closed by FU 34 (`9f0533a`), confirmed by SP-FU-i T2
 
 ### SP-FU-i T4 발견 (2026-05-04)
-- **FU 45 (제안)**: 정부 API endpoint URL drift staging-only smoke test — `BldRgstService_v2` deprecated 가 wiremock 통과시키며 silent drift 였음
-- **FU 46 (제안)**: 정부 API JSON Number vs String schema drift 모니터링 — `totArea`/`heit` 가 number 인데 fixture 는 string
+- ~~**FU 45 (제안)**: 정부 API endpoint URL drift staging-only smoke test~~ → ✅ closed by SP7-iii (`<T6 commit>`)
+- ~~**FU 46 (제안)**: 정부 API JSON Number vs String schema drift 모니터링~~ → ✅ closed by SP7-iii (`<T6 commit>`)
 - **FU 47 (제안)**: V-World 지오코딩 통합 (주소 → PNU) — dev session 가속
 
 ### Production 인프라
@@ -143,6 +155,6 @@ SP8 (IaC — Pulumi)
 
 - **로컬 cargo 작동** (MSVC Build Tools 설치 완료, 2026-05-03)
 - **Repo public** (`w1kch9812-cmd/test`) — GH Actions 무료
-- **CI 3 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset)
-- **마지막 commit**: `bae883c` (SP-FU-i T4 — FU 41 + endpoint URL fix + 숫자/문자열 dual 파싱)
+- **CI 4 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset) / api-drift-smoke-test (nightly cron 04:00 KST + workflow_dispatch)
+- **마지막 commit**: `<T6 commit>` (SP7-iii T6 — GitHub Actions cron + docs/observability + roadmap)
 - **다음 commit 시 항상**: 본 문서 갱신 → SP 진행 상태 SSOT 유지

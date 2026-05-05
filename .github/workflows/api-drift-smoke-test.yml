@@ -1,0 +1,171 @@
+name: api-drift-smoke-test
+
+on:
+  schedule:
+    # 04:00 KST = 19:00 UTC (전날)
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: 'Force fail (drift detection 검증)'
+        type: boolean
+        default: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  smoke-data-go-kr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Determine PNU (simulate_failure → invalid PNU)
+        id: pnu
+        run: |
+          if [ "${{ inputs.simulate_failure }}" = "true" ]; then
+            echo "value=9999999999999999999" >> $GITHUB_OUTPUT
+          else
+            echo "value=1168010100107370000" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run smoke test
+        id: smoke
+        env:
+          ODP_SERVICE_KEY: ${{ secrets.ODP_SERVICE_KEY }}
+          GONGZZANG_DRIFT_TEST_PNU: ${{ steps.pnu.outputs.value }}
+        run: |
+          set +e
+          START_MS=$(date +%s%3N)
+          cargo test --features real-api -p data-go-kr-client \
+              --test smoke_real_api -- --ignored --nocapture 2>&1 | tee smoke.log
+          STATUS_CODE=$?
+          END_MS=$(date +%s%3N)
+          DURATION=$((END_MS - START_MS))
+          echo "duration_ms=$DURATION" >> $GITHUB_OUTPUT
+
+          if [ $STATUS_CODE -eq 0 ]; then
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "http_code=200" >> $GITHUB_OUTPUT
+          else
+              if grep -qi "schema drift\|parser fail\|Malformed" smoke.log; then
+                  echo "status=parse_fail" >> $GITHUB_OUTPUT
+                  echo "http_code=200" >> $GITHUB_OUTPUT
+              elif grep -qi "5..\b\|5xx\|Bad Gateway\|Internal Server" smoke.log; then
+                  echo "status=http_5xx" >> $GITHUB_OUTPUT
+                  echo "http_code=502" >> $GITHUB_OUTPUT
+              elif grep -qi "4..\b\|4xx\|Forbidden\|Unauthorized\|Not Found" smoke.log; then
+                  echo "status=http_4xx" >> $GITHUB_OUTPUT
+                  echo "http_code=403" >> $GITHUB_OUTPUT
+              elif grep -qi "timeout" smoke.log; then
+                  echo "status=timeout" >> $GITHUB_OUTPUT
+              else
+                  echo "status=connection_fail" >> $GITHUB_OUTPUT
+              fi
+          fi
+
+      - name: Sanitize log
+        if: always()
+        run: |
+          sed -i 's/ServiceKey=[^&"]*/ServiceKey=***/g' smoke.log || true
+          sed -i 's/key=[^&"]*/key=***/g' smoke.log || true
+          tail -n 80 smoke.log > smoke.log.short
+
+      - name: Record + Issue orchestration
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HTTP_CODE: ${{ steps.smoke.outputs.http_code }}
+          STATUS: ${{ steps.smoke.outputs.status }}
+          DURATION_MS: ${{ steps.smoke.outputs.duration_ms }}
+        run: |
+          IS_CRON="${{ github.event_name == 'schedule' }}"
+          ARGS=(--api-name "data_go_kr.getBrTitleInfo" \
+                --status "$STATUS" \
+                --duration-ms "$DURATION_MS" \
+                --cron-run "$IS_CRON" \
+                --error-detail "$(cat smoke.log.short)")
+          if [ -n "$HTTP_CODE" ]; then
+              ARGS+=(--http-code "$HTTP_CODE")
+          fi
+          cargo run --bin api-health-recorder -- "${ARGS[@]}"
+
+  smoke-vworld:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Determine PNU
+        id: pnu
+        run: |
+          if [ "${{ inputs.simulate_failure }}" = "true" ]; then
+            echo "value=9999999999999999999" >> $GITHUB_OUTPUT
+          else
+            echo "value=1168010100107370000" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run smoke test
+        id: smoke
+        env:
+          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+          VWORLD_DOMAIN: ${{ secrets.VWORLD_DOMAIN }}
+          GONGZZANG_DRIFT_TEST_PNU: ${{ steps.pnu.outputs.value }}
+        run: |
+          set +e
+          START_MS=$(date +%s%3N)
+          cargo test --features real-api -p vworld-client \
+              --test smoke_real_api -- --ignored --nocapture 2>&1 | tee smoke.log
+          STATUS_CODE=$?
+          END_MS=$(date +%s%3N)
+          echo "duration_ms=$((END_MS - START_MS))" >> $GITHUB_OUTPUT
+
+          if [ $STATUS_CODE -eq 0 ]; then
+              echo "status=success" >> $GITHUB_OUTPUT
+              echo "http_code=200" >> $GITHUB_OUTPUT
+          elif grep -qi "schema\|parser\|Malformed" smoke.log; then
+              echo "status=parse_fail" >> $GITHUB_OUTPUT
+          elif grep -qi "5xx\|Bad Gateway" smoke.log; then
+              echo "status=http_5xx" >> $GITHUB_OUTPUT
+              echo "http_code=502" >> $GITHUB_OUTPUT
+          elif grep -qi "4xx\|Forbidden" smoke.log; then
+              echo "status=http_4xx" >> $GITHUB_OUTPUT
+              echo "http_code=403" >> $GITHUB_OUTPUT
+          else
+              echo "status=connection_fail" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sanitize log
+        if: always()
+        run: |
+          sed -i 's/key=[^&"]*/key=***/g' smoke.log || true
+          tail -n 80 smoke.log > smoke.log.short
+
+      - name: Record + Issue orchestration
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HTTP_CODE: ${{ steps.smoke.outputs.http_code }}
+          STATUS: ${{ steps.smoke.outputs.status }}
+          DURATION_MS: ${{ steps.smoke.outputs.duration_ms }}
+        run: |
+          IS_CRON="${{ github.event_name == 'schedule' }}"
+          ARGS=(--api-name "vworld.getFeature" \
+                --status "$STATUS" \
+                --duration-ms "$DURATION_MS" \
+                --cron-run "$IS_CRON" \
+                --error-detail "$(cat smoke.log.short)")
+          if [ -n "$HTTP_CODE" ]; then
+              ARGS+=(--http-code "$HTTP_CODE")
+          fi
+          cargo run --bin api-health-recorder -- "${ARGS[@]}"
