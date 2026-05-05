@@ -1,0 +1,14 @@
+[
+  {
+    "name": "production bundle (all JS chunks, gzipped)",
+    "path": ".next/static/chunks/*.js",
+    "limit": "350 KB",
+    "gzip": true
+  },
+  {
+    "name": "production bundle (turbopack runtime)",
+    "path": ".next/static/chunks/turbopack-*.js",
+    "limit": "20 KB",
+    "gzip": true
+  }
+]

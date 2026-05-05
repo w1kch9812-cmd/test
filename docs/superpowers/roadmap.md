@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-05 (SP7-iii 종료 직후)
-> **현재 main**: `<T6 commit>` (SP7-iii — 정부 API drift 자동 검출 시스템)
+> **갱신일**: 2026-05-05 (SP6-foundation 종료 직후)
+> **현재 main**: `<T4 commit>` (SP6-foundation — frontend 인프라 + smoke + e2e + a11y + bundle + CI)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -29,8 +29,9 @@
 | **4-iii-a** | data.go.kr 건축물대장 + DataGoKrBuildingReader | `crates/data-clients/data-go-kr` 신규 + `Policy::data_go_kr_default` + pnu_split + ACL parser (한글→enum 매핑) + V-World geom 합성 + 25 단위 + 6 wiremock 통합 | ✅ |
 | **FU-i** | 누적 spec 부채 일괄 정리 (6 FU) | T1 (FU 12 prefix `lph_` + FU 13 spec mock SQL ↔ schema + FU 17 trait rustdoc, ac4036a) / T2 (FU 18 already closed by FU 34) / T3 (FU 26 clippy.toml `disallowed-types reqwest::Client`, 30515ae) / T4 (FU 41 Cd primary 매핑 + endpoint URL drift fix + 숫자/문자열 dual 파싱 + 5 fixture + 25 신규 테스트, bae883c) | ✅ |
 | **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
+| **6-foundation** | Frontend 인프라 (Next.js 16 + shadcn + tokens + i18n + UX) | apps/web (Next.js 16.2 + React 19 + Tailwind 4) + packages/ui (shadcn 6 primitives + Pretendard tokens, swap-able) + packages/api-types (utoipa → TS) + 한국어 helper + error/not-found/loading + ky API client + TanStack Query + proxy skeleton + instrumentation.ts (Sentry 자리) + Vitest + Playwright + @axe-core/playwright (WCAG 2.1 AA) + size-limit (bundle < 200KB) + .github/workflows/frontend.yml. SSS 7기둥 모두 ◎ | ✅ |
 
-**누적**: 33 crate, ~1278 tests (1149 단위 + 129 통합), 4 CI workflow 그린, CI clippy `--all-targets` 강화.
+**누적**: 33 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1278 Rust tests (1149 단위 + 129 통합) + 7 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -77,8 +78,8 @@
 
 **작업**: Next.js 16 + React 19 + Naver Maps SDK + Zitadel OIDC 클라이언트. `services/api` 의 핸들러 추가 + `apps/web` 화면. `MutationContext::new_user_action(...)` helper (`services/api`) 도입.
 
-**추정**: 분해 필요 (SP6-i 인증 / SP6-ii 매물 검색 / SP6-iii 북마크 / SP6-iv 알림 등 4-7일).
-**Spec status**: 미작성.
+**추정**: 분해 진행 — SP6-foundation ✅ + SP6-i ~ v 미착수.
+**Spec status**: SP6-foundation 작성 완료 (`docs/superpowers/specs/2026-05-05-sub-project-6-foundation-design.md`). SP6-i ~ v 미작성.
 
 ### C. 잔여 FU 일괄 정리 (Medium / Large 영역)
 
@@ -89,6 +90,17 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 - **FU 40 / 42 / 43 / 44** (Building.geom / fetch_by_id / 캐시 정책 / 토지대장) — SP4-iii-a 후속 (SP4-iii-b/e)
 - ~~**FU 45 / 46**~~ (endpoint drift smoke test / schema drift) → ✅ closed by SP7-iii
 - **FU 47** (V-World 지오코딩) — dev session 가속, 미해소
+
+---
+
+### SP6 시리즈 (Frontend)
+
+- ✅ SP6-foundation: 인프라 (2026-05-05) — Next.js 16 + shadcn + tokens + i18n + UX + ky/TanStack Query + Vitest/Playwright/axe/size-limit + frontend CI workflow
+- 미착수 SP6-i: auth flow + 화면 (login/signup/profile + Zitadel OIDC + iron-session + RBAC + middleware, 2-3일)
+- 미착수 SP6-ii: 매물 검색 + Naver Maps SDK (2-3일)
+- 미착수 SP6-iii: 매물 상세 + 북마크 (1-2일)
+- 미착수 SP6-iv: 매물 등록 (broker 전용, 2일)
+- 미착수 SP6-v: 알림 (1일)
 
 ---
 
@@ -155,6 +167,6 @@ SP8 (IaC — Pulumi)
 
 - **로컬 cargo 작동** (MSVC Build Tools 설치 완료, 2026-05-03)
 - **Repo public** (`w1kch9812-cmd/test`) — GH Actions 무료
-- **CI 4 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset) / api-drift-smoke-test (nightly cron 04:00 KST + workflow_dispatch)
-- **마지막 commit**: `<T6 commit>` (SP7-iii T6 — GitHub Actions cron + docs/observability + roadmap)
+- **CI 5 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset) / api-drift-smoke-test (nightly cron 04:00 KST + workflow_dispatch) / frontend (lint/typecheck/test/build/bundle/e2e+a11y, paths-filtered)
+- **마지막 commit**: `<T4 commit>` (SP6-foundation T4 — smoke + Playwright + axe + size-limit + frontend CI + docs + roadmap)
 - **다음 commit 시 항상**: 본 문서 갱신 → SP 진행 상태 SSOT 유지
