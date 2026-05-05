@@ -1,9 +1,43 @@
-import { describe, expect, it } from "vitest";
-import { env } from "@/lib/env";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-describe("env validation", () => {
-  it("provides default API_BASE_URL", () => {
-    expect(env.NEXT_PUBLIC_API_BASE_URL).toBeDefined();
-    expect(env.NEXT_PUBLIC_API_BASE_URL).toMatch(/^https?:\/\//);
+describe("env schema (SP6-i extension)", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it("parses ZITADEL_* and REDIS_URL when set", async () => {
+    process.env.ZITADEL_ISSUER = "http://localhost:8443";
+    process.env.ZITADEL_CLIENT_ID = "demo-client";
+    process.env.ZITADEL_AUDIENCE = "demo-client";
+    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "x".repeat(32);
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+
+    const { env } = await import("@/lib/env");
+    expect(env.ZITADEL_ISSUER).toBe("http://localhost:8443");
+    expect(env.SESSION_SECRET.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("throws on missing SESSION_SECRET", async () => {
+    delete process.env.SESSION_SECRET;
+    process.env.ZITADEL_ISSUER = "http://localhost:8443";
+    process.env.ZITADEL_CLIENT_ID = "x";
+    process.env.ZITADEL_AUDIENCE = "x";
+    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on too-short SESSION_SECRET (< 32 chars)", async () => {
+    process.env.SESSION_SECRET = "short";
+    process.env.ZITADEL_ISSUER = "http://localhost:8443";
+    process.env.ZITADEL_CLIENT_ID = "x";
+    process.env.ZITADEL_AUDIENCE = "x";
+    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    await expect(import("@/lib/env")).rejects.toThrow();
   });
 });

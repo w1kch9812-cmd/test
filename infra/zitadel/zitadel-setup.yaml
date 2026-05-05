@@ -1,0 +1,20 @@
+FirstInstance:
+  Org:
+    Human:
+      UserName: admin
+      Password: Admin123!
+      PasswordChangeRequired: false
+      FirstName: Admin
+      LastName: Gongzzang
+      Email:
+        Address: admin@zitadel.localhost
+        Verified: true
+    Machine:
+      Machine:
+        Username: zitadel-admin-sa
+        Name: zitadel-admin-sa
+      MachineKey:
+        Type: 1
+      Pat:
+        ExpirationDate: "2099-01-01T00:00:00Z"
+        Path: /pat-out/pat
