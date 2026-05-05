@@ -509,6 +509,7 @@ version = "0.1.0"
 dependencies = [
  "admin-action-domain",
  "analysis-report-domain",
+ "api-health-domain",
  "async-trait",
  "audit-log-domain",
  "bigdecimal",

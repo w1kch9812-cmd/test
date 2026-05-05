@@ -8,6 +8,7 @@
 
 pub mod admin_action;
 pub mod analysis_report;
+pub mod api_health;
 pub mod audit_log;
 pub mod bookmark;
 pub mod bvq;
