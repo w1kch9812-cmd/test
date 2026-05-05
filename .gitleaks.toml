@@ -37,6 +37,8 @@ paths = [
     '''\.gitleaks\.toml$''',
     # tests/unit/setup.ts 의 placeholder env 값 (실 secret 아님)
     '''apps/web/tests/unit/setup\.ts''',
+    # naver-maps.ts line 22: NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID env var 참조 — 실 credential 아님
+    '''apps/web/lib/naver-maps\.ts''',
 ]
 regexes = [
     '''your_.*_here''',

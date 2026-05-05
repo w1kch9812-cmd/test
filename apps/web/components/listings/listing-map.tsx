@@ -13,6 +13,7 @@ export function ListingMap({ listings }: ListingMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<naver.maps.Map | null>(null);
   const markersRef = useRef<naver.maps.Marker[]>([]);
+  const boundsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setBounds = useListingsStore((s) => s.setBounds);
   const selectedId = useListingsStore((s) => s.selectedListingId);
   const setSelected = useListingsStore((s) => s.setSelectedListingId);
@@ -30,10 +31,9 @@ export function ListingMap({ listings }: ListingMapProps) {
       mapRef.current = map;
 
       // bounds 변경 이벤트 (debounce 350ms)
-      let timer: ReturnType<typeof setTimeout> | null = null;
       naverNs.maps.Event.addListener(map, "bounds_changed", () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
+        if (boundsTimerRef.current) clearTimeout(boundsTimerRef.current);
+        boundsTimerRef.current = setTimeout(() => {
           const bounds = map.getBounds() as naver.maps.LatLngBounds;
           const sw = bounds.getSW();
           const ne = bounds.getNE();
@@ -57,6 +57,10 @@ export function ListingMap({ listings }: ListingMapProps) {
     });
     return () => {
       cancelled = true;
+      if (boundsTimerRef.current) {
+        clearTimeout(boundsTimerRef.current);
+        boundsTimerRef.current = null;
+      }
     };
   }, [setBounds]);
 
