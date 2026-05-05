@@ -1,2 +1,1 @@
-// T3 가 generated/schema.ts re-export
-export {};
+export type { components, paths } from "./generated/schema";

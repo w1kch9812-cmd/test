@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { Toaster } from "@gongzzang/ui";
+import { QueryProvider } from "@/lib/query";
 
 export const metadata: Metadata = {
   title: "공짱 — 산업용 부동산 정보",
@@ -17,8 +18,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale}>
       <body>
         <NextIntlClientProvider messages={messages}>
-          {children}
-          <Toaster />
+          <QueryProvider>
+            {children}
+            <Toaster />
+          </QueryProvider>
         </NextIntlClientProvider>
       </body>
     </html>
