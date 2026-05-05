@@ -12,6 +12,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "biome.json"
+      - ".npmrc"
       - ".github/workflows/frontend.yml"
   pull_request:
     branches: [main]
@@ -24,6 +25,7 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "biome.json"
+      - ".npmrc"
       - ".github/workflows/frontend.yml"
 
 concurrency:
