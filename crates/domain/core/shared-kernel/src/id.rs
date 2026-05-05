@@ -175,6 +175,16 @@ impl IdPrefix for SystemAlertMarker {
     const PREFIX: &'static str = "sal";
 }
 
+/// `ExternalAccount` aggregate ID marker.
+///
+/// SP6-i: first sign-in 시 `zitadel` 행 자동 삽입.
+/// SP6-Social: kakao/naver/google federation 시 추가.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExternalAccountMarker;
+impl IdPrefix for ExternalAccountMarker {
+    const PREFIX: &'static str = "ext";
+}
+
 /// 도메인 ID. 런타임은 30자 String, 타입은 phantom marker로 BC 구분.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -404,6 +414,13 @@ mod tests {
         let id: Id<SystemAlertMarker> = Id::new();
         assert_eq!(id.as_str().len(), 30);
         assert!(id.as_str().starts_with("sal_"));
+    }
+
+    #[test]
+    fn new_external_account_id_has_ext_prefix() {
+        let id: Id<ExternalAccountMarker> = Id::new();
+        assert_eq!(id.as_str().len(), 30);
+        assert!(id.as_str().starts_with("ext_"));
     }
 
     #[test]

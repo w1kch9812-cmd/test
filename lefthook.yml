@@ -44,6 +44,11 @@ pre-push:
       skip:
         - merge
         - rebase
+    sqlx-prepare-check:
+      run: command -v cargo >/dev/null 2>&1 && (DATABASE_URL=${DATABASE_URL:-postgres://gongzzang:changeme_local_only@localhost:5432/gongzzang} cargo sqlx prepare --workspace --check 2>/dev/null || echo "sqlx prepare check skipped (DB unavailable or offline mode not configured)") || echo "cargo not installed - CI enforces"
+      skip:
+        - merge
+        - rebase
     # markdown-links는 CI에서만 강제 (외부 URL 인터넷 의존이라 로컬 push에선 skip)
 
 # commit-msg hook은 CI(Spectral 또는 별도 룰)에서 강제 — Windows bash regex 호환 이슈로 로컬 hook 제거

@@ -109,6 +109,14 @@ async fn resolve_or_create_user(state: &AuthState, claims: &Claims) -> Result<Us
         return Ok(existing);
     }
 
+    let user = provision_new_user(state, claims).await?;
+    Ok(user)
+}
+
+/// 존재하지 않는 sub 에 대해 `User` 를 생성·저장하고 `external_account` 를 link.
+// first-sign-in 흐름 특성상 race retry + best-effort side-effects 로 복잡도 불가피.
+#[allow(clippy::cognitive_complexity)]
+async fn provision_new_user(state: &AuthState, claims: &Claims) -> Result<User, AuthError> {
     // 자동 생성
     let email_str = claims.effective_email().ok_or_else(|| {
         AuthError::UserProvisioningFailed("token has no email or preferred_username".into())
@@ -135,15 +143,22 @@ async fn resolve_or_create_user(state: &AuthState, claims: &Claims) -> Result<Us
     // race: 동시 첫 로그인 — save 실패 시 fetch 재시도
     if let Err(save_err) = state.user_repo.save(&user, ctx).await {
         warn!(?save_err, sub = %claims.sub, "save failed, retrying find");
-        if let Some(existing) = state
+        return state
             .user_repo
             .find_by_zitadel_sub(&claims.sub)
             .await
             .map_err(|e| AuthError::UserProvisioningFailed(e.to_string()))?
-        {
-            return Ok(existing);
-        }
-        return Err(AuthError::UserProvisioningFailed(save_err.to_string()));
+            .ok_or_else(|| AuthError::UserProvisioningFailed(save_err.to_string()));
     }
+
+    // SP6-i: first sign-in 시 external_account('zitadel') 행 삽입. best-effort.
+    if let Err(e) = state
+        .user_repo
+        .link_zitadel_account(&user.id, &claims.sub)
+        .await
+    {
+        tracing::warn!(error = %e, user_id = %user.id, "external_account zitadel insert failed (best-effort)");
+    }
+
     Ok(user)
 }

@@ -19,7 +19,8 @@ EXPECTED_TABLES=( "user" listing listing_photo \
   pipeline_schedule pipeline_run \
   admin_action business_verification_queue listing_review_queue listing_report featured_content system_alert \
   parcel_external_data \
-  api_health_check )
+  api_health_check \
+  external_account )
 
 # Each table exists
 for t in "${EXPECTED_TABLES[@]}"; do
@@ -28,8 +29,9 @@ for t in "${EXPECTED_TABLES[@]}"; do
   fi
 done
 
-# Exactly 20 public tables (excluding sqlx + PostGIS system tables)
-# 18 base + parcel_external_data (V003_06, SP4-iii-d) + api_health_check (V003_07 = 30007, SP7-iii).
+# Exactly 21 public tables (excluding sqlx + PostGIS system tables)
+# 18 base + parcel_external_data (V003_06, SP4-iii-d) + api_health_check (V003_07 = 30007, SP7-iii)
+# + external_account (V003_08 = 30008, SP6-i).
 EXPECTED_COUNT=${#EXPECTED_TABLES[@]}
 COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_tables where schemaname='public' and tablename not like '\\_sqlx%' and tablename not in ('spatial_ref_sys');")
 if [ "$COUNT" != "$EXPECTED_COUNT" ]; then
@@ -97,5 +99,5 @@ if [ "$PED_BRIN" != "1" ]; then
   echo "FAIL: parcel_external_data_fetched_brin_idx missing (V003_06)" >&2; exit 1
 fi
 
-echo "PASS: V001 $EXPECTED_COUNT RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
+echo "PASS: V001-V004 $EXPECTED_COUNT RDS tables + PostGIS + ≥25 indexes (spec § 5.6)"
 exit 0

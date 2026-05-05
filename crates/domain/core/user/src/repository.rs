@@ -46,6 +46,20 @@ pub trait UserRepository: Send + Sync {
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
     async fn save(&self, user: &User, ctx: MutationContext) -> Result<(), RepoError>;
+
+    /// `external_account` 에 `zitadel` 행을 삽입해요 (first sign-in 시 호출).
+    ///
+    /// `ON CONFLICT DO NOTHING` — 중복 호출 safe. best-effort (실패해도 인증 흐름 차단 안 함).
+    /// SP6-Social federation 이 kakao/naver/google 행을 채워요.
+    ///
+    /// # Errors
+    ///
+    /// DB 통신 실패 시 [`RepoError::Database`].
+    async fn link_zitadel_account(
+        &self,
+        user_id: &Id<UserMarker>,
+        zitadel_sub: &str,
+    ) -> Result<(), RepoError>;
 }
 
 /// `Repository` 에러.

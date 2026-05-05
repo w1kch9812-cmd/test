@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use shared_kernel::broker_license::BrokerLicense;
 use shared_kernel::business_number::BusinessNumber;
 use shared_kernel::email::Email;
-use shared_kernel::id::{AuditLogMarker, Id, OutboxEventMarker, UserMarker};
+use shared_kernel::id::{AuditLogMarker, ExternalAccountMarker, Id, OutboxEventMarker, UserMarker};
 use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
@@ -353,6 +353,30 @@ impl UserRepository for PgUserRepository {
 
         // 4. commit — failure → tx Drop → rollback.
         tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// `external_account` 에 `zitadel` 행 삽입. `ON CONFLICT DO NOTHING` — 멱등.
+    #[instrument(skip(self), fields(user_id = %user_id.as_str()))]
+    async fn link_zitadel_account(
+        &self,
+        user_id: &Id<UserMarker>,
+        zitadel_sub: &str,
+    ) -> Result<(), RepoError> {
+        let ext_id = Id::<ExternalAccountMarker>::new();
+        sqlx::query(
+            r"
+            INSERT INTO external_account (id, user_id, provider, external_id)
+            VALUES ($1, $2, 'zitadel', $3)
+            ON CONFLICT (provider, external_id) DO NOTHING
+            ",
+        )
+        .bind(ext_id.as_str())
+        .bind(user_id.as_str())
+        .bind(zitadel_sub)
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(())
     }
 }
