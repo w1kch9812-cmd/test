@@ -26,7 +26,8 @@
     "REDIS_URL",
     "SENTRY_DSN",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "OTEL_SERVICE_NAME"
+    "OTEL_SERVICE_NAME",
+    "NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID"
   ],
   "tasks": {
     "build": {

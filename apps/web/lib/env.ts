@@ -5,6 +5,7 @@ import { z } from "zod";
  */
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:8080"),
+  NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: z.string().min(1).default("naver-maps-placeholder"),
 });
 
 /**
@@ -24,6 +25,7 @@ const Schema = isServer ? ServerEnvSchema : PublicEnvSchema;
 
 const parsed = Schema.safeParse({
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+  NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID,
   ZITADEL_ISSUER: process.env.ZITADEL_ISSUER,
   ZITADEL_CLIENT_ID: process.env.ZITADEL_CLIENT_ID,
   ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE,
