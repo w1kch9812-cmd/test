@@ -1,31 +1,12 @@
 "use client";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { ListingCard } from "@/components/listings/listing-card";
-import { fetchListings, type ListingsResponse } from "@/lib/listings/api";
-import { useListingsStore } from "@/stores/listings";
-
-const PAGE_SIZE = 20;
+import { useListingsQuery } from "@/lib/listings/use-listings-query";
 
 export function ListingCardList() {
   const t = useTranslations("listings");
-  const filters = useListingsStore((s) => s.filters);
-  const bounds = useListingsStore((s) => s.bounds);
-
-  const query = useInfiniteQuery<ListingsResponse>({
-    queryKey: ["listings", filters, bounds],
-    queryFn: ({ pageParam }) =>
-      fetchListings({
-        filters,
-        bounds,
-        page: pageParam as number,
-        size: PAGE_SIZE,
-      }),
-    initialPageParam: 0,
-    getNextPageParam: (last) => (last.has_next ? last.page + 1 : undefined),
-    enabled: bounds !== undefined,
-  });
+  const query = useListingsQuery();
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
