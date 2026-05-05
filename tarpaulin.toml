@@ -17,5 +17,8 @@ exclude-files = [
     "crates/db/**",                      # SQL Repository — tested via integration (Walking Skeleton T4)
     "services/api/**",                   # Binary entrypoint — integration smoke + manual demo
     "services/outbox-publisher/**",      # Daemon binary entrypoint
+    "crates/outbox-publisher/**",        # Daemon lib — integration tested via services binary
     "crates/api-health-recorder/**",     # SP7-iii binary — GitHub Actions cron 후속 (octocrab + DB record)
+    "crates/auth/src/jti_denylist.rs",   # SP6-i — Redis integration only (CI coverage workflow 에 Redis 없음)
+    "crates/auth/src/audit.rs",          # SP6-i — DB integration test 가 services/api e2e 가 cover
 ]
