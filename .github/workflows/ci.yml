@@ -34,7 +34,7 @@ jobs:
       - name: Biome check
         run: pnpm biome check .
       - name: markdownlint
-        run: pnpm markdownlint-cli2 "**/*.md" "#node_modules" "#_archive" "#reference" "#target"
+        run: pnpm markdownlint-cli2 "**/*.md" "#**/node_modules/**" "#**/_archive/**" "#**/reference/**" "#**/target/**" "#**/.next/**" "#**/.turbo/**"
       - uses: dtolnay/rust-toolchain@stable
         with: { components: "rustfmt, clippy" }
       - name: cargo fmt
