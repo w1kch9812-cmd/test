@@ -1,0 +1,47 @@
+{
+  "listings": {
+    "page": {
+      "title": "매물 검색"
+    },
+    "search": {
+      "placeholder": "지역명을 검색해 주세요"
+    },
+    "filter": {
+      "type": "매물 종류",
+      "transaction": "거래 방식",
+      "areaM2": "면적 (m²)",
+      "priceKrw": "가격 (원)",
+      "sort": "정렬"
+    },
+    "type": {
+      "factory": "공장",
+      "warehouse": "창고",
+      "office": "사무실",
+      "knowledge_industry_center": "지식산업센터",
+      "industrial_land": "산업단지",
+      "logistics_center": "물류센터"
+    },
+    "transaction": {
+      "sale": "매매",
+      "monthly_rent": "월세",
+      "jeonse": "전세"
+    },
+    "sort": {
+      "created_at_desc": "최신순",
+      "price_asc": "가격 낮은 순",
+      "price_desc": "가격 높은 순",
+      "area_asc": "면적 좁은 순",
+      "area_desc": "면적 넓은 순"
+    },
+    "card": {
+      "viewCount": "조회",
+      "bookmarkCount": "관심",
+      "favoritePlaceholder": "즐겨찾기"
+    },
+    "empty": "조건에 맞는 매물이 없어요",
+    "loading": "매물을 불러오는 중이에요",
+    "errors": {
+      "fetchFailed": "매물을 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
+    }
+  }
+}
