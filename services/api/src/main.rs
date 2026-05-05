@@ -1,9 +1,10 @@
-//! 공짱 `HTTP` `API` service — `Walking Skeleton` + `Auth` (`SP3`).
+//! 공짱 `HTTP` `API` service — `Walking Skeleton` + `Auth` (`SP3`) + `SP6-i`.
 //!
 //! 라우트:
 //! - `GET /healthz` — public liveness probe
 //! - `GET /users/me` — 인증된 자신 조회 (`AuthenticatedUser` extractor)
 //! - `GET /users/:id` — 인증된 자신만 (`auth.user.id == path id`), 다른 id 는 `403`
+//! - `POST /internal/auth/event` — frontend `AuthEvent` 수신 → `audit_log` INSERT
 //!
 //! `POST /users` 는 제거 — first-sign-in 자동 생성으로 대체.
 
@@ -24,12 +25,17 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{middleware, Json, Router};
 use db::user::PgUserRepository;
+use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
+
+mod routes {
+    pub mod auth_event;
+}
 
 /// `Axum` 핸들러에 주입할 공유 상태.
 #[derive(Clone)]
@@ -128,7 +134,7 @@ async fn main() {
         .await
         .expect("connect to Postgres");
 
-    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool));
+    let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
     let app_state = AppState {
         user_repo: user_repo.clone(),
     };
@@ -149,19 +155,37 @@ async fn main() {
         let jwks = Arc::new(JwksCache::new(jwks_url, http));
         Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
     };
+    let redis_url = env::var("REDIS_URL").expect("REDIS_URL must be set");
+    let redis_pool = RedisCfg::from_url(redis_url)
+        .create_pool(Some(RedisRt::Tokio1))
+        .expect("redis pool");
+    let jti_denylist: Arc<dyn auth::jti_denylist::JtiDenylist> =
+        Arc::new(auth::jti_denylist::RedisJtiDenylist::new(redis_pool));
+
     let auth_state = AuthState {
         verifier,
         user_repo,
+        jti_denylist: Some(jti_denylist),
     };
 
+    let auth_event_state = routes::auth_event::AuthEventState { pool };
     let public: Router<()> = Router::new().route("/healthz", get(health));
     let protected: Router<()> = Router::new()
         .route("/users/me", get(me))
         .route("/users/:id", get(get_user))
         .with_state(app_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
+    let internal: Router<()> = Router::new()
+        .route(
+            "/internal/auth/event",
+            axum::routing::post(routes::auth_event::post_auth_event),
+        )
+        .with_state(auth_event_state);
 
-    let app = public.merge(protected).layer(TraceLayer::new_for_http());
+    let app = public
+        .merge(protected)
+        .merge(internal)
+        .layer(TraceLayer::new_for_http());
 
     let addr = "0.0.0.0:8080";
     tracing::info!("api listening on {addr}");

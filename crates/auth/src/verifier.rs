@@ -155,6 +155,7 @@ impl Verifier {
             email: Some(format!("{sub}@dev.local")),
             name: Some(sub.to_owned()),
             preferred_username: None,
+            jti: format!("dev-{sub}"),
             exp: i64::MAX, // dev 모드는 만료 안 함
             nbf: None,
             iss: "dev-mode".to_owned(),

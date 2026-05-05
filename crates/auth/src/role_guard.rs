@@ -54,6 +54,7 @@ mod tests {
             email: Some("a@b.com".into()),
             name: Some("alice".into()),
             preferred_username: None,
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),

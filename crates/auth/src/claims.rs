@@ -18,6 +18,8 @@ pub struct Claims {
     /// `preferred_username` (`email` 대체용).
     #[serde(default)]
     pub preferred_username: Option<String>,
+    /// `JWT` ID — `JTI` denylist key. Zitadel 가 항상 발급.
+    pub jti: String,
     /// 만료 (`epoch seconds`).
     pub exp: i64,
     /// 미발효 (`epoch seconds`, 옵션).
@@ -101,10 +103,11 @@ mod tests {
 
     #[test]
     fn deserialize_single_aud() {
-        let json = r#"{"sub":"u1","exp":1000,"iss":"http://i","aud":"client-x"}"#;
+        let json = r#"{"sub":"u1","jti":"j1","exp":1000,"iss":"http://i","aud":"client-x"}"#;
         let c: Claims = serde_json::from_str(json).expect("parse");
         assert!(matches!(c.aud, Audience::Single(ref s) if s == "client-x"));
         assert_eq!(c.sub, "u1");
+        assert_eq!(c.jti, "j1");
         assert_eq!(c.exp, 1000);
         assert_eq!(c.iss, "http://i");
         assert_eq!(c.email, None);
@@ -113,7 +116,7 @@ mod tests {
 
     #[test]
     fn deserialize_multiple_aud() {
-        let json = r#"{"sub":"u1","exp":1000,"iss":"http://i","aud":["a","b"]}"#;
+        let json = r#"{"sub":"u1","jti":"j1","exp":1000,"iss":"http://i","aud":["a","b"]}"#;
         let c: Claims = serde_json::from_str(json).expect("parse");
         assert!(matches!(c.aud, Audience::Multiple(ref v) if v.len() == 2));
     }
@@ -122,6 +125,7 @@ mod tests {
     fn deserialize_with_optional_fields() {
         let json = r#"{
             "sub":"u1",
+            "jti":"j1",
             "email":"a@b.com",
             "name":"Alice",
             "exp":1000,
@@ -142,6 +146,7 @@ mod tests {
             email: Some("primary@example.com".into()),
             name: None,
             preferred_username: Some("alt@example.com".into()),
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -157,6 +162,7 @@ mod tests {
             email: None,
             name: None,
             preferred_username: Some("alice@example.com".into()),
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -172,6 +178,7 @@ mod tests {
             email: None,
             name: None,
             preferred_username: None,
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -187,6 +194,7 @@ mod tests {
             email: None,
             name: Some("Alice".into()),
             preferred_username: Some("alt".into()),
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -202,6 +210,7 @@ mod tests {
             email: None,
             name: None,
             preferred_username: Some("alt".into()),
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -217,6 +226,7 @@ mod tests {
             email: None,
             name: None,
             preferred_username: None,
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -232,6 +242,7 @@ mod tests {
             email: None,
             name: None,
             preferred_username: None,
+            jti: "j1".into(),
             exp: 0,
             nbf: None,
             iss: "i".into(),
@@ -247,6 +258,7 @@ mod tests {
             email: Some("e@x".into()),
             name: Some("Alice".into()),
             preferred_username: None,
+            jti: "j1".into(),
             exp: 1000,
             nbf: Some(900),
             iss: "http://i".into(),

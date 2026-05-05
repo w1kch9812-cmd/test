@@ -28,13 +28,15 @@ pub struct AuthenticatedUser {
     pub claims: Claims,
 }
 
-/// 미들웨어 의존 — `verifier` + `user_repo`.
+/// 미들웨어 의존 — `verifier` + `user_repo` + optional `jti_denylist`.
 #[derive(Clone)]
 pub struct AuthState {
     /// 토큰 검증기 (`Real` 또는 `Dev`).
     pub verifier: Arc<Verifier>,
     /// `User` 저장소.
     pub user_repo: Arc<dyn UserRepository>,
+    /// `JTI` denylist (`SP6-i`) — `None` 이면 검증 skip (fail-open).
+    pub jti_denylist: Option<Arc<dyn crate::jti_denylist::JtiDenylist>>,
 }
 
 /// `Bearer <jwt>` 검증 + `User` 자동 생성 + `Extension<AuthenticatedUser>` 주입.
@@ -67,6 +69,21 @@ pub async fn auth_layer(
     }
 
     let claims = state.verifier.verify(token).await?;
+
+    // SP6-i: JTI denylist (logout / refresh rotation / role change 시 즉시 무효).
+    // fail-open: Redis 장애 시 가용성 우선 (JWT 검증만 통과). audit log 만 남김.
+    if let Some(dl) = &state.jti_denylist {
+        match dl.is_denied(&claims.jti).await {
+            Ok(true) => return Err(AuthError::Expired),
+            Ok(false) => {}
+            Err(e) => tracing::warn!(
+                error = %e,
+                jti = %claims.jti,
+                "jti denylist check failed (fail-open)"
+            ),
+        }
+    }
+
     let user = resolve_or_create_user(&state, &claims).await?;
     req.extensions_mut().insert(AuthenticatedUser {
         user,

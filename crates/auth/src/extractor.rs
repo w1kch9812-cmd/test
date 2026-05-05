@@ -54,6 +54,7 @@ mod tests {
             email: Some("u@example.com".to_owned()),
             name: Some("User One".to_owned()),
             preferred_username: None,
+            jti: "j1".to_owned(),
             exp: i64::MAX,
             nbf: None,
             iss: "issuer".to_owned(),
