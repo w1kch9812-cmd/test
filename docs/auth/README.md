@@ -22,6 +22,10 @@
 - `business-verification.md` — 사업자/중개사 검증
 - `session.md` — Redis 세션 + 무효화
 
+## Frontend 통합
+
+- [SP6-i Frontend Integration](./frontend-integration.md) — 로컬 개발 / 디버깅 / 장애 대응
+
 ## 관련 ADR
 - → @docs/adr/0005-auth-zitadel.md
 
