@@ -3,9 +3,16 @@
 | | |
 |---|---|
 | 작성일 | 2026-05-06 |
-| 상태 | Accepted (defer) |
+| 상태 | **Superseded by [ADR 0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md)** (2026-05-06) |
 | 결정자 | 사용자 |
 | 컨텍스트 | SP4-iii-e 가 제안한 R2 PMTiles base layer 의 SSS 적합성 검토 |
+
+> ⚠️ **본 ADR 은 같은 날 ADR 0016 으로 supersede 됨**. 핵심 변경: 본 ADR 의
+> "사본 3개" SSOT 비판이 Medallion 아키텍처(Bronze/Silver/Gold) 기준으로
+> *layer/copy 혼동* 임이 드러남. PMTiles 는 사본이 아니라 Silver(PostGIS)
+> 에서 deterministic 하게 빌드한 Gold artifact. 사용자가 명시적으로
+> "필지 + 행정구역 모든 polygon 표시" 요구 → Scope creep 의심도 해소.
+> 자세한 재구성은 ADR 0016 참조.
 
 ## 컨텍스트
 
