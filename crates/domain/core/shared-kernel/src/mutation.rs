@@ -95,6 +95,24 @@ impl MutationContext {
         self
     }
 
+    /// 클라이언트 정보 부분 부여 — `ip` / `ua` 둘 중 하나라도 `Some` 이면 set
+    /// (HTTP 요청 환경에서 둘 다 항상 있는 건 아님 — proxy 누락 / mobile UA
+    /// 변경 등). SP-Obs T3 의 `MutationContextBuilder` extractor 가 사용.
+    #[must_use]
+    pub fn with_client_info_optional(
+        mut self,
+        ip: Option<String>,
+        ua: Option<String>,
+    ) -> Self {
+        if ip.is_some() {
+            self.client_ip = ip;
+        }
+        if ua.is_some() {
+            self.user_agent = ua;
+        }
+        self
+    }
+
     /// 발생 시각 부여 (builder, 테스트 결정성용).
     #[must_use]
     pub const fn with_occurred_at(mut self, at: DateTime<Utc>) -> Self {
@@ -153,5 +171,31 @@ mod tests {
     fn with_events_replaces_vec() {
         let ctx = MutationContext::new_system_action("c", "create").with_events(vec![]);
         assert!(ctx.events.is_empty());
+    }
+
+    #[test]
+    fn with_client_info_optional_sets_only_provided_fields() {
+        let ctx = MutationContext::new_system_action("c", "create")
+            .with_client_info_optional(Some("203.0.113.1".to_owned()), None);
+        assert_eq!(ctx.client_ip.as_deref(), Some("203.0.113.1"));
+        assert!(ctx.user_agent.is_none());
+    }
+
+    #[test]
+    fn with_client_info_optional_both_some() {
+        let ctx = MutationContext::new_system_action("c", "create")
+            .with_client_info_optional(Some("1.1.1.1".to_owned()), Some("test-ua".to_owned()));
+        assert_eq!(ctx.client_ip.as_deref(), Some("1.1.1.1"));
+        assert_eq!(ctx.user_agent.as_deref(), Some("test-ua"));
+    }
+
+    #[test]
+    fn with_client_info_optional_both_none_preserves_existing() {
+        // 기존 set 된 값을 None 으로 덮어쓰지 않음 — partial overwrite 방지.
+        let ctx = MutationContext::new_system_action("c", "create")
+            .with_client_info("1.1.1.1", "old-ua")
+            .with_client_info_optional(None, None);
+        assert_eq!(ctx.client_ip.as_deref(), Some("1.1.1.1"));
+        assert_eq!(ctx.user_agent.as_deref(), Some("old-ua"));
     }
 }
