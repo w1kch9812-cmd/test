@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import Link from "next/link";
 
 export default function NotFound(): React.ReactElement {
@@ -8,7 +9,7 @@ export default function NotFound(): React.ReactElement {
         삭제된 매물이거나 권한이 없는 매물일 수 있어요.
       </p>
       <Link
-        href="/listings"
+        href={"/listings" as Route}
         className="mt-6 inline-block text-sm text-[var(--color-primary)] underline"
       >
         매물 검색으로 돌아가기

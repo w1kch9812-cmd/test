@@ -15,6 +15,7 @@ import { Button, Input, Label } from "@gongzzang/ui";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { isHTTPError } from "ky";
+import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -75,7 +76,7 @@ export function ListingForm(): React.ReactElement {
     mutationFn: createListing,
     onSuccess(data) {
       toast.success(`매물이 등록되었어요 (${data.id})`);
-      router.push("/listings");
+      router.push("/listings" as Route);
     },
     onError(error) {
       // RFC 7807 ProblemDetails 매핑 — server 가 client 검증 통과 후 거부 시.

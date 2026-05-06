@@ -9,6 +9,7 @@
 
 import { Badge } from "@gongzzang/ui";
 import { Bell } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 
 import { useUnreadCount } from "@/lib/notifications/use-unread-count";
@@ -19,7 +20,7 @@ export function NotificationBell(): React.ReactElement {
 
   return (
     <Link
-      href="/me/notifications"
+      href={"/me/notifications" as Route}
       aria-label={count > 0 ? `미읽음 알림 ${count}건` : "알림"}
       className="relative inline-flex items-center justify-center rounded-md p-2 hover:bg-[var(--color-surface-cream-strong)]"
     >

@@ -9,6 +9,7 @@
 
 import { Card, CardContent } from "@gongzzang/ui";
 import { Heart, ListChecks, type LucideIcon, XCircle } from "lucide-react";
+import type { Route } from "next";
 import Link from "next/link";
 
 import type { Notification } from "@/lib/notifications/api";
@@ -39,7 +40,7 @@ export function NotificationCard({ notification }: NotificationCardProps): React
   );
 
   return href ? (
-    <Link href={href} className="block">
+    <Link href={href as Route} className="block">
       {inner}
     </Link>
   ) : (
