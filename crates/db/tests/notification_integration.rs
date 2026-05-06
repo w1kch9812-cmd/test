@@ -15,6 +15,7 @@ use chrono::Utc;
 use db::notification::PgNotificationRepository;
 use db::user::PgUserRepository;
 use notification_domain::entity::Notification;
+use notification_domain::kind::NotificationKind;
 use notification_domain::repository::NotificationRepository;
 use shared_kernel::email::Email;
 use shared_kernel::id::{Id, NotificationMarker, UserMarker};
@@ -41,15 +42,14 @@ async fn seed_user(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMarke
     user_id
 }
 
-fn make_notification(user_id: Id<UserMarker>, kind: &str) -> Notification {
-    Notification::try_new(
+fn make_notification(user_id: Id<UserMarker>, kind: NotificationKind) -> Notification {
+    Notification::new(
         Id::<NotificationMarker>::new(),
         user_id,
         kind,
         serde_json::json!({"listing_id": "lst_x"}),
         Utc::now(),
     )
-    .expect("notification")
 }
 
 #[tokio::test]
@@ -59,7 +59,7 @@ async fn insert_round_trip_with_audit() {
     let user_id = seed_user(&pool, "zsub-nt-1", "nt1@example.com").await;
     let repo = PgNotificationRepository::new(pool.clone());
 
-    let n = make_notification(user_id.clone(), "bookmark_listing_changed");
+    let n = make_notification(user_id.clone(), NotificationKind::ListingBookmarked);
     let ctx = MutationContext::new_system_action("corr-nt-1", "notify");
     repo.insert(&n, ctx).await.expect("insert");
 
@@ -68,7 +68,7 @@ async fn insert_round_trip_with_audit() {
         .await
         .expect("find unread");
     assert_eq!(unread.len(), 1);
-    assert_eq!(unread[0].kind, "bookmark_listing_changed");
+    assert_eq!(unread[0].kind, NotificationKind::ListingBookmarked);
     assert!(unread[0].read_at.is_none());
 
     let audit_count: (i64,) = sqlx::query_as(
@@ -89,7 +89,7 @@ async fn mark_read_moves_from_unread_to_read() {
     let user_id = seed_user(&pool, "zsub-nt-2", "nt2@example.com").await;
     let repo = PgNotificationRepository::new(pool.clone());
 
-    let n = make_notification(user_id.clone(), "auction_deadline_approaching");
+    let n = make_notification(user_id.clone(), NotificationKind::ListingApproved);
     repo.insert(&n, test_ctx()).await.unwrap();
 
     let read_at = Utc::now();
@@ -113,7 +113,7 @@ async fn mark_read_idempotent_on_already_read() {
     let user_id = seed_user(&pool, "zsub-nt-3", "nt3@example.com").await;
     let repo = PgNotificationRepository::new(pool);
 
-    let n = make_notification(user_id.clone(), "bookmark_listing_changed");
+    let n = make_notification(user_id.clone(), NotificationKind::ListingBookmarked);
     repo.insert(&n, test_ctx()).await.unwrap();
 
     repo.mark_read(&n.id, Utc::now(), test_ctx())
@@ -132,17 +132,17 @@ async fn mark_all_read_by_kind_bulk() {
     let user_id = seed_user(&pool, "zsub-nt-4", "nt4@example.com").await;
     let repo = PgNotificationRepository::new(pool.clone());
 
-    // 3 개 'bookmark' kind + 1 개 'auction' kind
+    // 3 개 ListingBookmarked + 1 개 ListingApproved
     for _ in 0..3 {
         repo.insert(
-            &make_notification(user_id.clone(), "bookmark_listing_changed"),
+            &make_notification(user_id.clone(), NotificationKind::ListingBookmarked),
             test_ctx(),
         )
         .await
         .unwrap();
     }
     repo.insert(
-        &make_notification(user_id.clone(), "auction_deadline_approaching"),
+        &make_notification(user_id.clone(), NotificationKind::ListingApproved),
         test_ctx(),
     )
     .await
@@ -150,14 +150,14 @@ async fn mark_all_read_by_kind_bulk() {
 
     let ctx = MutationContext::new_user_action(user_id.clone(), "corr-nt-bulk", "mark_all");
     let rows = repo
-        .mark_all_read_by_kind(&user_id, "bookmark_listing_changed", Utc::now(), ctx)
+        .mark_all_read_by_kind(&user_id, NotificationKind::ListingBookmarked, Utc::now(), ctx)
         .await
         .expect("bulk");
     assert_eq!(rows, 3);
 
     let unread = repo.find_unread_by_user(&user_id).await.unwrap();
-    assert_eq!(unread.len(), 1); // auction 만 남음
-    assert_eq!(unread[0].kind, "auction_deadline_approaching");
+    assert_eq!(unread.len(), 1); // ListingApproved 만 남음
+    assert_eq!(unread[0].kind, NotificationKind::ListingApproved);
 
     // bulk audit row 1개 + metadata 검증
     let after_state: Option<serde_json::Value> = sqlx::query_scalar(
@@ -170,6 +170,6 @@ async fn mark_all_read_by_kind_bulk() {
     .await
     .unwrap();
     let meta = after_state.expect("after_state present");
-    assert_eq!(meta["kind"], "bookmark_listing_changed");
+    assert_eq!(meta["kind"], "listing_bookmarked");
     assert_eq!(meta["rows_marked"], 3);
 }

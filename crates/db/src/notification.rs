@@ -8,7 +8,9 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use notification_domain::entity::Notification;
+use notification_domain::kind::NotificationKind;
 use notification_domain::repository::{NotificationRepository, RepoError};
+use std::str::FromStr;
 use shared_kernel::id::{AuditLogMarker, Id, NotificationMarker, OutboxEventMarker, UserMarker};
 use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgRow;
@@ -40,9 +42,12 @@ fn row_to_notification(row: &PgRow) -> Result<Notification, RepoError> {
     let user_id_str: String = row
         .try_get("user_id")
         .map_err(|e| RepoError::Database(e.to_string()))?;
-    let kind: String = row
+    let kind_str: String = row
         .try_get("kind")
         .map_err(|e| RepoError::Database(e.to_string()))?;
+    // SP6-v: DB varchar(50) → NotificationKind enum. Unknown 코드 = Other (forward-compat).
+    // FromStr is Infallible — unwrap_or_else 가 실제로 호출되지 않음.
+    let kind = NotificationKind::from_str(&kind_str).unwrap_or(NotificationKind::Other);
     let payload: serde_json::Value = row
         .try_get("payload")
         .map_err(|e| RepoError::Database(e.to_string()))?;
@@ -133,7 +138,7 @@ impl NotificationRepository for PgNotificationRepository {
         )
         .bind(notification.id.as_str())
         .bind(notification.user_id.as_str())
-        .bind(&notification.kind)
+        .bind(notification.kind.as_str())
         .bind(&notification.payload)
         .bind(notification.read_at)
         .bind(notification.created_at)
@@ -184,14 +189,14 @@ impl NotificationRepository for PgNotificationRepository {
     #[allow(clippy::needless_pass_by_value)]
     #[instrument(skip(self, ctx), fields(
         user_id = %user_id.as_str(),
-        kind,
+        kind = %kind,
         ctx_action = %ctx.action,
         correlation_id = %ctx.correlation_id,
     ))]
     async fn mark_all_read_by_kind(
         &self,
         user_id: &Id<UserMarker>,
-        kind: &str,
+        kind: NotificationKind,
         at: DateTime<Utc>,
         ctx: MutationContext,
     ) -> Result<u64, RepoError> {
@@ -203,7 +208,7 @@ impl NotificationRepository for PgNotificationRepository {
         )
         .bind(at)
         .bind(user_id.as_str())
-        .bind(kind)
+        .bind(kind.as_str())
         .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
@@ -212,7 +217,7 @@ impl NotificationRepository for PgNotificationRepository {
         // bulk audit row — resource_id = user_id 로 그룹화. metadata 에 kind +
         // rows_marked 보존.
         let bulk_meta = serde_json::json!({
-            "kind": kind,
+            "kind": kind.as_str(),
             "rows_marked": rows_affected,
             "marked_at_iso": at.to_rfc3339(),
         });

@@ -9,4 +9,7 @@
 
 pub mod entity;
 pub mod errors;
+pub mod kind;
 pub mod repository;
+
+pub use kind::NotificationKind;

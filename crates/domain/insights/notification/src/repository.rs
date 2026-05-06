@@ -9,6 +9,7 @@ use shared_kernel::mutation::MutationContext;
 use thiserror::Error;
 
 use crate::entity::Notification;
+use crate::kind::NotificationKind;
 
 /// `Notification` 저장/조회 포트.
 #[async_trait]
@@ -78,7 +79,7 @@ pub trait NotificationRepository: Send + Sync {
     async fn mark_all_read_by_kind(
         &self,
         user_id: &Id<UserMarker>,
-        kind: &str,
+        kind: NotificationKind,
         at: DateTime<Utc>,
         ctx: MutationContext,
     ) -> Result<u64, RepoError>;
