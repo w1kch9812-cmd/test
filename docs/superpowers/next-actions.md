@@ -1,12 +1,67 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-04 (SP4-iii-a 종료 직후, commit `2aaf7d9`)
+> **갱신일**: 2026-05-06 (SP9 spec/plan 작성 직후, commit `e7a3fd8`)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
 
 ---
 
-## 1순위 — SP4-iii-b: data.go.kr 실거래가 + RealTransactionReader (1-2일)
+## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) (1주)
+
+**왜 1순위**: 사용자가 "필지 + 행정구역(시도/시군구/읍면동/리) 모든 polygon 표시" 명시적 요구. ADR 0016 으로 architecture 확정 (PMTiles 100% + 다중 R2 정적 artifact, PostGIS 없이). PR 진행 중 — `e7a3fd8` 커밋.
+
+**진입점**:
+
+- ADR: [`docs/adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md`](../adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md)
+- Spec: [`docs/superpowers/specs/2026-05-06-sub-project-9-medallion-base-layer-design.md`](./specs/2026-05-06-sub-project-9-medallion-base-layer-design.md)
+- Plan: [`docs/superpowers/plans/2026-05-06-sub-project-9-medallion-base-layer.md`](./plans/2026-05-06-sub-project-9-medallion-base-layer.md)
+- Reference 구현: `C:\Users\admin\Desktop\gongzzang\apps\gongzzang-design-lab\` (PMTiles 패턴 운영 검증된 형제 프로젝트) — `scripts/pipeline/steps/build-pmtiles.ts`, `components/map/naver/UnifiedPolygonGLLayer.tsx`, `docs/PMTILES_GUIDE.md`
+
+**Task 분해 (plan T1~T6)**:
+
+| T | 작업 | 추정 | 의존 |
+|---|---|---|---|
+| T1 | docs commit (PR e7a3fd8 merge) | 0.5일 | — |
+| T2 | listing denormalize 컬럼 마이그레이션 (`parcel_pnu`, `admin_code`, `parcel_land_use_type`, `parcel_zoning`) | 0.5일 | T1 |
+| T3 | `services/etl-base-layer/` (Rust binary) — Bronze SHP fetch + tippecanoe + R2 upload | 2일 | T2 |
+| T4 | `crates/parcel-lookup/` (좌표→PNU lookup) + listing 등록 hooks | 1.5일 | T2 (T3 와 병렬) |
+| T5 | 프론트 PMTiles 통합 — Naver gl `_mapbox` + `pmtiles` JS lib + 클릭 panel + turf.js spatial 계산 | 2일 | T3 |
+| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 | 0.5일 | T3 |
+
+**핵심 architecture (ADR 0016)**:
+
+```text
+🥉 Bronze (R2): 공공데이터포털 raw SHP 12개월 archive
+🥇 Gold (R2 정적, 갱신 주기 분리):
+    parcels.pmtiles      geometry + PNU만        (분기)
+    admin.pmtiles        행정구역                 (분기)
+    complex.pmtiles      산단                    (분기)
+    parcel-attrs/<sigungu>.json   jiga/gosi/land_use_type (매년)
+    complex-stats.json            산단별 통계 precompute  (매일)
+    listings-by-pnu/<sigungu>.json  매물 list             (매시간)
+클라이언트 turf.js: viewport spatial 계산 (반경/contains)
+listing 테이블 denormalize: parcel_pnu, admin_code
+```
+
+**비용**: polygon 시스템 ~$0.5/월 (DAU 무관, R2 egress 무료).
+
+**미리 알아둘 lessons**:
+
+- gongzzang-design-lab 의 `_mapbox` private API 추출 패턴 그대로 차용 가능 — 검증됨
+- tippecanoe 빌드 시 `ubuntu-22.04-large` (32GB RAM) 필요 — 1.4억 polygon
+- 좌표계: SHP 가 EPSG:5179 → tippecanoe 입력 GeoJSON 은 EPSG:4326 (ogr2ogr 변환)
+- listing.parcel_pnu denormalize stale: 월 1회 재매핑 cron 으로 mitigation
+- ad-hoc 분석 / temporal audit 은 의도적 미지원 — Phase 3+ 별도 ADR
+
+**리스크 → mitigate**:
+
+- PostGIS spatial JOIN 부재 → 클라 turf.js + 매월 precomputed JSON
+- DB CHECK constraint 부재 → ETL smoke test (강남 PNU 존재 + sha256 + row count 변동 5%)
+- PMTiles 빌드 12시간 timeout → GitHub Actions large runner + region 별 batch 옵션
+
+---
+
+## 2순위 — SP4-iii-b: data.go.kr 실거래가 + RealTransactionReader (1-2일)
 
 **왜 1순위**: SP4-iii-a 가 만든 `DataGoKrClient` + `Policy::data_go_kr_default` + `pnu_split` + `PgRawCapture` 인프라를 *재사용*. 같은 패턴 답습이라 빠름. `RealTransaction` Aggregate 는 SP2c 에서 이미 구현 (`crates/domain/market/real-transaction`).
 
@@ -39,7 +94,7 @@
 
 ---
 
-## 2순위 — SP4-iii-c: 법제처 도시계획 텍스트 (1-2일)
+## 3순위 — SP4-iii-c: 법제처 도시계획 텍스트 (1-2일)
 
 **왜 다음**: `Parcel.zoning` 이 V-World 의 한글 분류만 사용 — 법제처 실제 조례/시행령 텍스트가 정확. ZoningReader port 신규.
 
@@ -54,9 +109,14 @@
 
 ---
 
-## 3순위 — SP4-iii-e: R2 PMTiles Reader 6 + FU 40 (2-3일)
+## ~~3순위 — SP4-iii-e: R2 PMTiles Reader 6 + FU 40 (2-3일)~~ → SP9 로 통합
 
-**왜 마지막**: 가장 무거움. PMTiles 정적 파일을 S3-호환 R2 버킷에서 fetch + spatial query. `Building.geom` 정확한 footprint 도 여기서 (FU 40).
+> ⚠️ **본 항목은 SP9 (위 1순위) 가 supersede**. ADR 0016 으로 R2 PMTiles base layer 가
+> 1순위로 격상 + 다중 artifact (parcels/admin/complex) 로 확장. 옛 R2 Reader 6 design
+> 의 stub 은 SP9 의 ETL/PMTiles 빌드 input 으로 흡수. FU 40 (`Building.geom` 정확
+> footprint) 는 SP9 종료 후 별도 sub-project (`LT_C_SPBD` 또는 PMTiles building 레이어).
+
+**왜 통합됐는지**: 1차 SP4-iii-e design (commit `9d8a513`) 은 PMTiles fetch 를 *Reader port* 로 추상화하려 했음 → ADR 0014 가 보류 → ADR 0016 이 *PMTiles 정적 호스팅 + 클라 직접 fetch* 패턴으로 재설계.
 
 **진입점**:
 
