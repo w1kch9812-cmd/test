@@ -7,10 +7,11 @@ import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
 
-// `/pmtiles` — SP9 정적 vector tile (parcels/admin/complex). 누구나 fetch 가능 →
-// auth gate 회피. production 은 R2 CDN 직접 fetch 라 본 prefix 비활성이지만, 로컬
-// dev 에서 Next.js public/pmtiles/ 를 거치는 경로는 allowlist 필요.
-const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth", "/pmtiles"];
+// `/pmtiles` — SP9 정적 vector tile 전체 file (디버그/legacy). 누구나 fetch 가능.
+// `/api/tiles` — SP9 T3b.2 의 동적 tile API (PMTiles 파일 → z/x/y .pbf). mapbox-gl
+//   addSource 가 viewport 별로 호출하는 endpoint. 누구나 fetch 가능 (정적 vector
+//   tile = 비공개 정보 없음). production 은 R2 CDN 직결로 본 prefix 비활성.
+const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth", "/pmtiles", "/api/tiles"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).

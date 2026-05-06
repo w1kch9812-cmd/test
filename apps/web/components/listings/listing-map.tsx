@@ -3,31 +3,14 @@ import { useEffect, useRef, useState } from "react";
 import { pinIconHtml } from "@/components/listings/listing-pin";
 import { useListingsQuery } from "@/lib/listings/use-listings-query";
 import { loadNaverMaps } from "@/lib/naver-maps";
-import { pmtilesSourceUrl, registerPmtilesProtocol } from "@/lib/pmtiles";
+import { buildTileUrl, type MapboxGLLike, waitForMapbox } from "@/lib/pmtiles";
 import { useListingsStore } from "@/stores/listings";
-
-interface MapboxLike {
-  getCanvas?: () => HTMLCanvasElement;
-  resize?: () => void;
-  triggerRepaint?: () => void;
-  // biome-ignore lint/suspicious/noExplicitAny: mapbox-gl source/layer config 타입은 라이브러리 dependent
-  addSource?: (id: string, source: any) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: mapbox-gl layer config
-  addLayer?: (layer: any) => void;
-  // biome-ignore lint/suspicious/noExplicitAny: mapbox-gl event handler
-  on?: (event: string, layer: string, handler: (e: any) => void) => void;
-  queryRenderedFeatures?: (
-    point: [number, number],
-    options?: { layers?: string[] },
-    // biome-ignore lint/suspicious/noExplicitAny: feature 타입은 source-layer 별 다름
-  ) => any[];
-}
 
 /**
  * WebGL context lost/restored 핸들러 등록. 모바일 백그라운딩/GPU 메모리 부족 대응.
  * 실패 시 cleanup 미반환 (등록 자체가 안 됨).
  */
-function setupWebGlRecovery(mb: MapboxLike): (() => void) | undefined {
+function setupWebGlRecovery(mb: MapboxGLLike): (() => void) | undefined {
   if (typeof mb.getCanvas !== "function") return undefined;
   const glCanvas = mb.getCanvas();
   if (!glCanvas) return undefined;
@@ -37,8 +20,10 @@ function setupWebGlRecovery(mb: MapboxLike): (() => void) | undefined {
   };
   const onRestored = () => {
     try {
-      mb.resize?.();
-      mb.triggerRepaint?.();
+      // resize / triggerRepaint 는 mapbox-gl Map 메서드. MapboxGLLike 의 추가 형 단언.
+      const mbExt = mb as MapboxGLLike & { resize?: () => void; triggerRepaint?: () => void };
+      mbExt.resize?.();
+      mbExt.triggerRepaint?.();
     } catch {
       /* ignore */
     }
@@ -52,16 +37,16 @@ function setupWebGlRecovery(mb: MapboxLike): (() => void) | undefined {
 }
 
 /**
- * PMTiles 폴리곤 source/layer 등록 — ADR 0016. 실패 (URL 미설정 / 프로토콜 미등록 /
- * 소스 추가 실패) 시 silent fallback — 지도 자체는 정상 동작, 폴리곤만 안 그려짐.
+ * PMTiles 폴리곤 source/layer 등록 — ADR 0016 + design-lab 의 검증된 패턴.
  *
- * 클릭 시 properties.pnu 추출 → patchFilters({ pnu }) 트리거 (ADR 0018 폴리곤 클릭 모델).
- */
-/**
- * PMTiles 의 *내부 layer 이름* — tippecanoe `-l <name>` 결과. 우리 ETL (SP9 T3b.2)
- * 은 `parcels` 로 빌드. 단, 일시적으로 외부 cached PMTiles (예: 형제 repo 의 `lots`
- * layer) 를 borrow 해 쓸 때만 env 로 override.
+ * 핵심: `pmtiles://` URL scheme + addProtocol 우회. Naver SDK 의 mapbox-gl
+ * namespace 가 외부 미노출이라, 대신 *Next.js API route* (`/api/tiles/.../{z}/{x}/{y}.pbf`)
+ * 가 PMTiles 파일에서 단일 tile 추출 → `addSource(type:'vector', tiles:[URL])` 패턴.
  *
+ * `promoteId` — vector tile 의 PNU/code attribute 를 mapbox-gl feature.id 로 끌어
+ * 올림 → `setFeatureState`/click 핸들러에서 안정적 식별.
+ *
+ * env override (외부 cached PMTiles 의 source-layer 이름이 다를 때만):
  * - `NEXT_PUBLIC_PMTILES_PARCELS_LAYER` (default `parcels`)
  * - `NEXT_PUBLIC_PMTILES_ADMIN_LAYER`   (default `admin`)
  * - `NEXT_PUBLIC_PMTILES_COMPLEX_LAYER` (default `complex`)
@@ -70,26 +55,20 @@ const PARCELS_LAYER = process.env.NEXT_PUBLIC_PMTILES_PARCELS_LAYER || "parcels"
 const ADMIN_LAYER = process.env.NEXT_PUBLIC_PMTILES_ADMIN_LAYER || "admin";
 const COMPLEX_LAYER = process.env.NEXT_PUBLIC_PMTILES_COMPLEX_LAYER || "complex";
 
-function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void): void {
-  const parcelsUrl = pmtilesSourceUrl("parcels.pmtiles");
-  const adminUrl = pmtilesSourceUrl("admin.pmtiles");
-  const complexUrl = pmtilesSourceUrl("complex.pmtiles");
-
-  if (!parcelsUrl && !adminUrl && !complexUrl) {
-    console.info(
-      "[ListingMap] NEXT_PUBLIC_PMTILES_BASE_URL 미설정 — 폴리곤 layer 비활성. SP9 T3 ETL 완료 후 활성화.",
-    );
-    return;
-  }
-
+function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => void): void {
   if (typeof mb.addSource !== "function" || typeof mb.addLayer !== "function") {
     console.warn("[ListingMap] mapbox addSource/addLayer 미지원 — 폴리곤 skip");
     return;
   }
 
   try {
-    if (adminUrl) {
-      mb.addSource("admin", { type: "vector", url: adminUrl });
+    // ===== 행정구역 (admin) — Z 0~16 항상 visible (옅게) =====
+    if (!mb.getSource("admin")) {
+      mb.addSource("admin", {
+        type: "vector",
+        tiles: [buildTileUrl("admin")],
+        maxzoom: 12,
+      });
       mb.addLayer({
         id: "admin-fill",
         type: "fill",
@@ -104,8 +83,14 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
         },
       });
     }
-    if (complexUrl) {
-      mb.addSource("complex", { type: "vector", url: complexUrl });
+
+    // ===== 산업단지 (complex) — Z 12+ =====
+    if (!mb.getSource("complex")) {
+      mb.addSource("complex", {
+        type: "vector",
+        tiles: [buildTileUrl("complex")],
+        maxzoom: 15,
+      });
       mb.addLayer({
         id: "complex-fill",
         type: "fill",
@@ -119,8 +104,19 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
         },
       });
     }
-    if (parcelsUrl) {
-      mb.addSource("parcels", { type: "vector", url: parcelsUrl });
+
+    // ===== 필지 (parcels) — Z 16+ (가장 무거움) =====
+    if (!mb.getSource("parcels")) {
+      mb.addSource("parcels", {
+        type: "vector",
+        tiles: [buildTileUrl("parcels")],
+        maxzoom: 17,
+        // tile 안의 PNU attribute → mapbox-gl feature.id (setFeatureState 등에 사용).
+        // 대문자 `PNU` (design-lab tippecanoe 출력 표준) — 우리 ETL 은 소문자 `pnu`.
+        // 둘 다 시도하기 어려워서 일단 대문자 — 우리 ETL 출력 시 tippecanoe `-l parcels`
+        // 후 attribute 이름 align 필요. T3b.2.x 후속.
+        promoteId: "PNU",
+      });
       mb.addLayer({
         id: "parcels-fill",
         type: "fill",
@@ -135,16 +131,14 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
       });
       // 클릭 핸들러 — parcels-fill 레이어만. ADR 0018 의 폴리곤 클릭 모델.
       if (typeof mb.on === "function") {
-        mb.on(
-          "click",
-          "parcels-fill",
-          (e: { features?: Array<{ properties?: { pnu?: string } }> }) => {
-            const pnu = e.features?.[0]?.properties?.pnu;
-            if (typeof pnu === "string" && pnu.length > 0) {
-              onParcelClick(pnu);
-            }
-          },
-        );
+        mb.on("click", "parcels-fill", (e: unknown) => {
+          const evt = e as { features?: Array<{ properties?: { PNU?: string; pnu?: string } }> };
+          const props = evt.features?.[0]?.properties;
+          const pnu = props?.PNU ?? props?.pnu;
+          if (typeof pnu === "string" && pnu.length > 0) {
+            onParcelClick(pnu);
+          }
+        });
       }
     }
   } catch (err) {
@@ -213,16 +207,31 @@ export function ListingMap() {
         east: b.getNE().lng(),
       });
 
-      // mb 인스턴스 attach 후 PMTiles 폴리곤 + WebGL 복구
-      setTimeout(() => {
-        const mb = (map as unknown as { _mapbox?: MapboxLike })._mapbox;
-        if (!mb) return;
-        if (registerPmtilesProtocol(mb)) {
+      // dev-only window 노출 — 디버깅 / Playwright E2E 용. production 빌드 미포함.
+      if (process.env.NODE_ENV !== "production") {
+        (window as unknown as Record<string, unknown>).__listingMap = map;
+      }
+
+      // mapbox-gl 인스턴스 polling → PMTiles vector source 등록 + WebGL 복구.
+      // design-lab 의 `waitForMapboxGL` 패턴 차용 (50회×100ms = 5초 + style.load 10초).
+      waitForMapbox(map)
+        .then((mb) => {
+          if (cancelled) return;
+          if (process.env.NODE_ENV !== "production") {
+            (window as unknown as Record<string, unknown>).__listingMb = mb;
+          }
           setupPolygonLayers(mb, (pnu) => patchFilters({ pnu }));
-        }
-        const recovery = setupWebGlRecovery(mb);
-        if (recovery) cleanups.push(recovery);
-      }, 500);
+          const recovery = setupWebGlRecovery(mb);
+          if (recovery) cleanups.push(recovery);
+        })
+        .catch((e: unknown) => {
+          // GPU 가 swiftshader fallback 인 환경 (headless 등) 에서는 GL init 실패.
+          // 이 경우 폴리곤 비활성. 지도 자체는 raster 모드로 정상 작동.
+          console.warn(
+            "[ListingMap] mapbox-gl 인스턴스 polling 실패 — 폴리곤 비활성:",
+            e instanceof Error ? e.message : String(e),
+          );
+        });
 
       setMapReady(true); // marker useEffect 가 trigger 됨
     });
