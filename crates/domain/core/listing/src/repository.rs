@@ -76,6 +76,61 @@ pub trait ListingRepository: Send + Sync {
     ///
     /// 버전 불일치 → [`RepoError::Conflict`]. DB 통신 실패 → [`RepoError::Database`].
     async fn save(&self, listing: &Listing, ctx: MutationContext) -> Result<(), RepoError>;
+
+    /// 상세 페이지용 — `Listing` + photos + bookmark 정보 (SP6-iii).
+    ///
+    /// `viewer_user_id` 는 `is_bookmarked` JOIN 에 사용. RBAC 는 호출 측 (handler)
+    /// 가 `Listing.status` + `owner_id == viewer` 비교로 차단 — repo 는 데이터만
+    /// 반환.
+    ///
+    /// # Errors
+    ///
+    /// 매물 미존재 → `Ok(None)`. DB 통신 실패 → [`RepoError::Database`].
+    async fn find_detail_by_id(
+        &self,
+        id: &Id<ListingIdMarker>,
+        viewer_user_id: &Id<UserMarker>,
+    ) -> Result<Option<ListingDetail>, RepoError>;
+
+    /// `view_count` 1 증가. version bump X / audit_log X (빈도 높아 분리).
+    ///
+    /// 본인 본인 매물 조회 시 skip — handler 책임.
+    ///
+    /// # Errors
+    ///
+    /// 매물 미존재 → [`RepoError::NotFound`]. DB 통신 실패 → [`RepoError::Database`].
+    async fn increment_view_count(
+        &self,
+        id: &Id<ListingIdMarker>,
+    ) -> Result<(), RepoError>;
+}
+
+/// 매물 상세 페이지 응답 — SP6-iii.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListingDetail {
+    /// 전체 `Listing` Aggregate (21 필드).
+    pub listing: Listing,
+    /// 활성 사진 (soft-delete 제외, `display_order ASC`).
+    pub photos: Vec<ListingPhotoSummary>,
+    /// 즐겨찾기 수 — `bookmark_listing` JOIN COUNT.
+    pub bookmark_count: i64,
+    /// 본 viewer 가 즐겨찾기 한 매물인지.
+    pub is_bookmarked: bool,
+}
+
+/// 사진 요약 — frontend 표시용 5 필드 (audit/소유 메타 제외, SP6-iii).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingPhotoSummary {
+    /// `R2` 객체 키.
+    pub r2_key: String,
+    /// 썸네일 `R2` 키 (선택).
+    pub thumbnail_r2_key: Option<String>,
+    /// 캡션 (선택).
+    pub caption: Option<String>,
+    /// 표시 순서.
+    pub display_order: i32,
+    /// `MIME` content-type 문자열 (`image/jpeg` 등).
+    pub content_type: String,
 }
 
 /// 지도 마커용 lightweight `Listing` projection.
@@ -98,6 +153,10 @@ pub struct ListingMarker {
 /// 카드 list 용 풍부한 projection (지도 핀 + 우측 카드 양쪽 사용).
 ///
 /// 전체 [`Listing`] 의 21 필드 중 list 페이지에 필요한 것만.
+///
+/// SP6-iii: `is_bookmarked` 와 `bookmark_count` 는 `bookmark_listing` 테이블
+/// JOIN COUNT 결과 — `Listing.bookmark_count` denormalized 필드는 deprecated
+/// (FU 70 schema 제거 예정).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ListingCardSummary {
     /// 매물 ID (`lst_...`).
@@ -122,14 +181,20 @@ pub struct ListingCardSummary {
     pub thumbnail_url: Option<String>,
     /// 조회수.
     pub view_count: i64,
-    /// 즐겨찾기 수.
+    /// 즐겨찾기 수 (SP6-iii: `bookmark_listing` JOIN COUNT — denormalized 사본
+    /// 아님).
     pub bookmark_count: i64,
+    /// 본 viewer (`viewer_user_id`) 가 즐겨찾기 한 매물인지 (SP6-iii).
+    pub is_bookmarked: bool,
     /// 등록일.
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// 카드 list 검색 조건 (모두 optional, default 는 "전체").
-#[derive(Debug, Clone, Default)]
+///
+/// SP6-iii: `viewer_user_id` 가 필수 — 모든 listings endpoint 가 인증 사용자
+/// 전용이라 항상 존재. `is_bookmarked` JOIN 에 사용.
+#[derive(Debug, Clone)]
 pub struct CardSearchQuery {
     /// 지도 영역 (4326). None 이면 한국 전체.
     pub bbox: Option<BoundingBox>,
@@ -151,6 +216,9 @@ pub struct CardSearchQuery {
     pub size: u32,
     /// 정렬.
     pub sort: CardSearchSort,
+    /// 검색하는 사용자 ID — `is_bookmarked` JOIN 에 사용 (SP6-iii). 인증 사용자
+    /// 전용 endpoint 라 항상 Some — anonymous 접근은 SP9 (B2C 확장) 영역.
+    pub viewer_user_id: Id<UserMarker>,
 }
 
 /// 정렬 방식.

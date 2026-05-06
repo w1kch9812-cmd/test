@@ -4,6 +4,8 @@
 //! 파일 자체가 테스트 모듈이라 별도 `mod tests {}` 래퍼 없어요.
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+// SP6-iii: record_bookmark / release_bookmark 가 #[deprecated] 처리됨 — 단위 테스트는 FU 70 까지 보존.
+#![allow(deprecated)]
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use shared_kernel::area::AreaM2;
@@ -348,6 +350,10 @@ fn increment_view_count_at_u64_max_saturates() {
     assert_eq!(l.view_count, u64::MAX, "saturating_add must not overflow");
 }
 
+// ── record_bookmark / release_bookmark (deprecated SP6-iii — 호출 보존) ─────
+//
+// SP6-iii 가 denormalized counter 를 JOIN COUNT 로 대체. 본 메서드들 호출자
+// 0 이지만 FU 70 의 schema 컬럼 제거 시까지 유지. 본 모듈 단위 테스트 보존.
 // ── record_bookmark ─────────────────────────────────────────────────────────
 
 #[test]

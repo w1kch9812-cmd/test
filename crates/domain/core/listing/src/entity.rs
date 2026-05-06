@@ -215,12 +215,26 @@ impl Listing {
     }
 
     /// 북마크 수 증가 (`saturating_add`). `version` bump *안* 함.
+    ///
+    /// **Deprecated (SP6-iii)**: `Listing.bookmark_count` denormalized 필드는
+    /// 응답 시 JOIN COUNT 로 대체됨. 본 메서드는 호출자 0 (FU 70 schema 컬럼
+    /// 제거 후 함께 제거).
+    #[deprecated(
+        since = "0.2.0",
+        note = "FU 70: bookmark_count denormalization 제거. JOIN COUNT 응답으로 전환."
+    )]
     pub const fn record_bookmark(&mut self, at: DateTime<Utc>) {
         self.bookmark_count = self.bookmark_count.saturating_add(1);
         self.updated_at = at;
     }
 
     /// 북마크 수 감소 (`saturating_sub`, `0` 이하면 `0` 유지). `version` bump *안* 함.
+    ///
+    /// **Deprecated (SP6-iii)**: `record_bookmark` 와 동일 사유.
+    #[deprecated(
+        since = "0.2.0",
+        note = "FU 70: bookmark_count denormalization 제거. JOIN COUNT 응답으로 전환."
+    )]
     pub const fn release_bookmark(&mut self, at: DateTime<Utc>) {
         self.bookmark_count = self.bookmark_count.saturating_sub(1);
         self.updated_at = at;
