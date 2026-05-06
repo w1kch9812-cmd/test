@@ -48,6 +48,7 @@ mod routes {
     pub mod auth_event;
     pub mod bookmarks;
     pub mod listings;
+    pub mod notifications;
 }
 
 /// `Axum` 핸들러에 주입할 공유 상태.
@@ -243,14 +244,27 @@ async fn main() {
         .with_state(listings_state)
         .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
 
-    // SP6-iii: bookmarks 라우터 (auth_layer 통과). 멱등 design.
-    let bookmark_repo: Arc<dyn bookmark_domain::repository::BookmarkRepository> =
-        Arc::new(db::bookmark::PgBookmarkRepository::new(
-            // pool 은 auth_event_state 가 가져감 — 새 connection 으로 borrow 회피.
-            // sqlx::PgPool 은 Clone 가능 (Arc 기반).
+    // SP6-v: 공유 repository 인스턴스 — bookmarks/admin/notifications 가 같이 사용.
+    let notification_repo: Arc<dyn notification_domain::repository::NotificationRepository> =
+        Arc::new(db::notification::PgNotificationRepository::new(
             auth_event_state.pool.clone(),
         ));
-    let bookmarks_state = routes::bookmarks::BookmarksState { bookmark_repo };
+    let listing_repo_shared: Arc<dyn listing_domain::repository::ListingRepository> =
+        Arc::new(db::listing::PgListingRepository::new(
+            auth_event_state.pool.clone(),
+        ));
+
+    // SP6-iii/v: bookmarks 라우터 (auth_layer 통과). 멱등 design.
+    // SP6-v: listing_repo + notification_repo 추가 — bookmarker != owner 면 알림 INSERT.
+    let bookmark_repo: Arc<dyn bookmark_domain::repository::BookmarkRepository> =
+        Arc::new(db::bookmark::PgBookmarkRepository::new(
+            auth_event_state.pool.clone(),
+        ));
+    let bookmarks_state = routes::bookmarks::BookmarksState {
+        bookmark_repo,
+        listing_repo: listing_repo_shared.clone(),
+        notification_repo: notification_repo.clone(),
+    };
     let bookmarks_router: Router<()> = Router::new()
         .route(
             "/listings/:id/bookmark",
@@ -265,17 +279,9 @@ async fn main() {
         .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
 
     // SP6-v: admin_listings 라우터 — Admin/Operator 매물 승인/반려 + 알림 trigger.
-    let notification_repo: Arc<dyn notification_domain::repository::NotificationRepository> =
-        Arc::new(db::notification::PgNotificationRepository::new(
-            auth_event_state.pool.clone(),
-        ));
-    let listing_repo_for_admin: Arc<dyn listing_domain::repository::ListingRepository> =
-        Arc::new(db::listing::PgListingRepository::new(
-            auth_event_state.pool.clone(),
-        ));
     let admin_listings_state = routes::admin_listings::AdminListingsState {
-        listing_repo: listing_repo_for_admin,
-        notification_repo,
+        listing_repo: listing_repo_shared,
+        notification_repo: notification_repo.clone(),
     };
     let admin_router: Router<()> = Router::new()
         .route(
@@ -287,6 +293,30 @@ async fn main() {
             axum::routing::post(routes::admin_listings::reject_listing),
         )
         .with_state(admin_listings_state)
+        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+
+    // SP6-v: /me/notifications 라우터 (인증 사용자 본인 알림 조회/읽음).
+    let notifications_state = routes::notifications::NotificationsState {
+        notification_repo,
+    };
+    let notifications_router: Router<()> = Router::new()
+        .route(
+            "/me/notifications",
+            get(routes::notifications::list_notifications),
+        )
+        .route(
+            "/me/notifications/unread-count",
+            get(routes::notifications::unread_count),
+        )
+        .route(
+            "/me/notifications/:id/read",
+            axum::routing::patch(routes::notifications::mark_read),
+        )
+        .route(
+            "/me/notifications/mark-all-read",
+            axum::routing::post(routes::notifications::mark_all_read),
+        )
+        .with_state(notifications_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY: /internal/auth/event 는 현재 unauthenticated.
     // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
@@ -304,6 +334,7 @@ async fn main() {
         .merge(listings_router)
         .merge(bookmarks_router)
         .merge(admin_router)
+        .merge(notifications_router)
         .merge(internal)
         .layer(TraceLayer::new_for_http());
 

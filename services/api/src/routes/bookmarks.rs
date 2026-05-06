@@ -12,17 +12,31 @@ use axum::{Extension, Json};
 use bookmark_domain::listing::BookmarkListing;
 use bookmark_domain::repository::{BookmarkRepository, RepoError as BookmarkRepoError};
 use chrono::{DateTime, Utc};
+use listing_domain::repository::ListingRepository;
+use notification_domain::entity::Notification;
+use notification_domain::kind::NotificationKind;
+use notification_domain::repository::NotificationRepository;
 use serde::{Deserialize, Serialize};
-use shared_kernel::id::{Id, ListingMarker as ListingIdMarker};
+use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, NotificationMarker};
 
 use crate::http::mutation_ctx::http_user_action;
 use crate::http::problem::{problem, ProblemResponse};
 
 /// 핸들러 공유 상태.
+///
+/// SP6-v: `listing_repo` + `notification_repo` 추가 — 본인 매물 아닌 경우
+/// owner 에게 `listing_bookmarked` notification trigger. 모든 필드가 `_repo`
+/// suffix 인 것은 의도된 layered repository pattern (axum State 가 한 번에
+/// 주입 가능).
+#[allow(clippy::struct_field_names)]
 #[derive(Clone)]
 pub struct BookmarksState {
     /// `BookmarkRepository` 구현체 (SP5-ii `PgBookmarkRepository`).
     pub bookmark_repo: Arc<dyn BookmarkRepository>,
+    /// `ListingRepository` — bookmark 발생 시 owner 조회 (SP6-v).
+    pub listing_repo: Arc<dyn ListingRepository>,
+    /// `NotificationRepository` — `listing_bookmarked` 알림 INSERT (SP6-v).
+    pub notification_repo: Arc<dyn NotificationRepository>,
 }
 
 /// `POST /listings/:id/bookmark` 요청 본문 (선택적 메모).
@@ -81,6 +95,31 @@ pub async fn toggle_bookmark(
             tracing::error!(error = %e, "bookmark save failed");
             from_bookmark_repo_error(&e)
         })?;
+
+    // SP6-v: listing.owner != bookmarker 면 broker 에게 알림 (best-effort).
+    // owner 본인이 본인 매물 북마크 시 skip (자기 알림 노이즈 차단).
+    match state.listing_repo.find(&listing_id).await {
+        Ok(Some(listing)) if listing.owner_id != auth.user.id => {
+            let notif = Notification::new(
+                Id::<NotificationMarker>::new(),
+                listing.owner_id.clone(),
+                NotificationKind::ListingBookmarked,
+                serde_json::json!({
+                    "listing_id": listing.id.as_str(),
+                    "title": listing.title.as_str(),
+                    "bookmarker_id": auth.user.id.as_str(),
+                    "bookmarker_name": auth.user.display_name,
+                }),
+                now,
+            );
+            let notif_ctx = http_user_action(&auth, "notify_listing_bookmarked");
+            if let Err(e) = state.notification_repo.insert(&notif, notif_ctx).await {
+                tracing::warn!(error = %e, "bookmark notification insert failed — proceeding");
+            }
+        }
+        Ok(_) => {} // 본인 매물 또는 미존재 -- skip
+        Err(e) => tracing::warn!(error = %e, "listing find for notification failed — proceeding"),
+    }
 
     Ok((
         StatusCode::CREATED,
