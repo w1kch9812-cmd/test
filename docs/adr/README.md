@@ -63,3 +63,4 @@
 | [0014](./0014-base-layer-defer-pmtiles.md) | 지도 base layer (전국 필지 polygon) — 보류 (R2 PMTiles SSS 부적합) | **Superseded by 0016** |
 | [0015](./0015-v-world-acl-rearchitecture.md) | V-World ACL 재설계 — fixture-driven, layer-decomposed, envelope-aware | Accepted |
 | [0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) | 지도 base layer — PMTiles 100% (Bronze raw archive + Gold PMTiles, PostGIS Silver 미도입) | Accepted |
+| [0017](./0017-listing-marker-render-canvas-bitmap-stamp.md) | 매물 마커 렌더링 — Naver Marker + Canvas content + BitmapStampCache (단일 렌더 박자) | Accepted |
