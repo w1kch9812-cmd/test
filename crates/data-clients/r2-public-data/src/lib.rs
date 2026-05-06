@@ -20,6 +20,10 @@
 
 pub mod client;
 pub mod error;
+pub mod parcel;
+pub mod pmtiles;
 
 pub use client::{R2Client, R2Config};
 pub use error::{ConfigError, ParseError};
+pub use parcel::R2ParcelReader;
+pub use pmtiles::{parse_header, PmtilesHeader};
