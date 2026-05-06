@@ -44,6 +44,7 @@ mod http {
 }
 
 mod routes {
+    pub mod admin_listings;
     pub mod auth_event;
     pub mod bookmarks;
     pub mod listings;
@@ -261,6 +262,31 @@ async fn main() {
             get(routes::bookmarks::list_my_bookmarks),
         )
         .with_state(bookmarks_state)
+        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+
+    // SP6-v: admin_listings 라우터 — Admin/Operator 매물 승인/반려 + 알림 trigger.
+    let notification_repo: Arc<dyn notification_domain::repository::NotificationRepository> =
+        Arc::new(db::notification::PgNotificationRepository::new(
+            auth_event_state.pool.clone(),
+        ));
+    let listing_repo_for_admin: Arc<dyn listing_domain::repository::ListingRepository> =
+        Arc::new(db::listing::PgListingRepository::new(
+            auth_event_state.pool.clone(),
+        ));
+    let admin_listings_state = routes::admin_listings::AdminListingsState {
+        listing_repo: listing_repo_for_admin,
+        notification_repo,
+    };
+    let admin_router: Router<()> = Router::new()
+        .route(
+            "/admin/listings/:id/approve",
+            axum::routing::post(routes::admin_listings::approve_listing),
+        )
+        .route(
+            "/admin/listings/:id/reject",
+            axum::routing::post(routes::admin_listings::reject_listing),
+        )
+        .with_state(admin_listings_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY: /internal/auth/event 는 현재 unauthenticated.
     // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
@@ -277,6 +303,7 @@ async fn main() {
         .merge(protected)
         .merge(listings_router)
         .merge(bookmarks_router)
+        .merge(admin_router)
         .merge(internal)
         .layer(TraceLayer::new_for_http());
 

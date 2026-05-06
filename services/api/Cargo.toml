@@ -13,6 +13,7 @@ user-domain = { path = "../../crates/domain/core/user", version = "0.1.0" }
 listing-domain = { path = "../../crates/domain/core/listing", version = "0.1.0" }
 listing-photo-domain = { path = "../../crates/domain/core/listing-photo", version = "0.1.0" }
 bookmark-domain = { path = "../../crates/domain/insights/bookmark", version = "0.1.0" }
+notification-domain = { path = "../../crates/domain/insights/notification", version = "0.1.0" }
 db = { path = "../../crates/db", version = "0.1.0" }
 axum = { workspace = true }
 deadpool-redis = { workspace = true }
