@@ -45,6 +45,7 @@ mod http {
 
 mod routes {
     pub mod auth_event;
+    pub mod bookmarks;
     pub mod listings;
 }
 
@@ -209,14 +210,19 @@ async fn main() {
             auth_state.clone(),
             auth_layer,
         ));
-    // /listings 라우터 — auth_layer 통과 후 GET 검색 (SP6-ii) + POST/PATCH/transitions/photos
-    // (SP6-iv). 모든 mutation 핸들러는 require_role(Broker) + ownership check.
+    // /listings 라우터 — auth_layer 통과 후 GET 검색/상세 (SP6-ii/iii) +
+    // POST/PATCH/transitions/photos (SP6-iv). 모든 mutation 핸들러는 require_role(Broker)
+    // + ownership check.
     let listings_router: Router<()> = Router::new()
         .route(
             "/listings",
             get(routes::listings::get_listings).post(routes::listings::create_listing),
         )
-        .route("/listings/:id", axum::routing::patch(routes::listings::patch_listing))
+        .route(
+            "/listings/:id",
+            get(routes::listings::get_listing_detail)
+                .patch(routes::listings::patch_listing),
+        )
         .route(
             "/listings/:id/submit-for-review",
             axum::routing::post(routes::listings::submit_for_review),
@@ -234,6 +240,27 @@ async fn main() {
             axum::routing::delete(routes::listings::delete_photo),
         )
         .with_state(listings_state)
+        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+
+    // SP6-iii: bookmarks 라우터 (auth_layer 통과). 멱등 design.
+    let bookmark_repo: Arc<dyn bookmark_domain::repository::BookmarkRepository> =
+        Arc::new(db::bookmark::PgBookmarkRepository::new(
+            // pool 은 auth_event_state 가 가져감 — 새 connection 으로 borrow 회피.
+            // sqlx::PgPool 은 Clone 가능 (Arc 기반).
+            auth_event_state.pool.clone(),
+        ));
+    let bookmarks_state = routes::bookmarks::BookmarksState { bookmark_repo };
+    let bookmarks_router: Router<()> = Router::new()
+        .route(
+            "/listings/:id/bookmark",
+            axum::routing::post(routes::bookmarks::toggle_bookmark)
+                .delete(routes::bookmarks::delete_bookmark),
+        )
+        .route(
+            "/me/bookmarks",
+            get(routes::bookmarks::list_my_bookmarks),
+        )
+        .with_state(bookmarks_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY: /internal/auth/event 는 현재 unauthenticated.
     // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
@@ -249,6 +276,7 @@ async fn main() {
     let app = public
         .merge(protected)
         .merge(listings_router)
+        .merge(bookmarks_router)
         .merge(internal)
         .layer(TraceLayer::new_for_http());
 
