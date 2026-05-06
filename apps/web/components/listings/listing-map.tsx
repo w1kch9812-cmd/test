@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { pinIconHtml } from "@/components/listings/listing-pin";
 import { useListingsQuery } from "@/lib/listings/use-listings-query";
 import { loadNaverMaps } from "@/lib/naver-maps";
-import { buildTileUrl, type MapboxGLLike, waitForMapbox } from "@/lib/pmtiles";
+import { type MapboxGLLike, registerPmtilesSourceType, waitForMapbox } from "@/lib/pmtiles";
 import { useListingsStore } from "@/stores/listings";
 
 /**
@@ -37,14 +37,11 @@ function setupWebGlRecovery(mb: MapboxGLLike): (() => void) | undefined {
 }
 
 /**
- * PMTiles 폴리곤 source/layer 등록 — ADR 0016 + design-lab 의 검증된 패턴.
+ * PMTiles 폴리곤 source/layer 등록 — ADR 0019 (addSourceType 표준 path).
  *
- * 핵심: `pmtiles://` URL scheme + addProtocol 우회. Naver SDK 의 mapbox-gl
- * namespace 가 외부 미노출이라, 대신 *Next.js API route* (`/api/tiles/.../{z}/{x}/{y}.pbf`)
- * 가 PMTiles 파일에서 단일 tile 추출 → `addSource(type:'vector', tiles:[URL])` 패턴.
- *
- * `promoteId` — vector tile 의 PNU/code attribute 를 mapbox-gl feature.id 로 끌어
- * 올림 → `setFeatureState`/click 핸들러에서 안정적 식별.
+ * 클라이언트가 PMTiles 파일에 *직접* HTTP byte-range request → server proxy 0.
+ * `mb.addSourceType("pmtiles", PMTilesSource)` 등록은 `setupPolygonLayers` 호출 *이전*
+ * 에 완료되어야 함 (호출자 책임).
  *
  * env override (외부 cached PMTiles 의 source-layer 이름이 다를 때만):
  * - `NEXT_PUBLIC_PMTILES_PARCELS_LAYER` (default `parcels`)
@@ -55,6 +52,13 @@ const PARCELS_LAYER = process.env.NEXT_PUBLIC_PMTILES_PARCELS_LAYER || "parcels"
 const ADMIN_LAYER = process.env.NEXT_PUBLIC_PMTILES_ADMIN_LAYER || "admin";
 const COMPLEX_LAYER = process.env.NEXT_PUBLIC_PMTILES_COMPLEX_LAYER || "complex";
 
+const PMTILES_BASE = process.env.NEXT_PUBLIC_PMTILES_BASE_URL || "/pmtiles/";
+
+function pmtilesUrl(filename: string): string {
+  const base = PMTILES_BASE.endsWith("/") ? PMTILES_BASE : `${PMTILES_BASE}/`;
+  return `${base}${filename}`;
+}
+
 function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => void): void {
   if (typeof mb.addSource !== "function" || typeof mb.addLayer !== "function") {
     console.warn("[ListingMap] mapbox addSource/addLayer 미지원 — 폴리곤 skip");
@@ -62,13 +66,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
   }
 
   try {
-    // ===== 행정구역 (admin) — Z 0~16 항상 visible (옅게) =====
+    // ===== 행정구역 (admin) =====
     if (!mb.getSource("admin")) {
-      mb.addSource("admin", {
-        type: "vector",
-        tiles: [buildTileUrl("admin")],
-        maxzoom: 12,
-      });
+      mb.addSource("admin", { type: "pmtiles", url: pmtilesUrl("admin.pmtiles") });
       mb.addLayer({
         id: "admin-fill",
         type: "fill",
@@ -84,13 +84,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
       });
     }
 
-    // ===== 산업단지 (complex) — Z 12+ =====
+    // ===== 산업단지 (complex) =====
     if (!mb.getSource("complex")) {
-      mb.addSource("complex", {
-        type: "vector",
-        tiles: [buildTileUrl("complex")],
-        maxzoom: 15,
-      });
+      mb.addSource("complex", { type: "pmtiles", url: pmtilesUrl("complex.pmtiles") });
       mb.addLayer({
         id: "complex-fill",
         type: "fill",
@@ -105,16 +101,14 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
       });
     }
 
-    // ===== 필지 (parcels) — Z 16+ (가장 무거움) =====
+    // ===== 필지 (parcels) =====
     if (!mb.getSource("parcels")) {
       mb.addSource("parcels", {
-        type: "vector",
-        tiles: [buildTileUrl("parcels")],
-        maxzoom: 17,
+        type: "pmtiles",
+        url: pmtilesUrl("parcels.pmtiles"),
         // tile 안의 PNU attribute → mapbox-gl feature.id (setFeatureState 등에 사용).
         // 대문자 `PNU` (design-lab tippecanoe 출력 표준) — 우리 ETL 은 소문자 `pnu`.
-        // 둘 다 시도하기 어려워서 일단 대문자 — 우리 ETL 출력 시 tippecanoe `-l parcels`
-        // 후 attribute 이름 align 필요. T3b.2.x 후속.
+        // T3b.3 합의 후 attribute 이름 align 필요.
         promoteId: "PNU",
       });
       mb.addLayer({
@@ -129,7 +123,6 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
           "fill-outline-color": "#059669",
         },
       });
-      // 클릭 핸들러 — parcels-fill 레이어만. ADR 0018 의 폴리곤 클릭 모델.
       if (typeof mb.on === "function") {
         mb.on("click", "parcels-fill", (e: unknown) => {
           const evt = e as { features?: Array<{ properties?: { PNU?: string; pnu?: string } }> };
@@ -212,13 +205,20 @@ export function ListingMap() {
         (window as unknown as Record<string, unknown>).__listingMap = map;
       }
 
-      // mapbox-gl 인스턴스 polling → PMTiles vector source 등록 + WebGL 복구.
-      // design-lab 의 `waitForMapboxGL` 패턴 차용 (50회×100ms = 5초 + style.load 10초).
+      // mapbox-gl 인스턴스 polling → addSourceType 등록 → PMTiles source 등록.
+      // ADR 0019: server proxy 폐기, 표준 mapbox-gl v2 path.
       waitForMapbox(map)
-        .then((mb) => {
+        .then(async (mb) => {
           if (cancelled) return;
           if (process.env.NODE_ENV !== "production") {
             (window as unknown as Record<string, unknown>).__listingMb = mb;
+          }
+          // SourceType 등록 *먼저* — 그 후 addSource(type:"pmtiles") 가능.
+          const ok = await registerPmtilesSourceType(mb);
+          if (cancelled) return;
+          if (!ok) {
+            console.warn("[ListingMap] addSourceType 실패 — PMTiles 폴리곤 비활성");
+            return;
           }
           setupPolygonLayers(mb, (pnu) => patchFilters({ pnu }));
           const recovery = setupWebGlRecovery(mb);

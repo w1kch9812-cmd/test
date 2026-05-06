@@ -7,11 +7,10 @@ import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
 
-// `/pmtiles` — SP9 정적 vector tile 전체 file (디버그/legacy). 누구나 fetch 가능.
-// `/api/tiles` — SP9 T3b.2 의 동적 tile API (PMTiles 파일 → z/x/y .pbf). mapbox-gl
-//   addSource 가 viewport 별로 호출하는 endpoint. 누구나 fetch 가능 (정적 vector
-//   tile = 비공개 정보 없음). production 은 R2 CDN 직결로 본 prefix 비활성.
-const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth", "/pmtiles", "/api/tiles"];
+// `/pmtiles` — SP9 ADR 0019 의 정적 vector tile 단일 파일. mapbox-gl 의 PMTilesSource
+// (VectorTileSource subclass) 가 byte-range request 직접. 누구나 fetch 가능
+// (정적 vector tile = 비공개 정보 없음). production 은 R2 직결로 본 prefix 비활성.
+const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth", "/pmtiles"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
@@ -88,9 +87,11 @@ export async function proxy(req: NextRequest) {
   const imgSrc = isDev
     ? "'self' data: blob: http: https:"
     : "'self' data: blob: https://*.map.naver.com https://map.naver.com https://*.map.naver.net https://map.naver.net https://*.pstatic.net";
+  // SP9 ADR 0019 — PMTilesSource 가 worker 한테 blob URL 로 raw .pbf bytes 전달.
+  // worker 의 standard fetch 가 blob: scheme 을 connect-src 에서 거치므로 허용 필수.
   const connectSrc = isDev
-    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
-    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com`;
+    ? `'self' blob: ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
+    : `'self' blob: ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com`;
 
   // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
   // 'strict-dynamic' 와 함께 modern browser 에서 호환 (CSP3).

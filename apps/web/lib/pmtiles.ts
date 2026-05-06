@@ -1,31 +1,19 @@
 /**
- * PMTiles 통합 helper — Naver Maps gl SDK 의 mapbox-gl 백엔드 위에 vector tile
- * source 등록.
+ * SP9 ADR 0019 — PMTiles 통합 helper. addSourceType + VectorTileSource subclass path.
  *
- * SP9 T3b.2 진단 결과:
- * - Naver SDK 는 mapbox-gl v2 인스턴스를 `getMapbox()` getter 로 노출.
- * - 단, mapbox-gl namespace 자체 (`addProtocol` 함수 보유) 는 외부에 노출 X.
- * - 따라서 `pmtiles://` URL scheme 등록 path 사용 불가.
+ * 본 모듈:
+ * - `getMapboxFromNaver` — Naver Map 인스턴스에서 mapbox-gl Map 추출
+ * - `waitForMapbox` — gl init polling
+ * - `registerPmtilesSourceType` — PMTilesSource 클래스를 mb 의 source registry 에 등록
  *
- * 대신 design-lab 의 검증된 패턴: 서버사이드 API route 가 PMTiles 파일에서 단일
- * tile 추출 → `mb.addSource(type:'vector', tiles:[<API URL>])` 표준 패턴 사용.
- *
- * 본 모듈은 그 URL 빌더 + 인스턴스 polling 헬퍼만 제공. addProtocol / Protocol
- * import 모두 제거.
+ * 등록 후 사용자는 표준 패턴:
+ * ```ts
+ * mb.addSource("parcels", { type: "pmtiles", url: "/pmtiles/parcels.pmtiles" });
+ * mb.addLayer({ id: "parcels-fill", source: "parcels", "source-layer": "parcels", ... });
+ * ```
  */
 
-/** PMTiles 파일 이름 (확장자 제외) → API route URL pattern. */
-export function buildTileUrl(name: string): string {
-  // 외부 R2 / Cloudflare Worker 우선, 미설정 시 Next.js API route fallback.
-  const workerUrl = process.env.NEXT_PUBLIC_TILE_WORKER_URL;
-  if (workerUrl && workerUrl.trim() !== "") {
-    return `${workerUrl.replace(/\/$/, "")}/tiles/${name}/{z}/{x}/{y}.pbf`;
-  }
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/api/tiles/${name}/{z}/{x}/{y}.pbf`;
-  }
-  return `/api/tiles/${name}/{z}/{x}/{y}.pbf`;
-}
+import { createPMTilesSourceClass } from "./pmtiles-source";
 
 /** Naver SDK 의 `getMapbox()` 결과 타입 (mapbox-gl v2 Map 의 sub-shape). */
 export interface MapboxGLLike {
@@ -33,6 +21,8 @@ export interface MapboxGLLike {
   addLayer: (layer: unknown, beforeId?: string) => void;
   getSource: (id: string) => unknown;
   getLayer: (id: string) => unknown;
+  // biome-ignore lint/suspicious/noExplicitAny: mapbox-gl v2 Source factory cb
+  addSourceType?: (name: string, SourceClass: any, callback: (err?: Error) => void) => void;
   getStyle?: () => { sources?: Record<string, unknown>; layers?: Array<{ id: string }> };
   isStyleLoaded?: () => boolean;
   on?: (
@@ -42,6 +32,52 @@ export interface MapboxGLLike {
   ) => void;
   queryRenderedFeatures?: (point?: unknown, options?: { layers?: string[] }) => unknown[];
   getCanvas?: () => HTMLCanvasElement;
+  // ADR 0019 — VectorTileSource subclass factory 사용을 위해 style 노출 필요.
+  // biome-ignore lint/suspicious/noExplicitAny: minified Style class
+  style?: any;
+  // biome-ignore lint/suspicious/noExplicitAny: minified painter
+  painter?: any;
+}
+
+/** `pmtiles` source type 이 한 mb 인스턴스에 1회만 등록되도록 추적. */
+const _registeredOnMb = new WeakSet<object>();
+
+/**
+ * PMTilesSource 를 mb 인스턴스의 source type registry 에 등록.
+ *
+ * mb 인스턴스 별로 1회만 호출 (idempotent). factory 가 mb.style.constructor.getSourceType("vector")
+ * 로 base class 받아 동적 subclass.
+ *
+ * 실패 (Naver fork 변경 / built-in vector source 못 찾음) 시 false → 호출자가 fallback.
+ */
+export async function registerPmtilesSourceType(mb: MapboxGLLike): Promise<boolean> {
+  if (_registeredOnMb.has(mb as unknown as object)) return true;
+
+  if (typeof mb.addSourceType !== "function") {
+    console.warn("[pmtiles] mb.addSourceType 미지원 — Naver fork 변경 추정");
+    return false;
+  }
+
+  let SourceClass: unknown;
+  try {
+    // biome-ignore lint/suspicious/noExplicitAny: factory needs raw mb shape
+    SourceClass = createPMTilesSourceClass(mb as any);
+  } catch (e) {
+    console.warn("[pmtiles] PMTilesSource factory 실패:", (e as Error).message);
+    return false;
+  }
+
+  return await new Promise<boolean>((resolve) => {
+    mb.addSourceType?.("pmtiles", SourceClass, (err) => {
+      if (err) {
+        console.warn("[pmtiles] addSourceType 실패:", err.message);
+        resolve(false);
+        return;
+      }
+      _registeredOnMb.add(mb as unknown as object);
+      resolve(true);
+    });
+  });
 }
 
 /** Naver Map 인스턴스에서 mapbox-gl 인스턴스 추출. `getMapbox()` 우선, fallback `_mapbox`. */
@@ -49,17 +85,12 @@ export function getMapboxFromNaver(naverMap: unknown): MapboxGLLike | null {
   if (!naverMap || typeof naverMap !== "object") return null;
   const m = naverMap as { getMapbox?: () => MapboxGLLike | undefined; _mapbox?: MapboxGLLike };
   const mb = m.getMapbox?.() ?? m._mapbox;
-  // 최소 sanity — addSource 가 함수면 진짜 mapbox-gl.
   if (mb && typeof mb.addSource === "function") return mb;
   return null;
 }
 
 /**
- * mapbox-gl 인스턴스가 준비될 때까지 polling. design-lab 의 `waitForMapboxGL`
- * 패턴 — 50회 × 100ms = 최대 5초. 그 후 추가로 style.load 폴링 10초.
- *
- * Naver SDK 의 `gl: true` 옵션이 raster 모드로 fallback 하는 환경 (headless
- * Chromium swiftshader 등) 에서는 영원히 mapbox 인스턴스 안 만들어짐 → reject.
+ * mapbox-gl 인스턴스가 준비될 때까지 polling (50회 × 100ms = 최대 5초 + style.load 10초).
  */
 export async function waitForMapbox(
   naverMap: unknown,
@@ -76,11 +107,9 @@ export async function waitForMapbox(
   }
   if (!mb) throw new Error("mapbox-gl 인스턴스 polling timeout (Naver gl init 실패 추정)");
 
-  // style.load 까지 대기 (최대 10초).
   for (let i = 0; i < 100; i++) {
     if (mb.isStyleLoaded?.()) return mb;
     await new Promise((r) => setTimeout(r, interval));
   }
-  // style 미로드 상태로도 반환 — 일부 호출자는 style.load 이벤트로 직접 listen.
   return mb;
 }
