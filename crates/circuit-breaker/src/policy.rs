@@ -56,6 +56,26 @@ impl Policy {
             open_cooldown_ms: 30_000,
         }
     }
+
+    /// R2 (Cloudflare R2, S3-호환) 정적 객체 정책 — SP4-iii-e.
+    ///
+    /// - timeout 8초 / 재시도 1회 (1s 지수 백오프)
+    /// - 10초 안 5회 실패 → 60초 차단
+    ///
+    /// 정부 API 보다 short timeout 적정 — R2 가 정적 객체 (`PMTiles` / JSON 인덱스)
+    /// 라 latency variance 작음. cooldown 길게 — 정적 객체 outage 는 보통
+    /// region-level (CDN 자동 복구 대기).
+    #[must_use]
+    pub const fn r2_default() -> Self {
+        Self {
+            timeout_ms: 8_000,
+            max_retries: 1,
+            retry_base_ms: 1_000,
+            open_threshold: 5,
+            open_window_ms: 10_000,
+            open_cooldown_ms: 60_000,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -91,6 +111,26 @@ mod tests {
         let d = Policy::data_go_kr_default();
         assert!(d.timeout_ms > v.timeout_ms);
         assert!(d.max_retries > v.max_retries);
+    }
+
+    #[test]
+    fn r2_default_matches_doc() {
+        let p = Policy::r2_default();
+        assert_eq!(p.timeout_ms, 8_000);
+        assert_eq!(p.max_retries, 1);
+        assert_eq!(p.retry_base_ms, 1_000);
+        assert_eq!(p.open_threshold, 5);
+        assert_eq!(p.open_window_ms, 10_000);
+        assert_eq!(p.open_cooldown_ms, 60_000);
+    }
+
+    #[test]
+    fn r2_has_shorter_timeout_than_data_go_kr() {
+        // R2 는 정적 객체 — government API 보다 latency variance 작음.
+        let r = Policy::r2_default();
+        let d = Policy::data_go_kr_default();
+        assert!(r.timeout_ms < d.timeout_ms);
+        assert!(r.open_cooldown_ms > d.open_cooldown_ms);
     }
 
     #[test]

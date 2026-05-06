@@ -28,6 +28,7 @@ members = [
     "crates/data-clients/raw-capture",
     "crates/data-clients/vworld",
     "crates/data-clients/data-go-kr",
+    "crates/data-clients/r2-public-data",
     "crates/data-pipeline-control",
     "crates/db",
     "crates/outbox-publisher",
