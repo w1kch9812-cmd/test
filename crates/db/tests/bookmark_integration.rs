@@ -288,3 +288,173 @@ async fn upsert_listing_bookmark_updates_note() {
     assert_eq!(bookmarks.len(), 1);
     assert_eq!(bookmarks[0].note.as_deref(), Some("updated"));
 }
+
+// ── SP6-iii: find_detail_by_id + JOIN bookmark_count + is_bookmarked ────────
+
+#[tokio::test]
+async fn find_detail_active_returns_full_data_with_zero_bookmarks() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_user(&pool, "zsub-detail-1", "detail1@example.com").await;
+    let viewer = seed_user(&pool, "zsub-detail-1v", "detail1v@example.com").await;
+    let listing_id = seed_active_listing(&pool, owner).await;
+    let l_repo = PgListingRepository::new(pool.clone());
+
+    let detail = l_repo
+        .find_detail_by_id(&listing_id, &viewer)
+        .await
+        .expect("ok")
+        .expect("found");
+    assert_eq!(detail.listing.id, listing_id);
+    assert_eq!(detail.bookmark_count, 0);
+    assert!(!detail.is_bookmarked);
+    assert!(detail.photos.is_empty()); // 사진 미등록
+}
+
+#[tokio::test]
+async fn find_detail_with_viewer_bookmark_sets_is_bookmarked_true() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_user(&pool, "zsub-detail-2", "detail2@example.com").await;
+    let viewer = seed_user(&pool, "zsub-detail-2v", "detail2v@example.com").await;
+    let listing_id = seed_active_listing(&pool, owner).await;
+    let l_repo = PgListingRepository::new(pool.clone());
+    let bm_repo = PgBookmarkRepository::new(pool.clone());
+
+    // viewer 가 북마크 한다.
+    let bm = BookmarkListing::try_new(viewer.clone(), listing_id.clone(), None, Utc::now())
+        .expect("bm");
+    bm_repo
+        .save_listing_bookmark(&bm, test_ctx())
+        .await
+        .expect("save");
+
+    let detail = l_repo
+        .find_detail_by_id(&listing_id, &viewer)
+        .await
+        .expect("ok")
+        .expect("found");
+    assert_eq!(detail.bookmark_count, 1);
+    assert!(detail.is_bookmarked);
+}
+
+#[tokio::test]
+async fn find_detail_other_users_bookmark_does_not_set_is_bookmarked() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_user(&pool, "zsub-detail-3", "detail3@example.com").await;
+    let other = seed_user(&pool, "zsub-detail-3o", "detail3o@example.com").await;
+    let viewer = seed_user(&pool, "zsub-detail-3v", "detail3v@example.com").await;
+    let listing_id = seed_active_listing(&pool, owner).await;
+    let l_repo = PgListingRepository::new(pool.clone());
+    let bm_repo = PgBookmarkRepository::new(pool.clone());
+
+    // 다른 사용자 (other) 가 북마크 한다.
+    let bm = BookmarkListing::try_new(other.clone(), listing_id.clone(), None, Utc::now())
+        .expect("bm");
+    bm_repo
+        .save_listing_bookmark(&bm, test_ctx())
+        .await
+        .expect("save");
+
+    // viewer 시점 — bookmark_count 1 이지만 is_bookmarked 는 false (본인 X).
+    let detail = l_repo
+        .find_detail_by_id(&listing_id, &viewer)
+        .await
+        .expect("ok")
+        .expect("found");
+    assert_eq!(detail.bookmark_count, 1);
+    assert!(!detail.is_bookmarked);
+}
+
+#[tokio::test]
+async fn find_detail_nonexistent_returns_none() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let viewer = seed_user(&pool, "zsub-detail-4v", "detail4v@example.com").await;
+    let l_repo = PgListingRepository::new(pool.clone());
+
+    let fake_id = Id::<ListingMarker>::new();
+    let result = l_repo
+        .find_detail_by_id(&fake_id, &viewer)
+        .await
+        .expect("ok");
+    assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn increment_view_count_increments_value() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_user(&pool, "zsub-detail-5", "detail5@example.com").await;
+    let viewer = seed_user(&pool, "zsub-detail-5v", "detail5v@example.com").await;
+    let listing_id = seed_active_listing(&pool, owner).await;
+    let l_repo = PgListingRepository::new(pool.clone());
+
+    l_repo
+        .increment_view_count(&listing_id)
+        .await
+        .expect("ok");
+    l_repo
+        .increment_view_count(&listing_id)
+        .await
+        .expect("ok");
+
+    let detail = l_repo
+        .find_detail_by_id(&listing_id, &viewer)
+        .await
+        .expect("ok")
+        .expect("found");
+    assert_eq!(detail.listing.view_count, 2);
+}
+
+#[tokio::test]
+async fn increment_view_count_nonexistent_returns_not_found() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    use listing_domain::repository::RepoError as ListingRepoError;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let l_repo = PgListingRepository::new(pool);
+
+    let fake_id = Id::<ListingMarker>::new();
+    let err = l_repo
+        .increment_view_count(&fake_id)
+        .await
+        .expect_err("not found");
+    assert!(matches!(err, ListingRepoError::NotFound));
+}
+
+/// 도우미 — Active 상태 매물 시드 (`find_detail` RBAC 테스트용).
+async fn seed_active_listing(
+    pool: &sqlx::PgPool,
+    owner: Id<UserMarker>,
+) -> Id<ListingMarker> {
+    let repo = PgListingRepository::new(pool.clone());
+    let now = Utc::now();
+    let mut listing = Listing::try_new_draft(
+        Id::new(),
+        owner,
+        Pnu::try_new("1111010100100090000").unwrap(),
+        ListingType::Factory,
+        TransactionType::Sale,
+        MoneyKrw::try_new(200_000_000).unwrap(),
+        None,
+        None,
+        AreaM2::try_new(150.0).unwrap(),
+        ListingTitle::try_new("active listing for detail test").unwrap(),
+        Description::try_new("").unwrap(),
+        None,
+        now,
+    )
+    .expect("listing");
+    listing.submit_for_review(now).expect("submit");
+    listing.approve(now).expect("approve");
+    let listing_id = listing.id.clone();
+    repo.save(&listing, test_ctx()).await.expect("save");
+    listing_id
+}
