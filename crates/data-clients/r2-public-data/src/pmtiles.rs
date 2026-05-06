@@ -93,7 +93,7 @@ mod tests {
         let mut v = Vec::with_capacity(127);
         v.extend_from_slice(b"PMTiles"); // 7 byte magic
         v.push(3); // version
-        // 나머지 119 byte 0 — header zone full size 는 127. 1차 파서는 8 byte 만 검증.
+                   // 나머지 119 byte 0 — header zone full size 는 127. 1차 파서는 8 byte 만 검증.
         v.resize(127, 0);
         Bytes::from(v)
     }

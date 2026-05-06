@@ -178,14 +178,7 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
         let after_state =
             crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
 
-        write_audit_log(
-            &mut tx,
-            report.id.as_str(),
-            &ctx,
-            before_state,
-            after_state,
-        )
-        .await?;
+        write_audit_log(&mut tx, report.id.as_str(), &ctx, before_state, after_state).await?;
         write_outbox_events(&mut tx, report.id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -206,8 +199,7 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
         // SP-Obs T4: before_state — DELETE 직전 row 마지막 상태.
-        let before_state =
-            crate::audit_state::read_analysis_report_json(&mut tx, id).await?;
+        let before_state = crate::audit_state::read_analysis_report_json(&mut tx, id).await?;
 
         let result = sqlx::query("delete from analysis_report where id = $1")
             .bind(id.as_str())

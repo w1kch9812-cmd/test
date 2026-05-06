@@ -85,9 +85,8 @@ impl DataGoKrBuildingReader {
                 // 좌표는 이미 MultiPolygonSrid::try_new_wgs84 에서 검증됨 — 재검증은
                 // PolygonSrid 보장 일관성을 위한 정직한 비용.
                 let first = parcel.geom.first_polygon().clone();
-                PolygonSrid::try_new_wgs84(first).map_err(|e| {
-                    ReaderError::Parse(format!("vworld first polygon invalid: {e}"))
-                })
+                PolygonSrid::try_new_wgs84(first)
+                    .map_err(|e| ReaderError::Parse(format!("vworld first polygon invalid: {e}")))
             }
             None => Err(ReaderError::Fetch(format!(
                 "vworld returned no feature for pnu '{}' — cannot synthesize Building.geom",

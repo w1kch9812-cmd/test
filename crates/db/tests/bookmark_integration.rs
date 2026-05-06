@@ -324,8 +324,8 @@ async fn find_detail_with_viewer_bookmark_sets_is_bookmarked_true() {
     let bm_repo = PgBookmarkRepository::new(pool.clone());
 
     // viewer 가 북마크 한다.
-    let bm = BookmarkListing::try_new(viewer.clone(), listing_id.clone(), None, Utc::now())
-        .expect("bm");
+    let bm =
+        BookmarkListing::try_new(viewer.clone(), listing_id.clone(), None, Utc::now()).expect("bm");
     bm_repo
         .save_listing_bookmark(&bm, test_ctx())
         .await
@@ -353,8 +353,8 @@ async fn find_detail_other_users_bookmark_does_not_set_is_bookmarked() {
     let bm_repo = PgBookmarkRepository::new(pool.clone());
 
     // 다른 사용자 (other) 가 북마크 한다.
-    let bm = BookmarkListing::try_new(other.clone(), listing_id.clone(), None, Utc::now())
-        .expect("bm");
+    let bm =
+        BookmarkListing::try_new(other.clone(), listing_id.clone(), None, Utc::now()).expect("bm");
     bm_repo
         .save_listing_bookmark(&bm, test_ctx())
         .await
@@ -396,14 +396,8 @@ async fn increment_view_count_increments_value() {
     let listing_id = seed_active_listing(&pool, owner).await;
     let l_repo = PgListingRepository::new(pool.clone());
 
-    l_repo
-        .increment_view_count(&listing_id)
-        .await
-        .expect("ok");
-    l_repo
-        .increment_view_count(&listing_id)
-        .await
-        .expect("ok");
+    l_repo.increment_view_count(&listing_id).await.expect("ok");
+    l_repo.increment_view_count(&listing_id).await.expect("ok");
 
     let detail = l_repo
         .find_detail_by_id(&listing_id, &viewer)
@@ -430,10 +424,7 @@ async fn increment_view_count_nonexistent_returns_not_found() {
 }
 
 /// 도우미 — Active 상태 매물 시드 (`find_detail` RBAC 테스트용).
-async fn seed_active_listing(
-    pool: &sqlx::PgPool,
-    owner: Id<UserMarker>,
-) -> Id<ListingMarker> {
+async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingMarker> {
     let repo = PgListingRepository::new(pool.clone());
     let now = Utc::now();
     let mut listing = Listing::try_new_draft(

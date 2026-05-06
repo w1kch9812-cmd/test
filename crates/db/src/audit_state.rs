@@ -21,13 +21,13 @@ use serde_json::Value;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::error_map::map_sqlx_err;
-use shared_kernel::id::{
-    AnalysisReportMarker, BookmarkExternalMarker, Id, ListingMarker, ListingPhotoMarker, UserMarker,
-};
+use analysis_report_domain::repository::RepoError as AnalysisReportRepoError;
 use bookmark_domain::repository::RepoError as BookmarkRepoError;
 use listing_domain::repository::RepoError as ListingRepoError;
 use listing_photo_domain::repository::RepoError as ListingPhotoRepoError;
-use analysis_report_domain::repository::RepoError as AnalysisReportRepoError;
+use shared_kernel::id::{
+    AnalysisReportMarker, BookmarkExternalMarker, Id, ListingMarker, ListingPhotoMarker, UserMarker,
+};
 use user_domain::repository::RepoError as UserRepoError;
 
 /// `User` row → JSON. `to_jsonb(t.*)` (`PostGIS` 미사용 — 단순).
@@ -139,10 +139,7 @@ pub async fn read_analysis_report_json(
 /// FU 90 (별도 `metadata jsonb` 컬럼 마이그) 가 본 nesting 을 대체. 1차 = schema
 /// 변경 0.
 #[must_use]
-pub fn merge_metadata(
-    after_state: Option<Value>,
-    metadata: Option<&Value>,
-) -> Option<Value> {
+pub fn merge_metadata(after_state: Option<Value>, metadata: Option<&Value>) -> Option<Value> {
     match (after_state, metadata) {
         (Some(Value::Object(mut obj)), Some(meta)) => {
             obj.insert("__metadata__".to_owned(), meta.clone());

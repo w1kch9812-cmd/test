@@ -99,10 +99,10 @@ where
                 )
             })?;
 
-        let correlation_id = parts.extensions.get::<RequestId>().map_or_else(
-            || format!("cor_{}", Ulid::new()),
-            |r| r.as_str().to_owned(),
-        );
+        let correlation_id = parts
+            .extensions
+            .get::<RequestId>()
+            .map_or_else(|| format!("cor_{}", Ulid::new()), |r| r.as_str().to_owned());
 
         let client_ip = extract_client_ip(parts);
         let user_agent = extract_user_agent(parts);

@@ -150,7 +150,12 @@ async fn mark_all_read_by_kind_bulk() {
 
     let ctx = MutationContext::new_user_action(user_id.clone(), "corr-nt-bulk", "mark_all");
     let rows = repo
-        .mark_all_read_by_kind(&user_id, NotificationKind::ListingBookmarked, Utc::now(), ctx)
+        .mark_all_read_by_kind(
+            &user_id,
+            NotificationKind::ListingBookmarked,
+            Utc::now(),
+            ctx,
+        )
         .await
         .expect("bulk");
     assert_eq!(rows, 3);
@@ -191,12 +196,11 @@ async fn enum_round_trip_listing_approved() {
     assert_eq!(unread[0].kind, NotificationKind::ListingApproved);
 
     // DB column 직접 확인 — varchar(50) 'listing_approved' 저장 검증.
-    let kind_str: (String,) =
-        sqlx::query_as("select kind from notification where id = $1")
-            .bind(n.id.as_str())
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let kind_str: (String,) = sqlx::query_as("select kind from notification where id = $1")
+        .bind(n.id.as_str())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
     assert_eq!(kind_str.0, "listing_approved");
 }
 

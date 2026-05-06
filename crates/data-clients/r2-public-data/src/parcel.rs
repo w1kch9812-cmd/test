@@ -61,8 +61,7 @@ impl ParcelReader for R2ParcelReader {
         // R2 PMTiles 의 fetch_by_pnu 는 spatial index 를 별도 JSON 으로 빌드해야
         // 하므로 별도 SP 분리 (FU 61).
         Err(ReaderError::Fetch(
-            "R2 fetch_by_pnu deferred -- use V-World; FU 61 R2 spatial index 후 활성화"
-                .to_owned(),
+            "R2 fetch_by_pnu deferred -- use V-World; FU 61 R2 spatial index 후 활성화".to_owned(),
         ))
     }
 
@@ -128,8 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_by_pnu_returns_deferred_error() {
-        let reader =
-            R2ParcelReader::new(dummy_client(), Arc::new(NoOpRawCapture::new()));
+        let reader = R2ParcelReader::new(dummy_client(), Arc::new(NoOpRawCapture::new()));
         let pnu = Pnu::try_new("1111010100100010000").unwrap();
         let err = reader.fetch_by_pnu(&pnu).await.unwrap_err();
         assert!(matches!(err, ReaderError::Fetch(s) if s.contains("FU 61")));

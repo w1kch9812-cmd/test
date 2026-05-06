@@ -12,7 +12,12 @@
 //! 6. `fetch_by_pnu` circuit open after threshold failures
 //! 7. `fetch_markers_in_bbox` returns deferred error (honest failure)
 
-#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic, clippy::doc_markdown)]
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::doc_markdown
+)]
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -61,10 +66,9 @@ async fn fetch_by_pnu_happy_path_real_fixture() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/req/data"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(load_fixture("real_parcel_boundary_gangnam_yeoksam_737.json")),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_json(load_fixture(
+            "real_parcel_boundary_gangnam_yeoksam_737.json",
+        )))
         .mount(&server)
         .await;
 
@@ -146,8 +150,7 @@ async fn fetch_by_pnu_vworld_error_envelope_propagates() {
     Mock::given(method("GET"))
         .and(path("/req/data"))
         .respond_with(
-            ResponseTemplate::new(200)
-                .set_body_json(load_fixture("real_error_invalid_range.json")),
+            ResponseTemplate::new(200).set_body_json(load_fixture("real_error_invalid_range.json")),
         )
         .mount(&server)
         .await;

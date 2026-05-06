@@ -65,8 +65,14 @@ mod tests {
 
     #[test]
     fn as_str_each_variant() {
-        assert_eq!(NotificationKind::ListingApproved.as_str(), "listing_approved");
-        assert_eq!(NotificationKind::ListingRejected.as_str(), "listing_rejected");
+        assert_eq!(
+            NotificationKind::ListingApproved.as_str(),
+            "listing_approved"
+        );
+        assert_eq!(
+            NotificationKind::ListingRejected.as_str(),
+            "listing_rejected"
+        );
         assert_eq!(
             NotificationKind::ListingBookmarked.as_str(),
             "listing_bookmarked"
@@ -76,7 +82,10 @@ mod tests {
 
     #[test]
     fn display_matches_as_str() {
-        assert_eq!(format!("{}", NotificationKind::ListingApproved), "listing_approved");
+        assert_eq!(
+            format!("{}", NotificationKind::ListingApproved),
+            "listing_approved"
+        );
     }
 
     #[test]

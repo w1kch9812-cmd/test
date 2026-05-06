@@ -152,16 +152,14 @@ fn parse_land_use_type_from_jibun(props: &Value) -> LandUseType {
 /// `jiga` (₩/m²) + `gosi_year`/`gosi_month` 묶어서 반환.
 ///
 /// `jiga` 가 "0" 이거나 누락이면 `(None, None)` — 미고시 필지 (도로 등).
-fn parse_jiga(
-    props: &Value,
-) -> Result<(Option<MoneyKrw>, Option<GosiYearMonth>), ParseError> {
+fn parse_jiga(props: &Value) -> Result<(Option<MoneyKrw>, Option<GosiYearMonth>), ParseError> {
     let jiga_str = props.get("jiga").and_then(Value::as_str).unwrap_or("");
     let jiga_num: i64 = jiga_str.trim().parse().unwrap_or(0);
     if jiga_num <= 0 {
         return Ok((None, None));
     }
-    let price = MoneyKrw::try_new(jiga_num)
-        .map_err(|e| ParseError::Domain(format!("jiga: {e}")))?;
+    let price =
+        MoneyKrw::try_new(jiga_num).map_err(|e| ParseError::Domain(format!("jiga: {e}")))?;
     let gosi = parse_gosi_year_month(props)?;
     Ok((Some(price), Some(gosi)))
 }

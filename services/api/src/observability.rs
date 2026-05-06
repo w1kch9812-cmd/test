@@ -16,7 +16,9 @@ use std::env;
 #[must_use]
 #[allow(clippy::cognitive_complexity)] // env 분기 + ClientOptions builder — 쪼개면 더 모호.
 pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
-    let dsn = env::var("SENTRY_DSN").ok().filter(|s| !s.trim().is_empty())?;
+    let dsn = env::var("SENTRY_DSN")
+        .ok()
+        .filter(|s| !s.trim().is_empty())?;
 
     let release = env::var("GIT_SHA").map_or_else(
         |_| format!("gongzzang-api@{}", env!("CARGO_PKG_VERSION")),

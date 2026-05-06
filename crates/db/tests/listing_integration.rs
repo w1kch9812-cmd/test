@@ -405,11 +405,8 @@ async fn update_listing_records_update_listing_audit_action() {
     let repo = PgListingRepository::new(pool.clone());
 
     let mut listing = make_listing_sale(owner.clone());
-    let create_ctx = MutationContext::new_user_action(
-        owner.clone(),
-        "corr-sp6iv-2-create",
-        "create_listing",
-    );
+    let create_ctx =
+        MutationContext::new_user_action(owner.clone(), "corr-sp6iv-2-create", "create_listing");
     repo.save(&listing, create_ctx).await.unwrap();
 
     let update = ListingUpdate {
@@ -447,11 +444,8 @@ async fn submit_for_review_records_state_transition_audit() {
     repo.save(&listing, test_ctx()).await.unwrap();
 
     listing.submit_for_review(Utc::now()).unwrap();
-    let ctx = MutationContext::new_user_action(
-        owner.clone(),
-        "corr-sp6iv-3-submit",
-        "submit_for_review",
-    );
+    let ctx =
+        MutationContext::new_user_action(owner.clone(), "corr-sp6iv-3-submit", "submit_for_review");
     repo.save(&listing, ctx).await.unwrap();
 
     let reloaded = repo.find(&listing.id).await.unwrap().unwrap();
@@ -487,8 +481,7 @@ async fn revise_after_rejection_returns_to_draft_with_audit() {
     assert_eq!(listing.status, ListingStatus::Rejected);
 
     listing.revise_after_rejection(Utc::now()).unwrap();
-    let ctx =
-        MutationContext::new_user_action(owner, "corr-sp6iv-4-revise", "revise_listing");
+    let ctx = MutationContext::new_user_action(owner, "corr-sp6iv-4-revise", "revise_listing");
     repo.save(&listing, ctx).await.unwrap();
 
     let reloaded = repo.find(&listing.id).await.unwrap().unwrap();

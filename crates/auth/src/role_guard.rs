@@ -26,10 +26,7 @@ pub fn require_role(auth: &AuthenticatedUser, role: UserRole) -> Result<(), Auth
 /// # Errors
 ///
 /// 어느 것도 미포함 → [`AuthError::InsufficientRole`].
-pub fn require_one_of_roles(
-    auth: &AuthenticatedUser,
-    roles: &[UserRole],
-) -> Result<(), AuthError> {
+pub fn require_one_of_roles(auth: &AuthenticatedUser, roles: &[UserRole]) -> Result<(), AuthError> {
     if roles.iter().any(|r| auth.user.roles.contains(r)) {
         Ok(())
     } else {
@@ -113,32 +110,26 @@ mod tests {
     #[test]
     fn require_one_of_roles_allows_when_any_matches() {
         let auth = fixture(vec![UserRole::Operator]);
-        assert!(
-            require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).is_ok()
-        );
+        assert!(require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).is_ok());
     }
 
     #[test]
     fn require_one_of_roles_allows_first_match() {
         let auth = fixture(vec![UserRole::Admin]);
-        assert!(
-            require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).is_ok()
-        );
+        assert!(require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).is_ok());
     }
 
     #[test]
     fn require_one_of_roles_denies_when_none_match() {
         let auth = fixture(vec![UserRole::Buyer]);
-        let err =
-            require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).unwrap_err();
+        let err = require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).unwrap_err();
         assert_eq!(err, AuthError::InsufficientRole);
     }
 
     #[test]
     fn require_one_of_roles_denies_with_no_user_roles() {
         let auth = fixture(vec![]);
-        let err =
-            require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).unwrap_err();
+        let err = require_one_of_roles(&auth, &[UserRole::Admin, UserRole::Operator]).unwrap_err();
         assert_eq!(err, AuthError::InsufficientRole);
     }
 }

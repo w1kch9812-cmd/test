@@ -10,11 +10,11 @@ use chrono::{DateTime, Utc};
 use notification_domain::entity::Notification;
 use notification_domain::kind::NotificationKind;
 use notification_domain::repository::{NotificationRepository, RepoError};
-use std::str::FromStr;
 use shared_kernel::id::{AuditLogMarker, Id, NotificationMarker, OutboxEventMarker, UserMarker};
 use shared_kernel::mutation::MutationContext;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
+use std::str::FromStr;
 use tracing::instrument;
 
 use crate::error_map::map_sqlx_err;

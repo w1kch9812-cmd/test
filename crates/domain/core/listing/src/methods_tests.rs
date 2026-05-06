@@ -506,7 +506,7 @@ fn update_editable_fields_clearing_deposit_on_jeonse_returns_mismatch() {
         Pnu::try_new("1111010100100010000").unwrap(),
         ListingType::Factory,
         TransactionType::Jeonse,
-        MoneyKrw::try_new(500_000_000).unwrap(), // price
+        MoneyKrw::try_new(500_000_000).unwrap(),      // price
         Some(MoneyKrw::try_new(50_000_000).unwrap()), // deposit
         None,
         AreaM2::try_new(250.0).unwrap(),
@@ -522,7 +522,10 @@ fn update_editable_fields_clearing_deposit_on_jeonse_returns_mismatch() {
         ..Default::default()
     };
     let err = l.update_editable_fields(update, later(1)).unwrap_err();
-    assert!(matches!(err, ListingError::TransactionFieldsMismatch { .. }));
+    assert!(matches!(
+        err,
+        ListingError::TransactionFieldsMismatch { .. }
+    ));
 }
 
 #[test]

@@ -530,8 +530,7 @@ mod tests {
             ]),
             vec![],
         );
-        let err =
-            MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
+        let err = MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
         assert!(matches!(err, GeometryError::ExteriorRingTooShort { .. }));
     }
 
@@ -546,8 +545,7 @@ mod tests {
             ]),
             vec![],
         );
-        let err =
-            MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
+        let err = MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
         assert!(matches!(err, GeometryError::LngOutOfRange { .. }));
     }
 

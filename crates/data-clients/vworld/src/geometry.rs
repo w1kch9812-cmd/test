@@ -40,9 +40,9 @@ pub fn parse_geometry(geom: &Value) -> Result<MultiPolygonSrid, ParseError> {
         "MultiPolygon" => coords
             .iter()
             .map(|p| {
-                let arr = p.as_array().ok_or_else(|| {
-                    ParseError::Malformed("MultiPolygon member not array".into())
-                })?;
+                let arr = p
+                    .as_array()
+                    .ok_or_else(|| ParseError::Malformed("MultiPolygon member not array".into()))?;
                 parse_polygon_coords(arr)
             })
             .collect::<Result<Vec<_>, _>>()?,
@@ -195,6 +195,8 @@ mod tests {
             ]]
         });
         let err = parse_geometry(&geom).unwrap_err();
-        assert!(matches!(err, ParseError::Domain(s) if s.contains("180") || s.contains("longitude")));
+        assert!(
+            matches!(err, ParseError::Domain(s) if s.contains("180") || s.contains("longitude"))
+        );
     }
 }

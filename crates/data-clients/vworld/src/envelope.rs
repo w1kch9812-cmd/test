@@ -86,7 +86,12 @@ pub fn parse(raw: &Value) -> Result<Outcome<'_>, ParseError> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic, clippy::match_wildcard_for_single_variants)]
+    #![allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::match_wildcard_for_single_variants
+    )]
 
     use super::*;
     use serde_json::json;

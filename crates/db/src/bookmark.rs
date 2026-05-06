@@ -168,12 +168,9 @@ impl BookmarkRepository for PgBookmarkRepository {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
         // 0. SP-Obs T4: before_state (composite PK).
-        let before_state = crate::audit_state::read_bookmark_listing_json(
-            &mut tx,
-            &bm.user_id,
-            &bm.listing_id,
-        )
-        .await?;
+        let before_state =
+            crate::audit_state::read_bookmark_listing_json(&mut tx, &bm.user_id, &bm.listing_id)
+                .await?;
 
         sqlx::query(
             r"
@@ -190,12 +187,9 @@ impl BookmarkRepository for PgBookmarkRepository {
         .await
         .map_err(map_sqlx_err)?;
 
-        let after_state_raw = crate::audit_state::read_bookmark_listing_json(
-            &mut tx,
-            &bm.user_id,
-            &bm.listing_id,
-        )
-        .await?;
+        let after_state_raw =
+            crate::audit_state::read_bookmark_listing_json(&mut tx, &bm.user_id, &bm.listing_id)
+                .await?;
         let after_state =
             crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
 
@@ -230,8 +224,7 @@ impl BookmarkRepository for PgBookmarkRepository {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
         // 0. SP-Obs T4: before_state.
-        let before_state =
-            crate::audit_state::read_bookmark_external_json(&mut tx, &bm.id).await?;
+        let before_state = crate::audit_state::read_bookmark_external_json(&mut tx, &bm.id).await?;
 
         sqlx::query(
             r"
@@ -335,8 +328,7 @@ impl BookmarkRepository for PgBookmarkRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
-        let before_state =
-            crate::audit_state::read_bookmark_external_json(&mut tx, id).await?;
+        let before_state = crate::audit_state::read_bookmark_external_json(&mut tx, id).await?;
 
         let result = sqlx::query("delete from bookmark_external where id = $1")
             .bind(id.as_str())

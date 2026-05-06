@@ -91,10 +91,7 @@ impl R2Client {
     ///
     /// 네트워크 오류 / 4xx / 5xx → [`BreakerError`].
     #[instrument(skip(self), fields(key = %key))]
-    pub async fn get_object_bytes(
-        &self,
-        key: &str,
-    ) -> Result<Bytes, BreakerError<reqwest::Error>> {
+    pub async fn get_object_bytes(&self, key: &str) -> Result<Bytes, BreakerError<reqwest::Error>> {
         let base = &self.config.public_url_base;
         let url = format!("{base}/{key}");
 
@@ -120,10 +117,15 @@ impl R2Client {
         let base = &self.config.public_url_base;
         let url = format!("{base}/{key}");
 
-        execute(&self.breaker, &self.policy, "r2.get_object_json", || async {
-            let resp = self.http.get(&url).send().await?;
-            resp.error_for_status()?.json::<serde_json::Value>().await
-        })
+        execute(
+            &self.breaker,
+            &self.policy,
+            "r2.get_object_json",
+            || async {
+                let resp = self.http.get(&url).send().await?;
+                resp.error_for_status()?.json::<serde_json::Value>().await
+            },
+        )
         .await
     }
 

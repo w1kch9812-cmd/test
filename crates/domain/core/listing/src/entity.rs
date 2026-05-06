@@ -259,10 +259,7 @@ impl Listing {
         update: ListingUpdate,
         at: DateTime<Utc>,
     ) -> Result<(), ListingError> {
-        if !matches!(
-            self.status,
-            ListingStatus::Draft | ListingStatus::Rejected
-        ) {
+        if !matches!(self.status, ListingStatus::Draft | ListingStatus::Rejected) {
             return Err(ListingError::ImmutableState {
                 current: self.status,
             });

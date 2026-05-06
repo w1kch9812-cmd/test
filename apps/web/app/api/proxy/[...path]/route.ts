@@ -1,4 +1,4 @@
-import { isHTTPError, type Options as KyOptions } from "ky";
+import type { Options as KyOptions } from "ky";
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerApi } from "@/lib/api";
 import { problem } from "@/lib/http/problem";
@@ -29,9 +29,13 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
   try {
     const headers: Record<string, string> = { "x-request-id": requestId };
     if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    // throwHttpErrors=false: 4xx/5xx 도 정상 Response 로 받아 body 한 번만 읽음.
+    // 기존 동작 (throw → catch → err.response.text()) 은 ky 가 error 생성 시 body 를
+    // 내부 소비해서 "Body is unusable" 에러 발생. body single consumption 으로 우회.
     const requestInit: KyOptions = {
       method: req.method,
       headers,
+      throwHttpErrors: false,
     };
 
     if (search) {
@@ -60,11 +64,8 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
         "x-request-id": responseRequestId,
       },
     });
-  } catch (err: unknown) {
-    if (isHTTPError(err)) {
-      const body = await err.response.text();
-      return new NextResponse(body, { status: err.response.status });
-    }
+  } catch {
+    // 진짜 네트워크/연결 실패만 여기로. 4xx/5xx 는 throwHttpErrors=false 로 위에서 처리.
     return problem({
       type: "proxy/upstream-unavailable",
       title: "백엔드 서버에 연결할 수 없어요",

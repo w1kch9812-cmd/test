@@ -99,11 +99,7 @@ impl MutationContext {
     /// (HTTP 요청 환경에서 둘 다 항상 있는 건 아님 — proxy 누락 / mobile UA
     /// 변경 등). SP-Obs T3 의 `MutationContextBuilder` extractor 가 사용.
     #[must_use]
-    pub fn with_client_info_optional(
-        mut self,
-        ip: Option<String>,
-        ua: Option<String>,
-    ) -> Self {
+    pub fn with_client_info_optional(mut self, ip: Option<String>, ua: Option<String>) -> Self {
         if ip.is_some() {
             self.client_ip = ip;
         }
