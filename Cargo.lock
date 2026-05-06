@@ -135,6 +135,9 @@ dependencies = [
  "listing-domain",
  "listing-photo-domain",
  "notification-domain",
+ "parcel-domain",
+ "parcel-lookup",
+ "raw-capture-client",
  "reqwest",
  "sentry",
  "sentry-tracing",
@@ -148,6 +151,7 @@ dependencies = [
  "tracing-subscriber",
  "ulid",
  "user-domain",
+ "vworld-client",
 ]
 
 [[package]]
@@ -2408,6 +2412,20 @@ dependencies = [
  "serde_json",
  "shared-kernel",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "parcel-lookup"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "geo-types",
+ "parcel-domain",
+ "shared-kernel",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

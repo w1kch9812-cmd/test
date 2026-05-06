@@ -31,12 +31,16 @@ use db::user::PgUserRepository;
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use listing_domain::repository::ListingRepository;
 use listing_photo_domain::repository::ListingPhotoRepository;
+use parcel_domain::reader::ParcelReader;
+use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup, VWorldParcelInfoLookup};
+use raw_capture_client::NoOpRawCapture;
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
+use vworld_client::{VWorldClient, VWorldConfig, VWorldParcelReader};
 
 mod http {
     pub mod mutation_ctx;
@@ -162,9 +166,32 @@ async fn main() {
     let listing_repo: Arc<dyn ListingRepository> = Arc::new(PgListingRepository::new(pool.clone()));
     let photo_repo: Arc<dyn ListingPhotoRepository> =
         Arc::new(PgListingPhotoRepository::new(pool.clone()));
+
+    // SP9 T4 / ADR 0018: PNU lookup. VWORLD_API_KEY 미설정 → NoOp fallback (dev/CI).
+    // production 은 secret 주입 필수 — Sentry 패턴과 동일 (silent disabled if no key).
+    let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
+        Ok(cfg) => {
+            tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN)");
+            let client = Arc::new(VWorldClient::new(cfg));
+            let reader: Arc<dyn ParcelReader> = Arc::new(VWorldParcelReader::new(
+                client,
+                Arc::new(NoOpRawCapture::new()),
+            ));
+            Arc::new(VWorldParcelInfoLookup::new(reader))
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "parcel_lookup: VWORLD env missing → NoOp fallback (denormalize columns NULL on listing create)"
+            );
+            Arc::new(NoOpParcelInfoLookup::new())
+        }
+    };
+
     let listings_state = routes::listings::ListingsState {
         listing_repo,
         photo_repo,
+        parcel_lookup,
     };
 
     let verifier = if dev_mode {
@@ -185,9 +212,8 @@ async fn main() {
     };
     // SP-Obs T7: Redis pool 을 jti_denylist + health check 양쪽이 공유.
     // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open).
-    let redis_pool_shared: Option<Arc<deadpool_redis::Pool>> = env::var("REDIS_URL")
-        .ok()
-        .map(|url| {
+    let redis_pool_shared: Option<Arc<deadpool_redis::Pool>> =
+        env::var("REDIS_URL").ok().map(|url| {
             let pool = RedisCfg::from_url(url)
                 .create_pool(Some(RedisRt::Tokio1))
                 .expect("redis pool");
@@ -199,9 +225,8 @@ async fn main() {
         );
     }
 
-    let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> = redis_pool_shared
-        .as_ref()
-        .map(|pool| {
+    let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> =
+        redis_pool_shared.as_ref().map(|pool| {
             let dl: Arc<dyn auth::jti_denylist::JtiDenylist> = Arc::new(
                 auth::jti_denylist::RedisJtiDenylist::new(pool.as_ref().clone()),
             );
@@ -247,8 +272,7 @@ async fn main() {
         )
         .route(
             "/listings/:id",
-            get(routes::listings::get_listing_detail)
-                .patch(routes::listings::patch_listing),
+            get(routes::listings::get_listing_detail).patch(routes::listings::patch_listing),
         )
         .route(
             "/listings/:id/submit-for-review",
@@ -267,24 +291,25 @@ async fn main() {
             axum::routing::delete(routes::listings::delete_photo),
         )
         .with_state(listings_state)
-        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
 
     // SP6-v: 공유 repository 인스턴스 — bookmarks/admin/notifications 가 같이 사용.
     let notification_repo: Arc<dyn notification_domain::repository::NotificationRepository> =
         Arc::new(db::notification::PgNotificationRepository::new(
             auth_event_state.pool.clone(),
         ));
-    let listing_repo_shared: Arc<dyn listing_domain::repository::ListingRepository> =
-        Arc::new(db::listing::PgListingRepository::new(
-            auth_event_state.pool.clone(),
-        ));
+    let listing_repo_shared: Arc<dyn listing_domain::repository::ListingRepository> = Arc::new(
+        db::listing::PgListingRepository::new(auth_event_state.pool.clone()),
+    );
 
     // SP6-iii/v: bookmarks 라우터 (auth_layer 통과). 멱등 design.
     // SP6-v: listing_repo + notification_repo 추가 — bookmarker != owner 면 알림 INSERT.
-    let bookmark_repo: Arc<dyn bookmark_domain::repository::BookmarkRepository> =
-        Arc::new(db::bookmark::PgBookmarkRepository::new(
-            auth_event_state.pool.clone(),
-        ));
+    let bookmark_repo: Arc<dyn bookmark_domain::repository::BookmarkRepository> = Arc::new(
+        db::bookmark::PgBookmarkRepository::new(auth_event_state.pool.clone()),
+    );
     let bookmarks_state = routes::bookmarks::BookmarksState {
         bookmark_repo,
         listing_repo: listing_repo_shared.clone(),
@@ -296,12 +321,12 @@ async fn main() {
             axum::routing::post(routes::bookmarks::toggle_bookmark)
                 .delete(routes::bookmarks::delete_bookmark),
         )
-        .route(
-            "/me/bookmarks",
-            get(routes::bookmarks::list_my_bookmarks),
-        )
+        .route("/me/bookmarks", get(routes::bookmarks::list_my_bookmarks))
         .with_state(bookmarks_state)
-        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
 
     // SP6-v: admin_listings 라우터 — Admin/Operator 매물 승인/반려 + 알림 trigger.
     let admin_listings_state = routes::admin_listings::AdminListingsState {
@@ -318,12 +343,13 @@ async fn main() {
             axum::routing::post(routes::admin_listings::reject_listing),
         )
         .with_state(admin_listings_state)
-        .layer(middleware::from_fn_with_state(auth_state.clone(), auth_layer));
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
 
     // SP6-v: /me/notifications 라우터 (인증 사용자 본인 알림 조회/읽음).
-    let notifications_state = routes::notifications::NotificationsState {
-        notification_repo,
-    };
+    let notifications_state = routes::notifications::NotificationsState { notification_repo };
     let notifications_router: Router<()> = Router::new()
         .route(
             "/me/notifications",

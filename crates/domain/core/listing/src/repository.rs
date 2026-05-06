@@ -6,16 +6,20 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
+use shared_kernel::admin_division::EupmyeondongCode;
 use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::geometry::PointSrid;
 // `shared_kernel::id::ListingMarker`는 `Id<_>`용 phantom marker.
 // 이 모듈의 `ListingMarker` projection과 이름이 겹치므로 `ListingIdMarker`로 별명 부여.
 use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
+use shared_kernel::land_use_type::LandUseType;
 use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
 use shared_kernel::mutation::MutationContext;
+use shared_kernel::pnu::Pnu;
 use shared_kernel::transaction_type::TransactionType;
+use shared_kernel::zoning::Zoning;
 use thiserror::Error;
 
 use crate::entity::Listing;
@@ -99,10 +103,39 @@ pub trait ListingRepository: Send + Sync {
     /// # Errors
     ///
     /// 매물 미존재 → [`RepoError::NotFound`]. DB 통신 실패 → [`RepoError::Database`].
-    async fn increment_view_count(
+    async fn increment_view_count(&self, id: &Id<ListingIdMarker>) -> Result<(), RepoError>;
+
+    /// PNU 파생 denormalize 컬럼 갱신 (SP9 T4, ADR 0018).
+    ///
+    /// 매물 등록 직후 (V-World lookup 후) 또는 월간 재매핑 cron 에서 호출. version
+    /// bump X / audit\_log X — *비즈니스 변경이 아닌 캐시 동기화* 라서 기록 가치
+    /// 낮음. 추적은 `listing.parcel_lookup_at` timestamp 컬럼이 담당.
+    ///
+    /// `denormalize` 의 `zoning` 이 `None` 이면 DB 컬럼도 NULL 로 — V-World 가
+    /// 용도지역 미제공 시 자연스러움.
+    ///
+    /// # Errors
+    ///
+    /// 매물 미존재 → [`RepoError::NotFound`]. DB 통신 실패 → [`RepoError::Database`].
+    async fn update_parcel_denormalize(
         &self,
         id: &Id<ListingIdMarker>,
+        denormalize: &ListingParcelDenormalize,
     ) -> Result<(), RepoError>;
+}
+
+/// PNU 파생 denormalize 입력 — `update_parcel_denormalize` 인자.
+///
+/// PNU 자체는 listing 의 정체성이라 본 struct 에 없음. 본 struct 는 PNU 가
+/// *지시하는* 외부 사실 (행정구역, 지목, 용도지역) 을 담음.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingParcelDenormalize {
+    /// 행정구역 8자리 (시도+시군구+읍면동).
+    pub admin_code: EupmyeondongCode,
+    /// 지목.
+    pub land_use_type: LandUseType,
+    /// 용도지역 (V-World `LP_PA_CBND_BUBUN` 미제공이면 `None`).
+    pub zoning: Option<Zoning>,
 }
 
 /// 매물 상세 페이지 응답 — SP6-iii.
@@ -196,8 +229,16 @@ pub struct ListingCardSummary {
 /// 전용이라 항상 존재. `is_bookmarked` JOIN 에 사용.
 #[derive(Debug, Clone)]
 pub struct CardSearchQuery {
-    /// 지도 영역 (4326). None 이면 한국 전체.
+    /// 지도 영역 (4326). None 이면 한국 전체. **Deprecated (ADR 0018)** —
+    /// `pnu` / `admin_code` 기반 검색으로 대체 진행 중. `geom_point` 컬럼 제거
+    /// 시 함께 제거.
     pub bbox: Option<BoundingBox>,
+    /// 필지 PNU 19자리 정확 매칭 (ADR 0018 SP9 T4) — 폴리곤 클릭 시 사용.
+    pub pnu: Option<Pnu>,
+    /// 행정구역 코드 prefix 매칭 (2/5/8자리) — 시도/시군구/읍면동 어느 단계든.
+    pub admin_code_prefix: Option<String>,
+    /// 지목 필터 (`parcel_land_use_type` denormalize 컬럼 — V-World lookup 결과).
+    pub land_use_type: Option<LandUseType>,
     /// `listing_type` 필터 (None or empty = 6 종 모두).
     pub types: Option<Vec<ListingType>>,
     /// `transaction_type` 필터 (None or empty = 3 종 모두).

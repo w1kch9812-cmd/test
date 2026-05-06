@@ -22,7 +22,8 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::{DateTime, Utc};
 use listing_domain::entity::Listing;
 use listing_domain::repository::{
-    ListingDetail, ListingMarker, ListingPhotoSummary, ListingRepository, RepoError,
+    ListingDetail, ListingMarker, ListingParcelDenormalize, ListingPhotoSummary, ListingRepository,
+    RepoError,
 };
 use shared_kernel::area::AreaM2;
 use shared_kernel::bounding_box::BoundingBox;
@@ -389,6 +390,15 @@ impl ListingRepository for PgListingRepository {
         //
         // SP6-iii: bookmark_count 와 is_bookmarked 는 bookmark_listing 테이블 JOIN
         // (denormalized listing.bookmark_count 컬럼 미사용 — FU 70 schema 제거 예정).
+        // ADR 0018 SP9 T4: pnu / admin_code_prefix / land_use_type 필터 추가.
+        // bbox 와 함께 쓰면 모두 AND. pnu 단독으로도 동작 (폴리곤 클릭 모델).
+        let pnu_filter: Option<&str> = query.pnu.as_ref().map(Pnu::as_str);
+        let admin_prefix_filter: Option<&str> = query.admin_code_prefix.as_deref();
+        let land_use_filter: Option<&str> = query.land_use_type.map(|t| {
+            use shared_kernel::land_use_type::LandUseType;
+            LandUseType::as_str(t)
+        });
+
         let sql = format!(
             r"
             WITH filtered AS (
@@ -403,6 +413,9 @@ impl ListingRepository for PgListingRepository {
                   AND ($6::text[] IS NULL OR transaction_type = ANY($6::text[]))
                   AND area_m2::float8 BETWEEN $7 AND $8
                   AND price_krw BETWEEN $9 AND $10
+                  AND ($14::text IS NULL OR parcel_pnu = $14)
+                  AND ($15::text IS NULL OR admin_code LIKE $15 || '%')
+                  AND ($16::text IS NULL OR parcel_land_use_type = $16)
             ),
             bm_count AS (
                 SELECT listing_id, COUNT(*)::int8 AS cnt
@@ -444,6 +457,9 @@ impl ListingRepository for PgListingRepository {
             .bind(i64::from(size))
             .bind(offset)
             .bind(query.viewer_user_id.as_str())
+            .bind(pnu_filter)
+            .bind(admin_prefix_filter)
+            .bind(land_use_filter)
             .fetch_all(&self.pool)
             .await
             .map_err(|e| RepoError::Database(e.to_string()))?;
@@ -673,8 +689,7 @@ impl ListingRepository for PgListingRepository {
         }
 
         // 2a. SP-Obs T4: after_state snapshot + metadata merge.
-        let after_state_raw =
-            crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
+        let after_state_raw = crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
         let after_state =
             crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
 
@@ -813,10 +828,7 @@ impl ListingRepository for PgListingRepository {
     /// `view_count` += 1. version bump X / audit_log X (빈도 분리).
     /// 매물 미존재 시 `RepoError::NotFound`.
     #[instrument(skip(self), fields(listing_id = %id.as_str()))]
-    async fn increment_view_count(
-        &self,
-        id: &Id<ListingIdMarker>,
-    ) -> Result<(), RepoError> {
+    async fn increment_view_count(&self, id: &Id<ListingIdMarker>) -> Result<(), RepoError> {
         let result = sqlx::query(
             r"
             UPDATE listing
@@ -825,6 +837,37 @@ impl ListingRepository for PgListingRepository {
             ",
         )
         .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
+        Ok(())
+    }
+
+    #[instrument(skip(self), fields(listing_id = %id))]
+    async fn update_parcel_denormalize(
+        &self,
+        id: &Id<ListingIdMarker>,
+        denormalize: &ListingParcelDenormalize,
+    ) -> Result<(), RepoError> {
+        // version bump 안 함 — 캐시 동기화. parcel_lookup_at = now() 가 stale 검출용.
+        // SP-Obs T4 audit 도 스킵 — 비즈니스 변경 아님.
+        let result = sqlx::query(
+            r"
+            UPDATE listing
+            SET admin_code = $2,
+                parcel_land_use_type = $3,
+                parcel_zoning = $4,
+                parcel_lookup_at = now()
+            WHERE id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .bind(denormalize.admin_code.as_str())
+        .bind(denormalize.land_use_type.as_str())
+        .bind(denormalize.zoning.as_ref().map(|z| z.as_str()))
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;

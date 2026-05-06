@@ -10,18 +10,20 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::{Extension, Json};
 use chrono::{DateTime, Utc};
 use listing_domain::entity::{Listing, ListingUpdate};
-use listing_domain::repository::{CardSearchQuery, CardSearchSort, ListingRepository};
+use listing_domain::repository::{
+    CardSearchQuery, CardSearchSort, ListingParcelDenormalize, ListingRepository,
+};
 use listing_photo_domain::entity::ListingPhoto;
 use listing_photo_domain::repository::ListingPhotoRepository;
+use parcel_lookup::ParcelInfoLookup;
 use serde::{Deserialize, Serialize};
 use shared_kernel::area::AreaM2;
 use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::contact_visibility::ContactVisibility;
 use shared_kernel::description::Description;
 use shared_kernel::geometry::PointSrid;
-use shared_kernel::id::{
-    Id, ListingMarker as ListingIdMarker, ListingPhotoMarker, UserMarker,
-};
+use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, ListingPhotoMarker, UserMarker};
+use shared_kernel::land_use_type::LandUseType;
 use shared_kernel::listing_title::ListingTitle;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
@@ -30,9 +32,7 @@ use shared_kernel::transaction_type::TransactionType;
 use user_domain::entity::UserRole;
 
 use crate::http::mutation_ctx::http_user_action;
-use crate::http::problem::{
-    from_listing_error, from_listing_repo_error, problem, ProblemResponse,
-};
+use crate::http::problem::{from_listing_error, from_listing_repo_error, problem, ProblemResponse};
 
 /// 핸들러 공유 상태.
 #[derive(Clone)]
@@ -41,13 +41,25 @@ pub struct ListingsState {
     pub listing_repo: Arc<dyn ListingRepository>,
     /// `ListingPhoto` 저장소.
     pub photo_repo: Arc<dyn ListingPhotoRepository>,
+    /// PNU → 행정/지목/용도지역 lookup (ADR 0018, SP9 T4).
+    /// production = `VWorldParcelInfoLookup`, dev/test = `NoOpParcelInfoLookup`.
+    pub parcel_lookup: Arc<dyn ParcelInfoLookup>,
 }
 
 /// `GET /listings` 쿼리 파라미터.
 #[derive(Debug, Deserialize)]
 pub struct ListingsQuery {
     /// 지도 영역: `"south,west,north,east"` (float 4개, WGS84).
+    /// **Deprecated (ADR 0018)** — `pnu` / `admin_code` 기반 검색으로 대체. 제거는
+    /// `geom_point` 컬럼 deprecate 와 함께 (3단계 path).
     pub bounds: Option<String>,
+    /// 필지 PNU 19자리 — 폴리곤 클릭 시 해당 필지 매물만 (ADR 0018, SP9 T4).
+    pub pnu: Option<String>,
+    /// 행정구역 코드 (시도 2 / 시군구 5 / 읍면동 8자리). prefix 매치로 처리해 시도/
+    /// 시군구/읍면동 어느 단계든 사용 가능.
+    pub admin_code: Option<String>,
+    /// 지목 필터 (예: `factory_site`, `warehouse_site`).
+    pub land_use_type: Option<String>,
     /// 매물 유형 필터: comma-separated (예: `"factory,warehouse"`).
     pub types: Option<String>,
     /// 거래 유형 필터: comma-separated (예: `"sale,jeonse"`).
@@ -235,8 +247,59 @@ pub async fn get_listings(
 
     let page = q.page.unwrap_or(0);
 
+    // ADR 0018 SP9 T4: pnu/admin_code/land_use_type 검증.
+    let pnu_filter = q
+        .pnu
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(Pnu::try_new)
+        .transpose()
+        .map_err(|e| {
+            problem(
+                "listings/invalid-filter",
+                "pnu 가 유효하지 않아요",
+                StatusCode::BAD_REQUEST,
+                Some(e.to_string()),
+            )
+        })?;
+
+    // admin_code prefix — 2/5/8 자리만 허용 (시도/시군구/읍면동). 그 외는 잘못된
+    // 입력 — DB LIKE 가 받기는 하나 의미 없는 prefix 차단.
+    let admin_prefix_filter = match q.admin_code.as_deref().filter(|s| !s.is_empty()) {
+        None => None,
+        Some(s) => {
+            if !matches!(s.len(), 2 | 5 | 8) || !s.chars().all(|c| c.is_ascii_digit()) {
+                return Err(problem(
+                    "listings/invalid-filter",
+                    "admin_code 는 2 / 5 / 8 자리 숫자여야 해요",
+                    StatusCode::BAD_REQUEST,
+                    Some(format!("got '{s}'")),
+                ));
+            }
+            Some(s.to_owned())
+        }
+    };
+
+    let land_use_filter = q
+        .land_use_type
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .map(LandUseType::from_str)
+        .transpose()
+        .map_err(|e| {
+            problem(
+                "listings/invalid-filter",
+                "land_use_type 가 유효하지 않아요",
+                StatusCode::BAD_REQUEST,
+                Some(e.to_string()),
+            )
+        })?;
+
     let query = CardSearchQuery {
         bbox,
+        pnu: pnu_filter,
+        admin_code_prefix: admin_prefix_filter,
+        land_use_type: land_use_filter,
         types,
         transactions,
         min_area_m2: q.min_area_m2,
@@ -370,14 +433,14 @@ pub async fn create_listing(
     let listing = build_draft_from_request(&body, auth.user.id.clone(), Utc::now())?;
     let ctx = http_user_action(&auth, "create_listing");
 
-    state
-        .listing_repo
-        .save(&listing, ctx)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "listing save failed");
-            from_listing_repo_error(&e)
-        })?;
+    state.listing_repo.save(&listing, ctx).await.map_err(|e| {
+        tracing::error!(error = %e, "listing save failed");
+        from_listing_repo_error(&e)
+    })?;
+
+    // SP9 T4 / ADR 0018: PNU lookup → denormalize 컬럼 채움. best-effort —
+    // 실패 시 listing 은 생성됨 (denormalize NULL). 월간 재매핑 cron 이 backfill.
+    populate_parcel_denormalize(&state, &listing).await;
 
     Ok((
         StatusCode::CREATED,
@@ -386,6 +449,53 @@ pub async fn create_listing(
             version: listing.version,
         }),
     ))
+}
+
+/// PNU lookup → `admin_code/land_use_type/zoning` denormalize 갱신.
+///
+/// best-effort — 모든 단계 실패는 warn 로그 후 swallow. listing row 자체는
+/// `create_listing` 에서 이미 commit 됐고, denormalize 가 NULL 이어도 검색이
+/// 동작 안 할 뿐 (PNU 기준 검색은 가능). 월간 ETL cron 이 stale row 재매핑.
+#[allow(clippy::cognitive_complexity)] // 3 분기 + 2 logging — 분해 시 가독성 떨어짐
+async fn populate_parcel_denormalize(state: &ListingsState, listing: &Listing) {
+    let info = match state.parcel_lookup.lookup_by_pnu(&listing.parcel_pnu).await {
+        Ok(Some(info)) => info,
+        Ok(None) => {
+            tracing::warn!(
+                listing_id = %listing.id,
+                pnu = %listing.parcel_pnu,
+                "parcel_lookup returned None — denormalize skipped"
+            );
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(
+                listing_id = %listing.id,
+                pnu = %listing.parcel_pnu,
+                error = %e,
+                "parcel_lookup failed — denormalize skipped"
+            );
+            return;
+        }
+    };
+
+    let denormalize = ListingParcelDenormalize {
+        admin_code: info.admin.eupmyeondong.clone(),
+        land_use_type: info.land_use_type,
+        zoning: info.zoning,
+    };
+
+    if let Err(e) = state
+        .listing_repo
+        .update_parcel_denormalize(&listing.id, &denormalize)
+        .await
+    {
+        tracing::warn!(
+            listing_id = %listing.id,
+            error = %e,
+            "update_parcel_denormalize failed — denormalize NULL until cron backfills"
+        );
+    }
 }
 
 /// 입력 → 도메인 값 객체 변환 + `Listing::try_new_draft`. 도메인 invariant 위반은
@@ -653,14 +763,10 @@ pub async fn patch_listing(
         .map_err(|e| from_listing_error(&e))?;
 
     let ctx = http_user_action(&auth, "update_listing");
-    state
-        .listing_repo
-        .save(&listing, ctx)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "listing save (update) failed");
-            from_listing_repo_error(&e)
-        })?;
+    state.listing_repo.save(&listing, ctx).await.map_err(|e| {
+        tracing::error!(error = %e, "listing save (update) failed");
+        from_listing_repo_error(&e)
+    })?;
 
     Ok(Json(UpdateListingResponse {
         id: listing.id.as_str().to_owned(),
@@ -759,18 +865,14 @@ fn build_update_from_request(body: UpdateListingRequest) -> Result<ListingUpdate
         Some(None) => Some(None),
         None => None,
     };
-    let area = body
-        .area_m2
-        .map(AreaM2::try_new)
-        .transpose()
-        .map_err(|e| {
-            problem(
-                "validation",
-                "area_m2 가 유효하지 않아요",
-                StatusCode::BAD_REQUEST,
-                Some(e.to_string()),
-            )
-        })?;
+    let area = body.area_m2.map(AreaM2::try_new).transpose().map_err(|e| {
+        problem(
+            "validation",
+            "area_m2 가 유효하지 않아요",
+            StatusCode::BAD_REQUEST,
+            Some(e.to_string()),
+        )
+    })?;
     let geom_point = match body.geom_point {
         Some(Some(g)) => Some(Some(PointSrid::try_new_wgs84(g.lng, g.lat).map_err(
             |e| {
@@ -847,14 +949,10 @@ pub async fn submit_for_review(
         .map_err(|e| from_listing_error(&e))?;
 
     let ctx = http_user_action(&auth, "submit_for_review");
-    state
-        .listing_repo
-        .save(&listing, ctx)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "listing save (submit) failed");
-            from_listing_repo_error(&e)
-        })?;
+    state.listing_repo.save(&listing, ctx).await.map_err(|e| {
+        tracing::error!(error = %e, "listing save (submit) failed");
+        from_listing_repo_error(&e)
+    })?;
 
     Ok(Json(TransitionResponse {
         id: listing.id.as_str().to_owned(),
@@ -885,14 +983,10 @@ pub async fn revise(
         .map_err(|e| from_listing_error(&e))?;
 
     let ctx = http_user_action(&auth, "revise_listing");
-    state
-        .listing_repo
-        .save(&listing, ctx)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "listing save (revise) failed");
-            from_listing_repo_error(&e)
-        })?;
+    state.listing_repo.save(&listing, ctx).await.map_err(|e| {
+        tracing::error!(error = %e, "listing save (revise) failed");
+        from_listing_repo_error(&e)
+    })?;
 
     Ok(Json(TransitionResponse {
         id: listing.id.as_str().to_owned(),
@@ -994,17 +1088,15 @@ pub async fn request_photo_upload(
 
     let listing = load_listing_for_actor(&state, &auth, &id).await?;
 
-    let content_type =
-        listing_photo_domain::entity::PhotoContentType::from_str(&body.content_type).map_err(
-            |e| {
-                problem(
-                    "validation",
-                    "content_type 가 유효하지 않아요 (image/jpeg, image/png, image/webp)",
-                    StatusCode::BAD_REQUEST,
-                    Some(e.to_string()),
-                )
-            },
-        )?;
+    let content_type = listing_photo_domain::entity::PhotoContentType::from_str(&body.content_type)
+        .map_err(|e| {
+            problem(
+                "validation",
+                "content_type 가 유효하지 않아요 (image/jpeg, image/png, image/webp)",
+                StatusCode::BAD_REQUEST,
+                Some(e.to_string()),
+            )
+        })?;
 
     let photo_id = Id::<ListingPhotoMarker>::new();
     let ext = match content_type {
@@ -1294,9 +1386,7 @@ fn can_view(listing: &Listing, viewer_id: &Id<UserMarker>) -> bool {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn detail_to_response(
-    detail: listing_domain::repository::ListingDetail,
-) -> ListingDetailResponse {
+fn detail_to_response(detail: listing_domain::repository::ListingDetail) -> ListingDetailResponse {
     let l = detail.listing;
     ListingDetailResponse {
         id: l.id.as_str().to_owned(),
