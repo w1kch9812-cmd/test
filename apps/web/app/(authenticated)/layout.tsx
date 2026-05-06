@@ -1,11 +1,14 @@
 import type { Route } from "next";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession } from "@/lib/session/store";
 
 // cast: typed route generation (next build) 전 단계에서도 타입 오류 없이 redirect 가능
 const LOGIN_ROUTE = "/login" as Route;
+const LISTINGS_ROUTE = "/listings" as Route;
 
 export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
@@ -17,5 +20,15 @@ export default async function AuthenticatedLayout({ children }: { children: Reac
   if (!session) {
     redirect(LOGIN_ROUTE);
   }
-  return <>{children}</>;
+  return (
+    <>
+      <header className="flex items-center justify-between border-b border-[var(--color-hairline)] px-4 py-2">
+        <Link href={LISTINGS_ROUTE} className="text-sm font-medium text-[var(--color-ink)]">
+          공짱
+        </Link>
+        <NotificationBell />
+      </header>
+      {children}
+    </>
+  );
 }
