@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-06 (SP6-iv 종료 직후)
-> **현재 main**: `9189163` (SP6-iv-T7 — broker /listings/new 폼)
+> **갱신일**: 2026-05-06 (SP6-iv 종료 + SP4-iii-e foundation 직후)
+> **현재 main**: `9d8a513` (SP4-iii-e-T5 — R2ParcelReader FU 60 stub)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -31,8 +31,9 @@
 | **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
 | **6-foundation** | Frontend 인프라 (Next.js 16 + shadcn + tokens + i18n + UX) | apps/web (Next.js 16.2 + React 19 + Tailwind 4) + packages/ui (shadcn 6 primitives + Pretendard tokens, swap-able) + packages/api-types (utoipa → TS) + 한국어 helper + error/not-found/loading + ky API client + TanStack Query + proxy skeleton + instrumentation.ts (Sentry 자리) + Vitest + Playwright + @axe-core/playwright (WCAG 2.1 AA) + size-limit (bundle < 200KB) + .github/workflows/frontend.yml. SSS 7기둥 모두 ◎ | ✅ |
 | **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / 5 신규 endpoint (POST /listings + PATCH /listings/:id `if-match` OCC + transitions 2 + photo presigned mock + DELETE photo soft-delete) / 4 신규 db integration test (audit_log action 검증) / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
+| **4-iii-e** (1차) | R2 PMTiles Reader foundation | `Policy::r2_default` (8s/retry 1/60s cooldown) + `crates/data-clients/r2-public-data` 신규 lib (R2Client get_object_bytes/json + reqwest+Breaker) + PMTiles v3 magic+version 파서 + R2ParcelReader (architecture wire-up + FU 60 honest failure stub). 12 unit tests. **R2BuildingReader (FU 40 close) / BuildingFootprintSource 추상화 / R2IndustrialComplexReader / PMTiles tile_at + MVT decode 는 FU 60 후속** (ETL 빌더 + production fixture 필요). | 🟡 (foundation only) |
 
-**누적**: 33 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1290 Rust tests (1157 단위 + 133 통합) + 17 frontend unit (Vitest, +10 SP6-iv schema) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
+**누적**: 34 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1304 Rust tests (1169 단위 + 133 통합) + 17 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -53,7 +54,8 @@
 | 4-iii-a | data.go.kr 건축물대장 + DataGoKrBuildingReader | ✅ (2026-05-04) |
 | 4-iii-b | data.go.kr 실거래가 + RealTransactionReader | 미착수 (1-2일) |
 | 4-iii-c | 법제처 (도시계획 텍스트) | 미착수 (1-2일) |
-| 4-iii-e | R2 PMTiles Reader 6 (Parcel bbox markers, Building footprint, IC, Mfr, ...) + FU 40 | 미착수 (2-3일) |
+| 4-iii-e (1차) | R2 PMTiles foundation (R2Client + Policy + magic header + R2ParcelReader stub) | 🟡 2026-05-06 (foundation only — FU 60 가 tile_at + readers 완성) |
+| 4-iii-e (2차 = FU 60) | ETL 빌더 + production fixture + R2BuildingReader (FU 40) + BuildingFootprintSource + ICReader | 미착수 (3-5일, 별도 SP) |
 
 **미해소 follow-up (SP4-ii 잔여)**:
 - ~~FU 26: `clippy::disallowed_types` reqwest::Client 직접 호출 차단~~ → ✅ closed by SP-FU-i T3 (`30515ae`)
