@@ -50,6 +50,7 @@ mod routes {
     pub mod admin_listings;
     pub mod auth_event;
     pub mod bookmarks;
+    pub mod health;
     pub mod listings;
     pub mod notifications;
 }
@@ -93,10 +94,7 @@ impl From<User> for UserResponse {
     }
 }
 
-/// `GET /healthz` — liveness probe (`DB` 미접속).
-async fn health() -> &'static str {
-    "ok"
-}
+// SP-Obs T7: 본 함수는 routes::health::liveness 가 대체. 본 stub 유지 안 함.
 
 /// `GET /users/me` — 인증된 사용자 자신 조회.
 async fn me(auth: AuthenticatedUser) -> Json<UserResponse> {
@@ -185,23 +183,30 @@ async fn main() {
         let jwks = Arc::new(JwksCache::new(jwks_url, http));
         Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
     };
-    let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> =
-        env::var("REDIS_URL").map_or_else(
-            |_| {
-                tracing::warn!(
-                    "REDIS_URL not set — JTI denylist disabled (fail-open). Set REDIS_URL in production."
-                );
-                None
-            },
-            |url| {
-                let pool = RedisCfg::from_url(url)
-                    .create_pool(Some(RedisRt::Tokio1))
-                    .expect("redis pool");
-                let dl: Arc<dyn auth::jti_denylist::JtiDenylist> =
-                    Arc::new(auth::jti_denylist::RedisJtiDenylist::new(pool));
-                Some(dl)
-            },
+    // SP-Obs T7: Redis pool 을 jti_denylist + health check 양쪽이 공유.
+    // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open).
+    let redis_pool_shared: Option<Arc<deadpool_redis::Pool>> = env::var("REDIS_URL")
+        .ok()
+        .map(|url| {
+            let pool = RedisCfg::from_url(url)
+                .create_pool(Some(RedisRt::Tokio1))
+                .expect("redis pool");
+            Arc::new(pool)
+        });
+    if redis_pool_shared.is_none() {
+        tracing::warn!(
+            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (fail-open). Set REDIS_URL in production."
         );
+    }
+
+    let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> = redis_pool_shared
+        .as_ref()
+        .map(|pool| {
+            let dl: Arc<dyn auth::jti_denylist::JtiDenylist> = Arc::new(
+                auth::jti_denylist::RedisJtiDenylist::new(pool.as_ref().clone()),
+            );
+            dl
+        });
 
     let auth_state = AuthState {
         verifier,
@@ -210,7 +215,20 @@ async fn main() {
     };
 
     let auth_event_state = routes::auth_event::AuthEventState { pool };
-    let public: Router<()> = Router::new().route("/healthz", get(health));
+
+    // SP-Obs T7: health check state -- DB pool + (optional) Redis pool 공유.
+    let health_state = routes::health::HealthState {
+        pool: auth_event_state.pool.clone(),
+        redis_pool: redis_pool_shared,
+    };
+
+    // SP-Obs T7: K8s/ECS liveness vs readiness 분리. /healthz = liveness 으로
+    // 변경 (이전 SP1 의 stateless `health()` 와 동등 — body shape 만 JSON 으로).
+    let public: Router<()> = Router::new()
+        .route("/healthz", get(routes::health::liveness))
+        .route("/healthz/ready", get(routes::health::readiness))
+        .route("/healthz/db", get(routes::health::db_health))
+        .with_state(health_state);
     let protected: Router<()> = Router::new()
         .route("/users/me", get(me))
         .route("/users/:id", get(get_user))
