@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-06 (SP6-iv 종료 + SP4-iii-e foundation 직후)
-> **현재 main**: `9d8a513` (SP4-iii-e-T5 — R2ParcelReader FU 60 stub)
+> **갱신일**: 2026-05-06 (SP6-iii 종료 직후)
+> **현재 main**: `932c5cf` (SP6-iii-T7 — `/listings/[id]` + BookmarkButton)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -31,9 +31,10 @@
 | **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
 | **6-foundation** | Frontend 인프라 (Next.js 16 + shadcn + tokens + i18n + UX) | apps/web (Next.js 16.2 + React 19 + Tailwind 4) + packages/ui (shadcn 6 primitives + Pretendard tokens, swap-able) + packages/api-types (utoipa → TS) + 한국어 helper + error/not-found/loading + ky API client + TanStack Query + proxy skeleton + instrumentation.ts (Sentry 자리) + Vitest + Playwright + @axe-core/playwright (WCAG 2.1 AA) + size-limit (bundle < 200KB) + .github/workflows/frontend.yml. SSS 7기둥 모두 ◎ | ✅ |
 | **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / 5 신규 endpoint (POST /listings + PATCH /listings/:id `if-match` OCC + transitions 2 + photo presigned mock + DELETE photo soft-delete) / 4 신규 db integration test (audit_log action 검증) / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
-| **4-iii-e** (1차) | R2 PMTiles Reader foundation | `Policy::r2_default` (8s/retry 1/60s cooldown) + `crates/data-clients/r2-public-data` 신규 lib (R2Client get_object_bytes/json + reqwest+Breaker) + PMTiles v3 magic+version 파서 + R2ParcelReader (architecture wire-up + FU 60 honest failure stub). 12 unit tests. **R2BuildingReader (FU 40 close) / BuildingFootprintSource 추상화 / R2IndustrialComplexReader / PMTiles tile_at + MVT decode 는 FU 60 후속** (ETL 빌더 + production fixture 필요). | 🟡 (foundation only) |
+| **4-iii-e** (1차) | R2 PMTiles Reader foundation | `Policy::r2_default` (8s/retry 1/60s cooldown) + `crates/data-clients/r2-public-data` 신규 lib (R2Client get_object_bytes/json + reqwest+Breaker) + PMTiles v3 magic+version 파서 + R2ParcelReader (architecture wire-up + FU 60 honest failure stub). 12 unit tests. **R2BuildingReader (FU 40 close) / BuildingFootprintSource 추상화 / R2IndustrialComplexReader / PMTiles tile_at + MVT decode 는 FU 60 후속** (ETL 빌더 + production fixture 필요). [ADR-0014 보류 — base layer 자체 SSS 부적합](../adr/0014-base-layer-defer-pmtiles.md). | 🟡 (foundation only) |
+| **6-iii** | 매물 상세 + 북마크 | `ListingRepository::find_detail_by_id` + `increment_view_count` + `is_bookmarked` JOIN. `Listing.bookmark_count` denormalized 필드 deprecated -- bookmark_listing JOIN COUNT 가 응답 SSOT (FU 70 schema 제거 예정). GET /listings/:id (RBAC: 비공개 상태는 owner only -> 404 leak 차단) + POST/DELETE /listings/:id/bookmark (멱등) + GET /me/bookmarks. Frontend `/listings/[id]` server component + ListingDetail / BookmarkButton (optimistic toggle). 6 db integration test. ADR-0015 V-World ACL 재설계 직전 commit 묶음. | ✅ |
 
-**누적**: 34 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1304 Rust tests (1169 단위 + 133 통합) + 17 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
+**누적**: 34 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1310 Rust tests (1169 단위 + 139 통합) + 17 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -103,8 +104,16 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 - ✅ SP6-ii: 매물 검색 + Naver Maps + ListingCard + FilterBar + Pretendard self-host + e2e — 2026-05-05~06
 - 미착수 SP6-iii: 매물 상세 + 북마크 (1-2일)
 - ✅ SP6-iv: 매물 등록 (broker POST/PATCH/submit/revise/photos backend + /listings/new 폼 + 10 Vitest + 4 DB integration test) — 2026-05-06
+- ✅ SP6-iii: 매물 상세 + 북마크 (find_detail_by_id JOIN COUNT + increment_view_count + bookmark CRUD + /listings/[id] + BookmarkButton + 6 DB integration test) — 2026-05-06
 - 미착수 SP6-v: 알림 (1일)
 - 미착수 FU 56: SP6-iv 후속 — `/listings/[id]/edit` PATCH 화면 + PhotoUploader (R2 통합 후) + e2e 3 (broker 등록 / non-broker 차단 / 폼 cross-field)
+- 미착수 FU 70: `listing.bookmark_count` schema 컬럼 제거 (deprecated 후 마이그)
+- 미착수 FU 71: 외부 (Parcel/Mfr/IC/CourtAuction) 북마크 UI
+- 미착수 FU 72: ListingCard inline bookmark toggle
+- 미착수 FU 73: `/me/bookmarks` 프론트엔드 페이지
+- 미착수 FU 74: 사진 carousel + lightbox (a11y)
+- 미착수 FU 75: `contact_visibility` 별 broker contact 표시 분기
+- 미착수 FU 76: bookmark 알림 (SP6-v 묶음)
 
 ---
 
