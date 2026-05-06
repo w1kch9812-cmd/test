@@ -364,3 +364,143 @@ async fn save_listing_system_action_records_null_actor() {
     .unwrap();
     assert_eq!(null_actor_count.0, 1);
 }
+
+// ---- SP6-iv: update_editable_fields + audit (broker 매물 등록) ----
+
+#[tokio::test]
+async fn update_editable_fields_round_trip_persists_new_values_and_bumps_version() {
+    use listing_domain::entity::ListingUpdate;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-sp6iv-1", "sp6iv1@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+
+    let mut listing = make_listing_sale(owner.clone());
+    repo.save(&listing, test_ctx()).await.unwrap();
+
+    // partial update — title + price.
+    let update = ListingUpdate {
+        title: Some(ListingTitle::try_new("수정된 제목").unwrap()),
+        price: Some(MoneyKrw::try_new(700_000_000).unwrap()),
+        ..Default::default()
+    };
+    listing.update_editable_fields(update, Utc::now()).unwrap();
+    assert_eq!(listing.version, 2);
+
+    let ctx = MutationContext::new_user_action(owner, "corr-sp6iv-update", "update_listing");
+    repo.save(&listing, ctx).await.expect("save");
+
+    let reloaded = repo.find(&listing.id).await.unwrap().expect("found");
+    assert_eq!(reloaded.title.as_str(), "수정된 제목");
+    assert_eq!(reloaded.price.as_i64(), 700_000_000);
+    assert_eq!(reloaded.version, 2);
+}
+
+#[tokio::test]
+async fn update_listing_records_update_listing_audit_action() {
+    use listing_domain::entity::ListingUpdate;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-sp6iv-2", "sp6iv2@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+
+    let mut listing = make_listing_sale(owner.clone());
+    let create_ctx = MutationContext::new_user_action(
+        owner.clone(),
+        "corr-sp6iv-2-create",
+        "create_listing",
+    );
+    repo.save(&listing, create_ctx).await.unwrap();
+
+    let update = ListingUpdate {
+        title: Some(ListingTitle::try_new("새 제목").unwrap()),
+        ..Default::default()
+    };
+    listing.update_editable_fields(update, Utc::now()).unwrap();
+    let update_ctx =
+        MutationContext::new_user_action(owner, "corr-sp6iv-2-update", "update_listing");
+    repo.save(&listing, update_ctx).await.unwrap();
+
+    // SP6-iv: 두 audit_log row — create_listing + update_listing.
+    let audit_actions: Vec<(String,)> = sqlx::query_as(
+        "select action from audit_log where resource_kind = 'listing' and resource_id = $1 \
+         order by created_at",
+    )
+    .bind(listing.id.as_str())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(audit_actions.len(), 2);
+    assert_eq!(audit_actions[0].0, "create_listing");
+    assert_eq!(audit_actions[1].0, "update_listing");
+}
+
+#[tokio::test]
+async fn submit_for_review_records_state_transition_audit() {
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-sp6iv-3", "sp6iv3@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+
+    let mut listing = make_listing_sale(owner.clone());
+    repo.save(&listing, test_ctx()).await.unwrap();
+
+    listing.submit_for_review(Utc::now()).unwrap();
+    let ctx = MutationContext::new_user_action(
+        owner.clone(),
+        "corr-sp6iv-3-submit",
+        "submit_for_review",
+    );
+    repo.save(&listing, ctx).await.unwrap();
+
+    let reloaded = repo.find(&listing.id).await.unwrap().unwrap();
+    assert_eq!(reloaded.status, ListingStatus::PendingReview);
+    assert_eq!(reloaded.version, 2);
+
+    // submit_for_review action 기록.
+    let submit_audit: Vec<(String,)> = sqlx::query_as(
+        "select action from audit_log where resource_kind = 'listing' and resource_id = $1 \
+         and action = 'submit_for_review'",
+    )
+    .bind(listing.id.as_str())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(submit_audit.len(), 1);
+}
+
+#[tokio::test]
+async fn revise_after_rejection_returns_to_draft_with_audit() {
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-sp6iv-4", "sp6iv4@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+
+    let mut listing = make_listing_sale(owner.clone());
+    repo.save(&listing, test_ctx()).await.unwrap();
+
+    listing.submit_for_review(Utc::now()).unwrap();
+    repo.save(&listing, test_ctx()).await.unwrap();
+    listing.reject(Utc::now()).unwrap();
+    repo.save(&listing, test_ctx()).await.unwrap();
+    assert_eq!(listing.status, ListingStatus::Rejected);
+
+    listing.revise_after_rejection(Utc::now()).unwrap();
+    let ctx =
+        MutationContext::new_user_action(owner, "corr-sp6iv-4-revise", "revise_listing");
+    repo.save(&listing, ctx).await.unwrap();
+
+    let reloaded = repo.find(&listing.id).await.unwrap().unwrap();
+    assert_eq!(reloaded.status, ListingStatus::Draft);
+
+    let revise_audit: Vec<(String,)> = sqlx::query_as(
+        "select action from audit_log where resource_kind = 'listing' and resource_id = $1 \
+         and action = 'revise_listing'",
+    )
+    .bind(listing.id.as_str())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(revise_audit.len(), 1);
+}
