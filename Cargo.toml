@@ -36,6 +36,7 @@ members = [
     "crates/api-health-recorder",
     "services/api",
     "services/outbox-publisher",
+    "services/etl-base-layer",
     # 다른 services/* 와 crates/* 는 sub-project 2+에서 추가됨.
 ]
 

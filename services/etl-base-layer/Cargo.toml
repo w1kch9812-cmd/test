@@ -1,0 +1,28 @@
+[package]
+name = "etl-base-layer"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "공짱 PMTiles base layer ETL — Bronze SHP fetch + tippecanoe + R2 업로드 (SP9 T3)"
+
+[[bin]]
+name = "etl-base-layer"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures-util = "0.3"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+
+[lints]
+workspace = true
