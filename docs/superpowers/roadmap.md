@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-06 (SP6-iii 종료 직후)
-> **현재 main**: `932c5cf` (SP6-iii-T7 — `/listings/[id]` + BookmarkButton)
+> **갱신일**: 2026-05-06 (SP6-v 종료 직후)
+> **현재 main**: `46601ff` (SP6-v-T7 — /me/notifications + 헤더 종 badge)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -33,8 +33,9 @@
 | **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / 5 신규 endpoint (POST /listings + PATCH /listings/:id `if-match` OCC + transitions 2 + photo presigned mock + DELETE photo soft-delete) / 4 신규 db integration test (audit_log action 검증) / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
 | **4-iii-e** (1차) | R2 PMTiles Reader foundation | `Policy::r2_default` (8s/retry 1/60s cooldown) + `crates/data-clients/r2-public-data` 신규 lib (R2Client get_object_bytes/json + reqwest+Breaker) + PMTiles v3 magic+version 파서 + R2ParcelReader (architecture wire-up + FU 60 honest failure stub). 12 unit tests. **R2BuildingReader (FU 40 close) / BuildingFootprintSource 추상화 / R2IndustrialComplexReader / PMTiles tile_at + MVT decode 는 FU 60 후속** (ETL 빌더 + production fixture 필요). [ADR-0014 보류 — base layer 자체 SSS 부적합](../adr/0014-base-layer-defer-pmtiles.md). | 🟡 (foundation only) |
 | **6-iii** | 매물 상세 + 북마크 | `ListingRepository::find_detail_by_id` + `increment_view_count` + `is_bookmarked` JOIN. `Listing.bookmark_count` denormalized 필드 deprecated -- bookmark_listing JOIN COUNT 가 응답 SSOT (FU 70 schema 제거 예정). GET /listings/:id (RBAC: 비공개 상태는 owner only -> 404 leak 차단) + POST/DELETE /listings/:id/bookmark (멱등) + GET /me/bookmarks. Frontend `/listings/[id]` server component + ListingDetail / BookmarkButton (optimistic toggle). 6 db integration test. ADR-0015 V-World ACL 재설계 직전 commit 묶음. | ✅ |
+| **6-v** | 알림 (Notifications) | `NotificationKind` 도메인 enum (4 variants + Other forward-compat). PgImpl enum round-trip + `mark_all_read_by_kind` 시그니처 변경. `auth::role_guard::require_one_of_roles` (OR 매칭). admin endpoints (`POST /admin/listings/:id/{approve,reject}` -- Admin/Operator + reason) + `Notification` trigger (best-effort multi-tx). bookmark trigger (owner != bookmarker -> ListingBookmarked 알림). `/me/notifications` 4 endpoints (list / unread-count / read 멱등 / mark-all-read by kind). Frontend `/me/notifications` 페이지 + NotificationBell 헤더 badge (1분 polling). 9 DB integration test (enum round-trip / Other fallback / user isolation / bulk filter). | ✅ |
 
-**누적**: 34 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1310 Rust tests (1169 단위 + 139 통합) + 17 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
+**누적**: 34 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1325 Rust tests (1183 단위 + 142 통합) + 17 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -105,7 +106,7 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 - 미착수 SP6-iii: 매물 상세 + 북마크 (1-2일)
 - ✅ SP6-iv: 매물 등록 (broker POST/PATCH/submit/revise/photos backend + /listings/new 폼 + 10 Vitest + 4 DB integration test) — 2026-05-06
 - ✅ SP6-iii: 매물 상세 + 북마크 (find_detail_by_id JOIN COUNT + increment_view_count + bookmark CRUD + /listings/[id] + BookmarkButton + 6 DB integration test) — 2026-05-06
-- 미착수 SP6-v: 알림 (1일)
+- ✅ SP6-v: 알림 (NotificationKind enum + admin approve/reject + bookmark trigger + /me/notifications 4 endpoints + 헤더 종 badge + 9 DB integration test) — 2026-05-06
 - 미착수 FU 56: SP6-iv 후속 — `/listings/[id]/edit` PATCH 화면 + PhotoUploader (R2 통합 후) + e2e 3 (broker 등록 / non-broker 차단 / 폼 cross-field)
 - 미착수 FU 70: `listing.bookmark_count` schema 컬럼 제거 (deprecated 후 마이그)
 - 미착수 FU 71: 외부 (Parcel/Mfr/IC/CourtAuction) 북마크 UI
