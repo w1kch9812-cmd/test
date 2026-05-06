@@ -117,6 +117,7 @@ dependencies = [
  "db",
  "deadpool-redis",
  "listing-domain",
+ "listing-photo-domain",
  "reqwest",
  "serde",
  "serde_json",

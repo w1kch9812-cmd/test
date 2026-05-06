@@ -26,9 +26,11 @@ use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{middleware, Json, Router};
 use db::listing::PgListingRepository;
+use db::listing_photo::PgListingPhotoRepository;
 use db::user::PgUserRepository;
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use listing_domain::repository::ListingRepository;
+use listing_photo_domain::repository::ListingPhotoRepository;
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
@@ -125,6 +127,7 @@ async fn get_user(
     Ok(Json(user.into()))
 }
 
+#[allow(clippy::too_many_lines)] // env 로딩 + state 조립 + router 7 endpoint — 분해 시 중복.
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
@@ -149,7 +152,12 @@ async fn main() {
     };
 
     let listing_repo: Arc<dyn ListingRepository> = Arc::new(PgListingRepository::new(pool.clone()));
-    let listings_state = routes::listings::ListingsState { listing_repo };
+    let photo_repo: Arc<dyn ListingPhotoRepository> =
+        Arc::new(PgListingPhotoRepository::new(pool.clone()));
+    let listings_state = routes::listings::ListingsState {
+        listing_repo,
+        photo_repo,
+    };
 
     let verifier = if dev_mode {
         tracing::warn!(
@@ -201,9 +209,30 @@ async fn main() {
             auth_state.clone(),
             auth_layer,
         ));
-    // GET /listings — protected (auth_layer 적용), 별도 state (listings_state).
+    // /listings 라우터 — auth_layer 통과 후 GET 검색 (SP6-ii) + POST/PATCH/transitions/photos
+    // (SP6-iv). 모든 mutation 핸들러는 require_role(Broker) + ownership check.
     let listings_router: Router<()> = Router::new()
-        .route("/listings", get(routes::listings::get_listings))
+        .route(
+            "/listings",
+            get(routes::listings::get_listings).post(routes::listings::create_listing),
+        )
+        .route("/listings/:id", axum::routing::patch(routes::listings::patch_listing))
+        .route(
+            "/listings/:id/submit-for-review",
+            axum::routing::post(routes::listings::submit_for_review),
+        )
+        .route(
+            "/listings/:id/revise",
+            axum::routing::post(routes::listings::revise),
+        )
+        .route(
+            "/listings/:id/photos",
+            axum::routing::post(routes::listings::request_photo_upload),
+        )
+        .route(
+            "/listings/:listing_id/photos/:photo_id",
+            axum::routing::delete(routes::listings::delete_photo),
+        )
         .with_state(listings_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY: /internal/auth/event 는 현재 unauthenticated.
