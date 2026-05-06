@@ -147,6 +147,9 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
     async fn save(&self, photo: &ListingPhoto, ctx: MutationContext) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state snapshot (None if INSERT — 새 row).
+        let before_state = crate::audit_state::read_listing_photo_json(&mut tx, &photo.id).await?;
+
         // 1. listing_photo UPSERT.
         sqlx::query(
             r"
@@ -184,8 +187,14 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
         .await
         .map_err(map_sqlx_err)?;
 
-        // 2. audit_log INSERT — same tx.
-        write_audit_log(&mut tx, photo.id.as_str(), &ctx).await?;
+        // 2a. SP-Obs T4: after_state snapshot + metadata merge.
+        let after_state_raw =
+            crate::audit_state::read_listing_photo_json(&mut tx, &photo.id).await?;
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        // 2b. audit_log INSERT — same tx.
+        write_audit_log(&mut tx, photo.id.as_str(), &ctx, before_state, after_state).await?;
 
         // 3. outbox_event INSERT for each ctx.events — same tx.
         write_outbox_events(&mut tx, photo.id.as_str(), &ctx).await?;
@@ -211,6 +220,10 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state snapshot (DELETE 시 audit chain 의 핵심 — row
+        // 가 사라지기 전 마지막 상태 보존).
+        let before_state = crate::audit_state::read_listing_photo_json(&mut tx, id).await?;
+
         // 1. DELETE listing_photo.
         let result = sqlx::query("delete from listing_photo where id = $1")
             .bind(id.as_str())
@@ -221,8 +234,11 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
             return Err(RepoError::NotFound);
         }
 
-        // 2. audit_log INSERT — same tx.
-        write_audit_log(&mut tx, id.as_str(), &ctx).await?;
+        // 2a. SP-Obs T4: after_state = None (row 가 더 이상 없음). metadata 만 wrap.
+        let after_state = crate::audit_state::merge_metadata(None, ctx.metadata.as_ref());
+
+        // 2b. audit_log INSERT — same tx.
+        write_audit_log(&mut tx, id.as_str(), &ctx, before_state, after_state).await?;
 
         // 3. outbox_event INSERT for each ctx.events — same tx.
         write_outbox_events(&mut tx, id.as_str(), &ctx).await?;
@@ -234,10 +250,15 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
 }
 
 /// `audit_log` 1 row INSERT — `resource_kind = 'listing_photo'`.
+///
+/// SP-Obs T4: caller 가 `before_state` (snapshot before mutation) +
+/// `after_state` (after, with `__metadata__` merged) 를 만들어 전달.
 async fn write_audit_log(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     photo_id: &str,
     ctx: &MutationContext,
+    before_state: Option<serde_json::Value>,
+    after_state: Option<serde_json::Value>,
 ) -> Result<(), RepoError> {
     let audit_id = Id::<AuditLogMarker>::new();
     let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
@@ -249,14 +270,15 @@ async fn write_audit_log(
             ip_address, user_agent,
             correlation_id, created_at
         )
-        values ($1, $2, $3, 'listing_photo', $4, NULL, $5, $6::inet, $7, $8, $9)
+        values ($1, $2, $3, 'listing_photo', $4, $5, $6, $7::inet, $8, $9, $10)
         ",
     )
     .bind(audit_id.as_str())
     .bind(ctx.actor_id.as_ref().map(Id::as_str))
     .bind(&ctx.action)
     .bind(photo_id)
-    .bind(&ctx.metadata)
+    .bind(&before_state)
+    .bind(&after_state)
     .bind(ctx.client_ip.as_deref())
     .bind(ctx.user_agent.as_deref())
     .bind(&ctx.correlation_id)

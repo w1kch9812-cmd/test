@@ -240,6 +240,9 @@ impl UserRepository for PgUserRepository {
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state snapshot (None if INSERT — 새 row).
+        let before_state = crate::audit_state::read_user_json(&mut tx, &user.id).await?;
+
         // 1. user UPSERT with OCC.
         let result = sqlx::query(
             r#"
@@ -301,7 +304,13 @@ impl UserRepository for PgUserRepository {
             return Err(RepoError::Conflict);
         }
 
-        // 2. audit_log INSERT — same tx.
+        // 2a. SP-Obs T4: after_state snapshot (UPSERT 후 저장된 row JSON).
+        let after_state_raw = crate::audit_state::read_user_json(&mut tx, &user.id).await?;
+        // metadata 를 after_state 의 __metadata__ key 로 merge (FU 90 까지 schema unchanged).
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        // 2b. audit_log INSERT — same tx.
         let audit_id = Id::<AuditLogMarker>::new();
         let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
         sqlx::query(
@@ -312,14 +321,15 @@ impl UserRepository for PgUserRepository {
                 ip_address, user_agent,
                 correlation_id, created_at
             )
-            values ($1, $2, $3, 'user', $4, NULL, $5, $6::inet, $7, $8, $9)
+            values ($1, $2, $3, 'user', $4, $5, $6, $7::inet, $8, $9, $10)
             ",
         )
         .bind(audit_id.as_str())
         .bind(ctx.actor_id.as_ref().map(Id::as_str))
         .bind(&ctx.action)
         .bind(user.id.as_str())
-        .bind(&ctx.metadata)
+        .bind(&before_state)
+        .bind(&after_state)
         .bind(ctx.client_ip.as_deref())
         .bind(ctx.user_agent.as_deref())
         .bind(&ctx.correlation_id)

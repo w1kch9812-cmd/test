@@ -132,6 +132,10 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
     async fn save(&self, report: &AnalysisReport, ctx: MutationContext) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state snapshot (None if INSERT).
+        let before_state =
+            crate::audit_state::read_analysis_report_json(&mut tx, &report.id).await?;
+
         // target_pnus: Vec<Pnu> → Vec<&str> bind for char(19)[].
         let pnu_strs: Vec<&str> = report.target_pnus.iter().map(Pnu::as_str).collect();
 
@@ -168,7 +172,20 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
             return Err(RepoError::Conflict);
         }
 
-        write_audit_log(&mut tx, report.id.as_str(), &ctx).await?;
+        // SP-Obs T4: after_state snapshot + metadata merge.
+        let after_state_raw =
+            crate::audit_state::read_analysis_report_json(&mut tx, &report.id).await?;
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        write_audit_log(
+            &mut tx,
+            report.id.as_str(),
+            &ctx,
+            before_state,
+            after_state,
+        )
+        .await?;
         write_outbox_events(&mut tx, report.id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -188,6 +205,10 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // SP-Obs T4: before_state — DELETE 직전 row 마지막 상태.
+        let before_state =
+            crate::audit_state::read_analysis_report_json(&mut tx, id).await?;
+
         let result = sqlx::query("delete from analysis_report where id = $1")
             .bind(id.as_str())
             .execute(&mut *tx)
@@ -197,7 +218,9 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
             return Err(RepoError::NotFound);
         }
 
-        write_audit_log(&mut tx, id.as_str(), &ctx).await?;
+        let after_state = crate::audit_state::merge_metadata(None, ctx.metadata.as_ref());
+
+        write_audit_log(&mut tx, id.as_str(), &ctx, before_state, after_state).await?;
         write_outbox_events(&mut tx, id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -205,11 +228,13 @@ impl AnalysisReportRepository for PgAnalysisReportRepository {
     }
 }
 
-/// `audit_log` 1 row INSERT — `resource_kind = 'analysis_report'`.
+/// `audit_log` 1 row INSERT — `resource_kind = 'analysis_report'` (SP-Obs T4 갱신).
 async fn write_audit_log(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     resource_id: &str,
     ctx: &MutationContext,
+    before_state: Option<serde_json::Value>,
+    after_state: Option<serde_json::Value>,
 ) -> Result<(), RepoError> {
     let audit_id = Id::<AuditLogMarker>::new();
     let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
@@ -221,14 +246,15 @@ async fn write_audit_log(
             ip_address, user_agent,
             correlation_id, created_at
         )
-        values ($1, $2, $3, 'analysis_report', $4, NULL, $5, $6::inet, $7, $8, $9)
+        values ($1, $2, $3, 'analysis_report', $4, $5, $6, $7::inet, $8, $9, $10)
         ",
     )
     .bind(audit_id.as_str())
     .bind(ctx.actor_id.as_ref().map(Id::as_str))
     .bind(&ctx.action)
     .bind(resource_id)
-    .bind(&ctx.metadata)
+    .bind(&before_state)
+    .bind(&after_state)
     .bind(ctx.client_ip.as_deref())
     .bind(ctx.user_agent.as_deref())
     .bind(&ctx.correlation_id)

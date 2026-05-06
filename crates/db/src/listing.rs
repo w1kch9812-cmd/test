@@ -599,6 +599,9 @@ impl ListingRepository for PgListingRepository {
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state snapshot. PostGIS geom_point 는 GeoJSON 으로 변환.
+        let before_state = crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
+
         // 1. listing UPSERT with OCC.
         let result = sqlx::query(
             r"
@@ -669,7 +672,13 @@ impl ListingRepository for PgListingRepository {
             return Err(RepoError::Conflict);
         }
 
-        // 2. audit_log INSERT — same tx.
+        // 2a. SP-Obs T4: after_state snapshot + metadata merge.
+        let after_state_raw =
+            crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        // 2b. audit_log INSERT — same tx.
         let audit_id = Id::<AuditLogMarker>::new();
         let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
         sqlx::query(
@@ -680,14 +689,15 @@ impl ListingRepository for PgListingRepository {
                 ip_address, user_agent,
                 correlation_id, created_at
             )
-            values ($1, $2, $3, 'listing', $4, NULL, $5, $6::inet, $7, $8, $9)
+            values ($1, $2, $3, 'listing', $4, $5, $6, $7::inet, $8, $9, $10)
             ",
         )
         .bind(audit_id.as_str())
         .bind(ctx.actor_id.as_ref().map(Id::as_str))
         .bind(&ctx.action)
         .bind(listing.id.as_str())
-        .bind(&ctx.metadata)
+        .bind(&before_state)
+        .bind(&after_state)
         .bind(ctx.client_ip.as_deref())
         .bind(ctx.user_agent.as_deref())
         .bind(&ctx.correlation_id)

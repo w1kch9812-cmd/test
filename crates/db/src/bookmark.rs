@@ -167,6 +167,14 @@ impl BookmarkRepository for PgBookmarkRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // 0. SP-Obs T4: before_state (composite PK).
+        let before_state = crate::audit_state::read_bookmark_listing_json(
+            &mut tx,
+            &bm.user_id,
+            &bm.listing_id,
+        )
+        .await?;
+
         sqlx::query(
             r"
             insert into bookmark_listing (user_id, listing_id, note, created_at)
@@ -182,7 +190,24 @@ impl BookmarkRepository for PgBookmarkRepository {
         .await
         .map_err(map_sqlx_err)?;
 
-        write_audit_log(&mut tx, "bookmark_listing", bm.listing_id.as_str(), &ctx).await?;
+        let after_state_raw = crate::audit_state::read_bookmark_listing_json(
+            &mut tx,
+            &bm.user_id,
+            &bm.listing_id,
+        )
+        .await?;
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        write_audit_log(
+            &mut tx,
+            "bookmark_listing",
+            bm.listing_id.as_str(),
+            &ctx,
+            before_state,
+            after_state,
+        )
+        .await?;
         write_outbox_events(&mut tx, "bookmark_listing", bm.listing_id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -203,6 +228,10 @@ impl BookmarkRepository for PgBookmarkRepository {
         ctx: MutationContext,
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+
+        // 0. SP-Obs T4: before_state.
+        let before_state =
+            crate::audit_state::read_bookmark_external_json(&mut tx, &bm.id).await?;
 
         sqlx::query(
             r"
@@ -226,7 +255,20 @@ impl BookmarkRepository for PgBookmarkRepository {
         .await
         .map_err(map_sqlx_err)?;
 
-        write_audit_log(&mut tx, "bookmark_external", bm.id.as_str(), &ctx).await?;
+        let after_state_raw =
+            crate::audit_state::read_bookmark_external_json(&mut tx, &bm.id).await?;
+        let after_state =
+            crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());
+
+        write_audit_log(
+            &mut tx,
+            "bookmark_external",
+            bm.id.as_str(),
+            &ctx,
+            before_state,
+            after_state,
+        )
+        .await?;
         write_outbox_events(&mut tx, "bookmark_external", bm.id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -248,6 +290,10 @@ impl BookmarkRepository for PgBookmarkRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        // SP-Obs T4: before_state — DELETE 직전 row 마지막 상태 보존.
+        let before_state =
+            crate::audit_state::read_bookmark_listing_json(&mut tx, user_id, listing_id).await?;
+
         let result =
             sqlx::query("delete from bookmark_listing where user_id = $1 and listing_id = $2")
                 .bind(user_id.as_str())
@@ -259,7 +305,17 @@ impl BookmarkRepository for PgBookmarkRepository {
             return Err(RepoError::NotFound);
         }
 
-        write_audit_log(&mut tx, "bookmark_listing", listing_id.as_str(), &ctx).await?;
+        let after_state = crate::audit_state::merge_metadata(None, ctx.metadata.as_ref());
+
+        write_audit_log(
+            &mut tx,
+            "bookmark_listing",
+            listing_id.as_str(),
+            &ctx,
+            before_state,
+            after_state,
+        )
+        .await?;
         write_outbox_events(&mut tx, "bookmark_listing", listing_id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -279,6 +335,9 @@ impl BookmarkRepository for PgBookmarkRepository {
     ) -> Result<(), RepoError> {
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
+        let before_state =
+            crate::audit_state::read_bookmark_external_json(&mut tx, id).await?;
+
         let result = sqlx::query("delete from bookmark_external where id = $1")
             .bind(id.as_str())
             .execute(&mut *tx)
@@ -288,7 +347,17 @@ impl BookmarkRepository for PgBookmarkRepository {
             return Err(RepoError::NotFound);
         }
 
-        write_audit_log(&mut tx, "bookmark_external", id.as_str(), &ctx).await?;
+        let after_state = crate::audit_state::merge_metadata(None, ctx.metadata.as_ref());
+
+        write_audit_log(
+            &mut tx,
+            "bookmark_external",
+            id.as_str(),
+            &ctx,
+            before_state,
+            after_state,
+        )
+        .await?;
         write_outbox_events(&mut tx, "bookmark_external", id.as_str(), &ctx).await?;
 
         tx.commit().await.map_err(map_sqlx_err)?;
@@ -296,12 +365,15 @@ impl BookmarkRepository for PgBookmarkRepository {
     }
 }
 
-/// `audit_log` 1 row INSERT — Bookmark transactional 패턴.
+/// `audit_log` 1 row INSERT — Bookmark transactional 패턴 (SP-Obs T4 갱신).
+#[allow(clippy::too_many_arguments)] // 7 = SP-Obs T4 audit chain 풀필드 (resource_kind/id 분리 + before/after).
 async fn write_audit_log(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     resource_kind: &str,
     resource_id: &str,
     ctx: &MutationContext,
+    before_state: Option<serde_json::Value>,
+    after_state: Option<serde_json::Value>,
 ) -> Result<(), RepoError> {
     let audit_id = Id::<AuditLogMarker>::new();
     let occurred_at = ctx.occurred_at.unwrap_or_else(Utc::now);
@@ -313,7 +385,7 @@ async fn write_audit_log(
             ip_address, user_agent,
             correlation_id, created_at
         )
-        values ($1, $2, $3, $4, $5, NULL, $6, $7::inet, $8, $9, $10)
+        values ($1, $2, $3, $4, $5, $6, $7, $8::inet, $9, $10, $11)
         ",
     )
     .bind(audit_id.as_str())
@@ -321,7 +393,8 @@ async fn write_audit_log(
     .bind(&ctx.action)
     .bind(resource_kind)
     .bind(resource_id)
-    .bind(&ctx.metadata)
+    .bind(&before_state)
+    .bind(&after_state)
     .bind(ctx.client_ip.as_deref())
     .bind(ctx.user_agent.as_deref())
     .bind(&ctx.correlation_id)
