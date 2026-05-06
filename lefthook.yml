@@ -30,7 +30,10 @@ pre-push:
   parallel: false
   commands:
     typecheck:
-      run: pnpm turbo run typecheck
+      # SSS § 2 자동강제: node_modules 누락 / lockfile drift 시 자가복구.
+      # `pnpm install --frozen-lockfile` 은 idempotent — sync 상태면 no-op (수 초),
+      # 누락/drift 면 full install. fresh checkout / dirty workspace 어디서든 안전.
+      run: pnpm install --frozen-lockfile --reporter=silent && pnpm turbo run typecheck
       skip:
         - merge
         - rebase
