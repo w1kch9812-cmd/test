@@ -57,6 +57,19 @@ function setupWebGlRecovery(mb: MapboxLike): (() => void) | undefined {
  *
  * 클릭 시 properties.pnu 추출 → patchFilters({ pnu }) 트리거 (ADR 0018 폴리곤 클릭 모델).
  */
+/**
+ * PMTiles 의 *내부 layer 이름* — tippecanoe `-l <name>` 결과. 우리 ETL (SP9 T3b.2)
+ * 은 `parcels` 로 빌드. 단, 일시적으로 외부 cached PMTiles (예: 형제 repo 의 `lots`
+ * layer) 를 borrow 해 쓸 때만 env 로 override.
+ *
+ * - `NEXT_PUBLIC_PMTILES_PARCELS_LAYER` (default `parcels`)
+ * - `NEXT_PUBLIC_PMTILES_ADMIN_LAYER`   (default `admin`)
+ * - `NEXT_PUBLIC_PMTILES_COMPLEX_LAYER` (default `complex`)
+ */
+const PARCELS_LAYER = process.env.NEXT_PUBLIC_PMTILES_PARCELS_LAYER || "parcels";
+const ADMIN_LAYER = process.env.NEXT_PUBLIC_PMTILES_ADMIN_LAYER || "admin";
+const COMPLEX_LAYER = process.env.NEXT_PUBLIC_PMTILES_COMPLEX_LAYER || "complex";
+
 function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void): void {
   const parcelsUrl = pmtilesSourceUrl("parcels.pmtiles");
   const adminUrl = pmtilesSourceUrl("admin.pmtiles");
@@ -81,7 +94,7 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
         id: "admin-fill",
         type: "fill",
         source: "admin",
-        "source-layer": "admin",
+        "source-layer": ADMIN_LAYER,
         minzoom: 0,
         maxzoom: 16,
         paint: {
@@ -97,7 +110,7 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
         id: "complex-fill",
         type: "fill",
         source: "complex",
-        "source-layer": "complex",
+        "source-layer": COMPLEX_LAYER,
         minzoom: 12,
         paint: {
           "fill-color": "#3B82F6",
@@ -112,7 +125,7 @@ function setupPolygonLayers(mb: MapboxLike, onParcelClick: (pnu: string) => void
         id: "parcels-fill",
         type: "fill",
         source: "parcels",
-        "source-layer": "parcels",
+        "source-layer": PARCELS_LAYER,
         minzoom: 16,
         paint: {
           "fill-color": "#10B981",
