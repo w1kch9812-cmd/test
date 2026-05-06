@@ -60,3 +60,4 @@
 | [0011](./0011-embedding-gemini-pgvector.md) | 임베딩 — Gemini + pgvector (Phase 3+) | Accepted |
 | [0012](./0012-pipeline-visualization-react-flow.md) | 파이프라인 시각화 — React Flow (xyflow) | Accepted |
 | [0013](./0013-listing-search-naver-maps.md) | Listing 검색 지도 vendor — Naver Maps (SP6-ii) | Accepted |
+| [0014](./0014-base-layer-defer-pmtiles.md) | 지도 base layer (전국 필지 polygon) — 보류 (R2 PMTiles SSS 부적합) | Accepted (defer) |
