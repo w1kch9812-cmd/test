@@ -31,4 +31,14 @@ pub enum ListingError {
         /// 시도된 대상 상태.
         to: ListingStatus,
     },
+    /// 현재 상태에서 필드 수정 불가 (`Draft` 또는 `Rejected` 만 허용).
+    ///
+    /// `Active` / `PendingReview` / `Sold` / `Expired` / `Archived` 모두 거부 —
+    /// 매물 데이터 무결성 보호. 변경 필요 시 `revise_after_rejection` 등으로
+    /// `Draft` 로 돌아온 후에만.
+    #[error("listing in {current:?} state cannot be edited (only Draft/Rejected)")]
+    ImmutableState {
+        /// 현재 상태.
+        current: ListingStatus,
+    },
 }

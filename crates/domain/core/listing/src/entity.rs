@@ -225,6 +225,111 @@ impl Listing {
         self.bookmark_count = self.bookmark_count.saturating_sub(1);
         self.updated_at = at;
     }
+
+    /// 편집 가능한 필드 일괄 갱신 — `Draft` / `Rejected` 상태에서만 허용.
+    ///
+    /// `transaction_type` / `parcel_pnu` / `listing_type` / `owner_id` 는 변경
+    /// *불가* — 다른 매물로 봐야 함. 이 invariant 가 cross-field 검증의 base.
+    ///
+    /// `deposit` / `monthly_rent` 변경 시 `transaction_type` 의 cross-field
+    /// invariant (`V003_01`) 재검증. 즉 `MonthlyRent` 매물의 `deposit` 을
+    /// `None` 으로 바꾸려 하면 거부.
+    ///
+    /// # Errors
+    ///
+    /// - 현재 상태가 `Draft`/`Rejected` 가 아니면 [`ListingError::ImmutableState`]
+    /// - `deposit`/`monthly_rent` 가 `transaction_type` 과 불일치하면
+    ///   [`ListingError::TransactionFieldsMismatch`]
+    pub fn update_editable_fields(
+        &mut self,
+        update: ListingUpdate,
+        at: DateTime<Utc>,
+    ) -> Result<(), ListingError> {
+        if !matches!(
+            self.status,
+            ListingStatus::Draft | ListingStatus::Rejected
+        ) {
+            return Err(ListingError::ImmutableState {
+                current: self.status,
+            });
+        }
+
+        // deposit / monthly_rent 변경 의도가 있으면 그 값 사용, 없으면 현재 값.
+        let new_deposit = match update.deposit {
+            Some(v) => v,
+            None => self.deposit,
+        };
+        let new_monthly_rent = match update.monthly_rent {
+            Some(v) => v,
+            None => self.monthly_rent,
+        };
+        let dep_required = self.transaction_type.requires_deposit();
+        let rent_required = self.transaction_type.requires_monthly_rent();
+        if new_deposit.is_some() != dep_required {
+            return Err(ListingError::TransactionFieldsMismatch {
+                transaction_type: self.transaction_type,
+                deposit_required: dep_required,
+                monthly_rent_required: rent_required,
+            });
+        }
+        if new_monthly_rent.is_some() != rent_required {
+            return Err(ListingError::TransactionFieldsMismatch {
+                transaction_type: self.transaction_type,
+                deposit_required: dep_required,
+                monthly_rent_required: rent_required,
+            });
+        }
+
+        if let Some(t) = update.title {
+            self.title = t;
+        }
+        if let Some(d) = update.description {
+            self.description = d;
+        }
+        if let Some(p) = update.price {
+            self.price = p;
+        }
+        self.deposit = new_deposit;
+        self.monthly_rent = new_monthly_rent;
+        if let Some(a) = update.area {
+            self.area = a;
+        }
+        if let Some(g) = update.geom_point {
+            self.geom_point = g;
+        }
+        if let Some(c) = update.contact_visibility {
+            self.contact_visibility = c;
+        }
+
+        self.version += 1;
+        self.updated_at = at;
+        Ok(())
+    }
+}
+
+/// `Listing::update_editable_fields` 의 partial-update 페이로드.
+///
+/// 외부 `Option` = "변경 의도 있음" / 내부 `Option` (`deposit` / `monthly_rent` /
+/// `geom_point`) = 실제 값 (`None` 으로 clear 가능). 이 두-단계 Option 패턴이
+/// partial update 의 표준 — `null` 로 clear 와 "필드 미언급" 을 구분.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ListingUpdate {
+    /// 제목 (변경 의도 있음 = `Some`).
+    pub title: Option<ListingTitle>,
+    /// 설명.
+    pub description: Option<Description>,
+    /// 가격.
+    pub price: Option<MoneyKrw>,
+    /// 보증금 — 외부 `Some` = 변경, 내부 `None` = clear (Sale 매물).
+    pub deposit: Option<Option<MoneyKrw>>,
+    /// 월세 — 동일 패턴.
+    pub monthly_rent: Option<Option<MoneyKrw>>,
+    /// 면적.
+    pub area: Option<AreaM2>,
+    /// 좌표 — 외부 `Some` = 변경, 내부 `None` = 좌표 제거.
+    pub geom_point: Option<Option<PointSrid>>,
+    /// 연락처 공개 범위.
+    pub contact_visibility: Option<ContactVisibility>,
 }
 
 // Tests in sibling files via #[path] (anticipate >500 lines combined).
