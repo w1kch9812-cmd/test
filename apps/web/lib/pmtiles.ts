@@ -70,7 +70,9 @@ export async function registerPmtilesSourceType(mb: MapboxGLLike): Promise<boole
   return await new Promise<boolean>((resolve) => {
     mb.addSourceType?.("pmtiles", SourceClass, (err) => {
       if (err) {
-        console.warn("[pmtiles] addSourceType 실패:", err.message);
+        // err 가 string (Naver fork 의 loadWorkerSource catch 블록) 또는 Error 객체.
+        const msg = typeof err === "string" ? err : (err?.message ?? JSON.stringify(err));
+        console.warn("[pmtiles] addSourceType (workerSourceURL importScripts) 실패:", msg);
         resolve(false);
         return;
       }

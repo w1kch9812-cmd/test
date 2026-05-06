@@ -4,6 +4,7 @@ import { pinIconHtml } from "@/components/listings/listing-pin";
 import { useListingsQuery } from "@/lib/listings/use-listings-query";
 import { loadNaverMaps } from "@/lib/naver-maps";
 import { type MapboxGLLike, registerPmtilesSourceType, waitForMapbox } from "@/lib/pmtiles";
+import { ensureSwActive } from "@/lib/sw-register";
 import { useListingsStore } from "@/stores/listings";
 
 /**
@@ -207,13 +208,15 @@ export function ListingMap() {
 
       // mapbox-gl 인스턴스 polling → addSourceType 등록 → PMTiles source 등록.
       // ADR 0019: server proxy 폐기, 표준 mapbox-gl v2 path.
-      waitForMapbox(map)
-        .then(async (mb) => {
+      // ADR 0019: Service Worker 활성 보장 *먼저* — 첫 로드 race handle.
+      // SW 가 /__pmtiles__/ URL 캡처해야 mapbox-gl 의 vector tile fetch 가 PMTiles 변환됨.
+      // SW 미지원 / register 실패 시 ensureSwActive 가 silent fallback (지도 본체 정상).
+      Promise.all([waitForMapbox(map), ensureSwActive()])
+        .then(async ([mb]) => {
           if (cancelled) return;
           if (process.env.NODE_ENV !== "production") {
             (window as unknown as Record<string, unknown>).__listingMb = mb;
           }
-          // SourceType 등록 *먼저* — 그 후 addSource(type:"pmtiles") 가능.
           const ok = await registerPmtilesSourceType(mb);
           if (cancelled) return;
           if (!ok) {

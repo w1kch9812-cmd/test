@@ -54,6 +54,9 @@ AGENTS.local.md
 var/
 # Next.js public 에 복사되는 PMTiles (재생성 가능, R2 우선).
 apps/web/public/pmtiles/
+# SP9 ADR 0019 — Service Worker bundle (esbuild build 결과, source 는 lib/workers/).
+apps/web/public/sw-pmtiles.js
+apps/web/public/pmtiles-worker.js
 .cache/
 .temp/
 .tmp/

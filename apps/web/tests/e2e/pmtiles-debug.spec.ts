@@ -27,7 +27,10 @@ async function plantSession(): Promise<string> {
   return sid;
 }
 
-test("ADR 0019 spike — addSourceType + direct byte-range fetch", async ({ page, context }) => {
+test("ADR 0019 A2 + SW — VectorTileSource subclass + Service Worker transport", async ({
+  page,
+  context,
+}) => {
   test.setTimeout(120_000);
 
   const sid = await plantSession();
@@ -45,9 +48,22 @@ test("ADR 0019 spike — addSourceType + direct byte-range fetch", async ({ page
   const consoleMessages: string[] = [];
   const networkLog: { url: string; status: number; range?: string }[] = [];
   page.on("console", (m) => consoleMessages.push(`[${m.type()}] ${m.text()}`));
+  // mapbox-gl worker (Naver SDK 가 만든 web worker) console capture
+  context.on("page", (p) => {
+    p.on("console", (m) => consoleMessages.push(`[page-console ${m.type()}] ${m.text()}`));
+  });
+  page.on("worker", (worker) => {
+    consoleMessages.push(`[worker created] ${worker.url()}`);
+    // Web Worker 의 console.log 는 page.on("console") 에 자동 capture 됨 (Playwright 가)
+  });
   page.on("response", (r) => {
     const u = r.url();
-    if (u.includes("/pmtiles/") || u.includes("/api/tiles/")) {
+    if (
+      u.includes("/pmtiles/") ||
+      u.includes("/__pmtiles__/") ||
+      u.includes("/sw-pmtiles") ||
+      u.includes("/api/tiles/")
+    ) {
       networkLog.push({
         url: u,
         status: r.status(),
@@ -110,9 +126,12 @@ test("ADR 0019 spike — addSourceType + direct byte-range fetch", async ({ page
   console.log("\n=== addSourceType spike result ===");
   console.log(JSON.stringify(result, null, 2));
 
-  console.log("\n=== Browser console (filtered for pmtiles/error) ===");
+  console.log("\n=== Browser console (filtered) ===");
   for (const m of consoleMessages) {
-    if (/pmtiles|addSourceType|error|warn/i.test(m)) console.log(m);
+    if (
+      /pmtiles|addSourceType|error|warn|sw-register|controllerchange|register|sw-pmtiles/i.test(m)
+    )
+      console.log(m);
   }
 
   console.log("\n=== PMTiles + tiles network requests ===");

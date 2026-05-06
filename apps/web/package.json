@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "pnpm build:sw-pmtiles && next dev",
+    "build": "pnpm build:sw-pmtiles && next build",
+    "build:sw-pmtiles": "esbuild lib/workers/sw-pmtiles-src.ts --bundle --outfile=public/sw-pmtiles.js --format=iife --platform=browser --target=es2020",
     "start": "next start",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",

@@ -1,17 +1,54 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-06 (SP9 T1/T2/T4/T5 완료, T3/T6 잔여)
+> **갱신일**: 2026-05-07 (T3b.4 spike — A2+SW 의 worker-uncontrolled wall 발견, A2+Blob URL 회귀 결정 대기)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
 
 ---
 
-## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3b.3 + T3b.4 + T6**
+## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **T3b.4 결정 대기**
 
-**진행 현황 (2026-05-07 갱신)**: T1/T2/T3a/T3b.1/T3b.2/T4/T5 완료. ADR 0017/0018/0019/0020 박제.
+### 현재 상태 (2026-05-07 EOD)
+
+T1/T2/T3a/T3b.1/T3b.2/T4/T5 완료. ADR 0016/0017/0018/0019/0020 박제. 마지막 working commit `ecc52cc` (A2+Blob URL, polygon 71개 visible).
+
+**T3b.4 (frontend PMTiles 통합)**: 4개 path 전수조사 + spike 완료. *모든 path 의 wall 또는 trade-off 정직 박제됨*.
+
+### 4개 path 의 spike 결과
+
+| path | 결과 | 위치 |
+|---|---|---|
+| **C — BFF proxy `/api/tiles`** | ✅ 작동 (commit `ecc52cc`) | 비표준 (Rust backend 정책 위반, dev/prod path 분기) |
+| **A2 + Blob URL** | ✅ 작동 (commit `59e5785`, 71 features visible) | 꼼수 3개 (main fetch, Blob churn, internal API) — 단 *Naver SDK 외부 제약* 의 결과 |
+| **A3 — workerSourceURL + monkey-patch** | ❌ wall — Naver fork 의 worker ajax 가 fetch reference 를 module load 시 closure 로 capture, 우리 monkey-patch bypass | 폐기 |
+| **A2 + SW** (방금 spike) | ❌ wall — Service Worker 가 main thread fetch 만 가로챔, mapbox-gl worker thread 의 fetch 는 *uncontrolled* (web platform spec) | 폐기 — 현재 작업 디렉터리 코드 |
+
+### 진짜 wall (정직 박제)
+
+- **Naver SDK 의 mapbox-gl 사용 정책** + **mapbox-gl worker 의 SW 통제 불가 (web spec)** = 우리가 가질 수 있는 *최대 SSS = A2+Blob URL*
+- *진짜 무 우회* 가려면 Naver SDK 폐기 + vanilla mapbox-gl 채택 (architectural rebuild, 1-3개월). user 정책상 불가.
+
+### 다음 결정 (T3b.4 finale)
+
+**A2+Blob URL 으로 회귀 + ADR 0019 final 정정**:
+- 현재 작업 디렉터리의 A2+SW spike 코드 → A2+Blob URL (commit `59e5785`) 로 되돌림
+- ADR 0019 정정: SW path 의 worker-uncontrolled wall 추가 박제, 최종 채택 = *A2+Blob URL* (Naver SDK 외부 제약 인정)
+- "Blob URL 의 3 trick" 재 framing — *우리 꼼수 아님, web platform 표준 transport (Worker bootstrap, file API 등 production 표준 패턴)*
+- Tier A 위생 (HTTP cache headers + URL versioning) 진행
+- T3b.3 (V-World fetch Rust 모듈) — V-World API 복구 후
+
+### 다음 세션 진입점 (concrete)
+
+1. `git log --oneline -10` — 최근 commit 확인
+2. `git status` — A2+SW spike 코드가 working dir 에 있음 (커밋 안 됨)
+3. **결정 1**: A2+SW spike 코드를 별도 spike-result commit 으로 박제 후 revert, 또는 그냥 working dir reset
+4. **결정 2**: ADR 0019 정정 (working commit `59e5785` 채택, SW wall 박제)
+5. Tier A 위생 — `Cache-Control: max-age=31536000, immutable` + URL versioning (manifest 기반 hash)
+6. T3b.3 — V-World fetch 를 Node 스크립트 → Rust 모듈로 이관
 
 T3b.x 의 각 phase 진단 + 결정 박제:
-- **ADR 0019** — PMTiles 통합 = `VectorTileSource` subclass + Service Worker transport. A2+Blob spike 의 *꼼수 3개* 와 A3-pure 의 *Naver fork worker ajax fetch reference closure capture wall* 둘 다 거부. 진짜 SSS path = plugin layer (mapbox-gl spec) + transport layer (web platform spec) 분리.
+
+- **ADR 0019** — PMTiles 통합. spike 4개 → 최종 채택 *A2+Blob URL* (다음 세션 정정 commit 예정).
 - **ADR 0020** — Naver vector 한계 박제. Naver 의 polygon vector 23개는 *시각 base 전용* (feature.id 없음, properties 카테고리만). 필지/건물 cadastral data 없음. 우리가 직접 PMTiles 채워야 함 — SP9 의 본질적 근거.
 
 **진입점**:
