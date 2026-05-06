@@ -31,26 +31,21 @@ export const CONTACT_VISIBILITIES = ["public", "login_required", "verified_only"
 
 const PNU_REGEX = /^\d{19}$/;
 
+// zod 4: errorMap → `error` callback, invalid_type_error 제거 (메시지는 fallback
+// custom validator 또는 issue.message 처리). enum 메시지는 default 가 충분.
 const baseListingFields = z.object({
   parcel_pnu: z.string().regex(PNU_REGEX, "PNU 는 19자리 숫자여야 해요"),
-  listing_type: z.enum(LISTING_TYPES, {
-    errorMap: () => ({ message: "매물 유형이 올바르지 않아요" }),
-  }),
-  transaction_type: z.enum(TRANSACTION_TYPES, {
-    errorMap: () => ({ message: "거래 유형이 올바르지 않아요" }),
-  }),
-  price_krw: z
-    .number({ invalid_type_error: "가격은 숫자여야 해요" })
-    .int()
-    .positive("가격은 0 보다 커야 해요"),
+  listing_type: z.enum(LISTING_TYPES),
+  transaction_type: z.enum(TRANSACTION_TYPES),
+  price_krw: z.number().int().positive("가격은 0 보다 커야 해요"),
   deposit_krw: z.number().int().positive().nullable(),
   monthly_rent_krw: z.number().int().positive().nullable(),
-  area_m2: z
-    .number({ invalid_type_error: "면적은 숫자여야 해요" })
-    .positive("면적은 0 보다 커야 해요"),
+  area_m2: z.number().positive("면적은 0 보다 커야 해요"),
   title: z.string().min(1, "제목을 입력해 주세요").max(200, "제목은 200자 이하여야 해요"),
   description: z.string().max(5000, "설명은 5000자 이하여야 해요"),
-  contact_visibility: z.enum(CONTACT_VISIBILITIES).default("login_required"),
+  // 폼 default 는 react-hook-form 의 defaultValues 가 셋팅 — schema 의 default
+  // 는 input/output type 불일치 (zod 4) 로 react-hook-form Resolver 와 충돌.
+  contact_visibility: z.enum(CONTACT_VISIBILITIES),
   geom_point: z
     .object({
       lng: z.number().gte(-180).lte(180),

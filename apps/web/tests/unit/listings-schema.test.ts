@@ -35,9 +35,7 @@ describe("createListingSchema cross-field invariant", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      const fields = result.error.issues.map((i: { path: (string | number)[] }) =>
-        i.path.join("."),
-      );
+      const fields = result.error.issues.map((i) => i.path.map(String).join("."));
       expect(fields).toContain("deposit_krw");
     }
   });
@@ -81,9 +79,7 @@ describe("createListingSchema cross-field invariant", () => {
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      const fields = result.error.issues.map((i: { path: (string | number)[] }) =>
-        i.path.join("."),
-      );
+      const fields = result.error.issues.map((i) => i.path.map(String).join("."));
       expect(fields).toContain("monthly_rent_krw");
     }
   });
