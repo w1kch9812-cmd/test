@@ -10,6 +10,9 @@ import { sanitizeReturnTo } from "@/lib/url";
 const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
+// SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
+const BROKER_PATHS = ["/listings/new", "/listings/edit"];
+const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -17,6 +20,14 @@ function isPublic(pathname: string): boolean {
 
 function isAdmin(pathname: string): boolean {
   return ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isBrokerGated(pathname: string): boolean {
+  // /listings/new exact + /listings/<id>/edit (정규식 미사용 단순 매칭).
+  if (pathname === "/listings/new" || pathname.endsWith("/edit")) {
+    return pathname.startsWith("/listings/");
+  }
+  return false;
 }
 
 async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null> {
@@ -124,6 +135,10 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isAdmin(url.pathname) && !ADMIN_ROLES.has(session.role)) {
+    return NextResponse.redirect(new URL("/forbidden", req.url));
+  }
+  // SP6-iv: 매물 등록/수정 broker (또는 admin) 만 진입.
+  if (isBrokerGated(url.pathname) && !BROKER_ALLOWED_ROLES.has(session.role)) {
     return NextResponse.redirect(new URL("/forbidden", req.url));
   }
 
