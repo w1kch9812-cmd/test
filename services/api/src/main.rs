@@ -44,6 +44,8 @@ mod http {
     pub mod request_id;
 }
 
+mod observability;
+
 mod routes {
     pub mod admin_listings;
     pub mod auth_event;
@@ -134,6 +136,10 @@ async fn get_user(
 #[allow(clippy::too_many_lines)] // env 로딩 + state 조립 + router 7 endpoint — 분해 시 중복.
 #[tokio::main]
 async fn main() {
+    // SP-Obs T5: Sentry init -- 가장 먼저 (panic hook 등록 우선). DSN 미설정 시 None.
+    // _sentry_guard 가 main lifetime 동안 유지 — drop 시 flush.
+    let _sentry_guard = observability::init_sentry();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

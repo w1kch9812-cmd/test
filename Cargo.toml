@@ -65,6 +65,9 @@ print_stderr = "deny"
 [workspace.dependencies]
 # 추가 예정 (Plan 2b/2c): utoipa
 async-trait = "0.1"
+# SP-Obs T5: Sentry SDK — env-driven, silent disabled if no SENTRY_DSN
+sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
+sentry-tracing = "0.34"
 deadpool-redis = "0.18"
 axum = "0.7"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
