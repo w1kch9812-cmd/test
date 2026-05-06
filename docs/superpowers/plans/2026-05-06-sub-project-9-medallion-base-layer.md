@@ -54,6 +54,18 @@ ALTER TABLE listing
 
 ## T3 — ETL Rust binary (Bronze 다운 + tippecanoe + R2 업로드)
 
+> **분해 (2026-05-07 갱신)**: T3 가 무거워 5 task 로 분해됨. 진행 현황:
+>
+> | | 내용 | 상태 | commit |
+> |---|---|---|---|
+> | T3a | etl-base-layer crate + Bronze SHP 다운 + sha256 + manifest | ✅ | `3dcf027` |
+> | T3b.1 | R2 업로드 모듈 (`aws-sdk-s3`) + Bronze archive PUT + GoldManifest skeleton | ✅ | `4302ff4` |
+> | T3b.2 | Gold pipeline — ogr2ogr + tippecanoe spawn (Win→WSL auto) + CLI gold subcommand | ✅ | `a12becd` |
+> | T3b.3 | V-World fetch Rust 모듈 (Node 스크립트 prototype 폐기) | ⏳ | - |
+> | T3b.4 | Frontend PMTiles 통합 — ADR 0019 (PMTilesSource subclass + Service Worker) | ⏳ | - |
+>
+> T3b.4 우선 (사용자 폴리곤 시각 확인). T3b.3 (자동화) 는 V-World API 복구 시점에 진행.
+
 **대상**: `services/etl-base-layer/` (신규 crate)
 
 ```

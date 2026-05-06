@@ -6,9 +6,13 @@
 
 ---
 
-## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3b.2 + T6 (2일)**
+## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3b.3 + T3b.4 + T6**
 
-**진행 현황**: T1, T2, T3a, T3b.1, T4, T5 완료. ADR 0017 (마커 렌더) + 0018 (PNU-First identity) 박제. T3 는 무거워서 T3a (Bronze 다운로드 + sha256) → T3b.1 (R2 업로드 + GoldManifest skeleton) → T3b.2 (ogr2ogr/tippecanoe + verify + activate) 로 3 분할.
+**진행 현황 (2026-05-07 갱신)**: T1/T2/T3a/T3b.1/T3b.2/T4/T5 완료. ADR 0017/0018/0019/0020 박제.
+
+T3b.x 의 각 phase 진단 + 결정 박제:
+- **ADR 0019** — PMTiles 통합 = `VectorTileSource` subclass + Service Worker transport. A2+Blob spike 의 *꼼수 3개* 와 A3-pure 의 *Naver fork worker ajax fetch reference closure capture wall* 둘 다 거부. 진짜 SSS path = plugin layer (mapbox-gl spec) + transport layer (web platform spec) 분리.
+- **ADR 0020** — Naver vector 한계 박제. Naver 의 polygon vector 23개는 *시각 base 전용* (feature.id 없음, properties 카테고리만). 필지/건물 cadastral data 없음. 우리가 직접 PMTiles 채워야 함 — SP9 의 본질적 근거.
 
 **진입점**:
 
@@ -23,14 +27,32 @@
 |---|---|---|---|
 | T1 | docs commit | ✅ | `e7a3fd8` |
 | T2 | listing denormalize 컬럼 마이그레이션 | ✅ | `0864270` |
-| T3a | `services/etl-base-layer/` Bronze SHP fetch + sha256 + 로컬 manifest | ✅ | `3dcf027` |
-| T3b.1 | R2 업로드 (`aws-sdk-s3`) + Bronze archive + manifest R2 PUT + GoldManifest skeleton | ✅ | (이번 세션) |
-| T3b.2 | ogr2ogr (EPSG:5179→4326) + tippecanoe (parcels/admin/complex) + verify + Gold manifest hot-swap | ⏳ | — |
-| T4 | `crates/parcel-lookup/` PNU lookup + listing 등록 hooks + 검색 필터 | ✅ | `e87d7d6` |
-| T5 | 프론트 PMTiles 통합 + 폴리곤 클릭 모델 + ParcelInfoPanel | ✅ | `ae48c54` |
-| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 | ⏳ | — |
+| T3a | etl-base-layer crate + Bronze SHP 다운 + sha256 + manifest | ✅ | `3dcf027` |
+| T3b.1 | R2 업로드 (`aws-sdk-s3`) + Bronze archive + GoldManifest skeleton | ✅ | `4302ff4` |
+| T3b.2 | Gold pipeline — ogr2ogr + tippecanoe spawn (Win→WSL) + CLI gold subcommand | ✅ | `a12becd` |
+| T3b.3 | **V-World fetch Rust 모듈** (Node 스크립트 prototype 폐기, 자동화 완성) | ⏳ | — |
+| T3b.4 | **Frontend PMTiles 통합** — ADR 0019 의 PMTilesSource (VectorTileSource subclass) + Service Worker transport + Tier A 위생 (HTTP cache + URL versioning) | ⏳ | — |
+| T4 | parcel-lookup crate + listing 등록 hooks + 검색 필터 | ✅ | `e87d7d6` |
+| T5 | 프론트 PMTiles 통합 (T3b.4 가 *재구현*) | ✅ | `ae48c54` |
+| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 + Tier 1 (자동 업데이트 SW) + Tier 3 (관측성 SP7) | ⏳ | — |
 
-**T3b.2 시작 진입점**:
+**T3b.4 시작 진입점 (다음 단계)**:
+
+- ADR 0019 채택 = **`VectorTileSource` subclass + Service Worker transport**.
+- 신규 파일:
+  - `apps/web/lib/workers/sw-pmtiles-src.ts` (Service Worker source — pmtiles JS lib + `/__pmtiles__/` fetch handler)
+  - `apps/web/public/sw-pmtiles.js` (esbuild bundle 결과, gitignore)
+  - `apps/web/lib/sw-register.ts` (등록 + skipWaiting + controllerchange 대기)
+  - `apps/web/lib/pmtiles-source.ts` (`createPMTilesSourceClass(mb)` factory — VectorTileSource subclass)
+  - `apps/web/lib/pmtiles.ts` (`registerPmtilesSourceType(mb)` + `waitForMapbox(map)`)
+- 수정:
+  - `apps/web/components/listings/listing-map.tsx` — `await ensureSwActive()` → `registerPmtilesSourceType` → `addSource({type:"pmtiles"})`
+  - `apps/web/proxy.ts` — `/sw-pmtiles.js` + `/__pmtiles__` PUBLIC_PATHS, `/api/tiles` 제거
+- 폐기:
+  - `apps/web/app/api/tiles/[...path]/route.ts` (BFF proxy, ADR 0019 폐기)
+  - A2 + Blob URL 로직 (T3b.2 commit `59e5785` 의 lib/pmtiles-source.ts) → SW path 로 교체
+
+**T3b.3 시작 진입점**:
 
 - 기존 crate 확장: `services/etl-base-layer/`
 - 신규 모듈 (제안): `gold/{shp_to_geojson.rs, tippecanoe.rs, build.rs, activate.rs}` + `verify.rs`
