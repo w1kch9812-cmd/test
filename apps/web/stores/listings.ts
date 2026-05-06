@@ -27,6 +27,9 @@ const DEFAULT_FILTERS: ListingFilters = {
   minPriceKrw: undefined,
   maxPriceKrw: undefined,
   sort: "created_at_desc" as SortKey,
+  pnu: undefined,
+  adminCode: undefined,
+  landUseType: undefined,
 };
 
 export const useListingsStore = create<ListingsState>((set) => ({

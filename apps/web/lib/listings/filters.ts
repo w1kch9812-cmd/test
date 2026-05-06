@@ -18,6 +18,12 @@ export interface ListingFilters {
   minPriceKrw: number | undefined;
   maxPriceKrw: number | undefined;
   sort: SortKey;
+  /** 필지 PNU (19자리) — 폴리곤 클릭 시 (ADR 0018, SP9 T5). */
+  pnu: string | undefined;
+  /** 행정구역 코드 prefix (시도 2 / 시군구 5 / 읍면동 8자리). */
+  adminCode: string | undefined;
+  /** 지목 (예: `factory_site`). */
+  landUseType: string | undefined;
 }
 
 const VALID_TYPES: ListingType[] = [
@@ -67,6 +73,9 @@ export function parseFiltersFromSearchParams(sp: URLSearchParams): ListingFilter
     minPriceKrw: parseNumber(sp.get("min_price_krw")),
     maxPriceKrw: parseNumber(sp.get("max_price_krw")),
     sort,
+    pnu: sp.get("pnu") ?? undefined,
+    adminCode: sp.get("admin_code") ?? undefined,
+    landUseType: sp.get("land_use_type") ?? undefined,
   };
 }
 
@@ -79,5 +88,8 @@ export function toSearchParams(f: ListingFilters): URLSearchParams {
   if (f.minPriceKrw !== undefined) sp.set("min_price_krw", String(f.minPriceKrw));
   if (f.maxPriceKrw !== undefined) sp.set("max_price_krw", String(f.maxPriceKrw));
   if (f.sort !== "created_at_desc") sp.set("sort", f.sort);
+  if (f.pnu) sp.set("pnu", f.pnu);
+  if (f.adminCode) sp.set("admin_code", f.adminCode);
+  if (f.landUseType) sp.set("land_use_type", f.landUseType);
   return sp;
 }

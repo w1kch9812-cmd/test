@@ -40,6 +40,7 @@
     },
     "empty": "조건에 맞는 매물이 없어요",
     "loading": "매물을 불러오는 중이에요",
+    "clearPnuFilter": "필지 필터 해제",
     "errors": {
       "fetchFailed": "매물을 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
     }

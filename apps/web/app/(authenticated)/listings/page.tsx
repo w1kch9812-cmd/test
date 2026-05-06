@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { FilterBar } from "@/components/listings/filter-bar";
 import { ListingCardList } from "@/components/listings/listing-card-list";
 import { ListingMap } from "@/components/listings/listing-map";
+import { ParcelInfoPanel } from "@/components/listings/parcel-info-panel";
 import { SearchBar } from "@/components/listings/search-bar";
 
 export default async function ListingsPage() {
@@ -26,6 +27,9 @@ export default async function ListingsPage() {
           <ListingMap />
         </section>
         <aside className="overflow-y-auto border-l border-[var(--color-hairline)] bg-[var(--color-canvas)]">
+          <div className="px-4 pt-3">
+            <ParcelInfoPanel />
+          </div>
           <ListingCardList />
         </aside>
       </div>

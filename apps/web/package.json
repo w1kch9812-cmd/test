@@ -30,6 +30,7 @@
     "next-intl": "^4.11.0",
     "oauth4webapi": "^3.6.1",
     "pino": "^9.5.0",
+    "pmtiles": "^4.4.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.75.0",
