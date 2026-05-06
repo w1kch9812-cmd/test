@@ -61,3 +61,4 @@
 | [0012](./0012-pipeline-visualization-react-flow.md) | 파이프라인 시각화 — React Flow (xyflow) | Accepted |
 | [0013](./0013-listing-search-naver-maps.md) | Listing 검색 지도 vendor — Naver Maps (SP6-ii) | Accepted |
 | [0014](./0014-base-layer-defer-pmtiles.md) | 지도 base layer (전국 필지 polygon) — 보류 (R2 PMTiles SSS 부적합) | Accepted (defer) |
+| [0015](./0015-v-world-acl-rearchitecture.md) | V-World ACL 재설계 — fixture-driven, layer-decomposed, envelope-aware | Accepted |

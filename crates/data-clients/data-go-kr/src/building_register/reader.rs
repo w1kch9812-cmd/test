@@ -22,12 +22,16 @@ use crate::building_register::parser::parse_building_title;
 use crate::client::DataGoKrClient;
 use crate::pnu_split;
 
-/// V-World 용도지역 레이어 — 필지 폴리곤이 같이 옴 (`LT_C_UQ111`).
+/// V-World 연속지적도 레이어 — `LP_PA_CBND_BUBUN`.
 ///
-/// data.go.kr 건축물대장 응답에 폴리곤 없음 → V-World 의 필지 폴리곤을
-/// `Building.geom` 으로 *합성*. 정확한 건물 footprint 는 FU 40 (R2 PMTiles
-/// 또는 V-World 건물 레이어) 에서 교체.
-const VWORLD_LAYER_USE_ZONE: &str = "LT_C_UQ111";
+/// data.go.kr 건축물대장 응답에 폴리곤 없음 → V-World 필지 폴리곤(연속지적도)을
+/// `Building.geom` 으로 *합성* (approximation). 정확한 건물 footprint 는 FU 40
+/// (R2 PMTiles 또는 V-World 건물 레이어) 에서 교체.
+///
+/// **레이어 선택 이유**: PNU `attrFilter` 가 작동하는 표준 레이어. 옛
+/// `LT_C_UQ111` (용도지역) 은 `pnu` attribute 미보유 — `INVALID_RANGE` 에러.
+/// → ADR 0015 (V-World ACL re-architecture) 참조.
+const VWORLD_LAYER_PARCEL_BOUNDARY: &str = "LP_PA_CBND_BUBUN";
 
 /// raw_capture 의 `source` 라벨 — `parcel_external_data.source` 컬럼 그대로.
 const RAW_CAPTURE_SOURCE: &str = "data_go_kr_building";
@@ -60,19 +64,31 @@ impl DataGoKrBuildingReader {
     }
 
     /// V-World 에서 필지 폴리곤만 추출. 다음 중 하나라도 실패면 `Err(Fetch)`.
-    /// `parser::parse_parcel` 재사용 — feature 0 일 때 None 인데, 본 함수는
-    /// None 도 에러로 (geom 없으면 `Building.geom` invariant 위반).
+    ///
+    /// `Building.geom: PolygonSrid` 호환을 위해 `MultiPolygonSrid` 에서 첫
+    /// polygon 만 추출. FU 40 에서 R2 PMTiles 건물 footprint 로 교체될 placeholder.
+    /// feature 0 일 때 None 인데, 본 함수는 None 도 에러로 (geom 없으면
+    /// `Building.geom` invariant 위반).
     async fn fetch_polygon(&self, pnu: &Pnu) -> Result<PolygonSrid, ReaderError> {
         let raw = self
             .vworld
-            .fetch_feature_by_pnu(VWORLD_LAYER_USE_ZONE, pnu.as_str())
+            .fetch_feature_by_pnu(VWORLD_LAYER_PARCEL_BOUNDARY, pnu.as_str())
             .await
             .map_err(|e| ReaderError::Fetch(format!("vworld geom fetch: {e}")))?;
 
-        let parcel_opt = vworld_client::parser::parse_parcel(&raw, Utc::now())
-            .map_err(|e| ReaderError::Parse(format!("vworld geom parse: {e}")))?;
+        let parcel_opt =
+            vworld_client::layers::parcel_boundary::parse_parcel_boundary(&raw, Utc::now())
+                .map_err(|e| ReaderError::Parse(format!("vworld geom parse: {e}")))?;
         match parcel_opt {
-            Some(parcel) => Ok(parcel.geom),
+            Some(parcel) => {
+                // MultiPolygon → 첫 polygon 발췌 (Building.geom 호환).
+                // 좌표는 이미 MultiPolygonSrid::try_new_wgs84 에서 검증됨 — 재검증은
+                // PolygonSrid 보장 일관성을 위한 정직한 비용.
+                let first = parcel.geom.first_polygon().clone();
+                PolygonSrid::try_new_wgs84(first).map_err(|e| {
+                    ReaderError::Parse(format!("vworld first polygon invalid: {e}"))
+                })
+            }
             None => Err(ReaderError::Fetch(format!(
                 "vworld returned no feature for pnu '{}' — cannot synthesize Building.geom",
                 pnu.as_str()
