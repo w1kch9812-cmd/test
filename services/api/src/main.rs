@@ -41,6 +41,7 @@ use user_domain::repository::UserRepository;
 mod http {
     pub mod mutation_ctx;
     pub mod problem;
+    pub mod request_id;
 }
 
 mod routes {
@@ -336,7 +337,10 @@ async fn main() {
         .merge(admin_router)
         .merge(notifications_router)
         .merge(internal)
-        .layer(TraceLayer::new_for_http());
+        // SP-Obs T2: X-Request-Id 가 outermost — TraceLayer 와 auth_layer 보다 먼저
+        // 실행돼 모든 trace 가 같은 request_id 공유. 인증 실패해도 trace ID 부여.
+        .layer(TraceLayer::new_for_http())
+        .layer(middleware::from_fn(http::request_id::request_id_layer));
 
     let addr = "0.0.0.0:8080";
     tracing::info!("api listening on {addr}");

@@ -20,10 +20,18 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
 
   const api = createServerApi();
 
+  // SP-Obs T2: X-Request-Id propagation -- 프론트가 보낸 ID 또는 자동 생성.
+  // backend Axum middleware 가 동일 ID 를 응답 echo + tracing span 에 attach.
+  const requestId =
+    req.headers.get("x-request-id") ??
+    `req_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 26).toUpperCase()}`;
+
   try {
+    const headers: Record<string, string> = { "x-request-id": requestId };
+    if (bearer) headers.Authorization = `Bearer ${bearer}`;
     const requestInit: KyOptions = {
       method: req.method,
-      headers: bearer ? { Authorization: `Bearer ${bearer}` } : {},
+      headers,
     };
 
     if (search) {
@@ -43,9 +51,14 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
     const response = await api(path, requestInit);
     const text = await response.text();
     const contentType = response.headers.get("content-type") ?? "text/plain";
+    // SP-Obs T2: backend echo 받은 X-Request-Id 응답 propagate (debugging UX).
+    const responseRequestId = response.headers.get("x-request-id") ?? requestId;
     return new NextResponse(text, {
       status: response.status,
-      headers: { "content-type": contentType },
+      headers: {
+        "content-type": contentType,
+        "x-request-id": responseRequestId,
+      },
     });
   } catch (err: unknown) {
     if (isHTTPError(err)) {
