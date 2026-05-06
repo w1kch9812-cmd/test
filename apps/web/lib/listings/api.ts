@@ -24,6 +24,7 @@ export const ListingCardSchema = z.object({
   thumbnail_url: z.string().nullish(),
   view_count: z.number().int(),
   bookmark_count: z.number().int(),
+  is_bookmarked: z.boolean(),
   created_at: z.string(), // ISO 8601
 });
 
@@ -57,4 +58,50 @@ export async function fetchListings(input: FetchListingsInput): Promise<Listings
 
   const json = await api.get(`listings?${sp.toString()}`).json<unknown>();
   return ListingsResponseSchema.parse(json);
+}
+
+// ── SP6-iii: 매물 상세 ──────────────────────────────────────────────────
+
+export const ListingPhotoSchema = z.object({
+  r2_key: z.string(),
+  thumbnail_r2_key: z.string().nullish(),
+  caption: z.string().nullish(),
+  display_order: z.number().int(),
+  content_type: z.string(),
+});
+
+export const ListingDetailSchema = z.object({
+  id: z.string(),
+  owner_id: z.string(),
+  parcel_pnu: z.string(),
+  listing_type: z.string(),
+  transaction_type: z.string(),
+  price_krw: z.number().int(),
+  deposit_krw: z.number().int().nullish(),
+  monthly_rent_krw: z.number().int().nullish(),
+  area_m2: z.number(),
+  title: z.string(),
+  description: z.string(),
+  status: z.string(),
+  contact_visibility: z.string(),
+  geom_point: z.object({ lat: z.number(), lng: z.number() }).nullish(),
+  view_count: z.number().int(),
+  bookmark_count: z.number().int(),
+  is_bookmarked: z.boolean(),
+  version: z.number().int(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  expires_at: z.string().nullish(),
+  photos: z.array(ListingPhotoSchema),
+});
+
+export type ListingDetail = z.infer<typeof ListingDetailSchema>;
+
+/**
+ * `GET /listings/:id` — 매물 상세 fetch.
+ * 404 (매물 미존재 또는 RBAC 차단) → ky `HTTPError` throw.
+ */
+export async function fetchListingDetail(id: string): Promise<ListingDetail> {
+  const json = await api.get(`listings/${id}`).json<unknown>();
+  return ListingDetailSchema.parse(json);
 }

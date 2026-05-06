@@ -44,6 +44,25 @@ export async function createListing(
  * `POST /listings/:id/submit-for-review`. Draft → PendingReview.
  * Returns new `{ id, version, status }`.
  */
+// ── SP6-iii: 북마크 toggle ─────────────────────────────────────────────
+
+/**
+ * `POST /listings/:id/bookmark` — 멱등 UPSERT.
+ * 같은 사용자/매물 두번째 호출은 note 갱신 (서버 멱등 design).
+ */
+export async function addBookmark(listingId: string, note?: string): Promise<void> {
+  await api
+    .post(`listings/${listingId}/bookmark`, { json: { note: note ?? null } })
+    .json<unknown>();
+}
+
+/**
+ * `DELETE /listings/:id/bookmark` — 멱등 (이미 없어도 200).
+ */
+export async function removeBookmark(listingId: string): Promise<void> {
+  await api.delete(`listings/${listingId}/bookmark`);
+}
+
 export async function submitForReview(
   listingId: string,
 ): Promise<{ id: string; version: number; status: string }> {

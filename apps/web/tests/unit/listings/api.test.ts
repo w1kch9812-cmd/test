@@ -16,6 +16,7 @@ describe("ListingCardSchema (zod)", () => {
       lng: 127.0,
       view_count: 0,
       bookmark_count: 0,
+      is_bookmarked: false,
       created_at: "2026-04-12T09:30:00Z",
     };
     const parsed = ListingCardSchema.parse(json);
@@ -38,6 +39,7 @@ describe("ListingCardSchema (zod)", () => {
       lng: 127.0,
       view_count: 0,
       bookmark_count: 0,
+      is_bookmarked: false,
       created_at: "2026-04-12T09:30:00Z",
     };
     const parsed = ListingCardSchema.parse(json);
