@@ -1,28 +1,33 @@
-//! 공짱 `PMTiles` base layer ETL — Bronze SHP 다운로드 단계 (SP9 T3a).
+//! 공짱 `PMTiles` base layer ETL — Bronze SHP 다운로드 + R2 업로드 (SP9 T3a + T3b.1).
 //!
 //! 실행:
 //! ```sh
 //! BRONZE_PARCEL_SHP_URL=https://www.data.go.kr/.../parcel.shp.zip \
 //! BRONZE_DIR=./var/bronze \
+//! R2_ACCOUNT_ID=... R2_ACCESS_KEY=... R2_SECRET_KEY=... R2_BUCKET=gongzzang-static \
 //! cargo run -p etl-base-layer
 //! ```
 //!
-//! 다음 단계 (T3b):
+//! `R2_*` 4 개 미설정 → 로컬 전용 모드 (T3a 호환).
+//!
+//! 다음 단계 (T3b.2):
 //! - SHP → `GeoJSON` 변환 (`ogr2ogr` spawn)
-//! - `tippecanoe` spawn → `PMTiles` 생성
-//! - R2 업로드 (Bronze + Gold)
-//! - manifest hot-swap
+//! - `tippecanoe` spawn → `PMTiles` 생성 (parcels / admin / complex)
+//! - Gold artifact R2 업로드 + verify (강남 PNU + row count Δ < 5%)
+//! - Gold manifest hot-swap (`current_version` 갱신)
 
 #![forbid(unsafe_code)]
 // main.rs: init failure panic 은 정답이라 expect/unwrap 허용.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-// FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b 에서
+// FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b.2 에서
 // retry 정책 함께 검토 (월 1회 cron 이라 외부 dependency 우선순위 낮음).
 #![allow(clippy::disallowed_types)]
 
 mod bronze;
 mod config;
+mod gold;
 mod manifest;
+mod r2_upload;
 
 use std::process::ExitCode;
 
@@ -48,7 +53,8 @@ async fn main() -> ExitCode {
         batch_label = %cfg.batch_label,
         bronze_dir = %cfg.bronze_dir.display(),
         sources = cfg.sources.len(),
-        "starting bronze fetch (SP9 T3a)"
+        r2_active = cfg.r2.is_some(),
+        "starting bronze fetch (SP9 T3a + T3b.1)"
     );
 
     let client = match reqwest::Client::builder()

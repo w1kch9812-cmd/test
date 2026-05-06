@@ -6,9 +6,9 @@
 
 ---
 
-## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3 + T6 (2.5일)**
+## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3b.2 + T6 (2일)**
 
-**진행 현황**: T1, T2, T4, T5 완료. ADR 0017 (마커 렌더) + 0018 (PNU-First identity) 박제. T3 (ETL Rust crate) + T6 (cron) 만 남음.
+**진행 현황**: T1, T2, T3a, T3b.1, T4, T5 완료. ADR 0017 (마커 렌더) + 0018 (PNU-First identity) 박제. T3 는 무거워서 T3a (Bronze 다운로드 + sha256) → T3b.1 (R2 업로드 + GoldManifest skeleton) → T3b.2 (ogr2ogr/tippecanoe + verify + activate) 로 3 분할.
 
 **진입점**:
 
@@ -23,17 +23,22 @@
 |---|---|---|---|
 | T1 | docs commit | ✅ | `e7a3fd8` |
 | T2 | listing denormalize 컬럼 마이그레이션 | ✅ | `0864270` |
-| T3 | `services/etl-base-layer/` Rust binary — Bronze SHP fetch + tippecanoe + R2 upload | ⏳ | — |
+| T3a | `services/etl-base-layer/` Bronze SHP fetch + sha256 + 로컬 manifest | ✅ | `3dcf027` |
+| T3b.1 | R2 업로드 (`aws-sdk-s3`) + Bronze archive + manifest R2 PUT + GoldManifest skeleton | ✅ | (이번 세션) |
+| T3b.2 | ogr2ogr (EPSG:5179→4326) + tippecanoe (parcels/admin/complex) + verify + Gold manifest hot-swap | ⏳ | — |
 | T4 | `crates/parcel-lookup/` PNU lookup + listing 등록 hooks + 검색 필터 | ✅ | `e87d7d6` |
 | T5 | 프론트 PMTiles 통합 + 폴리곤 클릭 모델 + ParcelInfoPanel | ✅ | `ae48c54` |
 | T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 | ⏳ | — |
 
-**T3 시작 진입점**:
+**T3b.2 시작 진입점**:
 
-- 새 crate: `services/etl-base-layer/` (Rust binary)
-- 구조: `bronze/{shp_download,vworld_fetch,manifest}.rs`, `shp_to_geojson.rs`, `tippecanoe.rs`, `r2_upload.rs`, `verify/smoke.rs`
+- 기존 crate 확장: `services/etl-base-layer/`
+- 신규 모듈 (제안): `gold/{shp_to_geojson.rs, tippecanoe.rs, build.rs, activate.rs}` + `verify.rs`
 - CI 의존: tippecanoe binary 빌드 (`make -j` from felt/tippecanoe github), GDAL (`apt install gdal-bin`)
+- 환경변수: `GOLD_VERSION`, `GOLD_PARCEL_LAYER_NAME` 등 (T3b.1 의 `Config::gold_version` field 가 이미 capture)
+- R2 KEY 레이아웃 (T3b.1 README 참조): `<gold_prefix>/<version>/{parcels,admin,complex}.pmtiles` + `<gold_prefix>/manifest.json`
 - 첫 30분: 로컬에서 강남구 시군구 SHP 작은 표본으로 tippecanoe 한 번 돌려보기 (CI 의 큰 빌드 디버깅 비용 회피)
+- verify smoke: pmtiles-rs 또는 wrangler r2 object get 후 `tippecanoe-decode` 로 강남 PNU 1168010100107370000 존재 확인
 
 **T6 시작 진입점**:
 
@@ -45,7 +50,7 @@
 
 **T5 후속 — 프론트 폴리곤 활성화**:
 
-- T3 완료 후 `NEXT_PUBLIC_PMTILES_BASE_URL=https://r2-static/v1/` 환경변수 한 줄 설정 → 폴리곤 layer 자동 활성화 (코드 변경 0)
+- T3b.2 완료 후 `NEXT_PUBLIC_PMTILES_BASE_URL=https://r2-static/v1/` 환경변수 한 줄 설정 → 폴리곤 layer 자동 활성화 (코드 변경 0)
 
 **핵심 architecture (ADR 0016)**:
 
