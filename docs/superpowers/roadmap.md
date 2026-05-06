@@ -1,7 +1,7 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-05 (SP6-foundation 종료 직후)
-> **현재 main**: `<T4 commit>` (SP6-foundation — frontend 인프라 + smoke + e2e + a11y + bundle + CI)
+> **갱신일**: 2026-05-06 (SP6-iv 종료 직후)
+> **현재 main**: `9189163` (SP6-iv-T7 — broker /listings/new 폼)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -30,8 +30,9 @@
 | **FU-i** | 누적 spec 부채 일괄 정리 (6 FU) | T1 (FU 12 prefix `lph_` + FU 13 spec mock SQL ↔ schema + FU 17 trait rustdoc, ac4036a) / T2 (FU 18 already closed by FU 34) / T3 (FU 26 clippy.toml `disallowed-types reqwest::Client`, 30515ae) / T4 (FU 41 Cd primary 매핑 + endpoint URL drift fix + 숫자/문자열 dual 파싱 + 5 fixture + 25 신규 테스트, bae883c) | ✅ |
 | **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
 | **6-foundation** | Frontend 인프라 (Next.js 16 + shadcn + tokens + i18n + UX) | apps/web (Next.js 16.2 + React 19 + Tailwind 4) + packages/ui (shadcn 6 primitives + Pretendard tokens, swap-able) + packages/api-types (utoipa → TS) + 한국어 helper + error/not-found/loading + ky API client + TanStack Query + proxy skeleton + instrumentation.ts (Sentry 자리) + Vitest + Playwright + @axe-core/playwright (WCAG 2.1 AA) + size-limit (bundle < 200KB) + .github/workflows/frontend.yml. SSS 7기둥 모두 ◎ | ✅ |
+| **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / 5 신규 endpoint (POST /listings + PATCH /listings/:id `if-match` OCC + transitions 2 + photo presigned mock + DELETE photo soft-delete) / 4 신규 db integration test (audit_log action 검증) / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
 
-**누적**: 33 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1278 Rust tests (1149 단위 + 129 통합) + 7 frontend unit (Vitest) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
+**누적**: 33 Rust crate + JS workspace (apps/web + packages/ui + packages/api-types), ~1290 Rust tests (1157 단위 + 133 통합) + 17 frontend unit (Vitest, +10 SP6-iv schema) + 3 e2e (Playwright + axe), 5 CI workflow 그린 (frontend 추가), CI clippy `--all-targets` 강화.
 
 **SP5 시리즈 완전 종료**: 13 BC 모두 동일 transactional `save(agg, ctx)` 또는 `insert(agg, ctx)` 패턴. 9 BC (Core+Audit+Pipeline+Operations) 의 SP5-iv 완성에 더해 4 BC (Insights — Bookmark/SearchHistory/AnalysisReport/Notification) 도 정합.
 
@@ -96,11 +97,12 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 ### SP6 시리즈 (Frontend)
 
 - ✅ SP6-foundation: 인프라 (2026-05-05) — Next.js 16 + shadcn + tokens + i18n + UX + ky/TanStack Query + Vitest/Playwright/axe/size-limit + frontend CI workflow
-- 미착수 SP6-i: auth flow + 화면 (login/signup/profile + Zitadel OIDC + iron-session + RBAC + middleware, 2-3일)
-- 미착수 SP6-ii: 매물 검색 + Naver Maps SDK (2-3일)
+- ✅ SP6-i: auth flow (Zitadel OIDC + Redis session + cookie + audit + V004 + e2e) — 2026-05-05
+- ✅ SP6-ii: 매물 검색 + Naver Maps + ListingCard + FilterBar + Pretendard self-host + e2e — 2026-05-05~06
 - 미착수 SP6-iii: 매물 상세 + 북마크 (1-2일)
-- 미착수 SP6-iv: 매물 등록 (broker 전용, 2일)
+- ✅ SP6-iv: 매물 등록 (broker POST/PATCH/submit/revise/photos backend + /listings/new 폼 + 10 Vitest + 4 DB integration test) — 2026-05-06
 - 미착수 SP6-v: 알림 (1일)
+- 미착수 FU 56: SP6-iv 후속 — `/listings/[id]/edit` PATCH 화면 + PhotoUploader (R2 통합 후) + e2e 3 (broker 등록 / non-broker 차단 / 폼 cross-field)
 
 ---
 
