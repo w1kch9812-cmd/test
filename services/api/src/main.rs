@@ -37,6 +37,7 @@ use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
 mod http {
+    pub mod mutation_ctx;
     pub mod problem;
 }
 

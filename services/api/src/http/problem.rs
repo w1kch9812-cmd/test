@@ -59,6 +59,72 @@ pub fn problem(
     }
 }
 
+/// 도메인 [`ListingError`] → RFC 7807 매핑 (SP6-iv).
+///
+/// - `TransactionFieldsMismatch` → 400 `transaction-fields-mismatch`
+/// - `InvalidTransition` → 409 `invalid-transition`
+/// - `ImmutableState` → 409 `immutable-state`
+#[must_use]
+#[allow(dead_code)] // T4 가 wire-up. T3 단독 commit 시점엔 caller 없음.
+pub fn from_listing_error(e: &listing_domain::errors::ListingError) -> ProblemResponse {
+    use listing_domain::errors::ListingError;
+    match e {
+        ListingError::TransactionFieldsMismatch { .. } => problem(
+            "transaction-fields-mismatch",
+            "거래 유형과 보증금/월세 조합이 맞지 않습니다",
+            StatusCode::BAD_REQUEST,
+            Some(e.to_string()),
+        ),
+        ListingError::InvalidTransition { .. } => problem(
+            "invalid-transition",
+            "현재 상태에서 허용되지 않는 전이입니다",
+            StatusCode::CONFLICT,
+            Some(e.to_string()),
+        ),
+        ListingError::ImmutableState { .. } => problem(
+            "immutable-state",
+            "현재 상태에서 매물을 수정할 수 없습니다",
+            StatusCode::CONFLICT,
+            Some(e.to_string()),
+        ),
+    }
+}
+
+/// 도메인 [`RepoError`] → RFC 7807 매핑 (SP6-iv).
+///
+/// - `NotFound` → 404 `not-found`
+/// - `Conflict` (OCC) → 409 `version-conflict`
+/// - `Database` → 500 `internal-error` (detail 은 prod 에서 leak 위험 — None)
+#[must_use]
+#[allow(dead_code)] // T4 가 wire-up.
+pub fn from_listing_repo_error(e: &listing_domain::repository::RepoError) -> ProblemResponse {
+    use listing_domain::repository::RepoError;
+    match e {
+        RepoError::NotFound => problem(
+            "not-found",
+            "매물을 찾을 수 없습니다",
+            StatusCode::NOT_FOUND,
+            None,
+        ),
+        RepoError::Conflict => problem(
+            "version-conflict",
+            "동시 수정 충돌 — 다시 불러오세요",
+            StatusCode::CONFLICT,
+            None,
+        ),
+        RepoError::Database(_) => {
+            // SECURITY: DB error message 가 application/problem+json 으로 외부 노출
+            // 되면 schema 정보 leak. 로그는 caller 가 tracing 으로 남기고, body 는 generic.
+            problem(
+                "internal-error",
+                "내부 서버 오류",
+                StatusCode::INTERNAL_SERVER_ERROR,
+                None,
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
