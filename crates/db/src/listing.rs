@@ -21,7 +21,9 @@ use async_trait::async_trait;
 use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::{DateTime, Utc};
 use listing_domain::entity::Listing;
-use listing_domain::repository::{ListingMarker, ListingRepository, RepoError};
+use listing_domain::repository::{
+    ListingDetail, ListingMarker, ListingPhotoSummary, ListingRepository, RepoError,
+};
 use shared_kernel::area::AreaM2;
 use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::contact_visibility::ContactVisibility;
@@ -384,12 +386,15 @@ impl ListingRepository for PgListingRepository {
         // PERF: COUNT(*) over filtered set runs on every paginated request.
         // For large `listing` tables (millions of rows) this can be slow.
         // SP6-ii 후속 (또는 SP7-i 의 monitoring) 에서 cached total / approximate count 검토.
+        //
+        // SP6-iii: bookmark_count 와 is_bookmarked 는 bookmark_listing 테이블 JOIN
+        // (denormalized listing.bookmark_count 컬럼 미사용 — FU 70 schema 제거 예정).
         let sql = format!(
             r"
             WITH filtered AS (
                 SELECT id, title, geom_point, listing_type, transaction_type,
                        price_krw, deposit_krw, monthly_rent_krw, area_m2,
-                       view_count, bookmark_count, created_at
+                       view_count, created_at, owner_id
                 FROM listing
                 WHERE status = 'active'
                   AND geom_point IS NOT NULL
@@ -398,6 +403,12 @@ impl ListingRepository for PgListingRepository {
                   AND ($6::text[] IS NULL OR transaction_type = ANY($6::text[]))
                   AND area_m2::float8 BETWEEN $7 AND $8
                   AND price_krw BETWEEN $9 AND $10
+            ),
+            bm_count AS (
+                SELECT listing_id, COUNT(*)::int8 AS cnt
+                FROM bookmark_listing
+                WHERE listing_id IN (SELECT id FROM filtered)
+                GROUP BY listing_id
             )
             SELECT
                 (SELECT COUNT(*) FROM filtered) AS total_count,
@@ -406,8 +417,14 @@ impl ListingRepository for PgListingRepository {
                 f.listing_type, f.transaction_type,
                 f.price_krw, f.deposit_krw, f.monthly_rent_krw,
                 f.area_m2::float8 AS area_m2,
-                f.view_count, f.bookmark_count, f.created_at
+                f.view_count,
+                COALESCE(bc.cnt, 0)::int8 AS bookmark_count,
+                CASE WHEN ub.user_id IS NOT NULL THEN true ELSE false END AS is_bookmarked,
+                f.created_at
             FROM filtered f
+            LEFT JOIN bm_count bc ON bc.listing_id = f.id
+            LEFT JOIN bookmark_listing ub
+              ON ub.listing_id = f.id AND ub.user_id = $13
             ORDER BY f.{order_by}
             LIMIT $11 OFFSET $12
             "
@@ -426,6 +443,7 @@ impl ListingRepository for PgListingRepository {
             .bind(max_price)
             .bind(i64::from(size))
             .bind(offset)
+            .bind(query.viewer_user_id.as_str())
             .fetch_all(&self.pool)
             .await
             .map_err(|e| RepoError::Database(e.to_string()))?;
@@ -497,6 +515,7 @@ impl ListingRepository for PgListingRepository {
                 .map_err(|e| RepoError::Database(e.to_string()))?;
             let view_count: i64 = row.try_get("view_count").unwrap_or(0_i64);
             let bookmark_count: i64 = row.try_get("bookmark_count").unwrap_or(0_i64);
+            let is_bookmarked: bool = row.try_get("is_bookmarked").unwrap_or(false);
             let created_at: chrono::DateTime<chrono::Utc> = row
                 .try_get("created_at")
                 .map_err(|e| RepoError::Database(e.to_string()))?;
@@ -511,9 +530,10 @@ impl ListingRepository for PgListingRepository {
                 deposit,
                 monthly_rent,
                 area_m2,
-                thumbnail_url: None, // SP6-iii 가 listing-photo 테이블 join 으로 채움
+                thumbnail_url: None, // SP6-iii 가 listing-photo 테이블 join 으로 채움 (FU 별도)
                 view_count,
                 bookmark_count,
+                is_bookmarked,
                 created_at,
             });
         }
@@ -701,6 +721,106 @@ impl ListingRepository for PgListingRepository {
 
         // 4. commit.
         tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(())
+    }
+
+    /// 상세 페이지 — `Listing` + photos + JOIN COUNT bookmark + viewer is_bookmarked.
+    /// 단일 connection 으로 listing+bookmark 와 photos 두 query 순차 실행.
+    #[instrument(skip(self), fields(
+        listing_id = %id.as_str(),
+        viewer = %viewer_user_id.as_str(),
+    ))]
+    async fn find_detail_by_id(
+        &self,
+        id: &Id<ListingIdMarker>,
+        viewer_user_id: &Id<UserMarker>,
+    ) -> Result<Option<ListingDetail>, RepoError> {
+        // 1. Listing + bookmark JOIN (단일 row).
+        let detail_sql = format!(
+            r"
+            SELECT {LISTING_FULL_COLUMNS},
+                   COALESCE(bm.cnt, 0)::int8 AS jc_bookmark_count,
+                   CASE WHEN ub.user_id IS NOT NULL THEN true ELSE false END AS jc_is_bookmarked
+            FROM listing l
+            LEFT JOIN (
+                SELECT listing_id, COUNT(*)::int8 AS cnt
+                FROM bookmark_listing
+                WHERE listing_id = $1
+                GROUP BY listing_id
+            ) bm ON bm.listing_id = l.id
+            LEFT JOIN bookmark_listing ub
+              ON ub.listing_id = l.id AND ub.user_id = $2
+            WHERE l.id = $1
+            "
+        );
+        let row_opt = sqlx::query(&detail_sql)
+            .bind(id.as_str())
+            .bind(viewer_user_id.as_str())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        let Some(row) = row_opt else {
+            return Ok(None);
+        };
+        let listing = row_to_listing(&row)?;
+        let bookmark_count: i64 = row.try_get("jc_bookmark_count").unwrap_or(0_i64);
+        let is_bookmarked: bool = row.try_get("jc_is_bookmarked").unwrap_or(false);
+
+        // 2. photos (active 만, display_order ASC).
+        let photo_rows = sqlx::query(
+            r"
+            SELECT r2_key, thumbnail_r2_key, caption, display_order, content_type
+            FROM listing_photo
+            WHERE listing_id = $1 AND deleted_at IS NULL
+            ORDER BY display_order ASC
+            ",
+        )
+        .bind(id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let photos: Vec<ListingPhotoSummary> = photo_rows
+            .iter()
+            .map(|r| {
+                Ok::<_, RepoError>(ListingPhotoSummary {
+                    r2_key: r.try_get("r2_key").map_err(map_sqlx_err)?,
+                    thumbnail_r2_key: r.try_get("thumbnail_r2_key").map_err(map_sqlx_err)?,
+                    caption: r.try_get("caption").map_err(map_sqlx_err)?,
+                    display_order: r.try_get("display_order").map_err(map_sqlx_err)?,
+                    content_type: r.try_get("content_type").map_err(map_sqlx_err)?,
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(Some(ListingDetail {
+            listing,
+            photos,
+            bookmark_count,
+            is_bookmarked,
+        }))
+    }
+
+    /// `view_count` += 1. version bump X / audit_log X (빈도 분리).
+    /// 매물 미존재 시 `RepoError::NotFound`.
+    #[instrument(skip(self), fields(listing_id = %id.as_str()))]
+    async fn increment_view_count(
+        &self,
+        id: &Id<ListingIdMarker>,
+    ) -> Result<(), RepoError> {
+        let result = sqlx::query(
+            r"
+            UPDATE listing
+            SET view_count = view_count + 1, updated_at = now()
+            WHERE id = $1
+            ",
+        )
+        .bind(id.as_str())
+        .execute(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        if result.rows_affected() == 0 {
+            return Err(RepoError::NotFound);
+        }
         Ok(())
     }
 }

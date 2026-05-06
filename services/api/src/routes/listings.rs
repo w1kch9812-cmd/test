@@ -100,6 +100,8 @@ pub struct ListingCardResponse {
     pub view_count: i64,
     /// 즐겨찾기 수.
     pub bookmark_count: i64,
+    /// 본 viewer 가 즐겨찾기 한 매물인지 (SP6-iii).
+    pub is_bookmarked: bool,
     /// 등록일 (RFC 3339).
     pub created_at: DateTime<Utc>,
 }
@@ -122,7 +124,7 @@ pub struct ListingsResponse {
 /// `GET /listings` — 카드 list 검색 (인증 필수).
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(
-    skip(state, _auth),
+    skip(state, auth),
     fields(
         page = q.page,
         size = q.size,
@@ -131,7 +133,7 @@ pub struct ListingsResponse {
 )]
 pub async fn get_listings(
     State(state): State<ListingsState>,
-    _auth: AuthenticatedUser,
+    Extension(auth): Extension<AuthenticatedUser>,
     Query(q): Query<ListingsQuery>,
 ) -> Result<Json<ListingsResponse>, ProblemResponse> {
     // size 검증: 0 은 has_next 무한 루프를 유발, 100 초과는 서버 부하 방지.
@@ -244,6 +246,7 @@ pub async fn get_listings(
         page,
         size,
         sort,
+        viewer_user_id: auth.user.id.clone(),
     };
 
     let (cards, total) = state
@@ -278,6 +281,7 @@ pub async fn get_listings(
             thumbnail_url: c.thumbnail_url,
             view_count: c.view_count,
             bookmark_count: c.bookmark_count,
+            is_bookmarked: c.is_bookmarked,
             created_at: c.created_at,
         })
         .collect();

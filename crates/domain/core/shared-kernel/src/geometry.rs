@@ -7,7 +7,7 @@
 //! 한국 영역으로 좁힌 검증은 aggregate level (예: `Listing.geom_point`) 책임이에요.
 
 use crate::srid::Srid;
-use geo_types::{Point as GeoPoint, Polygon as GeoPolygon};
+use geo_types::{MultiPolygon as GeoMultiPolygon, Point as GeoPoint, Polygon as GeoPolygon};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -54,6 +54,9 @@ pub enum GeometryError {
         /// 실제 점 수.
         actual: usize,
     },
+    /// `MultiPolygon`이 비어 있음 (≥1 polygon 필수).
+    #[error("multipolygon must contain at least one polygon")]
+    EmptyMultiPolygon,
 }
 
 impl PointSrid {
@@ -153,6 +156,63 @@ impl PolygonSrid {
     #[must_use]
     pub const fn as_geo_polygon(&self) -> &GeoPolygon<f64> {
         &self.polygon
+    }
+}
+
+/// `WGS84` 강제 + 좌표 범위 검증된 `MultiPolygon`.
+///
+/// 한국 필지(`Parcel.geom`) 매핑 — V-World `LP_PA_CBND_BUBUN` 응답이
+/// `MultiPolygon`. 단일 `Polygon`만 가진 필지도 V-World는 `MultiPolygon`으로
+/// 감싸서 반환하므로, 도메인은 `MultiPolygon`을 SSOT로 둠.
+///
+/// 구성 polygon ≥1 + 각 polygon의 exterior ring ≥4점 + 모든 좌표 finite/범위 검증.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MultiPolygonSrid {
+    /// `MultiPolygon` 데이터 (`geo-types::MultiPolygon`).
+    pub multi_polygon: GeoMultiPolygon<f64>,
+    /// 좌표계.
+    pub srid: Srid,
+}
+
+impl MultiPolygonSrid {
+    /// `WGS84` `MultiPolygon` 생성. 모든 polygon에 `PolygonSrid::try_new_wgs84`와
+    /// 동일한 검증 적용.
+    ///
+    /// # Errors
+    ///
+    /// Polygon 0개 → `EmptyMultiPolygon`. 그 외 좌표 검증 실패는
+    /// `PolygonSrid::try_new_wgs84`와 동일.
+    pub fn try_new_wgs84(multi: GeoMultiPolygon<f64>) -> Result<Self, GeometryError> {
+        if multi.0.is_empty() {
+            return Err(GeometryError::EmptyMultiPolygon);
+        }
+        for polygon in &multi.0 {
+            // 기존 PolygonSrid 검증 재사용 — clone은 유효성 검사 후 버림.
+            // 비용보다 검증 일관성이 우선 (V-World 응답은 polygon 수가 적음, 보통 1~3).
+            PolygonSrid::try_new_wgs84(polygon.clone())?;
+        }
+        Ok(Self {
+            multi_polygon: multi,
+            srid: Srid::Wgs84,
+        })
+    }
+
+    /// 첫 번째 polygon (단순 시각화 등 단일 polygon만 다루는 호출자용).
+    #[must_use]
+    pub fn first_polygon(&self) -> &GeoPolygon<f64> {
+        &self.multi_polygon.0[0]
+    }
+
+    /// `geo-types::MultiPolygon` 참조 반환 (`PostGIS` interop).
+    #[must_use]
+    pub const fn as_geo_multi_polygon(&self) -> &GeoMultiPolygon<f64> {
+        &self.multi_polygon
+    }
+
+    /// 구성 polygon 개수.
+    #[must_use]
+    pub const fn polygon_count(&self) -> usize {
+        self.multi_polygon.0.len()
     }
 }
 
@@ -419,5 +479,90 @@ mod tests {
         let json = serde_json::to_string(&p).expect("serialize");
         let back: PolygonSrid = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(p, back);
+    }
+
+    // ── MultiPolygonSrid ───────────────────────────────────────────
+
+    fn unit_multi_wgs84() -> GeoMultiPolygon<f64> {
+        GeoMultiPolygon(vec![unit_square_wgs84()])
+    }
+
+    fn two_polygon_multi_wgs84() -> GeoMultiPolygon<f64> {
+        let second = GeoPolygon::new(
+            LineString(vec![
+                Coord { x: 128.0, y: 37.0 },
+                Coord { x: 129.0, y: 37.0 },
+                Coord { x: 129.0, y: 38.0 },
+                Coord { x: 128.0, y: 37.0 },
+            ]),
+            vec![],
+        );
+        GeoMultiPolygon(vec![unit_square_wgs84(), second])
+    }
+
+    #[test]
+    fn multipolygon_single_member_valid() {
+        let m = MultiPolygonSrid::try_new_wgs84(unit_multi_wgs84()).expect("valid single");
+        assert_eq!(m.srid, Srid::Wgs84);
+        assert_eq!(m.polygon_count(), 1);
+        assert_eq!(m.first_polygon().exterior().0.len(), 5);
+    }
+
+    #[test]
+    fn multipolygon_two_members_valid() {
+        let m = MultiPolygonSrid::try_new_wgs84(two_polygon_multi_wgs84()).expect("valid two");
+        assert_eq!(m.polygon_count(), 2);
+    }
+
+    #[test]
+    fn multipolygon_rejects_empty() {
+        let err = MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![])).unwrap_err();
+        assert!(matches!(err, GeometryError::EmptyMultiPolygon));
+    }
+
+    #[test]
+    fn multipolygon_rejects_short_exterior_in_member() {
+        let bad = GeoPolygon::new(
+            LineString(vec![
+                Coord { x: 126.0, y: 37.0 },
+                Coord { x: 127.0, y: 37.0 },
+                Coord { x: 126.0, y: 37.0 },
+            ]),
+            vec![],
+        );
+        let err =
+            MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
+        assert!(matches!(err, GeometryError::ExteriorRingTooShort { .. }));
+    }
+
+    #[test]
+    fn multipolygon_rejects_lng_out_of_range() {
+        let bad = GeoPolygon::new(
+            LineString(vec![
+                Coord { x: 200.0, y: 37.0 },
+                Coord { x: 127.0, y: 37.0 },
+                Coord { x: 127.0, y: 38.0 },
+                Coord { x: 126.0, y: 37.0 },
+            ]),
+            vec![],
+        );
+        let err =
+            MultiPolygonSrid::try_new_wgs84(GeoMultiPolygon(vec![bad])).unwrap_err();
+        assert!(matches!(err, GeometryError::LngOutOfRange { .. }));
+    }
+
+    #[test]
+    fn multipolygon_serde_roundtrip() {
+        let m = MultiPolygonSrid::try_new_wgs84(two_polygon_multi_wgs84()).expect("valid");
+        let json = serde_json::to_string(&m).expect("serialize");
+        let back: MultiPolygonSrid = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(m, back);
+    }
+
+    #[test]
+    fn multipolygon_clone_works() {
+        let m = MultiPolygonSrid::try_new_wgs84(unit_multi_wgs84()).expect("valid");
+        let cloned = m.clone();
+        assert_eq!(m, cloned);
     }
 }

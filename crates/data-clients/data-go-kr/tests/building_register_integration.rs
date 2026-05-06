@@ -107,26 +107,37 @@ fn br_response_empty() -> serde_json::Value {
     })
 }
 
+/// V-World `LP_PA_CBND_BUBUN` 응답 모양 (실 API 캡처 기반).
+///
+/// 본 테스트가 검증하는 건 `building_register` reader 가 V-World geom 합성
+/// path 를 거치는지 — V-World 응답 자체 검증은 `vworld-client` crate 책임.
+/// 그래서 fixture 는 envelope 통과 + 단일 `MultiPolygon` feature 의 최소형.
 fn vworld_response() -> serde_json::Value {
     serde_json::json!({
         "response": {
+            "service": { "name": "data", "version": "2.0", "operation": "GetFeature" },
+            "status": "OK",
+            "record": { "total": "1", "current": "1" },
             "result": {
                 "featureCollection": {
+                    "type": "FeatureCollection",
                     "features": [{
+                        "type": "Feature",
                         "geometry": {
-                            "type": "Polygon",
-                            "coordinates": [[
+                            "type": "MultiPolygon",
+                            "coordinates": [[[
                                 [126.97, 37.56], [126.98, 37.56],
                                 [126.98, 37.57], [126.97, 37.57],
                                 [126.97, 37.56]
-                            ]]
+                            ]]]
                         },
                         "properties": {
                             "pnu": SAMPLE_PNU,
+                            "jibun": "1-1 공장용지",
                             "addr": "서울특별시 종로구 청운동 1-1",
-                            "lndcgr_nm": "공장용지",
-                            "lndpcl_ar": 1500.0,
-                            "uq_nm": "일반공업지역"
+                            "jiga": "5000000",
+                            "gosi_year": "2025",
+                            "gosi_month": "01"
                         }
                     }]
                 }
