@@ -1,32 +1,51 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-06 (SP9 spec/plan 작성 직후, commit `e7a3fd8`)
+> **갱신일**: 2026-05-06 (SP9 T1/T2/T4/T5 완료, T3/T6 잔여)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
 
 ---
 
-## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) (1주)
+## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **잔여 T3 + T6 (2.5일)**
 
-**왜 1순위**: 사용자가 "필지 + 행정구역(시도/시군구/읍면동/리) 모든 polygon 표시" 명시적 요구. ADR 0016 으로 architecture 확정 (PMTiles 100% + 다중 R2 정적 artifact, PostGIS 없이). PR 진행 중 — `e7a3fd8` 커밋.
+**진행 현황**: T1, T2, T4, T5 완료. ADR 0017 (마커 렌더) + 0018 (PNU-First identity) 박제. T3 (ETL Rust crate) + T6 (cron) 만 남음.
 
 **진입점**:
 
-- ADR: [`docs/adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md`](../adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md)
-- Spec: [`docs/superpowers/specs/2026-05-06-sub-project-9-medallion-base-layer-design.md`](./specs/2026-05-06-sub-project-9-medallion-base-layer-design.md)
-- Plan: [`docs/superpowers/plans/2026-05-06-sub-project-9-medallion-base-layer.md`](./plans/2026-05-06-sub-project-9-medallion-base-layer.md)
-- Reference 구현: `C:\Users\admin\Desktop\gongzzang\apps\gongzzang-design-lab\` (PMTiles 패턴 운영 검증된 형제 프로젝트) — `scripts/pipeline/steps/build-pmtiles.ts`, `components/map/naver/UnifiedPolygonGLLayer.tsx`, `docs/PMTILES_GUIDE.md`
+- ADR: [`0016 PMTiles 100%`](../adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) / [`0017 마커 렌더`](../adr/0017-listing-marker-render-canvas-bitmap-stamp.md) / [`0018 PNU-First`](../adr/0018-pnu-first-identity-no-coordinates.md)
+- Spec: [`2026-05-06-sub-project-9`](./specs/2026-05-06-sub-project-9-medallion-base-layer-design.md)
+- Plan: [`2026-05-06-sub-project-9`](./plans/2026-05-06-sub-project-9-medallion-base-layer.md)
+- Reference: `C:\Users\User\Desktop\gongzzang\apps\gongzzang-design-lab\` — `scripts/pipeline/steps/build-pmtiles.ts`, `components/map/naver/UnifiedPolygonGLLayer.tsx`, `docs/PMTILES_GUIDE.md`
 
 **Task 분해 (plan T1~T6)**:
 
-| T | 작업 | 추정 | 의존 |
+| T | 작업 | 상태 | commit |
 |---|---|---|---|
-| T1 | docs commit (PR e7a3fd8 merge) | 0.5일 | — |
-| T2 | listing denormalize 컬럼 마이그레이션 (`parcel_pnu`, `admin_code`, `parcel_land_use_type`, `parcel_zoning`) | 0.5일 | T1 |
-| T3 | `services/etl-base-layer/` (Rust binary) — Bronze SHP fetch + tippecanoe + R2 upload | 2일 | T2 |
-| T4 | `crates/parcel-lookup/` (좌표→PNU lookup) + listing 등록 hooks | 1.5일 | T2 (T3 와 병렬) |
-| T5 | 프론트 PMTiles 통합 — Naver gl `_mapbox` + `pmtiles` JS lib + 클릭 panel + turf.js spatial 계산 | 2일 | T3 |
-| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 | 0.5일 | T3 |
+| T1 | docs commit | ✅ | `e7a3fd8` |
+| T2 | listing denormalize 컬럼 마이그레이션 | ✅ | `0864270` |
+| T3 | `services/etl-base-layer/` Rust binary — Bronze SHP fetch + tippecanoe + R2 upload | ⏳ | — |
+| T4 | `crates/parcel-lookup/` PNU lookup + listing 등록 hooks + 검색 필터 | ✅ | `e87d7d6` |
+| T5 | 프론트 PMTiles 통합 + 폴리곤 클릭 모델 + ParcelInfoPanel | ✅ | `ae48c54` |
+| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 | ⏳ | — |
+
+**T3 시작 진입점**:
+
+- 새 crate: `services/etl-base-layer/` (Rust binary)
+- 구조: `bronze/{shp_download,vworld_fetch,manifest}.rs`, `shp_to_geojson.rs`, `tippecanoe.rs`, `r2_upload.rs`, `verify/smoke.rs`
+- CI 의존: tippecanoe binary 빌드 (`make -j` from felt/tippecanoe github), GDAL (`apt install gdal-bin`)
+- 첫 30분: 로컬에서 강남구 시군구 SHP 작은 표본으로 tippecanoe 한 번 돌려보기 (CI 의 큰 빌드 디버깅 비용 회피)
+
+**T6 시작 진입점**:
+
+- `.github/workflows/sp9-base-layer-etl.yml`
+- 매월 1일 03:00 KST cron + workflow_dispatch
+- ubuntu-22.04-large (32GB RAM) — 1.4억 polygon 빌드용
+- timeout 720분 (12시간), 정 안 되면 region 별 batch 옵션
+- manifest hot-swap: `gongzzang-static/v<N+1>/` 빌드 후 `manifest.json` 의 current_version 업데이트
+
+**T5 후속 — 프론트 폴리곤 활성화**:
+
+- T3 완료 후 `NEXT_PUBLIC_PMTILES_BASE_URL=https://r2-static/v1/` 환경변수 한 줄 설정 → 폴리곤 layer 자동 활성화 (코드 변경 0)
 
 **핵심 architecture (ADR 0016)**:
 
