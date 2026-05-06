@@ -7,5 +7,5 @@
 - [SSS급 기준 피드백](memory/feedback_sss_standard.md) — 미개함·꼼수 0
 - [기술 스택 확정](memory/tech_stack_confirmed.md) — Rust + Next.js + Postgres+PostGIS + Zitadel + Biome v2.4
 - [Sub-project 2a 작업 패턴 교훈](memory/feedback_subproject_2a_lessons.md) — spec verbatim 강제, 값 객체 dispatch 표준, 마이그 파일명, tarpaulin strict
-- [프로젝트 진행 현황](memory/project_progress.md) — SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d+4-iii-a+FU-i+7-iii+6-foundation+6-i+6-ii+6-iv+4-iii-e-1차+6-iii+6-v (34 crate, ~1325 tests), FU 12/13/17/18/26/27/34/41/45/46 closed. ADR-0014 R2 PMTiles defer / ADR-0015 V-World ACL. 다음 FU 70 bookmark_count schema 제거 / FU 80 SSE realtime / SP-FU 잔여 정리
+- [프로젝트 진행 현황](memory/project_progress.md) — SP1+2+3+5-i+5-iii+5-iv+4-i+5-ii+4-ii+FU34+4-iii-d+4-iii-a+FU-i+7-iii+6-foundation+6-i+6-ii+6-iv+4-iii-e-1차+6-iii+6-v+Obs-1차 (34 crate, ~1340 tests). ADR-0014 R2 PMTiles defer / ADR-0015 V-World ACL. SSS § 2/3/4/5 audit chain hardening + Sentry + health check 완료. 다음 SP-Obs-2차 (OTLP/Prometheus + frontend Sentry) / SP8 IaC Pulumi / FU 70 bookmark_count schema 제거
 - [다음 작업](docs/superpowers/next-actions.md) — SP4-iii-b (실거래가, 1-2일) → 4-iii-c (법제처) → 4-iii-e (R2 PMTiles + FU 40) → 잔여 FU 정리 → SP6 Frontend
