@@ -48,6 +48,12 @@ AGENTS.local.md
 # === 빌드 산출물 / 임시 ===
 *.tgz
 *.zip
+
+# === ETL 산출물 (SP9) ===
+# Bronze 다운로드 / Gold PMTiles 빌드 결과 — R2 업로드 전 임시.
+var/
+# Next.js public 에 복사되는 PMTiles (재생성 가능, R2 우선).
+apps/web/public/pmtiles/
 .cache/
 .temp/
 .tmp/

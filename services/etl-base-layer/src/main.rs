@@ -1,20 +1,29 @@
-//! 공짱 `PMTiles` base layer ETL — Bronze SHP 다운로드 + R2 업로드 (SP9 T3a + T3b.1).
+//! 공짱 `PMTiles` base layer ETL — Bronze SHP 다운로드 + Gold `PMTiles` 빌드.
 //!
-//! 실행:
+//! ## 서브커맨드
+//!
+//! - `etl-base-layer` (또는 `etl-base-layer bronze`) — Bronze 다운로드 (T3a + T3b.1 R2)
+//! - `etl-base-layer gold --layer parcels --output <gold_dir> <input.geojson>...` — `tippecanoe` 빌드 (T3b.2)
+//!
+//! ## Bronze 실행
+//!
 //! ```sh
 //! BRONZE_PARCEL_SHP_URL=https://www.data.go.kr/.../parcel.shp.zip \
 //! BRONZE_DIR=./var/bronze \
-//! R2_ACCOUNT_ID=... R2_ACCESS_KEY=... R2_SECRET_KEY=... R2_BUCKET=gongzzang-static \
-//! cargo run -p etl-base-layer
+//! cargo run -p etl-base-layer -- bronze
 //! ```
 //!
-//! `R2_*` 4 개 미설정 → 로컬 전용 모드 (T3a 호환).
+//! ## Gold 실행 (로컬, R2 미사용)
 //!
-//! 다음 단계 (T3b.2):
-//! - SHP → `GeoJSON` 변환 (`ogr2ogr` spawn)
-//! - `tippecanoe` spawn → `PMTiles` 생성 (parcels / admin / complex)
-//! - Gold artifact R2 업로드 + verify (강남 PNU + row count Δ < 5%)
-//! - Gold manifest hot-swap (`current_version` 갱신)
+//! ```sh
+//! cargo run -p etl-base-layer -- gold \
+//!     --layer parcels \
+//!     --output ./var/gold \
+//!     ./var/sample/gangnam.geojson
+//! ```
+//!
+//! Windows dev 환경에서 자동으로 `wsl.exe -d Ubuntu -- tippecanoe ...` 로 라우팅.
+//! 다른 distro 면 `ETL_WSL_DISTRO=<name>` 환경변수.
 
 #![forbid(unsafe_code)]
 // main.rs: init failure panic 은 정답이라 expect/unwrap 허용.
@@ -29,17 +38,38 @@ mod gold;
 mod manifest;
 mod r2_upload;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
+use crate::gold::build::build_layer;
+use crate::gold::spawn::Host;
+use crate::gold::tippecanoe::{check_available, LayerKind};
 
 #[tokio::main]
 async fn main() -> ExitCode {
     init_tracing();
 
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let subcommand = args.first().map_or("bronze", String::as_str);
+
+    match subcommand {
+        "bronze" | "" => run_bronze().await,
+        "gold" => run_gold(&args[1..]).await,
+        other => {
+            error!(subcommand = %other, "unknown subcommand — use `bronze` or `gold`");
+            ExitCode::from(2)
+        }
+    }
+}
+
+// CLI dispatch — config 로드 / 클라이언트 빌드 / spawn / error mapping 이 한 함수에
+// 모이는 게 자연스러움 (split 시 가독성 손해). 복잡도 lint 의도적 silence.
+#[allow(clippy::cognitive_complexity)]
+async fn run_bronze() -> ExitCode {
     let cfg = Config::from_env();
 
     if cfg.sources.is_empty() {
@@ -78,6 +108,118 @@ async fn main() -> ExitCode {
         }
         Err(e) => {
             error!(error = %e, "bronze fetch failed");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// CLI 옵션 (gold 전용).
+struct GoldOpts {
+    layer: LayerKind,
+    output_dir: PathBuf,
+    inputs: Vec<PathBuf>,
+}
+
+#[derive(Debug)]
+struct ArgError(String);
+
+impl std::fmt::Display for ArgError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+fn parse_layer(s: &str) -> Result<LayerKind, ArgError> {
+    match s {
+        "parcels" => Ok(LayerKind::Parcels),
+        "admin" => Ok(LayerKind::Admin),
+        "complex" => Ok(LayerKind::Complex),
+        other => Err(ArgError(format!(
+            "unknown layer `{other}` — must be parcels | admin | complex"
+        ))),
+    }
+}
+
+fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
+    let mut layer: Option<LayerKind> = None;
+    let mut output_dir: Option<PathBuf> = None;
+    let mut inputs: Vec<PathBuf> = Vec::new();
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--layer" | "-l" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--layer needs a value".into()))?;
+                layer = Some(parse_layer(v)?);
+            }
+            "--output" | "-o" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--output needs a value".into()))?;
+                output_dir = Some(PathBuf::from(v));
+            }
+            other => inputs.push(PathBuf::from(other)),
+        }
+    }
+    Ok(GoldOpts {
+        layer: layer.ok_or_else(|| ArgError("--layer is required".into()))?,
+        output_dir: output_dir.ok_or_else(|| ArgError("--output is required".into()))?,
+        inputs,
+    })
+}
+
+// CLI dispatch — 동일 사유 (cognitive complexity allow).
+#[allow(clippy::cognitive_complexity)]
+async fn run_gold(args: &[String]) -> ExitCode {
+    let opts = match parse_gold_args(args) {
+        Ok(o) => o,
+        Err(e) => {
+            error!(error = %e, "gold args parse failed");
+            return ExitCode::from(2);
+        }
+    };
+
+    if opts.inputs.is_empty() {
+        error!("gold: at least one input GeoJSON path is required");
+        return ExitCode::from(2);
+    }
+
+    let host = Host::detect();
+    info!(
+        host = ?host,
+        layer = %opts.layer.layer_name(),
+        output_dir = %opts.output_dir.display(),
+        inputs = opts.inputs.len(),
+        "starting gold build"
+    );
+
+    // 사전 체크 — tippecanoe 가 호출 가능한지.
+    match check_available(host).await {
+        Ok(version) => info!(version = %version, "tippecanoe available"),
+        Err(e) => {
+            error!(error = %e, "tippecanoe not available — set ETL_WSL_DISTRO if not Ubuntu, or apt install tippecanoe in WSL");
+            return ExitCode::from(2);
+        }
+    }
+
+    // 입력 path → &Path borrow vec.
+    let input_refs: Vec<&std::path::Path> = opts.inputs.iter().map(PathBuf::as_path).collect();
+
+    match build_layer(host, &opts.output_dir, opts.layer, &input_refs).await {
+        Ok(result) => {
+            // 정수 MB — display 용이라 정밀도 손실 무관. KB 단위는 너무 노이지.
+            let mb = result.output_bytes / 1_048_576;
+            info!(
+                output = %result.output_path.display(),
+                bytes = result.output_bytes,
+                mb = mb,
+                "gold build complete"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            error!(error = %e, "gold build failed");
             ExitCode::FAILURE
         }
     }
