@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { pinIconHtml } from "@/components/listings/listing-pin";
 import { useListingsQuery } from "@/lib/listings/use-listings-query";
 import { loadNaverMaps } from "@/lib/naver-maps";
+import { usePanelStack } from "@/lib/panel/use-panel-stack";
 import { useListingsStore } from "@/stores/listings";
 
 /**
@@ -176,9 +177,9 @@ export function ListingMap() {
   const boundsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const setBounds = useListingsStore((s) => s.setBounds);
-  const selectedId = useListingsStore((s) => s.selectedListingId);
-  const setSelected = useListingsStore((s) => s.setSelectedListingId);
-  const patchFilters = useListingsStore((s) => s.patchFilters);
+  const { push: pushPanel, stack } = usePanelStack();
+  const top = stack.entries.at(-1);
+  const selectedListingId = top?.kind === "listing" ? top.id : undefined;
   const query = useListingsQuery();
   const listings = query.data?.pages.flatMap((p) => p.listings) ?? [];
 
@@ -251,7 +252,7 @@ export function ListingMap() {
             if (cancelled) return;
           }
           if (cancelled) return;
-          setupPolygonLayers(mb, (pnu) => patchFilters({ pnu }));
+          setupPolygonLayers(mb, (pnu) => pushPanel({ kind: "parcel", id: pnu, view: "summary" }));
           const recovery = setupWebGlRecovery(mb);
           if (recovery) cleanups.push(recovery);
         })
@@ -274,7 +275,7 @@ export function ListingMap() {
       }
       for (const fn of cleanups) fn();
     };
-  }, [setBounds, patchFilters]);
+  }, [setBounds, pushPanel]);
 
   // 2. 매물 변경 → marker 재생성 (mapReady 가 true 일 때만)
   // ADR 0017 후속에서 BitmapStampCache 패턴으로 마이그레이션 예정.
@@ -290,16 +291,18 @@ export function ListingMap() {
         position: new naver.maps.LatLng(listing.lat, listing.lng),
         map,
         icon: {
-          content: pinIconHtml(listing.listing_type, { selected: listing.id === selectedId }),
+          content: pinIconHtml(listing.listing_type, {
+            selected: listing.id === selectedListingId,
+          }),
           anchor: new naver.maps.Point(14, 28),
         },
       });
       naver.maps.Event.addListener(marker, "click", () => {
-        setSelected(listing.id);
+        pushPanel({ kind: "listing", id: listing.id, view: "summary" });
       });
       markersRef.current.push(marker);
     }
-  }, [mapReady, listings, selectedId, setSelected]);
+  }, [mapReady, listings, selectedListingId, pushPanel]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }
