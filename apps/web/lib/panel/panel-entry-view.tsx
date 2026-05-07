@@ -60,11 +60,20 @@ export function PanelEntryView({ entry, depth }: { entry: PanelStackEntry; depth
     enabled: Boolean(def && viewDef),
   });
 
+  // Stable scalar deps — capture entry's discriminator scalars directly so
+  // parent re-renders that produce a new `entry` object reference (URL
+  // unchanged) do not re-fire telemetry. Reconstructing the entry at call
+  // site is cheap and keeps biome's useExhaustiveDependencies satisfied.
+  const { kind, id, view } = entry;
   useEffect(() => {
     if (query.isSuccess) {
-      reportPanelOpened(entry, depth, performance.now() - startedAt.current);
+      reportPanelOpened(
+        { kind, id, view } as PanelStackEntry,
+        depth,
+        performance.now() - startedAt.current,
+      );
     }
-  }, [query.isSuccess, entry, depth]);
+  }, [query.isSuccess, kind, id, view, depth]);
 
   // Spec rule § 13 — registered 안된 view import 자체가 컴파일 에러여야 하지만, runtime 의 안전망.
   const stateNarrowed = useMemo(() => {

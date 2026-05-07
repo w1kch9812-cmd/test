@@ -9,9 +9,9 @@ import { useFocusTrap } from "./focus-trap";
  * 4-state: loading / error / ok / empty / auth-required.
  *   (auth-required 가 별도 prop — registry 의 authGate 미통과 시 렌더)
  *
- * TODO(SP10-T2): Wrap `children` in a React ErrorBoundary inside
- * panel-entry-view.tsx (not here) so registry components throwing during
- * render are caught and routed to `state="error"`. Spec rule § 9 #6.
+ * Spec rule § 9 #6 (error boundary per card) is implemented in
+ * panel-entry-view.tsx — `PanelErrorBoundary` wraps the registry view component
+ * within this PanelCard's children slot, flipping `state="error"` on catch.
  */
 
 export type PanelCardState = "loading" | "error" | "empty" | "ok" | "auth-required";
