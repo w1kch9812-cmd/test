@@ -233,7 +233,12 @@ impl R2Uploader {
                 source: std::io::Error::other(e),
             })?;
 
-        info!("uploading file → R2");
+        info!(
+            r2_op = "PutObject",
+            r2_bucket = %self.config.bucket,
+            r2_key = %key,
+            "uploading file → R2"
+        );
 
         self.client
             .put_object()
@@ -242,6 +247,10 @@ impl R2Uploader {
             .body(body)
             .content_type(content_type)
             .cache_control("public, max-age=31536000")
+            // L5 Security — R2 server-side encryption (AES256). R2 default 가 이미
+            // encrypted at rest 지만 `x-amz-server-side-encryption: AES256` header 명시 →
+            // audit 정합 (audit log 가 SSE 사용 박제 가능).
+            .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
             .send()
             .await
             .map_err(|e| UploadError::PutObject {
@@ -327,6 +336,7 @@ impl R2Uploader {
                         .content_type("application/x-protobuf")
                         .content_encoding("gzip") // tippecanoe 출력은 default gzip
                         .cache_control("public, max-age=31536000, immutable")
+                        .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
                         .send()
                         .await
                         .map_err(|e| UploadError::PutObject {
@@ -535,7 +545,13 @@ impl R2Uploader {
         let json = serde_json::to_vec_pretty(value)?;
         let bytes_len = json.len();
 
-        info!(bytes = bytes_len, "uploading json → R2");
+        info!(
+            r2_op = "PutObject",
+            r2_bucket = %self.config.bucket,
+            r2_key = %key,
+            bytes = bytes_len,
+            "uploading json → R2"
+        );
 
         self.client
             .put_object()
@@ -544,6 +560,7 @@ impl R2Uploader {
             .body(ByteStream::from(json))
             .content_type("application/json")
             .cache_control(cache_control)
+            .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
             .send()
             .await
             .map_err(|e| UploadError::PutObject {

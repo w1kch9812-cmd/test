@@ -1,0 +1,109 @@
+name: SP9 Base Layer Cleanup (L6 Lifecycle)
+
+# 매월 15일 02:00 KST cron — `gold/<old-version>/` + `gold/staging/<old-version>/`
+# 삭제 (rollback retention 보존: 최근 3 version 유지).
+#
+# 정책 (L6 Lifecycle):
+#   - **3 version 유지** — `gold/manifest.json` 의 `current_version` + 직전 2 version.
+#   - 그 이전 version 의 flat tile + staging spec 삭제 (R2 storage 비용 절감).
+#   - DRY-RUN 기본 (workflow_dispatch input `confirm_delete=false` 일 때 list 만).
+
+on:
+  schedule:
+    # 매월 15일 02:00 KST = 14일 17:00 UTC. cron 빌드 (1일) 와 충돌 회피.
+    - cron: "0 17 14 * *"
+  workflow_dispatch:
+    inputs:
+      retention_count:
+        description: "유지할 최근 version 수 (default 3)"
+        required: false
+        default: "3"
+      confirm_delete:
+        description: "true 시 실 삭제. false (default) = dry-run list 만."
+        required: false
+        default: "false"
+        type: boolean
+
+concurrency:
+  group: sp9-base-layer-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  cleanup:
+    name: R2 prefix cleanup
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install aws-cli
+        run: pip install -q awscli
+
+      - name: List + (optional) delete old versions
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          RETENTION: ${{ inputs.retention_count || '3' }}
+          CONFIRM: ${{ inputs.confirm_delete || 'false' }}
+        run: |
+          set -euo pipefail
+          export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY}"
+          export AWS_SECRET_ACCESS_KEY="${R2_SECRET_KEY}"
+          export AWS_DEFAULT_REGION=auto
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+
+          # 현재 manifest 의 current_version (절대 삭제 금지).
+          current=$(aws --endpoint-url "$ENDPOINT" s3 cp "s3://${R2_BUCKET}/gold/manifest.json" - \
+              | jq -r .current_version)
+          echo "current_version (활성, 보호 대상): $current"
+
+          # gold/v*/ prefix 들 모두 list — `aws s3 ls` 가 기본 prefix 분리.
+          # `--delimiter /` 로 first-level prefix (= version) 만 추출.
+          versions=$(aws --endpoint-url "$ENDPOINT" s3api list-objects-v2 \
+              --bucket "$R2_BUCKET" --prefix "gold/" --delimiter "/" \
+              --query 'CommonPrefixes[].Prefix' --output text \
+              | tr '\t' '\n' \
+              | grep -v -E '(staging/|manifest\.json)' \
+              | sed 's|gold/||;s|/$||')
+
+          echo "발견된 version 들:"
+          echo "$versions"
+
+          # 정렬 (lex order — `v_2026_05` < `v_2026_06`). 최근 N 개 제외 = 삭제 대상.
+          delete_targets=$(echo "$versions" | grep -v "^$current$" | sort -r | tail -n +"$RETENTION")
+
+          if [ -z "$delete_targets" ]; then
+            echo "삭제할 version 없음 (3개 이하)"
+            exit 0
+          fi
+
+          echo "삭제 대상 version 들 (current 제외, 최근 $RETENTION 제외):"
+          echo "$delete_targets"
+
+          if [ "$CONFIRM" != "true" ]; then
+            echo "::notice::DRY RUN — confirm_delete=true 시 실제 삭제."
+            exit 0
+          fi
+
+          # 실 삭제 — gold/<v>/ + gold/staging/<v>/.
+          while IFS= read -r v; do
+            [ -z "$v" ] && continue
+            echo "deleting gold/$v/"
+            aws --endpoint-url "$ENDPOINT" s3 rm \
+              "s3://${R2_BUCKET}/gold/$v/" --recursive
+            echo "deleting gold/staging/$v/"
+            aws --endpoint-url "$ENDPOINT" s3 rm \
+              "s3://${R2_BUCKET}/gold/staging/$v/" --recursive --include "*" \
+              || echo "(staging/$v/ 없음 — 정상)"
+          done <<< "$delete_targets"
+
+          echo "::notice::cleanup complete"
