@@ -168,8 +168,9 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
     let mut inputs: Vec<PathBuf> = Vec::new();
     let mut bronze_prefix: Option<String> = None;
     let mut work_dir: Option<PathBuf> = None;
-    let mut concurrency: usize = 8;
-    let mut source_srs: String = "EPSG:5186".to_owned();
+    // SSOT: sp9_base_layer_config 의 default. CLI flag 로 override 가능.
+    let mut concurrency: usize = sp9_base_layer_config::DTMK_DOWNLOAD_CONCURRENCY;
+    let mut source_srs: String = sp9_base_layer_config::SOURCE_SRS_VWORLD.to_owned();
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -434,46 +435,48 @@ async fn prepare_dtmk_inputs(
     Ok(geojsons)
 }
 
-/// L2 Verification — `VERIFY_*` 환경변수 driven invariant 검증.
+/// L2 Verification — *default-on*, SSOT landmarks 자동 검증.
 ///
-/// 환경변수:
-/// - `VERIFY_GANGNAM_PNU` (예: `1168010100107370000`) — maxzoom tile (강남 좌표) 에 등장 강제.
-/// - `VERIFY_MIN_BYTES` (예: `10485760`) — `pmtiles` 파일이 최소 N bytes (silent fail 감지).
+/// SSOT: `sp9_base_layer_config::VERIFY_LANDMARKS` 의 모든 (pnu, lat, lon) 가 maxzoom
+/// tile 에 등장해야 함. parcels layer 만 적용 (admin/complex 는 PNU 컬럼 없음).
 ///
-/// 둘 다 미설정 시 skip — dev / smoke 단계 (CI 에선 둘 다 set 권장).
+/// 추가 env override:
+/// - `VERIFY_MIN_BYTES` — 파일 size 최소. 미설정 시 SSOT default
+///   (`NATIONWIDE_PMTILES_MIN_BYTES`) 적용 — 항상 강제 (silent build fail 감지).
+/// - `VERIFY_DISABLE=1` — dev / micro-fixture 빌드 명시적 disable. CI 에선 절대 set 금지.
 async fn run_verify(
     host: Host,
     build: &BuildResult,
     layer: LayerKind,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let pnu = std::env::var("VERIFY_GANGNAM_PNU")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let min_bytes: u64 = std::env::var("VERIFY_MIN_BYTES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
-
-    if pnu.is_none() && min_bytes == 0 {
-        info!("VERIFY_* env not set — skipping L2 verification");
+    if std::env::var("VERIFY_DISABLE").ok().as_deref() == Some("1") {
+        warn!("VERIFY_DISABLE=1 — verification skipped (dev / micro-fixture only)");
         return Ok(());
     }
 
-    // 강남 좌표 (대치동 기준) — maxzoom tile 계산.
-    let (max_z, _) = (layer.zoom_range().1, layer.zoom_range().0);
+    let min_bytes: u64 = std::env::var("VERIFY_MIN_BYTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(sp9_base_layer_config::NATIONWIDE_PMTILES_MIN_BYTES);
+
+    // parcels 만 PNU 검증. admin/complex 는 file size + sha256 만.
+    let max_z = layer.zoom_range().1;
     let mut tile_specs: Vec<TileSpec> = Vec::new();
-    if let Some(pnu_str) = pnu {
-        // parcels 만 PNU 검증 의미 있음 — admin/complex 는 PNU 컬럼 없음.
-        if matches!(layer, LayerKind::Parcels) {
-            let (gx, gy) = lonlat_to_tile(127.04, 37.51, max_z);
+    if matches!(layer, LayerKind::Parcels) {
+        for landmark in sp9_base_layer_config::VERIFY_LANDMARKS {
+            let (gx, gy) = lonlat_to_tile(landmark.lon, landmark.lat, max_z);
             tile_specs.push(TileSpec {
                 z: max_z,
                 x: gx,
                 y: gy,
-                must_contain: vec![pnu_str],
+                must_contain: vec![landmark.pnu.to_owned()],
             });
-        } else {
-            warn!("VERIFY_GANGNAM_PNU set but layer != parcels — skipping PNU spot-check");
+            info!(
+                landmark = landmark.label,
+                pnu = landmark.pnu,
+                tile = format!("{max_z}/{gx}/{gy}"),
+                "verify landmark scheduled",
+            );
         }
     }
 

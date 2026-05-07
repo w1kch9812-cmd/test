@@ -34,6 +34,7 @@ members = [
     "crates/db",
     "crates/outbox-publisher",
     "crates/api-health-recorder",
+    "crates/sp9-base-layer-config",
     "services/api",
     "services/outbox-publisher",
     "services/etl-base-layer",

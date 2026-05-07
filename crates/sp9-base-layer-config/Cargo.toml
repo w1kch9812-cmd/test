@@ -1,0 +1,21 @@
+[package]
+name = "sp9-base-layer-config"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "Apache-2.0"
+description = "SP9 Base Layer SSOT — tippecanoe / GDAL / R2 prefix / 강남 landmark 등 한 곳에 박제"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "sp9-config-print"
+path = "src/bin/sp9_config_print.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

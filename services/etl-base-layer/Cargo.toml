@@ -11,6 +11,7 @@ name = "etl-base-layer"
 path = "src/main.rs"
 
 [dependencies]
+sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config" }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }

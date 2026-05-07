@@ -44,15 +44,49 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  TIPPECANOE_VERSION: "2.80.0"
+  # TIPPECANOE_VERSION 등은 setup job 의 sp9-config-print → $GITHUB_OUTPUT 으로 propagate.
+  # 본 workflow 에 SSOT hardcode 0.
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Setup — SSOT 의 모든 const + layer 목록을 다른 job 들이 소비하도록 emit.
+  # 모든 후속 job 이 needs: [setup] — SSOT drift 차단.
+  # ─────────────────────────────────────────────────────────────────────────────
+  setup:
+    name: Load SSOT config
+    runs-on: ubuntu-22.04
+    outputs:
+      layers_json: ${{ steps.print.outputs.layers_json }}
+      tippecanoe_version: ${{ steps.print.outputs.tippecanoe_version }}
+      gdal_version_pin: ${{ steps.print.outputs.gdal_version_pin }}
+      rust_toolchain_version: ${{ steps.print.outputs.rust_toolchain_version }}
+      dtmk_download_concurrency: ${{ steps.print.outputs.dtmk_download_concurrency }}
+      nationwide_pmtiles_min_bytes: ${{ steps.print.outputs.nationwide_pmtiles_min_bytes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+      - name: Print SSOT
+        id: print
+        run: |
+          json="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- json)"
+          echo "$json" | jq .
+          # 각 key → output (다른 job 이 ${{ needs.setup.outputs.X }} 로 소비).
+          for key in tippecanoe_version gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes; do
+              val="$(echo "$json" | jq -r ".${key}")"
+              echo "${key}=${val}" >> "$GITHUB_OUTPUT"
+          done
+          # layer 목록은 JSON array 그대로 — fromJson() matrix 입력.
+          layers_json="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- layers)"
+          echo "layers_json=${layers_json}" >> "$GITHUB_OUTPUT"
   # ─────────────────────────────────────────────────────────────────────────────
   # Phase 1: Bronze refresh — V-World dtmk 273 시군구 zip 갱신.
   # 변경된 size 만 다운 (idempotent). 실패해도 phase 2 가 *기존* R2 자산 재사용 가능.
   # ─────────────────────────────────────────────────────────────────────────────
   bronze:
     name: Bronze refresh (dtmk_vworld.py)
+    needs: [setup]
     runs-on: ubuntu-22.04
     if: ${{ inputs.bronze_skip != true }}
     timeout-minutes: 90
@@ -81,11 +115,16 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           DTMK_PARALLEL: "3"
         run: python dtmk_vworld.py
-      - name: Summary
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+      - name: Summary (SSOT prefix)
         id: summary
         run: |
-          # Bronze prefix 는 dtmk_vworld.py 가 stdout 에 박제 — TODO: structured output.
-          echo "manifest_url=bronze/$(date -u +%Y-%m)/parcel-dtmk-30563/" >> "$GITHUB_OUTPUT"
+          # SSOT — Rust 측의 dtmk_bronze_prefix() 와 *동일* format.
+          BATCH="$(date -u +%Y-%m)"
+          DTMK_DS_ID="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)"
+          echo "manifest_url=bronze/${BATCH}/parcel-dtmk-${DTMK_DS_ID}/" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Phase 2-3: Gold build + verify. ubuntu-22.04-large (32GB RAM, 16 vCPU) — 1.4억
@@ -93,27 +132,32 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   gold:
     name: Gold build + verify (${{ matrix.layer }})
-    needs: [bronze]
+    needs: [setup, bronze]
     # bronze 가 skipped (input: bronze_skip=true) 여도 본 job 진행.
-    if: always() && (needs.bronze.result == 'success' || needs.bronze.result == 'skipped')
-    runs-on: ubuntu-22.04   # TODO: '-large' 로 격상 후 32GB RAM. 현재는 17GB.
+    if: always() && needs.setup.result == 'success' && (needs.bronze.result == 'success' || needs.bronze.result == 'skipped')
+    # ubuntu-22.04-large = 16 vCPU + 64GB RAM. 1.4억 polygon tippecanoe 빌드에 필수
+    # (default 17GB 에서 OOM 확정). beta runner 라 비용 ~3x — 월 1회만 호출.
+    runs-on: ubuntu-22.04-large
     timeout-minutes: 720
     strategy:
       fail-fast: false
       matrix:
-        layer: [parcels, admin, complex]
+        # SSOT 의 layer 목록 — LayerKind variant 추가 시 본 matrix 자동 확장.
+        layer: ${{ fromJson(needs.setup.outputs.layers_json) }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build deps + GDAL
+      - name: Install build deps + GDAL (pinned via SSOT)
         run: |
           sudo apt-get update -q
           sudo apt-get install -y --no-install-recommends \
-            build-essential libsqlite3-dev zlib1g-dev gdal-bin
+            build-essential libsqlite3-dev zlib1g-dev \
+            "gdal-bin=${{ needs.setup.outputs.gdal_version_pin }}"
 
-      - name: Build & install tippecanoe ${{ env.TIPPECANOE_VERSION }}
+      - name: Build & install tippecanoe ${{ needs.setup.outputs.tippecanoe_version }}
         run: |
-          git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
+          TVER="${{ needs.setup.outputs.tippecanoe_version }}"
+          git clone --depth 1 --branch "$TVER" \
               https://github.com/felt/tippecanoe.git /tmp/tippecanoe
           cd /tmp/tippecanoe
           make -j"$(nproc)"
@@ -124,8 +168,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { shared-key: sp9-etl }
 
-      - name: Build etl-base-layer (release)
-        run: cargo build -p etl-base-layer --release
+      - name: Build etl-base-layer (release, --frozen)
+        run: cargo build -p etl-base-layer --release --frozen
 
       - name: Compute version label
         id: ver
@@ -136,6 +180,16 @@ jobs:
             echo "version=v$(date -u +%Y_%m)" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Compute Bronze prefix (SSOT helper)
+        id: bronze
+        run: |
+          BATCH="$(date -u +%Y-%m)"
+          # SSOT — sp9-base-layer-config 의 dtmk_bronze_prefix() 와 동일 format
+          # (Rust + workflow 양쪽 한 source 강제 — 본 step 도 print binary 의 변종).
+          PREFIX="bronze/${BATCH}/parcel-dtmk-$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)/"
+          echo "prefix=${PREFIX}" >> "$GITHUB_OUTPUT"
+          echo "batch=${BATCH}" >> "$GITHUB_OUTPUT"
+
       - name: Run gold build (${{ matrix.layer }})
         env:
           # Gold version + R2 자격.
@@ -145,22 +199,20 @@ jobs:
           R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
-          # L2 verify invariants — parcels 만 PNU 검증. complex/admin 는 PNU 없음.
-          VERIFY_GANGNAM_PNU: ${{ matrix.layer == 'parcels' && '1168010100107370000' || '' }}
-          VERIFY_MIN_BYTES: "104857600"   # 100MB — nationwide 빌드 sanity.
-          # Sentry 통합 (L4 — 다음 commit 으로 활성).
+          # L2 verify — default-on (SSOT 의 VERIFY_LANDMARKS 자동 검증).
+          # MIN_BYTES override — SSOT 의 NATIONWIDE_PMTILES_MIN_BYTES 와 동일 값.
+          VERIFY_MIN_BYTES: ${{ needs.setup.outputs.nationwide_pmtiles_min_bytes }}
+          # Sentry 통합 (L4 — 다음 commit 으로 SDK 활성).
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          BRONZE_PREFIX="bronze/$(date -u +%Y-%m)/parcel-dtmk-30563/"
-          # parcels 만 dtmk pipeline. admin/complex 는 별도 SHP 소스 (V-World 의 행정구역 /
-          # 공공데이터포털 의 산업단지) — 현재 미구현 → matrix 에서 일단 dtmk path 동일.
+          # parcels 만 dtmk pipeline. admin/complex 는 별도 SHP 소스 (V-World 행정구역 /
+          # 공공데이터포털 산업단지) — 현재 미구현. 임시 동일 prefix.
           # TODO L10: layer 별 다른 BRONZE_PREFIX (admin/complex 측 ADR 추가 필요).
           ./target/release/etl-base-layer gold \
             --layer "${{ matrix.layer }}" \
             --output "./var/gold/${{ steps.ver.outputs.version }}" \
-            --bronze-prefix "${BRONZE_PREFIX}" \
-            --concurrency 8 \
-            --source-srs EPSG:5186
+            --bronze-prefix "${{ steps.bronze.outputs.prefix }}" \
+            --concurrency "${{ needs.setup.outputs.dtmk_download_concurrency }}"
 
       - name: Upload PMTiles artifact (debug)
         if: failure() || inputs.target_version != ''

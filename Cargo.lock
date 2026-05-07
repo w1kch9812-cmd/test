@@ -1503,6 +1503,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sp9-base-layer-config",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -4217,6 +4218,14 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sp9-base-layer-config"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
