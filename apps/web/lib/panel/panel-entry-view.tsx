@@ -24,14 +24,14 @@ class PanelErrorBoundary extends React.Component<
   { children: React.ReactNode; onError: (err: Error) => void; fallback: React.ReactNode },
   { hasError: boolean }
 > {
-  state = { hasError: false };
+  override state = { hasError: false };
   static getDerivedStateFromError(): { hasError: boolean } {
     return { hasError: true };
   }
-  componentDidCatch(err: Error): void {
+  override componentDidCatch(err: Error): void {
     this.props.onError(err);
   }
-  render(): React.ReactNode {
+  override render(): React.ReactNode {
     return this.state.hasError ? this.props.fallback : this.props.children;
   }
 }
