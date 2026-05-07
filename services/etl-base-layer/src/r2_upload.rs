@@ -10,14 +10,21 @@
 //! T3b.1 = R2 업로드 path 만. ogr2ogr / tippecanoe / verify 는 T3b.2.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use aws_config::Region;
 use aws_credential_types::Credentials;
-use aws_sdk_s3::config::{BehaviorVersion, Builder as S3ConfigBuilder};
+use aws_sdk_s3::config::{
+    BehaviorVersion, Builder as S3ConfigBuilder, RequestChecksumCalculation,
+    ResponseChecksumValidation,
+};
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
+use futures_util::stream::{self, StreamExt};
 use thiserror::Error;
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn};
+use walkdir::WalkDir;
 
 /// R2 자격 증명 + 버킷 설정.
 ///
@@ -77,6 +84,15 @@ pub enum UploadError {
     JsonSerialize(#[from] serde_json::Error),
 }
 
+/// 디렉터리 batch upload 결과.
+#[derive(Debug, Clone, Copy)]
+pub struct DirectoryUploadResult {
+    /// 성공 PUT 수.
+    pub uploaded: u64,
+    /// 총 bytes (`PutObject` body 합).
+    pub total_bytes: u64,
+}
+
 /// R2 업로더 — `aws-sdk-s3` Client 래퍼.
 ///
 /// 한 번 생성하면 여러 객체 업로드에 재사용. Client 는 connection pool 을 내부 보유.
@@ -101,12 +117,17 @@ impl R2Uploader {
             "etl-base-layer-r2",
         );
         // R2 는 region 무시하지만 SigV4 가 필수로 요구 — `auto` 사용.
+        // `WhenRequired` checksum 설정: R2 가 aws-sdk-s3 1.86 의 default
+        // `STREAMING-UNSIGNED-PAYLOAD-TRAILER` (`aws-chunked` 인코딩) 와 호환 안 함 →
+        // `SignatureDoesNotMatch` 에러. R2 측 docs 권장 설정.
         let s3_config = S3ConfigBuilder::default()
             .behavior_version(BehaviorVersion::latest())
             .region(Region::new("auto"))
             .endpoint_url(config.endpoint_url())
             .credentials_provider(creds)
             .force_path_style(true)
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
             .build();
         let client = S3Client::from_conf(s3_config);
         Self { client, config }
@@ -180,6 +201,117 @@ impl R2Uploader {
 
         info!("file uploaded");
         Ok(())
+    }
+
+    /// ADR 0021 — flat tile 디렉터리 batch upload.
+    ///
+    /// `<local_root>/<z>/<x>/<y>.pbf` 들을 walk → R2 의
+    /// `<key_prefix>/<z>/<x>/<y>.pbf` 들로 *concurrent* PutObject (default 100).
+    /// tippecanoe 의 .pbf 는 기본 gzip → `Content-Encoding: gzip` + immutable
+    /// `Cache-Control` metadata 자동 부여 (Cloudflare CDN edge 가 그대로 헤더 전달).
+    ///
+    /// 본 메서드가 X9 의 production 측 진정한 batch — DAU 1000+ 가 R2 직결 fetch.
+    ///
+    /// # Errors
+    ///
+    /// 단일 파일 read / `PutObject` 실패 시 [`UploadError`] 첫 1개 반환. 나머지는
+    /// concurrent 진행 상태에서 cancel.
+    #[instrument(
+        skip(self, local_root),
+        fields(bucket = %self.config.bucket, prefix = %key_prefix, root = %local_root.display()),
+    )]
+    pub async fn put_directory(
+        &self,
+        local_root: &Path,
+        key_prefix: &str,
+        concurrency: usize,
+    ) -> Result<DirectoryUploadResult, UploadError> {
+        let key_prefix = key_prefix.trim_end_matches('/').to_owned();
+        let entries: Vec<(std::path::PathBuf, String)> = WalkDir::new(local_root)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.file_type().is_file())
+            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("pbf"))
+            .map(|e| {
+                let abs = e.path().to_path_buf();
+                let rel = abs
+                    .strip_prefix(local_root)
+                    .unwrap_or(&abs)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let key = format!("{key_prefix}/{rel}");
+                (abs, key)
+            })
+            .collect();
+
+        info!(count = entries.len(), concurrency, "starting batch upload");
+
+        let success = Arc::new(AtomicU64::new(0));
+        let bytes = Arc::new(AtomicU64::new(0));
+        let success_clone = Arc::clone(&success);
+        let bytes_clone = Arc::clone(&bytes);
+
+        let result = stream::iter(entries.into_iter())
+            .map(move |(path, key)| {
+                let client = self.client.clone();
+                let bucket = self.config.bucket.clone();
+                let success = Arc::clone(&success_clone);
+                let bytes = Arc::clone(&bytes_clone);
+                async move {
+                    let body = ByteStream::from_path(&path)
+                        .await
+                        .map_err(|e| UploadError::ReadFile {
+                            path: path.display().to_string(),
+                            source: std::io::Error::other(e),
+                        })?;
+                    let len = tokio::fs::metadata(&path)
+                        .await
+                        .map(|m| m.len())
+                        .unwrap_or(0);
+                    client
+                        .put_object()
+                        .bucket(&bucket)
+                        .key(&key)
+                        .body(body)
+                        .content_type("application/x-protobuf")
+                        .content_encoding("gzip") // tippecanoe 출력은 default gzip
+                        .cache_control("public, max-age=31536000, immutable")
+                        .send()
+                        .await
+                        .map_err(|e| UploadError::PutObject {
+                            key: key.clone(),
+                            detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                        })?;
+                    success.fetch_add(1, Ordering::Relaxed);
+                    bytes.fetch_add(len, Ordering::Relaxed);
+                    Ok::<(), UploadError>(())
+                }
+            })
+            .buffer_unordered(concurrency)
+            .collect::<Vec<_>>()
+            .await;
+
+        let mut first_err: Option<UploadError> = None;
+        for r in result {
+            if let Err(e) = r {
+                if first_err.is_none() {
+                    first_err = Some(e);
+                } else {
+                    warn!("multiple upload errors — only first reported");
+                }
+            }
+        }
+        if let Some(e) = first_err {
+            return Err(e);
+        }
+
+        let count = success.load(Ordering::Relaxed);
+        let total_bytes = bytes.load(Ordering::Relaxed);
+        info!(uploaded = count, bytes = total_bytes, "batch upload complete");
+        Ok(DirectoryUploadResult {
+            uploaded: count,
+            total_bytes,
+        })
     }
 
     /// JSON pretty-encoded 객체 업로드. `content_type=application/json`.

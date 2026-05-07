@@ -54,9 +54,14 @@ AGENTS.local.md
 var/
 # Next.js public 에 복사되는 PMTiles (재생성 가능, R2 우선).
 apps/web/public/pmtiles/
-# SP9 ADR 0019 — Service Worker bundle (esbuild build 결과, source 는 lib/workers/).
+# SP9 ADR 0021 — dev 검증용 flat tile 디렉터리 (production 은 R2 직결, 본 prefix 미사용).
+apps/web/public/dev-tiles/
+# SP9 ADR 0019 (deprecated) — Service Worker bundle (X9 채택 후 미사용).
 apps/web/public/sw-pmtiles.js
 apps/web/public/pmtiles-worker.js
+# Playwright MCP / dev 검증 screenshot artifacts — R2 직결 + 폴리곤 시각 확인 산출물.
+.playwright-mcp/
+x9-*.png
 .cache/
 .temp/
 .tmp/

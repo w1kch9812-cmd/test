@@ -44,13 +44,21 @@ use std::process::ExitCode;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 
+use std::collections::BTreeMap;
+
+use sha2::{Digest, Sha256};
+
 use crate::config::Config;
-use crate::gold::build::build_layer;
+use crate::gold::build::{build_layer, BuildResult};
+use crate::gold::manifest::{GoldArtifact, GoldManifest};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
+use crate::r2_upload::R2Uploader;
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    // .env 자동 로드 (dev convenience). production 에서는 .env 미존재 → silent skip.
+    let _ = dotenvy::dotenv();
     init_tracing();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -206,27 +214,118 @@ async fn run_gold(args: &[String]) -> ExitCode {
     // 입력 path → &Path borrow vec.
     let input_refs: Vec<&std::path::Path> = opts.inputs.iter().map(PathBuf::as_path).collect();
 
-    match build_layer(host, &opts.output_dir, opts.layer, &input_refs).await {
-        Ok(result) => {
-            // 정수 MB — display 용이라 정밀도 손실 무관. KB 단위는 너무 노이지.
-            let pmtiles_mb = result.output_bytes / 1_048_576;
-            let flat_mb = result.flat_tiles_total_bytes / 1_048_576;
-            info!(
-                pmtiles_path = %result.output_path.display(),
-                pmtiles_bytes = result.output_bytes,
-                pmtiles_mb = pmtiles_mb,
-                flat_tiles_dir = %result.flat_tiles_dir.display(),
-                flat_tile_count = result.flat_tile_count,
-                flat_tiles_mb = flat_mb,
-                "gold build complete (PMTiles + ADR 0021 flat tiles)"
-            );
-            ExitCode::SUCCESS
-        }
+    let result = match build_layer(host, &opts.output_dir, opts.layer, &input_refs).await {
+        Ok(r) => r,
         Err(e) => {
             error!(error = %e, "gold build failed");
-            ExitCode::FAILURE
+            return ExitCode::FAILURE;
         }
+    };
+    let pmtiles_mb = result.output_bytes / 1_048_576;
+    let flat_mb = result.flat_tiles_total_bytes / 1_048_576;
+    info!(
+        pmtiles_path = %result.output_path.display(),
+        pmtiles_bytes = result.output_bytes,
+        pmtiles_mb = pmtiles_mb,
+        flat_tiles_dir = %result.flat_tiles_dir.display(),
+        flat_tile_count = result.flat_tile_count,
+        flat_tiles_mb = flat_mb,
+        "gold build complete (PMTiles + ADR 0021 flat tiles)"
+    );
+
+    // ADR 0021 § ETL pipeline — R2 가 설정되어 있으면 flat tile + manifest publish.
+    let cfg = Config::from_env();
+    if let Some(r2_cfg) = cfg.r2 {
+        let version = cfg
+            .gold_version
+            .as_deref()
+            .unwrap_or("v_local")
+            .to_owned();
+        match upload_gold_to_r2(&r2_cfg, &version, opts.layer, &result).await {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                error!(error = %e, "R2 upload failed");
+                ExitCode::FAILURE
+            }
+        }
+    } else {
+        info!("R2_* env not set → local-only mode (build artifact ready at flat_tiles_dir)");
+        ExitCode::SUCCESS
     }
+}
+
+/// ADR 0021 — flat tile 디렉터리 + manifest 를 R2 publish.
+///
+/// Key 레이아웃: `<gold_prefix>/<version>/<layer>/{z}/{x}/{y}.pbf` + `<gold_prefix>/manifest.json`.
+async fn upload_gold_to_r2(
+    r2_cfg: &crate::r2_upload::R2Config,
+    version: &str,
+    layer: LayerKind,
+    build: &BuildResult,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let uploader = R2Uploader::new(r2_cfg.clone());
+    let key_prefix = format!("{}/{}/{}", r2_cfg.gold_prefix, version, layer.layer_name());
+    info!(version, layer = %layer.layer_name(), key_prefix = %key_prefix, "R2 batch upload start");
+
+    let upload = uploader
+        .put_directory(&build.flat_tiles_dir, &key_prefix, 100)
+        .await?;
+    info!(
+        uploaded = upload.uploaded,
+        bytes = upload.total_bytes,
+        "R2 batch upload done"
+    );
+
+    // PMTiles file sha256 — manifest 의 row_count 검증 기준 (간단히 file size 만 박제, 후속에서 sha256).
+    let pmtiles_bytes = tokio::fs::read(&build.output_path).await?;
+    let sha256 = format!("{:x}", Sha256::digest(&pmtiles_bytes));
+
+    let mut artifacts = BTreeMap::new();
+    artifacts.insert(
+        layer.layer_name().to_owned(),
+        GoldArtifact {
+            key: key_prefix.clone(),
+            pmtiles_bytes: build.output_bytes,
+            pmtiles_sha256: sha256,
+            built_at: chrono::Utc::now(),
+            row_count: 0, // tippecanoe 출력 metadata 의 feature 수 (후속 박제)
+            flat_tile_count: build.flat_tile_count,
+            flat_tiles_total_bytes: build.flat_tiles_total_bytes,
+        },
+    );
+
+    // tiles_url_template 의 host 는 R2 public URL — 사용자가 dashboard 에서 활성한
+    // r2.dev subdomain 또는 custom domain 에 따라 다름. 환경변수 R2_PUBLIC_URL_BASE 로
+    // override 가능 (미설정 시 placeholder 박제 — 사용자가 manifest 직접 수정).
+    let raw_base = std::env::var("R2_PUBLIC_URL_BASE")
+        .unwrap_or_else(|_| "https://<r2-public-host>/".to_owned());
+    let base = if raw_base.ends_with('/') {
+        raw_base
+    } else {
+        let mut s = raw_base;
+        s.push('/');
+        s
+    };
+    // 'literal placeholder' (`{layer}`, `{z}`, `{x}`, `{y}`) 는 mapbox-gl 의 tile URL
+    // template 표준 — Rust format!{} 와 충돌해서 push_str 으로 안전 concat.
+    let mut tiles_url_template = String::with_capacity(128);
+    tiles_url_template.push_str(&base);
+    tiles_url_template.push_str(&r2_cfg.gold_prefix);
+    tiles_url_template.push('/');
+    tiles_url_template.push_str(version);
+    // mapbox-gl tile URL template placeholders — clippy nursery 의 false positive 회피.
+    #[allow(clippy::literal_string_with_formatting_args)]
+    {
+        tiles_url_template.push_str("/{layer}/{z}/{x}/{y}.pbf");
+    }
+
+    let manifest = GoldManifest::new(version.to_owned(), tiles_url_template, artifacts);
+    let manifest_key = format!("{}/manifest.json", r2_cfg.gold_prefix);
+    uploader
+        .put_object_json(&manifest_key, &manifest, "no-cache, max-age=0")
+        .await?;
+    info!(manifest_key = %manifest_key, "manifest published");
+    Ok(())
 }
 
 fn init_tracing() {

@@ -24,7 +24,19 @@ const nextConfig: NextConfig = {
   typedRoutes: true,
   async headers() {
     const headers = process.env.NODE_ENV === "production" ? productionHeaders : baseHeaders;
-    return [{ source: "/(.*)", headers }];
+    return [
+      { source: "/(.*)", headers },
+      // ADR 0021 § Tier A — dev only: 디스크의 .pbf 는 raw protobuf (gunzipped).
+      // Production R2 는 gzip 저장 + R2 metadata `Content-Encoding: gzip` 자동 처리.
+      // (Next dev 의 자동 gzip 재압축 + body mismatch 회피로 Content-Encoding 헤더 미부여)
+      {
+        source: "/dev-tiles/:path*\\.pbf",
+        headers: [
+          { key: "Content-Type", value: "application/x-protobuf" },
+          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
+        ],
+      },
+    ];
   },
 };
 

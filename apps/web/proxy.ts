@@ -9,7 +9,11 @@ import { sanitizeReturnTo } from "@/lib/url";
 
 // SP9 ADR 0021 채택 후 — 우리 origin 의 PMTiles/SW prefix 모두 폐기. 클라가 R2
 // (`NEXT_PUBLIC_TILES_BASE_URL`) 와 직결, 표준 mapbox-gl `type:"vector"` source.
-const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth"];
+//
+// `/dev-tiles` — dev 환경에서만 Next dev 가 자체 호스팅 (apps/web/public/dev-tiles/).
+// `/dev-x9-test` — ADR 0021 X9 path 시각 검증 page. dev 한정.
+// production 빌드는 R2 직결이라 본 prefix 없음. dev 의 *X9 path 시각 검증* 용도.
+const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth", "/dev-tiles", "/dev-x9-test"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
