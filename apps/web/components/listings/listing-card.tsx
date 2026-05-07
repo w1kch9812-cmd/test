@@ -7,12 +7,16 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import type { ListingCard as ListingCardData } from "@/lib/listings/api";
 import { formatAreaPyeong, formatPriceKrw } from "@/lib/listings/format";
-import { useListingsStore } from "@/stores/listings";
+import { usePanelStack } from "@/lib/panel/use-panel-stack";
 
 /*
  * ListingCard — Claude.com spec 의 feature-card 패턴 (cream-card surface).
  * 핀↔카드 highlight: 선택 시 coral 외곽선 (spec 의 primary 강조 사용).
  * 카드 내부 구조: 이미지(4/3) + 타입/거래방식 badge + 제목 + 면적 + 가격 + 메타.
+ *
+ * SP10: Click → pushPanel({ kind: "listing", view: "summary" }).
+ * Cmd/Ctrl-click 은 새 탭으로 그대로 흘려보내고 server redirect 가 받음.
+ * 선택 상태는 panel stack top 에서 derive — store 의 selectedListingId 폐기됨.
  */
 interface ListingCardProps {
   data: ListingCardData;
@@ -20,9 +24,9 @@ interface ListingCardProps {
 
 export function ListingCard({ data }: ListingCardProps) {
   const t = useTranslations("listings");
-  const selectedId = useListingsStore((s) => s.selectedListingId);
-  const setSelected = useListingsStore((s) => s.setSelectedListingId);
-  const isSelected = selectedId === data.id;
+  const { push, stack } = usePanelStack();
+  const top = stack.entries.at(-1);
+  const isSelected = top?.kind === "listing" && top.id === data.id;
 
   return (
     <Card
@@ -33,10 +37,17 @@ export function ListingCard({ data }: ListingCardProps) {
           ? "ring-2 ring-[var(--color-primary)] ring-offset-2 ring-offset-[var(--color-canvas)]"
           : "",
       ].join(" ")}
-      onMouseEnter={() => setSelected(data.id)}
-      onMouseLeave={() => setSelected(null)}
     >
-      <Link href={`/listings/${data.id}` as Route} className="block">
+      <Link
+        href={`/listings/${data.id}` as Route}
+        onClick={(e) => {
+          // Cmd/Ctrl-click / middle-click 은 그대로 새 탭 — server redirect 가 받음.
+          if (e.metaKey || e.ctrlKey || e.button === 1) return;
+          e.preventDefault();
+          push({ kind: "listing", id: data.id, view: "summary" });
+        }}
+        className="block"
+      >
         <div className="relative aspect-[4/3] w-full overflow-hidden bg-[var(--color-surface-cream-strong)]">
           {data.thumbnail_url ? (
             <Image
