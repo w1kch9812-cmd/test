@@ -8,5 +8,34 @@
   "errors": {
     "network": "네트워크 연결을 확인해 주세요",
     "server": "서버에 일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요"
+  },
+  "panel": {
+    "back": "이전",
+    "breadcrumb": "경로"
+  },
+  "panels": {
+    "parcel": {
+      "empty": "필지 정보가 없어요",
+      "errors": {
+        "loadFailed": "필지 정보를 불러오지 못했어요"
+      },
+      "summary": {
+        "landUse": "지목",
+        "zoning": "용도지역",
+        "officialPrice": "공시지가",
+        "viewBuildings": "건축물 보기",
+        "viewListings": "등록 매물 보기",
+        "codeFallback": "행정코드 {code}"
+      },
+      "buildings": {
+        "title": "건축물",
+        "count": "동",
+        "none": "등록된 건축물이 없어요"
+      },
+      "listings": {
+        "title": "이 필지의 매물 ({count})",
+        "none": "이 필지에 등록된 매물이 없어요"
+      }
+    }
   }
 }
