@@ -151,6 +151,9 @@ impl R2Uploader {
     ///
     /// `behavior_version_latest` + `force_path_style(true)` 사용 — R2 가 virtual-host
     /// style 도 지원하지만 path-style 이 endpoint URL 패턴과 더 호환적.
+    ///
+    /// L8 build resilience — `RetryConfig` 가 standard mode (max 3 attempts, exponential
+    /// backoff). 1M+ 객체 batch 의 transient 4xx/5xx (R2 rate limit / network blip) 자동 재시도.
     #[must_use]
     pub fn new(config: R2Config) -> Self {
         let creds = Credentials::new(
@@ -172,6 +175,9 @@ impl R2Uploader {
             .force_path_style(true)
             .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
             .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
+            // L8: standard retry mode = 최대 3 시도, exponential backoff.
+            // adaptive 도 가능하지만 R2 가 rate limit signal 안 함 → standard 권장.
+            .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(5))
             .build();
         let client = S3Client::from_conf(s3_config);
         Self { client, config }

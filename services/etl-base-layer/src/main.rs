@@ -77,14 +77,53 @@ async fn async_main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let subcommand = args.first().map_or("bronze", String::as_str);
 
-    match subcommand {
-        "bronze" | "" => run_bronze().await,
-        "gold" => run_gold(&args[1..]).await,
-        "promote" => run_promote_cli(&args[1..]).await,
+    // L8 — graceful shutdown handler. Ctrl+C / SIGTERM 시 즉시 abort 보다 *current
+    // step abort + cleanup* 이 더 좋지만 ETL 의 모든 step 이 atomic spec staging 이라
+    // (L3) 즉시 abort 도 안전. 본 핸들러는 user-facing 메시지 + 130 (SIGINT) exit code.
+    let task = match subcommand {
+        "bronze" | "" => tokio::spawn(run_bronze()),
+        "gold" => tokio::spawn(run_gold(args[1..].to_vec())),
+        "promote" => tokio::spawn(run_promote_cli(args[1..].to_vec())),
         other => {
             error!(subcommand = %other, "unknown subcommand — use `bronze` | `gold` | `promote`");
-            ExitCode::from(2)
+            return ExitCode::from(2);
         }
+    };
+
+    tokio::select! {
+        biased;
+        result = task => {
+            match result {
+                Ok(code) => code,
+                Err(e) => {
+                    error!(error = %e, "task panicked or aborted");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        () = shutdown_signal() => {
+            warn!("shutdown signal received — aborting (L3 staging spec 가 prod 보호)");
+            // 130 = bash convention for SIGINT (128 + 2).
+            ExitCode::from(130)
+        }
+    }
+}
+
+/// L8 — Ctrl+C (Unix SIGINT) + Unix SIGTERM 양쪽 listen. Windows 는 `ctrl_c` 만.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        let mut int = signal(SignalKind::interrupt()).expect("install SIGINT handler");
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = int.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }
 
@@ -250,8 +289,8 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
 
 // CLI dispatch — 동일 사유 (cognitive complexity allow).
 #[allow(clippy::cognitive_complexity)]
-async fn run_gold(args: &[String]) -> ExitCode {
-    let opts = match parse_gold_args(args) {
+async fn run_gold(args: Vec<String>) -> ExitCode {
+    let opts = match parse_gold_args(&args) {
         Ok(o) => o,
         Err(e) => {
             error!(error = %e, "gold args parse failed");
@@ -476,7 +515,7 @@ async fn prepare_dtmk_inputs(
 ///
 /// CLI: `etl-base-layer promote --version <ver>`. layer 목록은 SSOT 의 `Layer::ALL` 자동.
 /// 환경변수: `R2_*` 자격 + `R2_PUBLIC_URL_BASE` (manifest URL 의 base) + (선택) `CLOUDFLARE_*`.
-async fn run_promote_cli(args: &[String]) -> ExitCode {
+async fn run_promote_cli(args: Vec<String>) -> ExitCode {
     let mut version: Option<String> = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
