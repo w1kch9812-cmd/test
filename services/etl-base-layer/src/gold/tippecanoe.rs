@@ -196,13 +196,17 @@ pub async fn run(
         Arg::Lit(&min_z_str),
         Arg::Lit("-z"),
         Arg::Lit(&max_z_str),
-        // SSS 화 (사용자 needs: 폴리곤 망가짐/비틀림 0):
-        // - simplification=1: 거의 원본 보존 (default 12 → 1)
+        // SSS 화 (사용자 needs: 폴리곤 망가짐/비틀림 0, 사라짐 0, 생긴거 그대로):
+        // - simplification=1: 최소 simplification (default 12 → 1, epsilon ~2mm 수준).
+        //   maxzoom 에서는 항상 0 — 정확히 원본 (tippecanoe invariant).
         // - coalesce-smallest-as-needed: 작은 polygon 'drop' → 'merge' (사라짐 0)
         // - detect-shared-borders: 인접 polygon boundary 정확히 일치 (틈 0, 겹침 0)
+        // - no-tiny-polygon-reduction: 저줌 (z0-5) 에서도 작은 polygon 이 *점* 으로
+        //   reduce 안 됨 — 산단 "모든 zoom 에서 visible" 요구사항.
         // - maximum-tile-bytes 4MB: detail 보존, default 500KB 보다 8x
         Arg::Lit("--no-feature-limit"),
         Arg::Lit("--no-tile-size-limit"),
+        Arg::Lit("--no-tiny-polygon-reduction"),
         Arg::Lit("--force"),
         Arg::Lit("--coalesce-smallest-as-needed"),
         Arg::Lit("--detect-shared-borders"),
