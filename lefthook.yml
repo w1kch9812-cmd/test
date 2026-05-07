@@ -25,6 +25,19 @@ pre-commit:
       skip:
         - merge
         - rebase
+    panel-no-framework-import-kind:
+      # SP10 spec § 9 #5: lib/panel/** 는 components/panels/** 에 의존 금지.
+      # 프레임워크 → kind 단방향. 위반 시 commit 차단.
+      glob: "apps/web/lib/panel/*.{ts,tsx}"
+      run: bash scripts/lefthook/panel-no-framework-import-kind.sh
+    panel-no-direct-codec:
+      # SP10 spec § 5.2: codec 외부에서 ad-hoc split('>') 금지 (URL grammar 우회 방지).
+      glob: "apps/web/**/*.{ts,tsx}"
+      run: bash scripts/lefthook/panel-no-direct-codec.sh
+    panel-no-state-without-router:
+      # SP10 spec § 5.4: zustand store 가 panelStack 보유 금지 — URL 이 SSOT.
+      glob: "apps/web/stores/*.{ts,tsx}"
+      run: bash scripts/lefthook/panel-no-state-without-router.sh
 
 pre-push:
   parallel: false
