@@ -1,0 +1,56 @@
+# Workspace-wide .dockerignore — applies to all `docker build` 의 build context.
+# 본 파일이 없으면 build 컨텍스트가 GB 단위 (target/ + node_modules/ + var/) 로 부풀어
+# 1) push 가 영원히 걸리고 2) `tar` 단계 OOM 가능. AGENTS.md § 자동강제 위반 가능성.
+
+# === Cargo / Rust 빌드 산출물 ===
+target/
+**/target/
+*.rs.bk
+Cargo.lock.bak
+
+# === Node / pnpm / TS ===
+node_modules/
+**/node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+test-results/
+playwright-report/
+
+# === ETL 작업 디렉터리 (Bronze/Gold 산출물 — Docker image 에 들어가면 안 됨) ===
+var/
+**/var/
+**/.venv/
+
+# === Git / IDE / OS ===
+.git/
+.github/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# === Secrets ===
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# === Logs ===
+*.log
+
+# === Docs / human-only (ETL runtime 무관) ===
+docs/
+*.md
+!services/etl-base-layer/README.md
+
+# === Python venvs (services/scraper-py — etl-base-layer 와 무관) ===
+**/__pycache__/
+*.pyc

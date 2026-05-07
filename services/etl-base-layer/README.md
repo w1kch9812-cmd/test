@@ -111,13 +111,39 @@ workspace `[rust-toolchain.toml]` = 1.88.0 → pre-MSRV-bump 으로 핀:
 
 workspace MSRV 가 1.91 로 올라가면 모두 latest 풀어도 됨.
 
+## Docker (Plan D L1 Reproducibility)
+
+[Dockerfile.etl](./Dockerfile.etl) — multi-stage 결정성 빌드:
+
+- Stage 1: `tippecanoe-builder` — `felt/tippecanoe` git tag `2.80.0` (immutable)
+- Stage 2: `rust-builder` — `rust:1.88-slim-bookworm` + `cargo build --release`
+- Stage 3: `runtime` — `ubuntu:22.04` + `gdal-bin=3.4.*` + tippecanoe + etl-base-layer
+
+빌드:
+
+```bash
+GIT_SHA=$(git rev-parse HEAD)
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+docker build \
+  -f services/etl-base-layer/Dockerfile.etl \
+  -t gongzzang/etl-base-layer:${GIT_SHA} \
+  --build-arg GIT_SHA=${GIT_SHA} \
+  --build-arg BUILD_TIMESTAMP=${TS} \
+  .
+```
+
+CI 사용 (다음 commit 의 `.github/workflows/sp9-base-layer-etl.yml`) — 위 이미지가
+`ubuntu-22.04-large` runner 에서 pulled 후 `docker run` 으로 호출.
+
+비-root 사용자 (`etl`, uid 10001) 로 실행 — 보안 best practice.
+
 ## 후속 (T3b.2 / T6)
 
 T3b.2 추가 의존:
 
-- `tokio::process::Command` (ogr2ogr / tippecanoe spawn)
-- pmtiles parser (`pmtiles-rs` 또는 ogrinfo 결과 파싱) — verify 단계의 강남 PNU lookup
-- CI: `apt install gdal-bin`, tippecanoe build from `felt/tippecanoe` source
+- `tokio::process::Command` (ogr2ogr / tippecanoe spawn) ✅
+- pmtiles parser (`pmtiles-rs` 또는 ogrinfo 결과 파싱) — verify 단계의 강남 PNU lookup (L2)
+- CI: `apt install gdal-bin`, tippecanoe build from `felt/tippecanoe` source ✅ (Dockerfile.etl)
 
 T6 (`.github/workflows/sp9-base-layer-etl.yml`):
 
