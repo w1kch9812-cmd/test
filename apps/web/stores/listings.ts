@@ -12,11 +12,9 @@ export interface MapBounds {
 interface ListingsState {
   bounds: MapBounds | undefined;
   filters: ListingFilters;
-  selectedListingId: string | null;
   setBounds: (b: MapBounds) => void;
   setFilters: (next: ListingFilters) => void;
   patchFilters: (patch: Partial<ListingFilters>) => void;
-  setSelectedListingId: (id: string | null) => void;
 }
 
 const DEFAULT_FILTERS: ListingFilters = {
@@ -27,7 +25,6 @@ const DEFAULT_FILTERS: ListingFilters = {
   minPriceKrw: undefined,
   maxPriceKrw: undefined,
   sort: "created_at_desc" as SortKey,
-  pnu: undefined,
   adminCode: undefined,
   landUseType: undefined,
 };
@@ -35,9 +32,7 @@ const DEFAULT_FILTERS: ListingFilters = {
 export const useListingsStore = create<ListingsState>((set) => ({
   bounds: undefined,
   filters: DEFAULT_FILTERS,
-  selectedListingId: null,
   setBounds: (b) => set({ bounds: b }),
   setFilters: (next) => set({ filters: next }),
   patchFilters: (patch) => set((state) => ({ filters: { ...state.filters, ...patch } })),
-  setSelectedListingId: (id) => set({ selectedListingId: id }),
 }));
