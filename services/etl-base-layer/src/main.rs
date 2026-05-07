@@ -42,7 +42,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use std::collections::BTreeMap;
@@ -56,6 +56,7 @@ use crate::gold::manifest::{GoldArtifact, GoldManifest};
 use crate::gold::shp_to_geojson::{self, Ogr2OgrArgs};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
+use crate::gold::verify::{self, lonlat_to_tile, TileSpec, VerifySpec};
 use crate::r2_upload::R2Uploader;
 
 #[tokio::main]
@@ -294,6 +295,14 @@ async fn run_gold(args: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // L2 Verification — env-driven invariant 검증.
+    // VERIFY_GANGNAM_PNU=1168010100107370000 / VERIFY_MIN_BYTES=10485760 (10MB).
+    // 미설정 시 skip (개발 / smoke 빌드 — CI 에서만 강제).
+    if let Err(e) = run_verify(host, &result, opts.layer).await {
+        error!(error = %e, "L2 verification failed");
+        return ExitCode::FAILURE;
+    }
     let pmtiles_mb = result.output_bytes / 1_048_576;
     let flat_mb = result.flat_tiles_total_bytes / 1_048_576;
     info!(
@@ -423,6 +432,65 @@ async fn prepare_dtmk_inputs(
         "ogr2ogr conversion complete"
     );
     Ok(geojsons)
+}
+
+/// L2 Verification — `VERIFY_*` 환경변수 driven invariant 검증.
+///
+/// 환경변수:
+/// - `VERIFY_GANGNAM_PNU` (예: `1168010100107370000`) — maxzoom tile (강남 좌표) 에 등장 강제.
+/// - `VERIFY_MIN_BYTES` (예: `10485760`) — `pmtiles` 파일이 최소 N bytes (silent fail 감지).
+///
+/// 둘 다 미설정 시 skip — dev / smoke 단계 (CI 에선 둘 다 set 권장).
+async fn run_verify(
+    host: Host,
+    build: &BuildResult,
+    layer: LayerKind,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let pnu = std::env::var("VERIFY_GANGNAM_PNU")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    let min_bytes: u64 = std::env::var("VERIFY_MIN_BYTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    if pnu.is_none() && min_bytes == 0 {
+        info!("VERIFY_* env not set — skipping L2 verification");
+        return Ok(());
+    }
+
+    // 강남 좌표 (대치동 기준) — maxzoom tile 계산.
+    let (max_z, _) = (layer.zoom_range().1, layer.zoom_range().0);
+    let mut tile_specs: Vec<TileSpec> = Vec::new();
+    if let Some(pnu_str) = pnu {
+        // parcels 만 PNU 검증 의미 있음 — admin/complex 는 PNU 컬럼 없음.
+        if matches!(layer, LayerKind::Parcels) {
+            let (gx, gy) = lonlat_to_tile(127.04, 37.51, max_z);
+            tile_specs.push(TileSpec {
+                z: max_z,
+                x: gx,
+                y: gy,
+                must_contain: vec![pnu_str],
+            });
+        } else {
+            warn!("VERIFY_GANGNAM_PNU set but layer != parcels — skipping PNU spot-check");
+        }
+    }
+
+    let spec = VerifySpec {
+        pmtiles: &build.output_path,
+        layer_name: layer.layer_name(),
+        min_file_bytes: min_bytes,
+        tile_specs: &tile_specs,
+    };
+    let result = verify::run(host, &spec).await?;
+    info!(
+        sha256 = %result.sha256,
+        file_bytes = result.file_bytes,
+        tiles_passed = result.tiles_passed,
+        "L2 verification passed",
+    );
+    Ok(())
 }
 
 /// ADR 0021 — flat tile 디렉터리 + manifest 를 R2 publish.

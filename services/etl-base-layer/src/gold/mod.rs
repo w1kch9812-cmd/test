@@ -14,3 +14,4 @@ pub mod manifest;
 pub mod shp_to_geojson;
 pub mod spawn;
 pub mod tippecanoe;
+pub mod verify;
