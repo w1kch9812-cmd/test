@@ -478,6 +478,37 @@ impl R2Uploader {
         Ok(total)
     }
 
+    /// `GetObject` → 메모리 `Vec<u8>` 으로 collect (작은 객체 - manifest / spec - 가정).
+    /// 큰 객체는 [`Self::download_to_file`] 사용.
+    ///
+    /// # Errors
+    ///
+    /// `GetObject` API / body stream 실패.
+    #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
+    pub async fn get_object_bytes(&self, key: &str) -> Result<Vec<u8>, UploadError> {
+        let resp = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| UploadError::GetObject {
+                key: key.to_owned(),
+                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+            })?;
+        let mut body = resp.body;
+        let mut buf = Vec::new();
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(|e| UploadError::BodyStream {
+                key: key.to_owned(),
+                detail: format!("{e}"),
+            })?;
+            buf.extend_from_slice(&chunk);
+        }
+        Ok(buf)
+    }
+
     /// JSON pretty-encoded 객체 업로드. `content_type=application/json`.
     ///
     /// manifest / index 류에 사용 — 작은 (~10KB) 페이로드 가정.

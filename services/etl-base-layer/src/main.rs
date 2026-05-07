@@ -45,14 +45,11 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
-use std::collections::BTreeMap;
-
-use sha2::{Digest, Sha256};
-
 use crate::bronze::dtmk::{self, DtmkFetchArgs};
 use crate::config::Config;
 use crate::gold::build::{build_layer, BuildResult};
-use crate::gold::manifest::{GoldArtifact, GoldManifest};
+use crate::gold::manifest::{BronzeInput, BuildLineage};
+use crate::gold::promote::{self, ArtifactSpec, PromoteArgs};
 use crate::gold::shp_to_geojson::{self, Ogr2OgrArgs};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
@@ -71,8 +68,9 @@ async fn main() -> ExitCode {
     match subcommand {
         "bronze" | "" => run_bronze().await,
         "gold" => run_gold(&args[1..]).await,
+        "promote" => run_promote_cli(&args[1..]).await,
         other => {
-            error!(subcommand = %other, "unknown subcommand — use `bronze` or `gold`");
+            error!(subcommand = %other, "unknown subcommand — use `bronze` | `gold` | `promote`");
             ExitCode::from(2)
         }
     }
@@ -269,17 +267,19 @@ async fn run_gold(args: &[String]) -> ExitCode {
     }
 
     // dtmk path: R2 → unzip → ogr2ogr → GeoJSON inputs. positional path 와 disjoint.
-    let geojson_inputs: Vec<PathBuf> = if let Some(prefix) = opts.bronze_prefix.as_deref() {
-        match prepare_dtmk_inputs(host, &opts, prefix).await {
-            Ok(v) => v,
-            Err(e) => {
-                error!(error = %e, "dtmk preparation failed");
-                return ExitCode::FAILURE;
+    // bronze_inputs 도 함께 return — L10 lineage 박제용.
+    let (geojson_inputs, bronze_inputs): (Vec<PathBuf>, Vec<BronzeInput>) =
+        if let Some(prefix) = opts.bronze_prefix.as_deref() {
+            match prepare_dtmk_inputs(host, &opts, prefix).await {
+                Ok(v) => v,
+                Err(e) => {
+                    error!(error = %e, "dtmk preparation failed");
+                    return ExitCode::FAILURE;
+                }
             }
-        }
-    } else {
-        opts.inputs.clone()
-    };
+        } else {
+            (opts.inputs.clone(), Vec::new())
+        };
 
     if geojson_inputs.is_empty() {
         error!("no GeoJSON inputs after preparation — aborting");
@@ -320,7 +320,16 @@ async fn run_gold(args: &[String]) -> ExitCode {
     let cfg = Config::from_env();
     if let Some(r2_cfg) = cfg.r2 {
         let version = cfg.gold_version.as_deref().unwrap_or("v_local").to_owned();
-        match upload_gold_to_r2(&r2_cfg, &version, opts.layer, &result).await {
+        match upload_gold_to_r2(
+            &r2_cfg,
+            &version,
+            opts.layer,
+            &result,
+            bronze_inputs,
+            &opts.source_srs,
+        )
+        .await
+        {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 error!(error = %e, "R2 upload failed");
@@ -344,7 +353,7 @@ async fn prepare_dtmk_inputs(
     host: Host,
     opts: &GoldOpts,
     bronze_prefix: &str,
-) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+) -> Result<(Vec<PathBuf>, Vec<BronzeInput>), Box<dyn std::error::Error>> {
     let cfg = Config::from_env();
     let r2_cfg = cfg
         .r2
@@ -376,6 +385,21 @@ async fn prepare_dtmk_inputs(
         extracted = fetched.newly_extracted,
         "dtmk fetch done"
     );
+
+    // L10 lineage — bronze 입력의 fingerprint 박제 (R2 list 응답의 size + ETag).
+    // 별도 list 호출이 비용 X (이미 dtmk fetch 가 list 했지만 결과 throw away).
+    let listed = uploader
+        .list_objects(&format!("{}/", bronze_prefix.trim_end_matches('/')))
+        .await?;
+    let bronze_inputs: Vec<BronzeInput> = listed
+        .into_iter()
+        .filter(|o| o.key.to_ascii_lowercase().ends_with(".zip"))
+        .map(|o| BronzeInput {
+            r2_key: o.key,
+            bytes: o.size,
+            etag: o.etag,
+        })
+        .collect();
 
     // ogr2ogr 사전 체크.
     match shp_to_geojson::check_available(host).await {
@@ -430,9 +454,80 @@ async fn prepare_dtmk_inputs(
     geojsons.sort();
     info!(
         geojson_count = geojsons.len(),
-        "ogr2ogr conversion complete"
+        bronze_inputs = bronze_inputs.len(),
+        "ogr2ogr conversion complete; L10 lineage captured"
     );
-    Ok(geojsons)
+    Ok((geojsons, bronze_inputs))
+}
+
+/// L3 Atomicity — `promote` subcommand. 모든 layer staging spec 검증 후 manifest atomic flip + CDN purge.
+///
+/// CLI: `etl-base-layer promote --version <ver>`. layer 목록은 SSOT 의 `Layer::ALL` 자동.
+/// 환경변수: `R2_*` 자격 + `R2_PUBLIC_URL_BASE` (manifest URL 의 base) + (선택) `CLOUDFLARE_*`.
+async fn run_promote_cli(args: &[String]) -> ExitCode {
+    let mut version: Option<String> = None;
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--version" | "-v" => {
+                let Some(v) = iter.next() else {
+                    error!("--version needs a value");
+                    return ExitCode::from(2);
+                };
+                version = Some(v.clone());
+            }
+            other => {
+                error!(arg = %other, "unknown promote arg");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let Some(version) = version else {
+        error!("--version is required");
+        return ExitCode::from(2);
+    };
+
+    let cfg = Config::from_env();
+    let Some(r2_cfg) = cfg.r2 else {
+        error!("R2_* env not set — promote requires R2 access");
+        return ExitCode::FAILURE;
+    };
+    let public_base = match std::env::var("R2_PUBLIC_URL_BASE") {
+        Ok(v) if !v.trim().is_empty() => v,
+        _ => {
+            error!(
+                "R2_PUBLIC_URL_BASE env required for promote (manifest tiles_url_template host)"
+            );
+            return ExitCode::FAILURE;
+        }
+    };
+    let uploader = R2Uploader::new(r2_cfg);
+
+    info!(version = %version, "promote start (atomic manifest flip)");
+    match promote::run(
+        &uploader,
+        &PromoteArgs {
+            version: &version,
+            layers: LayerKind::ALL,
+            public_url_base: &public_base,
+        },
+    )
+    .await
+    {
+        Ok(result) => {
+            info!(
+                version = %result.current_version,
+                manifest_key = %result.manifest_key,
+                cdn_purged = ?result.cdn_purged,
+                "promote complete — manifest atomic flip done"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            error!(error = %e, "promote failed — prod manifest unchanged (degrade gracefully)");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// L2 Verification — *default-on*, SSOT landmarks 자동 검증.
@@ -499,14 +594,27 @@ async fn run_verify(
     Ok(())
 }
 
-/// ADR 0021 — flat tile 디렉터리 + manifest 를 R2 publish.
+/// L3 Atomicity — flat tile R2 batch upload + staging spec 박제. **manifest 미발행**.
 ///
-/// Key 레이아웃: `<gold_prefix>/<version>/<layer>/{z}/{x}/{y}.pbf` + `<gold_prefix>/manifest.json`.
+/// 본 함수는 `gold` subcommand 의 R2 단계. promote subcommand 가 모든 layer staging
+/// spec 검증 후에만 manifest atomic publish (`gold/manifest.json`).
+///
+/// Key 레이아웃:
+/// - flat tile: `<gold_prefix>/<version>/<layer>/{z}/{x}/{y}.pbf` (immutable, 1년 cache).
+/// - `TileJSON`: `<gold_prefix>/<version>/<layer>.json` (5분 cache — 비활성화 가능).
+/// - staging spec: `<gold_prefix>/staging/<version>/<layer>.spec.json` (no-cache).
+///
+/// 매뉴얼 manifest 발행 안 함 — promote 단계 책임.
+// 6 args 는 본 함수의 책임 범위 (R2 cfg / version / layer / build / lineage 자료들).
+// 분해해도 helper 가 더 어색 → 의도적 allow.
+#[allow(clippy::too_many_arguments)]
 async fn upload_gold_to_r2(
     r2_cfg: &crate::r2_upload::R2Config,
     version: &str,
     layer: LayerKind,
     build: &BuildResult,
+    bronze_inputs: Vec<BronzeInput>,
+    source_srs: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let uploader = R2Uploader::new(r2_cfg.clone());
     let key_prefix = format!("{}/{}/{}", r2_cfg.gold_prefix, version, layer.layer_name());
@@ -521,66 +629,34 @@ async fn upload_gold_to_r2(
         "R2 batch upload done"
     );
 
-    // PMTiles file sha256 — manifest 의 row_count 검증 기준 (간단히 file size 만 박제, 후속에서 sha256).
-    let pmtiles_bytes = tokio::fs::read(&build.output_path).await?;
-    let sha256 = format!("{:x}", Sha256::digest(&pmtiles_bytes));
+    // PMTiles file sha256 — streaming (큰 파일 메모리 적재 0).
+    let sha256 = verify::compute_sha256(&build.output_path).await?;
 
-    let (tile_min_zoom, tile_max_zoom) = layer.zoom_range();
-    let mut artifacts = BTreeMap::new();
-    artifacts.insert(
-        layer.layer_name().to_owned(),
-        GoldArtifact {
-            key: key_prefix.clone(),
-            source_layer: layer.layer_name().to_owned(),
-            pmtiles_bytes: build.output_bytes,
-            pmtiles_sha256: sha256,
-            built_at: chrono::Utc::now(),
-            row_count: 0, // tippecanoe 출력 metadata 의 feature 수 (후속 박제)
-            flat_tile_count: build.flat_tile_count,
-            flat_tiles_total_bytes: build.flat_tiles_total_bytes,
-            tile_min_zoom,
-            tile_max_zoom,
-            render_min_zoom: layer.render_min_zoom(),
-            render_max_zoom: layer.render_max_zoom(),
-            cache_max_age_seconds: layer.cache_max_age_seconds(),
-        },
-    );
-
-    // tiles_url_template 의 host 는 R2 public URL — 사용자가 dashboard 에서 활성한
-    // r2.dev subdomain 또는 custom domain 에 따라 다름. 환경변수 R2_PUBLIC_URL_BASE 로
-    // override 가능 (미설정 시 placeholder 박제 — 사용자가 manifest 직접 수정).
-    let raw_base = std::env::var("R2_PUBLIC_URL_BASE")
-        .unwrap_or_else(|_| "https://<r2-public-host>/".to_owned());
-    let base = if raw_base.ends_with('/') {
-        raw_base
-    } else {
-        let mut s = raw_base;
-        s.push('/');
-        s
+    // L10 lineage — git SHA / build env / bronze inputs 박제.
+    let lineage = BuildLineage {
+        tippecanoe_version: sp9_base_layer_config::TIPPECANOE_VERSION.to_owned(),
+        git_sha: std::env::var("GIT_SHA").unwrap_or_else(|_| "unknown".to_owned()),
+        built_at: chrono::Utc::now(),
+        bronze_inputs,
+        source_srs: source_srs.to_owned(),
+        layer_name: layer.layer_name().to_owned(),
+        build_environment: std::env::var("ETL_BUILD_ENV").unwrap_or_else(|_| "dev".to_owned()),
     };
-    // 'literal placeholder' (`{layer}`, `{z}`, `{x}`, `{y}`) 는 mapbox-gl 의 tile URL
-    // template 표준 — Rust format!{} 와 충돌해서 push_str 으로 안전 concat.
-    let mut tiles_url_template = String::with_capacity(128);
-    tiles_url_template.push_str(&base);
-    tiles_url_template.push_str(&r2_cfg.gold_prefix);
-    tiles_url_template.push('/');
-    tiles_url_template.push_str(version);
-    // mapbox-gl tile URL template placeholders — clippy nursery 의 false positive 회피.
-    #[allow(clippy::literal_string_with_formatting_args)]
-    {
-        tiles_url_template.push_str("/{layer}/{z}/{x}/{y}.pbf");
-    }
 
-    let manifest = GoldManifest::new(version.to_owned(), tiles_url_template, artifacts);
-    let manifest_key = format!("{}/manifest.json", r2_cfg.gold_prefix);
-    uploader
-        .put_object_json(&manifest_key, &manifest, "no-cache, max-age=0")
-        .await?;
-    info!(manifest_key = %manifest_key, "manifest published");
+    let spec = ArtifactSpec {
+        key_prefix: key_prefix.clone(),
+        pmtiles_bytes: build.output_bytes,
+        pmtiles_sha256: sha256,
+        row_count: 0, // tippecanoe metadata 의 feature 수 — 후속 commit (extract from --metadata).
+        flat_tile_count: build.flat_tile_count,
+        flat_tiles_total_bytes: build.flat_tiles_total_bytes,
+        lineage,
+    };
+    promote::write_staging_spec(&uploader, version, layer, &spec).await?;
+    info!("staging spec published — promote subcommand 가 manifest atomic flip");
 
-    // ADR 0021 SSS 화 — Mapbox TileJSON spec publish (https://github.com/mapbox/tilejson-spec).
-    // 프론트는 `addSource({ type: "vector", url: "...parcels.json" })` 한 줄 → mapbox-gl
-    // 자동 fetch + minzoom/maxzoom/tiles 적용. 우리 manifest fetch 코드 0.
+    // TileJSON 은 layer 단위 self-describe — promote 와 무관하게 layer 빌드 직후 publish OK
+    // (URL 안 version 이 박혀있어 client 가 overwrite 안 됨).
     let tilejson = build_tilejson(r2_cfg, version, layer);
     let tilejson_key = format!(
         "{}/{}/{}.json",

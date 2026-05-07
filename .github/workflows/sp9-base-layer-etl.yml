@@ -223,26 +223,42 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Phase 4: Promote — manifest pointer flip (L3 atomicity 의 핵심).
-  # 모든 layer 가 success 후에만 실행 — partial 빌드를 prod 에 노출 X.
-  # 현재는 skeleton — actual flip 로직은 L3 commit 에서 추가.
+  # Phase 4: Promote — manifest atomic flip (L3 + L10).
+  # 모든 layer 가 success 후에만 실행. promote subcommand 가 staging spec 검증 후
+  # gold/manifest.json publish + Cloudflare CDN purge.
   # ─────────────────────────────────────────────────────────────────────────────
   promote:
-    name: Promote (manifest flip)
-    needs: [gold]
+    name: Promote (manifest atomic flip)
+    needs: [setup, gold]
     if: ${{ success() && inputs.target_version == '' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: TODO L3 — atomic manifest flip
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+      - name: Compute version
+        id: ver
         run: |
-          echo "::warning::L3 Atomicity not yet wired."
-          echo "기대 동작:"
-          echo "  1) staging 의 모든 layer 가 verify 통과 확인."
-          echo "  2) gold/manifest.json 의 current_version 을 새 version 으로 atomic update."
-          echo "  3) Cloudflare CDN cache purge (manifest 만 — flat tile 은 immutable URL)."
-          echo "  4) failure 시 staging 그대로 두고 manifest 변경 없음 (degrade gracefully)."
+          if [ -n "${{ inputs.target_version }}" ]; then
+            echo "version=${{ inputs.target_version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=v$(date -u +%Y_%m)" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run promote (L3 atomicity)
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
+          # CDN purge — secrets 미설정 시 promote 가 warn skip (manifest no-cache 가 fallback).
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+        run: |
+          cargo run -q -p etl-base-layer --frozen --release -- \
+            promote --version "${{ steps.ver.outputs.version }}"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Phase 5: Notify on failure — Sentry 가 SDK 단계에서 보내지만 workflow-level

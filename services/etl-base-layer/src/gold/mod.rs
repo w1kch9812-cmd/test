@@ -11,6 +11,7 @@
 pub mod build;
 pub mod decompose;
 pub mod manifest;
+pub mod promote;
 pub mod shp_to_geojson;
 pub mod spawn;
 pub mod tippecanoe;

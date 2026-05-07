@@ -16,6 +16,39 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// L10 Data Lineage — 단일 layer 빌드의 *모든* lineage. promote 단계에서 모인 후
+/// `GoldManifest.artifacts[layer].lineage` 로 박제. provenance 추적 불가능 → 가능.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildLineage {
+    /// `tippecanoe` 빌드에 사용된 git tag (`sp9-base-layer-config::TIPPECANOE_VERSION` reflection).
+    pub tippecanoe_version: String,
+    /// 빌드 머신의 git SHA (workflow 의 `${{ github.sha }}`). dev 빌드는 `unknown`.
+    pub git_sha: String,
+    /// 빌드 시작 시각 (UTC).
+    pub built_at: DateTime<Utc>,
+    /// 입력 Bronze archive 들 — 각 R2 key + sha256 + bytes. ETL 입력의 fingerprinting.
+    pub bronze_inputs: Vec<BronzeInput>,
+    /// `--source-srs` flag 값 (예: `EPSG:5186`).
+    pub source_srs: String,
+    /// `LayerKind::layer_name()` (`parcels` / `admin` / `complex`).
+    pub layer_name: String,
+    /// 빌드 환경 — `production` / `staging` / `dev` 등 (env-driven).
+    pub build_environment: String,
+}
+
+/// Bronze archive 의 lineage entry — promote 단계의 검증 input.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BronzeInput {
+    /// R2 object key (예: `bronze/2026-05/parcel-dtmk-30563/LSMD_CONT_LDREG_충북_충주시.zip`).
+    pub r2_key: String,
+    /// 객체 size (bytes).
+    pub bytes: u64,
+    /// R2 `ETag` — single-part PUT 시 MD5, multipart 시 합성. 일관 fingerprint.
+    /// `None` = R2 `list_objects` 응답에서 누락 (드물지만 가능).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub etag: Option<String>,
+}
+
 /// 단일 Gold 아티팩트 — 한 layer 의 빌드/검증 메타 + 프론트 동적 소비 hint.
 ///
 /// **SSOT 정책**: 본 schema 가 *runtime SSOT*. ETL 의 [`crate::gold::tippecanoe::LayerKind`]
@@ -58,6 +91,10 @@ pub struct GoldArtifact {
     pub render_max_zoom: Option<u8>,
     /// CDN `Cache-Control: max-age=<seconds>` — R2 PUT 메타 + manifest 박제.
     pub cache_max_age_seconds: u32,
+    /// L10 lineage — 본 layer 의 build provenance (tippecanoe SHA + git SHA + bronze inputs).
+    /// 미설정 (legacy 빌드 호환) 가능 → `Option`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub lineage: Option<BuildLineage>,
 }
 
 /// Gold manifest — 매월 빌드 결과 + 활성 버전 포인터.
@@ -138,6 +175,7 @@ mod tests {
             render_min_zoom: 16,
             render_max_zoom: None,
             cache_max_age_seconds: 31_536_000,
+            lineage: None,
         }
     }
 
