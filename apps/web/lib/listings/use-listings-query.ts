@@ -1,24 +1,30 @@
 "use client";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { fetchListings, type ListingsResponse } from "@/lib/listings/api";
+import { usePanelStack } from "@/lib/panel/use-panel-stack";
 import { useListingsStore } from "@/stores/listings";
 
 const PAGE_SIZE = 20;
 
 /**
- * 단일 useInfiniteQuery hook — ListingMap + ListingCardList 가 동일 queryKey 로 공유.
- * filters / bounds 변경 시 자동 refetch (Zustand 의 patchFilters 가 새 object ref 생성).
+ * 단일 useInfiniteQuery hook. SP10: filters 의 pnu 자리를 panel stack 의 top
+ * (parcel.summary 또는 parcel.*) 에서 derive — `useListingsStore` 에 pnu 없음.
  */
 export function useListingsQuery() {
   const filters = useListingsStore((s) => s.filters);
   const bounds = useListingsStore((s) => s.bounds);
+  const { stack } = usePanelStack();
+
+  const top = stack.entries[stack.entries.length - 1];
+  const derivedPnu = top?.kind === "parcel" ? top.id : undefined;
 
   return useInfiniteQuery<ListingsResponse>({
-    queryKey: ["listings", filters, bounds],
+    queryKey: ["listings", filters, bounds, derivedPnu],
     queryFn: ({ pageParam }) =>
       fetchListings({
         filters,
         bounds,
+        pnu: derivedPnu,
         page: pageParam as number,
         size: PAGE_SIZE,
       }),
