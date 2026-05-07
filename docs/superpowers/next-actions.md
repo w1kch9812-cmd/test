@@ -1,12 +1,51 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-07 EOD+ (ADR 0022 채택 — Bronze scraping = `services/scraper-py/` Python 격리, V-World dtmk 273 SHP zip 다운 → R2 진행)
+> **갱신일**: 2026-05-07 EOD++ (Plan D 진행 중 — SSS 10-layer enterprise prod. 줌 + dtmk pipeline 완료, 잔여: GH Actions + L1-L10)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
 
 ---
 
-## 🆕 0순위 — V-World dtmk Bronze 다운로드 진행 중 (다른 세션)
+## 🆕 0순위 — Plan D (SSS 10-layer enterprise) 진행 중
+
+**사용자 합의**: "ㄱㄱ" — 10일 작업, 각 layer 별 commit (review/rollback).
+
+### 이번 세션 commit
+- `cb93a96` feat(sp9-t3b.2): industrial complex zoom 0-16 (산단 모든 zoom visible)
+- `bfc7d29` feat(sp9-t3b.2): dtmk pipeline — R2 Bronze list/download/unzip + CLI `--bronze-prefix`
+
+### 다음 즉시 (사용자 R2 자격 + 다운 완료된 273 zip 가정)
+
+```sh
+# 충북 충주 1개 시군구만 prefix 좁혀서 smoke (작은 빌드, 5분 내).
+# (Bronze 273 다운 완료 후) — 시간 측정 + 출력 검증 path 정리.
+cargo run -p etl-base-layer -- gold \
+    --layer parcels \
+    --output ./var/gold/v_smoke \
+    --bronze-prefix bronze/2026-05/parcel-dtmk-30563/충주 \
+    --concurrency 4
+# 검증: ./var/gold/v_smoke/parcels.pmtiles 존재 + 강남 PNU 검증은 강남 prefix 로 별도.
+```
+
+### Plan D 잔여 (각 layer = 별도 commit)
+
+| Layer | 작업 | 추정 |
+|---|---|---|
+| GH Actions | `sp9-base-layer-validation.yml` (PR) + `sp9-base-layer-etl.yml` (cron) + `sp9-base-layer-rollback.yml` | 1d |
+| L1 Reproducibility | `Dockerfile.etl` — pinned tippecanoe SHA + GDAL version | 1d |
+| L2 Verification | build artifact invariants — 강남 PNU 1168010100107370000, sha256, row-count Δ<5%, geometry validity | 1d |
+| L3 Atomicity | two-phase publish — tiles → manifest flip → CDN purge | 0.5d |
+| L4 Observability | p50/p95/p99 latency, cache hit, Sentry, Grafana SLO | 2d |
+| L5 Security | Cloudflare OIDC short-lived tokens, R2 SSE, audit, secret rotation | 1d |
+| L6 Lifecycle | old R2 prefix cleanup automation, deprecation policy | 0.5d |
+| L7 SLO + Runbook | explicit SLO, incident runbook, on-call | 1d |
+| L8 Build Resilience | OOM, mid-build SIGKILL, 12h timeout overflow path | 1d |
+| L9 PR Preview | per-PR R2 prefix + Vercel preview URL + auto-cleanup | 0.5d |
+| L10 Data Lineage | manifest with V-World fetch time + tippecanoe SHA + git SHA | 0.5d |
+
+---
+
+## 1순위 — V-World dtmk Bronze 다운로드 진행 중 (다른 세션)
 
 R2 에 *연속지적도 전국 273 SHP zip* 다운로드 진행 중 (또는 진행 예정).
 
