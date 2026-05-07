@@ -54,9 +54,34 @@ mod routes {
     pub mod admin_listings;
     pub mod auth_event;
     pub mod bookmarks;
+    pub mod buildings; // SP10 T3
     pub mod health;
     pub mod listings;
     pub mod notifications;
+    pub mod parcels; // SP10 T3
+}
+
+/// SP10 T3: `NoOp` building reader — `DATA_GO_KR_API_KEY` 미설정 시 fallback (빈 list).
+/// production 은 SP4-iii-a 의 live reader 로 swap.
+struct NoOpBuildingRegisterReader;
+
+impl routes::buildings::BuildingRegisterReader for NoOpBuildingRegisterReader {
+    fn list_by_pnu<'a>(
+        &'a self,
+        _pnu: &'a shared_kernel::pnu::Pnu,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<routes::buildings::BuildingItem>,
+                        routes::buildings::BuildingRegisterError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Vec::new()) })
+    }
 }
 
 /// `Axum` 핸들러에 주입할 공유 상태.
@@ -290,7 +315,34 @@ async fn main() {
             "/listings/:listing_id/photos/:photo_id",
             axum::routing::delete(routes::listings::delete_photo),
         )
-        .with_state(listings_state)
+        .with_state(listings_state.clone())
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
+
+    // SP10 T3: Panel system backing endpoints — pure REST resource. Spec § 7 F1.
+    let parcels_state = routes::parcels::ParcelsState {
+        parcel_lookup: listings_state.parcel_lookup.clone(),
+    };
+    let parcels_router: Router<()> = Router::new()
+        .route("/api/parcels/:pnu", get(routes::parcels::get_parcel))
+        .with_state(parcels_state)
+        .layer(middleware::from_fn_with_state(
+            auth_state.clone(),
+            auth_layer,
+        ));
+
+    // SP10 T3: building_register reader 주입 — SP4-iii-a 의 live reader 로 swap 예정.
+    // 현재는 NoOp fallback (`DATA_GO_KR_API_KEY` 미설정 시 빈 list).
+    let building_reader: Arc<dyn routes::buildings::BuildingRegisterReader> =
+        Arc::new(NoOpBuildingRegisterReader);
+    let buildings_state = routes::buildings::BuildingsState {
+        reader: building_reader,
+    };
+    let buildings_router: Router<()> = Router::new()
+        .route("/api/buildings", get(routes::buildings::list_buildings))
+        .with_state(buildings_state)
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
@@ -383,6 +435,8 @@ async fn main() {
     let app = public
         .merge(protected)
         .merge(listings_router)
+        .merge(parcels_router) // SP10 T3
+        .merge(buildings_router) // SP10 T3
         .merge(bookmarks_router)
         .merge(admin_router)
         .merge(notifications_router)

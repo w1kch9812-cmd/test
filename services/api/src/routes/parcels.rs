@@ -1,6 +1,6 @@
 //! `GET /api/parcels/:pnu` — PNU 19 자리로 필지 정보 조회 (SP10 panel.parcel.summary 의 backing).
 //!
-//! `parcel-lookup` crate 의 [`ParcelInfoLookup::lookup_by_pnu`] 호출 → V-World 또는 NoOp 응답.
+//! `parcel-lookup` crate 의 [`ParcelInfoLookup::lookup_by_pnu`] 호출 → V-World 또는 `NoOp` 응답.
 //! 본 핸들러는 "panel" 단어를 모름 — pure REST resource (spec § 7 F1).
 
 use std::sync::Arc;
@@ -107,7 +107,9 @@ pub async fn get_parcel(
         eupmyeondong_name: String::new(),
         land_use_type: info.land_use_type.as_str().to_owned(),
         zoning: info.zoning.map(|z| z.as_str().to_owned()),
-        official_land_price_per_m2: info.official_land_price_per_m2.map(|m| m.as_i64()),
+        official_land_price_per_m2: info
+            .official_land_price_per_m2
+            .map(shared_kernel::money::MoneyKrw::as_i64),
         gosi_year_month: info
             .gosi_year_month
             .map(|y| format!("{:04}{:02}", y.year, y.month)),
