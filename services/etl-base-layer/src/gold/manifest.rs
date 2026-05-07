@@ -1,6 +1,6 @@
 //! Gold manifest — 클라이언트가 R2 에서 *어떤 버전* 의 vector tile 을 fetch 할지 결정.
 //!
-//! ADR 0016 hot-swap + ADR 0021 (`PMTiles` 분해 → flat tile) 패턴:
+//! ADR 0016 hot-swap + ADR 0021 (``PMTiles`` 분해 → flat tile) 패턴:
 //! 1. 새 빌드 → tippecanoe 로 `<layer>.pmtiles` (build artifact, R2 미업로드)
 //! 2. tile-join 으로 `<layer>/{z}/{x}/{y}.pbf` 분해
 //! 3. flat tile 들 R2 batch upload (`gold/<version>/<layer>/{z}/{x}/{y}.pbf`)
@@ -16,17 +16,24 @@ use std::collections::BTreeMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// 단일 Gold 아티팩트 — 한 layer 의 빌드/검증 메타.
+/// 단일 Gold 아티팩트 — 한 layer 의 빌드/검증 메타 + 프론트 동적 소비 hint.
 ///
-/// `PMTiles` 파일은 build artifact (`sha256` / `row_count` 검증 용도), R2 에는 분해된
-/// flat `.pbf` 만 업로드. 본 ADR 0021 결정.
+/// **SSOT 정책**: 본 schema 가 *runtime SSOT*. ETL 의 [`crate::gold::tippecanoe::LayerKind`]
+/// enum 이 build-time SSOT 이고, 본 manifest 가 그 reflection 을 클라이언트로 propagate.
+/// 프론트는 본 메타를 fetch 후 `addSource`/`addLayer` 의 zoom/cache 등을 동적 결정 —
+/// *hardcode 0*.
+///
+/// ``PMTiles`` 파일은 build artifact (`sha256` / `row_count` 검증 용도), R2 에는 분해된
+/// flat `.pbf` 만 업로드 (ADR 0021).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GoldArtifact {
     /// flat tile prefix — `gold/<version>/<layer>` (URL template 에 `{layer}` 치환됨).
     pub key: String,
-    /// `PMTiles` 파일 크기 (bytes) — build artifact, R2 미업로드.
+    /// vector tile 안의 `source-layer` 이름 (= `LayerKind::layer_name`).
+    pub source_layer: String,
+    /// ``PMTiles`` 파일 크기 (bytes) — build artifact, R2 미업로드.
     pub pmtiles_bytes: u64,
-    /// `PMTiles` sha256 — 빌드 결정성 검증.
+    /// ``PMTiles`` sha256 — 빌드 결정성 검증.
     pub pmtiles_sha256: String,
     /// 빌드 완료 시각 (UTC).
     pub built_at: DateTime<Utc>,
@@ -36,6 +43,21 @@ pub struct GoldArtifact {
     pub flat_tile_count: u64,
     /// ADR 0021 — flat tile 합계 bytes.
     pub flat_tiles_total_bytes: u64,
+    /// `PMTiles` 빌드 zoom 하한 (= `LayerKind::zoom_range().0`).
+    /// 프론트 `addSource({ minzoom })` 가 본 값을 따름.
+    pub tile_min_zoom: u8,
+    /// `PMTiles` 빌드 zoom 상한 (= `LayerKind::zoom_range().1`).
+    /// 프론트 `addSource({ maxzoom })` 가 본 값을 따름.
+    pub tile_max_zoom: u8,
+    /// 프론트 layer render 시작 zoom (= `LayerKind::render_min_zoom`).
+    /// `addLayer({ minzoom })` 가 본 값을 따름. `tile_min_zoom` 보다 클 수 있음.
+    pub render_min_zoom: u8,
+    /// 프론트 layer render 종료 zoom (= `LayerKind::render_max_zoom`).
+    /// `None` 시 mapbox-gl default 24.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub render_max_zoom: Option<u8>,
+    /// CDN `Cache-Control: max-age=<seconds>` — R2 PUT 메타 + manifest 박제.
+    pub cache_max_age_seconds: u32,
 }
 
 /// Gold manifest — 매월 빌드 결과 + 활성 버전 포인터.
@@ -100,12 +122,18 @@ mod tests {
     fn fixture_artifact(key: &str) -> GoldArtifact {
         GoldArtifact {
             key: key.into(),
+            source_layer: "parcels".into(),
             pmtiles_bytes: 1_234,
             pmtiles_sha256: "abc".into(),
             built_at: Utc.with_ymd_and_hms(2026, 5, 6, 10, 0, 0).unwrap(),
             row_count: 1_400_000_000,
             flat_tile_count: 800_000,
             flat_tiles_total_bytes: 8_000_000_000,
+            tile_min_zoom: 14,
+            tile_max_zoom: 17,
+            render_min_zoom: 16,
+            render_max_zoom: None,
+            cache_max_age_seconds: 31_536_000,
         }
     }
 

@@ -10,9 +10,8 @@ FirstInstance:
         Address: admin@zitadel.localhost
         Verified: true
     Machine:
-      Machine:
-        Username: zitadel-admin-sa
-        Name: zitadel-admin-sa
+      Username: zitadel-admin-sa
+      Name: zitadel-admin-sa
       MachineKey:
         Type: 1
       Pat:

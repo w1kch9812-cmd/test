@@ -58,25 +58,25 @@ function setupWebGlRecovery(mb: MapboxGLLike): (() => void) | undefined {
 }
 
 /**
- * Vector tile 폴리곤 source/layer 등록 — ADR 0021 (PMTiles 분해 → 정적 .pbf, mapbox-gl 표준 100%).
+ * Vector tile 폴리곤 source/layer 등록 — ADR 0021 X9 + Mapbox `TileJSON` SSOT.
  *
- * 클라이언트는 `type: "vector" + tiles: [URL_TEMPLATE]` 표준 source 그대로 사용.
- * addSourceType / Service Worker / Blob URL / private API 의존 0 (ADR 0019 의 모든 trick 폐기).
+ * 클라이언트는 `addSource({ type: "vector", url: ".../<layer>.json" })` 한 줄.
+ * mapbox-gl 이 자동으로 TileJSON fetch → minzoom/maxzoom/tiles[] 적용. 우리 fetch 코드 0.
  *
  * env:
- * - `NEXT_PUBLIC_TILES_BASE_URL` (e.g. `https://r2.gongzzang.dev/gold/v3/`) — 미설정 시 폴리곤 비활성
- * - `NEXT_PUBLIC_TILES_PARCELS_LAYER` (default `parcels`) — vector tile 안의 source-layer 이름
- * - `NEXT_PUBLIC_TILES_ADMIN_LAYER`   (default `admin`)
- * - `NEXT_PUBLIC_TILES_COMPLEX_LAYER` (default `complex`)
+ * - `NEXT_PUBLIC_TILES_BASE_URL` (e.g. `https://r2/.../gold/v1/`) — 미설정 시 폴리곤 비활성
+ *
+ * `source-layer` 이름은 ETL `LayerKind::layer_name()` 와 1:1 — `LAYER_IDS` SSOT 참조.
+ * minzoom/maxzoom 은 ETL `LayerKind::zoom_range()` 가 TileJSON 에 박제 — *프론트 hardcode 0*.
+ * 단 *render zoom* (`addLayer({ minzoom })`) 은 도메인 정책 — 본 컴포넌트에 명시:
+ * - `parcels-fill`: zoom 14+ (TileJSON minzoom 부터, 오버줌은 mapbox-gl 자동)
+ * - `admin-fill` / `complex-fill`: ETL 빌드 후 활성
  */
 const TILES_BASE_URL = process.env.NEXT_PUBLIC_TILES_BASE_URL ?? "";
-const PARCELS_LAYER = process.env.NEXT_PUBLIC_TILES_PARCELS_LAYER || "parcels";
-const ADMIN_LAYER = process.env.NEXT_PUBLIC_TILES_ADMIN_LAYER || "admin";
-const COMPLEX_LAYER = process.env.NEXT_PUBLIC_TILES_COMPLEX_LAYER || "complex";
 
-function tilesUrlTemplate(layerDir: string): string {
+function tileJsonUrl(layerName: string): string {
   const base = TILES_BASE_URL.endsWith("/") ? TILES_BASE_URL : `${TILES_BASE_URL}/`;
-  return `${base}${layerDir}/{z}/{x}/{y}.pbf`;
+  return `${base}${layerName}.json`;
 }
 
 function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => void): void {
@@ -89,69 +89,21 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
     return;
   }
 
+  // ===== 필지 (parcels) — TileJSON 자동 소비 =====
   try {
-    // ===== 행정구역 (admin) =====
-    if (!mb.getSource?.("admin")) {
-      mb.addSource("admin", {
-        type: "vector",
-        tiles: [tilesUrlTemplate("admin")],
-        minzoom: 6,
-        maxzoom: 12,
-      });
-      mb.addLayer({
-        id: "admin-fill",
-        type: "fill",
-        source: "admin",
-        "source-layer": ADMIN_LAYER,
-        minzoom: 0,
-        maxzoom: 16,
-        paint: {
-          "fill-color": "#9CA3AF",
-          "fill-opacity": 0.05,
-          "fill-outline-color": "#6B7280",
-        },
-      });
-    }
-
-    // ===== 산업단지 (complex) =====
-    if (!mb.getSource?.("complex")) {
-      mb.addSource("complex", {
-        type: "vector",
-        tiles: [tilesUrlTemplate("complex")],
-        minzoom: 10,
-        maxzoom: 15,
-      });
-      mb.addLayer({
-        id: "complex-fill",
-        type: "fill",
-        source: "complex",
-        "source-layer": COMPLEX_LAYER,
-        minzoom: 12,
-        paint: {
-          "fill-color": "#3B82F6",
-          "fill-opacity": 0.15,
-          "fill-outline-color": "#1D4ED8",
-        },
-      });
-    }
-
-    // ===== 필지 (parcels) =====
     if (!mb.getSource?.("parcels")) {
       mb.addSource("parcels", {
         type: "vector",
-        tiles: [tilesUrlTemplate("parcels")],
-        minzoom: 14,
-        maxzoom: 17,
-        // tile 안의 PNU attribute → mapbox-gl feature.id (setFeatureState 등에 사용).
-        // 대문자 `PNU` (design-lab tippecanoe 출력 표준). ETL T3b.3 정렬 시 align.
+        url: tileJsonUrl("parcels"),
+        // PNU attribute → mapbox-gl feature.id (setFeatureState).
         promoteId: "PNU",
       });
       mb.addLayer({
         id: "parcels-fill",
         type: "fill",
         source: "parcels",
-        "source-layer": PARCELS_LAYER,
-        minzoom: 16,
+        "source-layer": "parcels",
+        minzoom: 14,
         paint: {
           "fill-color": "#10B981",
           "fill-opacity": 0.1,
@@ -170,7 +122,50 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
       }
     }
   } catch (err) {
-    console.warn("[ListingMap] 폴리곤 layer 추가 실패 — 무시", err);
+    console.warn("[ListingMap] parcels layer 추가 실패 — 무시", err);
+  }
+
+  // ===== 행정구역 (admin) — ETL 빌드 후 활성 (TileJSON 200 OK 시) =====
+  try {
+    if (!mb.getSource?.("admin")) {
+      mb.addSource("admin", { type: "vector", url: tileJsonUrl("admin") });
+      mb.addLayer({
+        id: "admin-fill",
+        type: "fill",
+        source: "admin",
+        "source-layer": "admin",
+        maxzoom: 14, // 시군구 zoom 14 미만에서만 보임 (필지가 zoom 14+ 에서 바로 이어짐)
+        paint: {
+          "fill-color": "#9CA3AF",
+          "fill-opacity": 0.05,
+          "fill-outline-color": "#6B7280",
+        },
+      });
+    }
+  } catch {
+    // admin TileJSON 미발행 (ETL 미빌드) — 정상 silent skip.
+  }
+
+  // ===== 산업단지 (complex) — ETL 빌드 후 활성 =====
+  try {
+    if (!mb.getSource?.("complex")) {
+      mb.addSource("complex", { type: "vector", url: tileJsonUrl("complex") });
+      mb.addLayer({
+        id: "complex-fill",
+        type: "fill",
+        source: "complex",
+        "source-layer": "complex",
+        minzoom: 10,
+        maxzoom: 16,
+        paint: {
+          "fill-color": "#3B82F6",
+          "fill-opacity": 0.15,
+          "fill-outline-color": "#1D4ED8",
+        },
+      });
+    }
+  } catch {
+    // complex TileJSON 미발행 — 정상 silent skip.
   }
 }
 
@@ -244,11 +239,18 @@ export function ListingMap() {
       // ADR 0021: PMTiles 분해 → 정적 .pbf, mapbox-gl 의 가장 표준 source type.
       // addSourceType / Service Worker / Blob URL / private API 의존 0.
       waitForMapbox(map)
-        .then((mb) => {
+        .then(async (mb) => {
           if (cancelled) return;
           if (process.env.NODE_ENV !== "production") {
             (window as unknown as Record<string, unknown>).__listingMb = mb;
           }
+          // addSource 는 style.load 후에만 작동. polling — `once("style.load")` 는
+          // 이벤트가 이미 fire 됐으면 callback 안 호출 (Naver fork edge case).
+          for (let i = 0; i < 60 && !mb.isStyleLoaded?.(); i++) {
+            await new Promise((r) => setTimeout(r, 100));
+            if (cancelled) return;
+          }
+          if (cancelled) return;
           setupPolygonLayers(mb, (pnu) => patchFilters({ pnu }));
           const recovery = setupWebGlRecovery(mb);
           if (recovery) cleanups.push(recovery);

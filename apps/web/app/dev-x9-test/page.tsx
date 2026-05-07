@@ -71,16 +71,22 @@ export default function DevX9TestPage() {
           return;
         }
 
+        // addSource 는 style.load 후에만 작동. polling — `once("style.load")` 는
+        // *이벤트가 이미 fire 됐으면* callback 안 호출 (Naver fork edge case).
+        for (let i = 0; i < 60 && !mb.isStyleLoaded?.(); i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          if (cancelled) return;
+        }
+
         const base = TILES_BASE_URL.endsWith("/") ? TILES_BASE_URL : `${TILES_BASE_URL}/`;
-        const tilesUrl = `${base}parcels/{z}/{x}/{y}.pbf`;
-        setStatus(`X9 vector source 등록 중… ${tilesUrl}`);
+        const tileJsonUrl = `${base}parcels.json`;
+        setStatus(`TileJSON source 등록 중… ${tileJsonUrl}`);
 
         if (!mb.getSource?.("parcels")) {
+          // ADR 0021 SSS — Mapbox TileJSON spec. mapbox-gl 자동 fetch + zoom 적용.
           mb.addSource?.("parcels", {
             type: "vector",
-            tiles: [tilesUrl],
-            minzoom: 14,
-            maxzoom: 17,
+            url: tileJsonUrl,
             promoteId: "PNU",
           });
           mb.addLayer?.({
@@ -116,7 +122,7 @@ export default function DevX9TestPage() {
             setClickedPnu(typeof pnu === "string" ? pnu : "(no PNU)");
           });
         }
-        setStatus(`✅ X9 wire 활성 (강남 z17, click 시 PNU 표시) — ${tilesUrl}`);
+        setStatus(`✅ TileJSON wire 활성 (강남 z17, click 시 PNU 표시) — ${tileJsonUrl}`);
       })
       .catch((e: unknown) => {
         setStatus(`❌ 실패: ${e instanceof Error ? e.message : String(e)}`);

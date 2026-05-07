@@ -33,7 +33,12 @@ pub enum LayerKind {
 }
 
 impl LayerKind {
+    /// 모든 variant — manifest 박제 시 iterate (multi-layer build orchestration).
+    #[allow(dead_code)]
+    pub const ALL: &'static [Self] = &[Self::Parcels, Self::Admin, Self::Complex];
+
     /// PMTiles 안의 layer 이름 (프론트 `addLayer({ "source-layer": ... })` 에 매칭).
+    /// **SSOT** — 프론트 `LAYER_IDS` 가 본 enum 의 reflection.
     #[must_use]
     pub const fn layer_name(self) -> &'static str {
         match self {
@@ -43,7 +48,8 @@ impl LayerKind {
         }
     }
 
-    /// `(min_zoom, max_zoom)`.
+    /// PMTiles 빌드 zoom range `(min, max)` — tippecanoe `-Z`/`-z` 인자 + manifest 박제.
+    /// **SSOT** — 프론트 source 의 minzoom/maxzoom 이 본 값을 따라야 함 (manifest fetch).
     #[must_use]
     pub const fn zoom_range(self) -> (u8, u8) {
         match self {
@@ -51,6 +57,36 @@ impl LayerKind {
             Self::Admin => (6, 12),
             Self::Complex => (10, 15),
         }
+    }
+
+    /// 프론트 `addLayer({ minzoom })` 권장값 — *render* 시작 zoom.
+    /// PMTiles `min_zoom` 보다 *클* 수 있음 (e.g. parcels tile 14 부터 있지만 render 는 16+).
+    #[must_use]
+    pub const fn render_min_zoom(self) -> u8 {
+        match self {
+            Self::Parcels => 16,
+            Self::Admin => 0,
+            Self::Complex => 12,
+        }
+    }
+
+    /// 프론트 `addLayer({ maxzoom })` 권장값 (render 종료). `None` = mapbox-gl default 24.
+    #[must_use]
+    pub const fn render_max_zoom(self) -> Option<u8> {
+        match self {
+            Self::Admin => Some(16),
+            _ => None,
+        }
+    }
+
+    /// CDN `Cache-Control: max-age=<seconds>` — layer 별 차별화 (gongzzang-develop 차용).
+    /// flat tile 은 immutable (URL versioning 으로 무효화) → 1년.
+    /// 향후 layer 별 차등 (e.g. complex 일 6시간) 가능성 위해 `self` 인자 보존.
+    #[must_use]
+    #[allow(clippy::unused_self)]
+    pub const fn cache_max_age_seconds(self) -> u32 {
+        // 31_536_000s = 365일. immutable + URL versioning 패턴 (ADR 0021 § Tier A).
+        31_536_000
     }
 }
 
@@ -156,11 +192,18 @@ pub async fn run(
         Arg::Lit(&min_z_str),
         Arg::Lit("-z"),
         Arg::Lit(&max_z_str),
+        // SSS 화 (사용자 needs: 폴리곤 망가짐/비틀림 0):
+        // - simplification=1: 거의 원본 보존 (default 12 → 1)
+        // - coalesce-smallest-as-needed: 작은 polygon 'drop' → 'merge' (사라짐 0)
+        // - detect-shared-borders: 인접 polygon boundary 정확히 일치 (틈 0, 겹침 0)
+        // - maximum-tile-bytes 4MB: detail 보존, default 500KB 보다 8x
         Arg::Lit("--no-feature-limit"),
         Arg::Lit("--no-tile-size-limit"),
         Arg::Lit("--force"),
-        Arg::Lit("--drop-smallest-as-needed"),
-        Arg::Lit("--simplification=10"),
+        Arg::Lit("--coalesce-smallest-as-needed"),
+        Arg::Lit("--detect-shared-borders"),
+        Arg::Lit("--simplification=1"),
+        Arg::Lit("--maximum-tile-bytes=4000000"),
         Arg::Lit("--extend-zooms-if-still-dropping"),
         Arg::Lit("--attribute-type=pnu:string"),
     ];

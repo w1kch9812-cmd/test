@@ -27,6 +27,9 @@ services:
       - --masterkeyFromEnv
       - --tlsMode
       - disabled
+      # zitadel-setup.yaml 의 Machine user + PAT 생성 적용 (init-zitadel.sh 가 PAT 사용).
+      - --steps
+      - /zitadel-setup.yaml
     environment:
       ZITADEL_MASTERKEY: MasterkeyNeedsToHave32Characters
       ZITADEL_DATABASE_POSTGRES_HOST: zitadel-db

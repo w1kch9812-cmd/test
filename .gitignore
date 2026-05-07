@@ -62,6 +62,7 @@ apps/web/public/pmtiles-worker.js
 # Playwright MCP / dev 검증 screenshot artifacts — R2 직결 + 폴리곤 시각 확인 산출물.
 .playwright-mcp/
 x9-*.png
+login-*.png
 .cache/
 .temp/
 .tmp/
@@ -80,3 +81,4 @@ apps/web/scripts/
 _archive/
 .claude/scheduled_tasks.lock
 
+.superpowers/

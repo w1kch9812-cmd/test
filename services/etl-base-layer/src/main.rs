@@ -280,17 +280,24 @@ async fn upload_gold_to_r2(
     let pmtiles_bytes = tokio::fs::read(&build.output_path).await?;
     let sha256 = format!("{:x}", Sha256::digest(&pmtiles_bytes));
 
+    let (tile_min_zoom, tile_max_zoom) = layer.zoom_range();
     let mut artifacts = BTreeMap::new();
     artifacts.insert(
         layer.layer_name().to_owned(),
         GoldArtifact {
             key: key_prefix.clone(),
+            source_layer: layer.layer_name().to_owned(),
             pmtiles_bytes: build.output_bytes,
             pmtiles_sha256: sha256,
             built_at: chrono::Utc::now(),
             row_count: 0, // tippecanoe 출력 metadata 의 feature 수 (후속 박제)
             flat_tile_count: build.flat_tile_count,
             flat_tiles_total_bytes: build.flat_tiles_total_bytes,
+            tile_min_zoom,
+            tile_max_zoom,
+            render_min_zoom: layer.render_min_zoom(),
+            render_max_zoom: layer.render_max_zoom(),
+            cache_max_age_seconds: layer.cache_max_age_seconds(),
         },
     );
 
@@ -325,7 +332,57 @@ async fn upload_gold_to_r2(
         .put_object_json(&manifest_key, &manifest, "no-cache, max-age=0")
         .await?;
     info!(manifest_key = %manifest_key, "manifest published");
+
+    // ADR 0021 SSS 화 — Mapbox TileJSON spec publish (https://github.com/mapbox/tilejson-spec).
+    // 프론트는 `addSource({ type: "vector", url: "...parcels.json" })` 한 줄 → mapbox-gl
+    // 자동 fetch + minzoom/maxzoom/tiles 적용. 우리 manifest fetch 코드 0.
+    let tilejson = build_tilejson(r2_cfg, version, layer);
+    let tilejson_key = format!("{}/{}/{}.json", r2_cfg.gold_prefix, version, layer.layer_name());
+    uploader
+        .put_object_json(&tilejson_key, &tilejson, "public, max-age=300")
+        .await?;
+    info!(tilejson_key = %tilejson_key, "TileJSON published");
     Ok(())
+}
+
+/// Mapbox `TileJSON` 3.0.0 spec 직렬화. layer 메타 (zoom range / tiles url / `vector_layers`).
+fn build_tilejson(
+    r2_cfg: &crate::r2_upload::R2Config,
+    version: &str,
+    layer: LayerKind,
+) -> serde_json::Value {
+    let public_base = std::env::var("R2_PUBLIC_URL_BASE")
+        .unwrap_or_else(|_| "https://<r2-public-host>/".to_owned());
+    let base = if public_base.ends_with('/') {
+        public_base
+    } else {
+        format!("{public_base}/")
+    };
+    let tiles_url = format!(
+        "{base}{prefix}/{version}/{layer_name}/{{z}}/{{x}}/{{y}}.pbf",
+        prefix = r2_cfg.gold_prefix,
+        layer_name = layer.layer_name(),
+    );
+    let (min_z, max_z) = layer.zoom_range();
+    serde_json::json!({
+        "tilejson": "3.0.0",
+        "name": layer.layer_name(),
+        "description": format!("gongzzang gold v{version} {}", layer.layer_name()),
+        "tiles": [tiles_url],
+        "minzoom": min_z,
+        "maxzoom": max_z,
+        "vector_layers": [{
+            "id": layer.layer_name(),
+            "minzoom": min_z,
+            "maxzoom": max_z,
+            "fields": match layer {
+                LayerKind::Parcels => serde_json::json!({ "pnu": "String" }),
+                LayerKind::Admin | LayerKind::Complex => {
+                    serde_json::json!({ "code": "String", "name": "String" })
+                }
+            }
+        }]
+    })
 }
 
 fn init_tracing() {
