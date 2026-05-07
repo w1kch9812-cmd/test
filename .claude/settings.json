@@ -27,7 +27,9 @@
       "Bash(rustc --version)",
       "Bash(cargo --version)",
       "Bash(node --version)",
-      "Bash(pnpm --version)"
+      "Bash(pnpm --version)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/scrapling:*)"
     ],
     "deny": [
       "Bash(rm -rf *)",
