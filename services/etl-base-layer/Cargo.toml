@@ -12,6 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config" }
+# L4 Observability — Sentry SDK proper integration (curl 깨진 endpoint 제거).
+sentry = { workspace = true }
+sentry-tracing = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
@@ -32,7 +35,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # dev convenience — `.env` 자동 로드 (production 은 ECS task environment 가 직접 inject).
 dotenvy = "0.15"
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+# json feature — L4 prod 에서 ETL_LOG_FORMAT=json (CloudWatch / Datadog 자동 파싱).
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
 # R2 (Cloudflare R2 = S3-호환) 업로드 — SP9 T3b.1.
 # rustls 강제 (workspace 정책: reqwest/sqlx 모두 rustls-tls 사용, openssl 의존 회피).
 #

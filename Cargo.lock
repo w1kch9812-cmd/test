@@ -1500,6 +1500,8 @@ dependencies = [
  "futures-util",
  "hex",
  "reqwest",
+ "sentry",
+ "sentry-tracing",
  "serde",
  "serde_json",
  "sha2",

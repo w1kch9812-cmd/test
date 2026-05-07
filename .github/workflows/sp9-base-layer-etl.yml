@@ -261,25 +261,34 @@ jobs:
             promote --version "${{ steps.ver.outputs.version }}"
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Phase 5: Notify on failure — Sentry 가 SDK 단계에서 보내지만 workflow-level
-  # alert 도 따로. SP9 정전 = 클라이언트 폴리곤 안 보임 → on-call 에게 page.
+  # Phase 5: Notify on failure — workflow-level alert.
+  # SDK 단계는 etl-base-layer Rust binary 가 SENTRY_DSN env 받아서 직접 emit
+  # (gold/promote 에서 panic / error tracing 자동 보고). 본 job 은 workflow runner
+  # 자체 실패 (예: tippecanoe build 실패) 의 fallback alert — sentry-cli 사용.
   # ─────────────────────────────────────────────────────────────────────────────
   notify-failure:
-    name: Notify failure
+    name: Notify failure (workflow-level)
     needs: [bronze, gold, promote]
     if: ${{ always() && (needs.bronze.result == 'failure' || needs.gold.result == 'failure' || needs.promote.result == 'failure') }}
     runs-on: ubuntu-22.04
     steps:
-      - name: Sentry alert
+      - name: Sentry CLI alert (proper envelope endpoint)
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
         run: |
-          if [ -n "$SENTRY_DSN" ]; then
-            curl --silent --output /dev/null \
-              -X POST \
-              -H "Content-Type: application/json" \
-              -d "{\"message\":\"SP9 Base Layer ETL failed (run ${{ github.run_id }})\",\"level\":\"error\",\"tags\":{\"workflow\":\"sp9-base-layer-etl\",\"sha\":\"${{ github.sha }}\"}}" \
-              "${SENTRY_DSN}/store/" || true
-          else
-            echo "::warning::SENTRY_DSN not set — skipping alert"
+          if [ -z "${SENTRY_DSN:-}" ]; then
+            echo "::warning::SENTRY_DSN not set — skipping workflow-level alert"
+            exit 0
           fi
+          # sentry-cli 설치 (공식, GitHub Releases 에서 정적 binary).
+          curl -sL https://sentry.io/get-cli/ | bash
+          # send-event = 모던 envelope endpoint 사용 (legacy /store/ 와 다름).
+          sentry-cli send-event \
+            --message "SP9 Base Layer ETL failed (run ${{ github.run_id }})" \
+            --level error \
+            --tag "workflow:sp9-base-layer-etl" \
+            --tag "sha:${{ github.sha }}" \
+            --tag "ref:${{ github.ref_name }}" \
+            --tag "bronze:${{ needs.bronze.result }}" \
+            --tag "gold:${{ needs.gold.result }}" \
+            --tag "promote:${{ needs.promote.result }}"

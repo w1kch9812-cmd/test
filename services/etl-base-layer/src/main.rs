@@ -56,12 +56,24 @@ use crate::gold::tippecanoe::{check_available, LayerKind};
 use crate::gold::verify::{self, lonlat_to_tile, TileExpectation, TileSpec, VerifySpec};
 use crate::r2_upload::R2Uploader;
 
-#[tokio::main]
-async fn main() -> ExitCode {
+fn main() -> ExitCode {
     // .env 자동 로드 (dev convenience). production 에서는 .env 미존재 → silent skip.
     let _ = dotenvy::dotenv();
+
+    // L4 Observability — Sentry SDK init *before* tokio runtime.
+    // SENTRY_DSN 미설정 시 sentry::init 가 no-op (silent disabled — dev / smoke 빌드).
+    // ClientInitGuard drop = pending event flush (program exit 시 자동).
+    let _sentry_guard = init_sentry();
     init_tracing();
 
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("tokio runtime build");
+    runtime.block_on(async_main())
+}
+
+async fn async_main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let subcommand = args.first().map_or("bronze", String::as_str);
 
@@ -714,8 +726,42 @@ fn build_tilejson(
 fn init_tracing() {
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,etl_base_layer=debug"));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(true)
-        .init();
+    // L4: prod 는 ETL_LOG_FORMAT=json (CloudWatch / Datadog 자동 파싱). dev = pretty (default).
+    let json_mode = std::env::var("ETL_LOG_FORMAT").as_deref() == Ok("json");
+    if json_mode {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_target(true)
+            .json()
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_target(true)
+            .init();
+    }
+}
+
+/// L4 — Sentry SDK init. `SENTRY_DSN` 미설정 시 no-op (silent disabled).
+/// release / environment / `git_sha` 자동 박제 → Sentry UI 의 release tracking 활성.
+fn init_sentry() -> Option<sentry::ClientInitGuard> {
+    let dsn = std::env::var("SENTRY_DSN")
+        .ok()
+        .filter(|v| !v.trim().is_empty())?;
+    let release = std::env::var("GIT_SHA").ok().map(Into::into);
+    let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_BUILD_ENV")
+        .unwrap_or_else(|_| "dev".to_owned())
+        .into();
+    let guard = sentry::init((
+        dsn,
+        sentry::ClientOptions {
+            release,
+            environment: Some(environment),
+            // 100% sampling — ETL 은 월 1회 cron 이라 비용 무관, 모든 에러 보고.
+            sample_rate: 1.0,
+            traces_sample_rate: 0.0,
+            ..Default::default()
+        },
+    ));
+    Some(guard)
 }
