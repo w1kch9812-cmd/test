@@ -1,0 +1,221 @@
+name: SP9 Base Layer Validation
+
+# PR 시 SP9 ETL 관련 파일 (etl-base-layer Rust + Dockerfile.etl + scraper-py) 변경 시
+# 자동 검증. 일반 ci.yml 의 cargo clippy / typecheck 와 *별개* — SP9 특이 path:
+#   1) Dockerfile.etl 이 valid 한지 (build 통과)
+#   2) tippecanoe / ogr2ogr 이 actual binary 로 동작하는지 (mini-fixture E2E)
+#   3) verify module 의 sha256 / lonlat_to_tile 단위 테스트 (이미 ci.yml 에 포함되지만
+#      여기서 한 번 더 — runner 환경 차이 디버깅 용이).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "services/etl-base-layer/**"
+      - "services/scraper-py/**"
+      - ".github/workflows/sp9-base-layer-*.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/etl-base-layer/**"
+      - "services/scraper-py/**"
+      - ".github/workflows/sp9-base-layer-*.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  TIPPECANOE_VERSION: "2.80.0"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1: etl-base-layer test + clippy (focused) — 일반 ci.yml 의 workspace
+  # 빌드보다 *빠른* feedback (ETL crate 만).
+  # ─────────────────────────────────────────────────────────────────────────────
+  rust-focused:
+    name: cargo test/clippy (etl-base-layer only)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy" }
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+      - name: cargo clippy (etl-base-layer)
+        run: cargo clippy -p etl-base-layer --all-targets -- -D warnings
+      - name: cargo test (etl-base-layer)
+        run: cargo test -p etl-base-layer --all-features
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2: Tippecanoe smoke — 실 binary 로 mini-fixture build → decode → verify.
+  # build 가 *작동* 하는지 (binary spawn / GeoJSON parse / pmtiles output) 의
+  # E2E 검증. CI 에서 외부 도구 회귀 잡는 용도.
+  # ─────────────────────────────────────────────────────────────────────────────
+  tippecanoe-smoke:
+    name: tippecanoe smoke (mini-fixture)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps + GDAL
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libsqlite3-dev zlib1g-dev gdal-bin
+
+      - name: Cache tippecanoe build
+        id: tippecanoe-cache
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/tippecanoe-cache
+          key: tippecanoe-${{ env.TIPPECANOE_VERSION }}-ubuntu22
+
+      - name: Build & install tippecanoe
+        if: steps.tippecanoe-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
+              https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j"$(nproc)"
+          sudo make install
+          # cache marker (real install 은 cache key 와 무관 — make install 이 빠르므로 단순화).
+          mkdir -p /usr/local/bin/tippecanoe-cache
+          echo "${TIPPECANOE_VERSION}" > /usr/local/bin/tippecanoe-cache/version
+      - name: Re-install tippecanoe from cache
+        if: steps.tippecanoe-cache.outputs.cache-hit == 'true'
+        run: |
+          # cache 만 hit 한 경우 binary 는 새로 받음 (cache 가 binary 자체 보존 X).
+          git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
+              https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j"$(nproc)"
+          sudo make install
+
+      - name: Verify external tools
+        run: |
+          tippecanoe --version
+          tile-join --version
+          # tippecanoe-decode 는 --version flag 미지원 → presence 만 확인.
+          which tippecanoe-decode
+          ogr2ogr --version
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+
+      - name: Build etl-base-layer (release)
+        run: cargo build -p etl-base-layer --release
+
+      - name: Mini fixture — single-feature GeoJSON
+        run: |
+          mkdir -p var/sample
+          cat > var/sample/mini.geojson <<'EOF'
+          {
+            "type": "FeatureCollection",
+            "features": [
+              {
+                "type": "Feature",
+                "geometry": {
+                  "type": "Polygon",
+                  "coordinates": [[
+                    [127.04, 37.50],
+                    [127.05, 37.50],
+                    [127.05, 37.51],
+                    [127.04, 37.51],
+                    [127.04, 37.50]
+                  ]]
+                },
+                "properties": { "pnu": "1168010100107370000" }
+              }
+            ]
+          }
+          EOF
+
+      - name: Run gold build (parcels, mini-fixture)
+        env:
+          # Host::detect() 가 cfg!(windows) 기반 — Linux runner = Native 자동.
+          # R2 미설정 → upload skip, local-only mode.
+          # VERIFY_* → build 후 invariant 강제.
+          VERIFY_GANGNAM_PNU: "1168010100107370000"
+          VERIFY_MIN_BYTES: "100"
+        run: |
+          ./target/release/etl-base-layer gold \
+            --layer parcels \
+            --output ./var/gold/v_smoke \
+            ./var/sample/mini.geojson
+
+      - name: Sanity check output
+        run: |
+          test -f ./var/gold/v_smoke/parcels.pmtiles
+          test -d ./var/gold/v_smoke/parcels
+          # at maxzoom (z17), 강남 좌표 tile 이 있어야 함.
+          ls ./var/gold/v_smoke/parcels/17/ | head -3 || echo "z17 디렉터리 없음"
+
+      - name: Decode + grep 강남 PNU
+        run: |
+          tippecanoe-decode -l parcels \
+            ./var/gold/v_smoke/parcels.pmtiles 17 111789 50783 \
+            | grep -F "1168010100107370000" \
+            && echo "✅ 강남 PNU detected at z17"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3: Dockerfile.etl 빌드 검증 — image 가 실제로 빌드되는지 (push 안 함).
+  # ─────────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Dockerfile.etl build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/etl-base-layer/Dockerfile.etl
+          push: false
+          load: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIMESTAMP=${{ github.event.repository.updated_at }}
+            TIPPECANOE_VERSION=${{ env.TIPPECANOE_VERSION }}
+          tags: gongzzang/etl-base-layer:pr-${{ github.event.number || github.run_id }}
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 4: scraper-py lint + dtmk_vworld import smoke (Python service 격리).
+  # ─────────────────────────────────────────────────────────────────────────────
+  scraper-py:
+    name: scraper-py lint + import
+    runs-on: ubuntu-22.04
+    if: hashFiles('services/scraper-py/requirements.txt') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/scraper-py/requirements.txt
+      - name: pip install
+        working-directory: services/scraper-py
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: ruff check (있으면)
+        working-directory: services/scraper-py
+        run: |
+          if pip show ruff >/dev/null 2>&1; then
+            ruff check .
+          else
+            echo "ruff not in requirements — skipping"
+          fi
+      - name: import smoke (script not actually executed)
+        working-directory: services/scraper-py
+        run: python -c "import dtmk_vworld; print('import OK')"
