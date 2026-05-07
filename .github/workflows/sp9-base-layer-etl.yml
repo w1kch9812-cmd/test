@@ -1,0 +1,217 @@
+name: SP9 Base Layer ETL
+
+# 매월 1일 03:00 KST 자동 실행 + workflow_dispatch (manual run).
+# 한국 전국 273 시군구 V-World dtmk → PMTiles → R2 publish (Plan D L3 atomicity 와 짝).
+#
+# Phase 분리:
+#   1. Bronze refresh — services/scraper-py/dtmk_vworld.py 로 R2 의 273 zip 갱신.
+#                       (size diff 비교 + 변경된 시군구만 부분 다운 — daily diff 패턴.)
+#   2. Gold build      — cargo run -p etl-base-layer -- gold --bronze-prefix ...
+#                       이 단계가 가장 무거움 — ubuntu-22.04-large (32GB RAM).
+#   3. Verify          — VERIFY_* env 가 build-tail 에서 자동 강제 (L2).
+#   4. Promote         — manifest pointer flip (L3 atomicity).
+#   5. Notify          — Sentry 알림 (실패 시).
+
+on:
+  schedule:
+    # cron 은 UTC. 03:00 KST = 18:00 UTC (전날). 매월 1일 18:00 UTC.
+    - cron: "0 18 1 * *"
+  workflow_dispatch:
+    inputs:
+      layers:
+        description: "build 할 layer 목록 (쉼표 구분: parcels,admin,complex)"
+        required: false
+        default: "parcels,admin,complex"
+      bronze_skip:
+        description: "Bronze refresh 단계 skip (R2 의 기존 zip 그대로 재사용)"
+        required: false
+        default: "false"
+        type: boolean
+      target_version:
+        description: "Gold version 라벨 (예: v3 / v_dryrun_2026_05). 미입력 시 v<YYYY-MM>."
+        required: false
+        default: ""
+
+concurrency:
+  # 같은 ref 의 두 번째 ETL 동시 실행 차단 — R2 manifest 충돌 방지.
+  group: sp9-base-layer-etl-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write   # OIDC for Cloudflare R2 (L5 — 다음 commit). 현재는 long-lived key 도 OK.
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  TIPPECANOE_VERSION: "2.80.0"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 1: Bronze refresh — V-World dtmk 273 시군구 zip 갱신.
+  # 변경된 size 만 다운 (idempotent). 실패해도 phase 2 가 *기존* R2 자산 재사용 가능.
+  # ─────────────────────────────────────────────────────────────────────────────
+  bronze:
+    name: Bronze refresh (dtmk_vworld.py)
+    runs-on: ubuntu-22.04
+    if: ${{ inputs.bronze_skip != true }}
+    timeout-minutes: 90
+    outputs:
+      manifest_url: ${{ steps.summary.outputs.manifest_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/scraper-py/requirements.txt
+      - name: pip install
+        working-directory: services/scraper-py
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run dtmk_vworld
+        working-directory: services/scraper-py
+        env:
+          VWORLD_USERNAME: ${{ secrets.VWORLD_USERNAME }}
+          VWORLD_PASSWORD: ${{ secrets.VWORLD_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          DTMK_PARALLEL: "3"
+        run: python dtmk_vworld.py
+      - name: Summary
+        id: summary
+        run: |
+          # Bronze prefix 는 dtmk_vworld.py 가 stdout 에 박제 — TODO: structured output.
+          echo "manifest_url=bronze/$(date -u +%Y-%m)/parcel-dtmk-30563/" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 2-3: Gold build + verify. ubuntu-22.04-large (32GB RAM, 16 vCPU) — 1.4억
+  # parcel polygon tippecanoe 빌드용. timeout 720분 (12h) — 평균 2-4h, 최악 7h.
+  # ─────────────────────────────────────────────────────────────────────────────
+  gold:
+    name: Gold build + verify (${{ matrix.layer }})
+    needs: [bronze]
+    # bronze 가 skipped (input: bronze_skip=true) 여도 본 job 진행.
+    if: always() && (needs.bronze.result == 'success' || needs.bronze.result == 'skipped')
+    runs-on: ubuntu-22.04   # TODO: '-large' 로 격상 후 32GB RAM. 현재는 17GB.
+    timeout-minutes: 720
+    strategy:
+      fail-fast: false
+      matrix:
+        layer: [parcels, admin, complex]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps + GDAL
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            build-essential libsqlite3-dev zlib1g-dev gdal-bin
+
+      - name: Build & install tippecanoe ${{ env.TIPPECANOE_VERSION }}
+        run: |
+          git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
+              https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe
+          make -j"$(nproc)"
+          sudo make install
+          tippecanoe --version
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+
+      - name: Build etl-base-layer (release)
+        run: cargo build -p etl-base-layer --release
+
+      - name: Compute version label
+        id: ver
+        run: |
+          if [ -n "${{ inputs.target_version }}" ]; then
+            echo "version=${{ inputs.target_version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=v$(date -u +%Y_%m)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run gold build (${{ matrix.layer }})
+        env:
+          # Gold version + R2 자격.
+          GOLD_VERSION: ${{ steps.ver.outputs.version }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
+          # L2 verify invariants — parcels 만 PNU 검증. complex/admin 는 PNU 없음.
+          VERIFY_GANGNAM_PNU: ${{ matrix.layer == 'parcels' && '1168010100107370000' || '' }}
+          VERIFY_MIN_BYTES: "104857600"   # 100MB — nationwide 빌드 sanity.
+          # Sentry 통합 (L4 — 다음 commit 으로 활성).
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          BRONZE_PREFIX="bronze/$(date -u +%Y-%m)/parcel-dtmk-30563/"
+          # parcels 만 dtmk pipeline. admin/complex 는 별도 SHP 소스 (V-World 의 행정구역 /
+          # 공공데이터포털 의 산업단지) — 현재 미구현 → matrix 에서 일단 dtmk path 동일.
+          # TODO L10: layer 별 다른 BRONZE_PREFIX (admin/complex 측 ADR 추가 필요).
+          ./target/release/etl-base-layer gold \
+            --layer "${{ matrix.layer }}" \
+            --output "./var/gold/${{ steps.ver.outputs.version }}" \
+            --bronze-prefix "${BRONZE_PREFIX}" \
+            --concurrency 8 \
+            --source-srs EPSG:5186
+
+      - name: Upload PMTiles artifact (debug)
+        if: failure() || inputs.target_version != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmtiles-${{ matrix.layer }}-${{ steps.ver.outputs.version }}
+          path: ./var/gold/${{ steps.ver.outputs.version }}/${{ matrix.layer }}.pmtiles
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 4: Promote — manifest pointer flip (L3 atomicity 의 핵심).
+  # 모든 layer 가 success 후에만 실행 — partial 빌드를 prod 에 노출 X.
+  # 현재는 skeleton — actual flip 로직은 L3 commit 에서 추가.
+  # ─────────────────────────────────────────────────────────────────────────────
+  promote:
+    name: Promote (manifest flip)
+    needs: [gold]
+    if: ${{ success() && inputs.target_version == '' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: TODO L3 — atomic manifest flip
+        run: |
+          echo "::warning::L3 Atomicity not yet wired."
+          echo "기대 동작:"
+          echo "  1) staging 의 모든 layer 가 verify 통과 확인."
+          echo "  2) gold/manifest.json 의 current_version 을 새 version 으로 atomic update."
+          echo "  3) Cloudflare CDN cache purge (manifest 만 — flat tile 은 immutable URL)."
+          echo "  4) failure 시 staging 그대로 두고 manifest 변경 없음 (degrade gracefully)."
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Phase 5: Notify on failure — Sentry 가 SDK 단계에서 보내지만 workflow-level
+  # alert 도 따로. SP9 정전 = 클라이언트 폴리곤 안 보임 → on-call 에게 page.
+  # ─────────────────────────────────────────────────────────────────────────────
+  notify-failure:
+    name: Notify failure
+    needs: [bronze, gold, promote]
+    if: ${{ always() && (needs.bronze.result == 'failure' || needs.gold.result == 'failure' || needs.promote.result == 'failure') }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Sentry alert
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          if [ -n "$SENTRY_DSN" ]; then
+            curl --silent --output /dev/null \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -d "{\"message\":\"SP9 Base Layer ETL failed (run ${{ github.run_id }})\",\"level\":\"error\",\"tags\":{\"workflow\":\"sp9-base-layer-etl\",\"sha\":\"${{ github.sha }}\"}}" \
+              "${SENTRY_DSN}/store/" || true
+          else
+            echo "::warning::SENTRY_DSN not set — skipping alert"
+          fi
