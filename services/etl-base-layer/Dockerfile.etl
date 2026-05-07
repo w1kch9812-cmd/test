@@ -29,7 +29,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 FROM ubuntu:22.04@sha256:962f6cadeae0ea6284001009daa4cc9a8c37e75d1f5191cf0eb83fe565b63dd7 AS tippecanoe-builder
 
-ARG TIPPECANOE_VERSION=2.80.0
+# tag pin (sanity 표시) + commit SHA pin (진짜 결정성 — tag force-push 차단).
+ARG TIPPECANOE_VERSION=2.79.0
+ARG TIPPECANOE_GIT_SHA=68ab8dcc229f95b8b25877697d5e8d66783af503
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -40,11 +42,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /tmp
-RUN git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
-    https://github.com/felt/tippecanoe.git
+# `git fetch --depth 1 origin <SHA>` — 정확 commit 만 fetch (tag 우회).
+# fetch 후 `git rev-parse HEAD` 가 expected SHA 와 일치하는지 *명시 검증*.
 WORKDIR /tmp/tippecanoe
-RUN make -j"$(nproc)" \
+RUN git init -q \
+    && git remote add origin https://github.com/felt/tippecanoe.git \
+    && git fetch --depth 1 origin "${TIPPECANOE_GIT_SHA}" \
+    && git checkout FETCH_HEAD \
+    && actual_sha="$(git rev-parse HEAD)" \
+    && [ "$actual_sha" = "${TIPPECANOE_GIT_SHA}" ] \
+        || (echo "SHA mismatch: expected ${TIPPECANOE_GIT_SHA}, got ${actual_sha}" && exit 1) \
+    && make -j"$(nproc)" \
     && make install PREFIX=/opt/tippecanoe \
     && /opt/tippecanoe/bin/tippecanoe --version
 
@@ -90,11 +98,11 @@ FROM ubuntu:22.04@sha256:962f6cadeae0ea6284001009daa4cc9a8c37e75d1f5191cf0eb83fe
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# GDAL 3.4.x 가 ubuntu 22.04 의 표준 (3.4.1-1build4 정도). 명시 버전 pin 은 apt
-# 에서 매년 patch 들어와 풀릴 수 있어 *major.minor* 까지만 강제 — 더 strict 한
-# byte-level 결정성 필요 시 unstable PPA + version pin (별도 ADR).
+# GDAL exact pin — Ubuntu 22.04 jammy 표준 build (`apt-cache madison gdal-bin`).
+# wildcard (3.4.*) 은 빌드마다 다른 patch — 결정성 깨짐.
+ARG GDAL_VERSION_PIN=3.4.1-1build4
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gdal-bin=3.4.* \
+    "gdal-bin=${GDAL_VERSION_PIN}" \
     libsqlite3-0 \
     zlib1g \
     ca-certificates \

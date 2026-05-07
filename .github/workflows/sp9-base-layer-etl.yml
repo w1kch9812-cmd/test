@@ -58,6 +58,7 @@ jobs:
     outputs:
       layers_json: ${{ steps.print.outputs.layers_json }}
       tippecanoe_version: ${{ steps.print.outputs.tippecanoe_version }}
+      tippecanoe_git_sha: ${{ steps.print.outputs.tippecanoe_git_sha }}
       gdal_version_pin: ${{ steps.print.outputs.gdal_version_pin }}
       rust_toolchain_version: ${{ steps.print.outputs.rust_toolchain_version }}
       dtmk_download_concurrency: ${{ steps.print.outputs.dtmk_download_concurrency }}
@@ -73,7 +74,7 @@ jobs:
           json="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- json)"
           echo "$json" | jq .
           # 각 key → output (다른 job 이 ${{ needs.setup.outputs.X }} 로 소비).
-          for key in tippecanoe_version gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes; do
+          for key in tippecanoe_version tippecanoe_git_sha gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes; do
               val="$(echo "$json" | jq -r ".${key}")"
               echo "${key}=${val}" >> "$GITHUB_OUTPUT"
           done
@@ -154,12 +155,19 @@ jobs:
             build-essential libsqlite3-dev zlib1g-dev \
             "gdal-bin=${{ needs.setup.outputs.gdal_version_pin }}"
 
-      - name: Build & install tippecanoe ${{ needs.setup.outputs.tippecanoe_version }}
+      - name: Build & install tippecanoe (SSOT SHA pin)
         run: |
-          TVER="${{ needs.setup.outputs.tippecanoe_version }}"
-          git clone --depth 1 --branch "$TVER" \
-              https://github.com/felt/tippecanoe.git /tmp/tippecanoe
-          cd /tmp/tippecanoe
+          SHA="${{ needs.setup.outputs.tippecanoe_git_sha }}"
+          mkdir -p /tmp/tippecanoe && cd /tmp/tippecanoe
+          git init -q
+          git remote add origin https://github.com/felt/tippecanoe.git
+          git fetch --depth 1 origin "$SHA"
+          git checkout FETCH_HEAD
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$SHA" ]; then
+            echo "::error::tippecanoe SHA mismatch — expected $SHA, got $actual"
+            exit 1
+          fi
           make -j"$(nproc)"
           sudo make install
           tippecanoe --version

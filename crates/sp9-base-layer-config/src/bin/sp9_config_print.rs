@@ -49,6 +49,7 @@ fn main() -> ExitCode {
             // shell-eval 형식 — quoting 필요 없는 단순 값들 (string 안에 공백 / quote X).
             // 향후 값에 공백 들어가면 본 함수에서 escape 추가.
             println!("TIPPECANOE_VERSION={}", snapshot.tippecanoe_version);
+            println!("TIPPECANOE_GIT_SHA={}", snapshot.tippecanoe_git_sha);
             println!("GDAL_VERSION_PIN={}", snapshot.gdal_version_pin);
             println!("RUST_TOOLCHAIN_VERSION={}", snapshot.rust_toolchain_version);
             println!("DTMK_DS_ID={}", snapshot.dtmk_ds_id);
@@ -71,6 +72,7 @@ fn main() -> ExitCode {
             };
             let value = match name.as_str() {
                 "tippecanoe_version" => snapshot.tippecanoe_version,
+                "tippecanoe_git_sha" => snapshot.tippecanoe_git_sha,
                 "gdal_version_pin" => snapshot.gdal_version_pin,
                 "rust_toolchain_version" => snapshot.rust_toolchain_version,
                 "dtmk_ds_id" => snapshot.dtmk_ds_id.to_string(),

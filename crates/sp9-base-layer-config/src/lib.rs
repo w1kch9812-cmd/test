@@ -30,11 +30,21 @@
 
 use serde::{Deserialize, Serialize};
 
-/// `tippecanoe` git tag (immutable). 업그레이드 = 본 const 한 줄 변경 + commit.
-pub const TIPPECANOE_VERSION: &str = "2.80.0";
+/// `tippecanoe` git tag (sanity 표시용). 진짜 결정성은 [`TIPPECANOE_GIT_SHA`].
+/// upgrade = 본 const + `TIPPECANOE_GIT_SHA` 둘 다 commit.
+pub const TIPPECANOE_VERSION: &str = "2.79.0";
 
-/// `GDAL` apt-pin pattern (`gdal-bin=<pattern>`). Ubuntu 22.04 표준 = 3.4.x.
-pub const GDAL_VERSION_PIN: &str = "3.4.*";
+/// `tippecanoe` 의 *commit SHA* (tag 보다 강한 immutable identifier).
+///
+/// tag 는 GitHub 측에서 force-push 가능 → SHA pin 이 진짜 SSS-grade reproducibility.
+/// build 시 `git fetch --depth 1 origin <SHA>` + `git checkout <SHA>` 로 정확 commit fetch.
+/// 갱신: `curl -s https://api.github.com/repos/felt/tippecanoe/git/refs/tags/<ver>`.
+pub const TIPPECANOE_GIT_SHA: &str = "68ab8dcc229f95b8b25877697d5e8d66783af503";
+
+/// `GDAL` apt 의 *exact* version (Ubuntu 22.04 jammy security 표준).
+/// wildcard (`3.4.*`) 는 빌드마다 다른 patch 가져옴 → 결정성 깨짐.
+/// 갱신: `apt-cache madison gdal-bin` on jammy.
+pub const GDAL_VERSION_PIN: &str = "3.4.1-1build4";
 
 /// Rust toolchain version — `rust-toolchain.toml` 의 channel 과 동일.
 /// workflow / Dockerfile 이 이 const 를 echo 해 base image tag (`rust:<v>-slim-bookworm`) 결정.
@@ -134,6 +144,8 @@ pub const VERIFY_LANDMARKS: &[VerifyLandmark] = &[VerifyLandmark {
 pub struct ConfigSnapshot {
     /// `TIPPECANOE_VERSION`.
     pub tippecanoe_version: String,
+    /// `TIPPECANOE_GIT_SHA` — 실 결정성의 정수.
+    pub tippecanoe_git_sha: String,
     /// `GDAL_VERSION_PIN`.
     pub gdal_version_pin: String,
     /// `RUST_TOOLCHAIN_VERSION`.
@@ -160,6 +172,7 @@ impl ConfigSnapshot {
     pub fn current() -> Self {
         Self {
             tippecanoe_version: TIPPECANOE_VERSION.to_owned(),
+            tippecanoe_git_sha: TIPPECANOE_GIT_SHA.to_owned(),
             gdal_version_pin: GDAL_VERSION_PIN.to_owned(),
             rust_toolchain_version: RUST_TOOLCHAIN_VERSION.to_owned(),
             dtmk_ds_id: DTMK_DS_ID,
@@ -221,6 +234,7 @@ mod tests {
         let json = serde_json::to_value(&snap).unwrap();
         for key in &[
             "tippecanoe_version",
+            "tippecanoe_git_sha",
             "gdal_version_pin",
             "rust_toolchain_version",
             "dtmk_ds_id",
@@ -233,5 +247,30 @@ mod tests {
         ] {
             assert!(json.get(key).is_some(), "missing snapshot key: {key}");
         }
+    }
+
+    #[test]
+    fn tippecanoe_git_sha_is_40_char_hex() {
+        // SSS-grade 검증: SHA 가 잘못 박혀있으면 build 가 silent 다른 commit fetch 가능.
+        assert_eq!(TIPPECANOE_GIT_SHA.len(), 40, "git SHA must be 40-char hex");
+        assert!(
+            TIPPECANOE_GIT_SHA
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+            "git SHA must be lowercase hex"
+        );
+    }
+
+    #[test]
+    fn gdal_version_is_exact_not_wildcard() {
+        // `3.4.*` 같은 wildcard 는 빌드마다 다른 patch — 결정성 깨짐.
+        assert!(
+            !GDAL_VERSION_PIN.contains('*'),
+            "GDAL pin must be exact version (not wildcard): {GDAL_VERSION_PIN}"
+        );
+        assert!(
+            GDAL_VERSION_PIN.contains('-'),
+            "GDAL pin should include Debian build suffix (e.g. -1build4)"
+        );
     }
 }

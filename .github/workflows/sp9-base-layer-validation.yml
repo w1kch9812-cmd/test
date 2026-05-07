@@ -85,11 +85,18 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential libsqlite3-dev zlib1g-dev "gdal-bin=${GDAL_VERSION_PIN}"
 
-      - name: Build & install tippecanoe (SSOT version)
+      - name: Build & install tippecanoe (SSOT SHA pin)
         run: |
-          git clone --depth 1 --branch "${TIPPECANOE_VERSION}" \
-              https://github.com/felt/tippecanoe.git /tmp/tippecanoe
-          cd /tmp/tippecanoe
+          mkdir -p /tmp/tippecanoe && cd /tmp/tippecanoe
+          git init -q
+          git remote add origin https://github.com/felt/tippecanoe.git
+          git fetch --depth 1 origin "${TIPPECANOE_GIT_SHA}"
+          git checkout FETCH_HEAD
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "${TIPPECANOE_GIT_SHA}" ]; then
+            echo "::error::tippecanoe SHA mismatch — expected ${TIPPECANOE_GIT_SHA}, got ${actual}"
+            exit 1
+          fi
           make -j"$(nproc)"
           sudo make install
 
