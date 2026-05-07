@@ -36,6 +36,29 @@
         "title": "이 필지의 매물 ({count})",
         "none": "이 필지에 등록된 매물이 없어요"
       }
+    },
+    "listing": {
+      "notFound": "매물을 찾을 수 없어요",
+      "errors": {
+        "loadFailed": "매물 정보를 불러오지 못했어요"
+      },
+      "summary": {
+        "area": "면적",
+        "price": "가격",
+        "type": {
+          "factory": "공장",
+          "warehouse": "창고",
+          "office": "오피스",
+          "knowledge_industry_center": "지식산업센터",
+          "industrial_land": "산업용지",
+          "logistics_center": "물류센터"
+        },
+        "transaction": {
+          "sale": "매매",
+          "monthly_rent": "월세",
+          "jeonse": "전세"
+        }
+      }
     }
   }
 }
