@@ -68,3 +68,4 @@
 | [0019](./0019-pmtiles-source-via-addsourcetype.md) | PMTiles 통합 — VectorTileSource subclass + Service Worker transport | **Superseded by 0021** |
 | [0020](./0020-naver-vector-interaction-model.md) | Naver gl SDK vector 한계 + 우리 platform interaction model (probe scope = polygon-only) | Accepted |
 | [0021](./0021-static-vector-tile-decomposition.md) | PMTiles 분해 → 정적 `{z}/{x}/{y}.pbf` (mapbox-gl 표준 100%, trick 0) | Accepted |
+| [0022](./0022-bronze-scraping-isolated-python-service.md) | Bronze HTML scraping = 격리 Python service (`services/scraper-py/`) + Scrapling | Accepted |

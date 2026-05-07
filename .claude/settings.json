@@ -29,7 +29,11 @@
       "Bash(node --version)",
       "Bash(pnpm --version)",
       "Bash(.venv/Scripts/pip install:*)",
-      "Bash(.venv/Scripts/scrapling:*)"
+      "Bash(.venv/Scripts/scrapling:*)",
+      "Bash(git push origin main)",
+      "Bash(git push origin *)",
+      "Bash(git fetch *)",
+      "Bash(git pull *)"
     ],
     "deny": [
       "Bash(rm -rf *)",

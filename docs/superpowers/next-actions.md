@@ -1,8 +1,35 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-07 EOD (T3b.4 finale — ADR 0021 채택, X9 = PMTiles 분해 → flat .pbf, mapbox-gl 표준 100%)
+> **갱신일**: 2026-05-07 EOD+ (ADR 0022 채택 — Bronze scraping = `services/scraper-py/` Python 격리, V-World dtmk 273 SHP zip 다운 → R2 진행)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
+
+---
+
+## 🆕 0순위 — V-World dtmk Bronze 다운로드 진행 중 (다른 세션)
+
+R2 에 *연속지적도 전국 273 SHP zip* 다운로드 진행 중 (또는 진행 예정).
+
+**Handoff 문서**: [docs/superpowers/handoff/2026-05-07-bronze-dtmk-download.md](./handoff/2026-05-07-bronze-dtmk-download.md) — *다음 세션 진입점 정확히 박제*.
+
+**완료 사항** (이번 세션):
+- ADR 0022 박제 — Bronze scraping = 격리 Python service (`services/scraper-py/` + Scrapling)
+- `services/scraper-py/dtmk_vworld.py` — V-World 로그인 + 273 zip → R2 자동 다운
+- 검증 — 충북 충주시 52.3MB ZIP 단일 다운 성공 (ZIP magic OK)
+
+**진행 중/예정** (background):
+- R2 키: `bronze/<YYYY-MM>/parcel-dtmk-30563/LSMD_CONT_LDREG_<sigungu>.zip` × 273
+- 합계 ~5-10GB, 30-60분
+- idempotent skip — daily diff cron 패턴
+
+**다음 세션** (이어서 = R2 의 Bronze 데이터 사용):
+1. R2 Bronze 의 273 객체 list 검증 (다운 완료)
+2. `services/etl-base-layer/src/bronze/dtmk.rs` 신규 — Rust 가 R2 → unzip → ogr2ogr → tippecanoe
+3. ETL Gold pipeline 으로 *전국 필지* PMTiles 빌드
+4. `crates/parcel-lookup/` 의 V-World API 의존 폐기 → DB 우선 (Silver Postgres 적재)
+5. Daily diff cron (T6) — fileSize 비교 + 변경 시군구만 부분 rebuild
+
+---
 
 ---
 
