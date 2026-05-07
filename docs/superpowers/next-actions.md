@@ -59,33 +59,63 @@ cargo run -p etl-base-layer -- gold \
 | L9 PR Preview | per-PR R2 prefix + Vercel preview | ⏸️ | 별도 ADR |
 | Integration test | mini-fixture E2E (R2 LocalStack) | ⏳ | 다음 세션 |
 
-### 잔여 (다음 세션)
+### Plan A 완료 (이번 세션 13 commit, 24 commit 누적)
 
-1. **L5 Cloudflare OIDC** — `aws-actions/configure-aws-credentials@v4` `role-to-assume`
-   패턴으로 R2 short-lived token. 현재 long-lived `R2_ACCESS_KEY` 사용.
-2. **L6 Lifecycle** — `gold/staging/<old-version>/` cleanup workflow (월 1회 cron, 6개월
-   이상된 staging spec 만 삭제 — rollback retention 보장).
-3. **Integration test** — mini-fixture R2 (LocalStack) + 1 commit E2E.
-4. **Nationwide smoke** — 사용자 R2 자격 + 273 zip 다운 완료 후 GH Actions
-   `workflow_dispatch { target_version: v_dryrun_2026_05 }` 첫 실행 검증.
+후속 commit 들 (Plan A "더 박아"):
+- `001c9bc` SSOT crate (TIPPECANOE_VERSION 3중복 / parcel-dtmk-30563 5중복 / 강남 magic 좌표 모두 sp9-base-layer-config 통합)
+- `fde1ecd` base image digest pin
+- `12e4509` verify JSON properties exact-equal (substring 매칭 제거)
+- `764d0ac` L3 atomic flip via promote subcommand + L10 lineage
+- `15a4110` L4 Sentry SDK init + JSON log
+- `2a3f11c` L8 signal handler + R2 retry policy + rollback.yml
+- `dc63d8a` L7 SLO + Runbook docs/sp9/sslo-runbook.md
+- `7c5659a` L5 R2 SSE + audit log + L6 cleanup workflow
+- `eb281ea` **L1++** tippecanoe **commit SHA** pin (mutable tag → immutable SHA) + GDAL **exact patch** (3.4.* → 3.4.1-1build4)
+- `a54ea3d` **L3++** flat tile 실재 검증 + previous manifest backup + previous_version field
+- `3a2e1e6` **L4++** sentry-tracing layer 실 wire (event → Sentry breadcrumb 자동)
+- `f03023f` **L10++** BronzeInput 진짜 SHA-256 streaming 계산 (ETag 대체)
 
-### 진입점 (다음 세션)
+### 솔직한 평가 (4번째 SSS 질문 후)
+
+| 차원 | 점수 | 잔여 |
+|---|---|---|
+| L1 결정성 | **9/10** | apt snapshot URL (~별도 commit) |
+| L2 verification | **5/10** | admin/complex layer 검증 0 |
+| L3 atomicity | **9/10** | distributed lock (race) |
+| L4 observability | **8.5/10** | OpenTelemetry metrics export 0 (SLO p50/p95 측정 X) |
+| L5 security | **4/10** | OIDC 미구현 (Cloudflare 한계), API token rotation cron 0 |
+| L6 lifecycle | **5/10** | bash + race condition, Rust 으로 재구현 필요 |
+| L7 SLO+Runbook | **8/10** | 실 instrumentation 부재 (docs only) |
+| L8 resilience | **5/10** | mid-build checkpoint resume 0 |
+| L10 lineage | **8.5/10** | digital signature 0 (위조 가능) |
+| **SSOT 준수** | **9/10** | gold prefix helper 부재 (manifest.rs / promote.rs 양쪽 format!) |
+
+**전체: 약 8/10 SSS-grade.** "production-ready beta + 강한 결정성/atomicity/lineage". 진짜 SSS 까지 잔여 ~3-5일:
+
+1. L2 admin/complex 검증
+2. integration test (LocalStack 또는 dev R2 bucket)
+3. distributed lock (R2 If-None-Match conditional PUT 또는 별도 advisory lock)
+4. OpenTelemetry metrics export
+5. canary deploy / multi-region DR / SBOM + SLSA L3 / chaos test (별도 sprint)
+
+### 다음 세션 진입점 (concrete)
 
 ```bash
-# nationwide build 검증 (R2 dev bucket).
-# UI: GitHub Actions → SP9 Base Layer ETL → Run workflow
-#   target_version: v_dryrun_2026_05
-#   bronze_skip: false (다운 안 됐을 시) / true (이미 R2 에 있음)
-#   layers: parcels (작은 단위 먼저)
-#
-# promote 는 target_version 미지정 시만 자동. 수동:
+# 1) (사용자) 273 시군구 다운로드 + R2 dev bucket 자격 준비.
+# 2) GH Actions → SP9 Base Layer ETL → workflow_dispatch:
+#    target_version: v_dryrun_2026_05
+#    bronze_skip: true (이미 R2 에 있음)
+#    layers: parcels (작은 단위 먼저)
+# 3) 검증 (수동):
 cargo run -p etl-base-layer -- promote --version v_dryrun_2026_05
-
-# 검증
 curl -s https://r2-dev.gongzzang.dev/gold/manifest.json | jq .
+# 4) 다음 commit 우선순위:
+#    a. L2 admin/complex verification (가장 가벼운 SSS 향상)
+#    b. integration test (LocalStack — atomicity 증명)
+#    c. SBOM + SLSA (cargo cyclonedx + slsa-github-generator)
 ```
 
-**Runbook** (production go-live 직전 reference): [docs/sp9/sslo-runbook.md](../sp9/sslo-runbook.md).
+**Runbook**: [docs/sp9/sslo-runbook.md](../sp9/sslo-runbook.md).
 
 ---
 
