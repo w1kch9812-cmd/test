@@ -21,6 +21,8 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "io-util", "process"] }
 tokio-util = { version = "0.7", features = ["io"] }
 futures-util = "0.3"
+# ADR 0021 decompose — `<gold>/<layer>/{z}/{x}/{y}.pbf` 산출물 walk + R2 batch upload.
+walkdir = "2"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 # R2 (Cloudflare R2 = S3-호환) 업로드 — SP9 T3b.1.

@@ -15,16 +15,23 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 use tracing::{info, instrument};
 
+use super::decompose::{self, DecomposeArgs, DecomposeError};
 use super::spawn::Host;
 use super::tippecanoe::{self, LayerKind, TippecanoeArgs, TippecanoeError};
 
 /// Gold 빌드 한 번 결과.
 #[derive(Debug, Clone)]
 pub struct BuildResult {
-    /// 출력 경로 (`<gold_dir>/<layer>.pmtiles`).
+    /// 출력 `PMTiles` 경로 (`<gold_dir>/<layer>.pmtiles`). decompose step 의 input.
     pub output_path: PathBuf,
-    /// 출력 파일 크기.
+    /// `PMTiles` 파일 크기.
     pub output_bytes: u64,
+    /// ADR 0021 — flat tile 출력 디렉터리 (`<gold_dir>/<layer>/`). 안에 `{z}/{x}/{y}.pbf`.
+    pub flat_tiles_dir: PathBuf,
+    /// 생성된 .pbf 타일 수.
+    pub flat_tile_count: u64,
+    /// .pbf 파일 총 bytes.
+    pub flat_tiles_total_bytes: u64,
 }
 
 /// Gold 빌드 에러.
@@ -33,6 +40,9 @@ pub enum BuildError {
     /// tippecanoe 단계 실패.
     #[error("tippecanoe: {0}")]
     Tippecanoe(#[from] TippecanoeError),
+    /// decompose 단계 실패.
+    #[error("decompose: {0}")]
+    Decompose(#[from] DecomposeError),
     /// `gold_dir` 생성 실패 / 출력 검증 실패.
     #[error("io error at {path}: {source}")]
     Io {
@@ -78,15 +88,39 @@ pub async fn build_layer(
     };
     let result = tippecanoe::run(host, &args).await?;
 
+    // ADR 0021 — PMTiles 분해 (`<gold_dir>/<layer>/{z}/{x}/{y}.pbf`).
+    // mapbox-gl 의 표준 vector source 가 직결할 flat tile 디렉터리.
+    let flat_tiles_dir = gold_dir.join(kind.layer_name());
+    if flat_tiles_dir.exists() {
+        // 이전 빌드 산출물 정리 — tile-join 이 비어있는 디렉터리 요구.
+        tokio::fs::remove_dir_all(&flat_tiles_dir)
+            .await
+            .map_err(|source| BuildError::Io {
+                path: flat_tiles_dir.display().to_string(),
+                source,
+            })?;
+    }
+    let decompose_args = DecomposeArgs {
+        input: &output_path,
+        output_dir: &flat_tiles_dir,
+    };
+    let decomposed = decompose::run(host, &decompose_args).await?;
+
     info!(
         output = %output_path.display(),
-        bytes = result.output_bytes,
-        "Gold layer build complete"
+        pmtiles_bytes = result.output_bytes,
+        flat_tiles_dir = %flat_tiles_dir.display(),
+        flat_tile_count = decomposed.tile_count,
+        flat_tiles_total_bytes = decomposed.total_bytes,
+        "Gold layer build complete (PMTiles + flat tiles)"
     );
 
     Ok(BuildResult {
         output_path,
         output_bytes: result.output_bytes,
+        flat_tiles_dir,
+        flat_tile_count: decomposed.tile_count,
+        flat_tiles_total_bytes: decomposed.total_bytes,
     })
 }
 

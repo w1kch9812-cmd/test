@@ -65,3 +65,6 @@
 | [0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) | 지도 base layer — PMTiles 100% (Bronze raw archive + Gold PMTiles, PostGIS Silver 미도입) | Accepted |
 | [0017](./0017-listing-marker-render-canvas-bitmap-stamp.md) | 매물 마커 렌더링 — Naver Marker + Canvas content + BitmapStampCache (단일 렌더 박자) | Accepted |
 | [0018](./0018-pnu-first-identity-no-coordinates.md) | 매물 정체성 — PNU-First (좌표는 매칭/검색에 사용 안 함) | Accepted |
+| [0019](./0019-pmtiles-source-via-addsourcetype.md) | PMTiles 통합 — VectorTileSource subclass + Service Worker transport | **Superseded by 0021** |
+| [0020](./0020-naver-vector-interaction-model.md) | Naver gl SDK vector 한계 + 우리 platform interaction model (probe scope = polygon-only) | Accepted |
+| [0021](./0021-static-vector-tile-decomposition.md) | PMTiles 분해 → 정적 `{z}/{x}/{y}.pbf` (mapbox-gl 표준 100%, trick 0) | Accepted |

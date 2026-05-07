@@ -209,12 +209,16 @@ async fn run_gold(args: &[String]) -> ExitCode {
     match build_layer(host, &opts.output_dir, opts.layer, &input_refs).await {
         Ok(result) => {
             // 정수 MB — display 용이라 정밀도 손실 무관. KB 단위는 너무 노이지.
-            let mb = result.output_bytes / 1_048_576;
+            let pmtiles_mb = result.output_bytes / 1_048_576;
+            let flat_mb = result.flat_tiles_total_bytes / 1_048_576;
             info!(
-                output = %result.output_path.display(),
-                bytes = result.output_bytes,
-                mb = mb,
-                "gold build complete"
+                pmtiles_path = %result.output_path.display(),
+                pmtiles_bytes = result.output_bytes,
+                pmtiles_mb = pmtiles_mb,
+                flat_tiles_dir = %result.flat_tiles_dir.display(),
+                flat_tile_count = result.flat_tile_count,
+                flat_tiles_mb = flat_mb,
+                "gold build complete (PMTiles + ADR 0021 flat tiles)"
             );
             ExitCode::SUCCESS
         }

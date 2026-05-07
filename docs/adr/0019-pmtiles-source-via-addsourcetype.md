@@ -3,11 +3,28 @@
 | | |
 |---|---|
 | 작성일 | 2026-05-07 |
-| 상태 | Accepted (SSS-grade) |
+| 상태 | **Superseded by [ADR 0021](./0021-static-vector-tile-decomposition.md)** (2026-05-07 EOD) — A2+SW spike 결과 worker uncontrolled wall (commit `28d7eb2`); 본 ADR 의 "전수 검토" 가 X9 (PMTiles 분해 → flat .pbf) / X10 (rawData transfer) 두 path 누락 — ADR 0021 이 X9 채택 (trick 0, mapbox-gl 표준 100%) |
 | 선행 | [ADR 0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md), [ADR 0017](./0017-listing-marker-render-canvas-bitmap-stamp.md) |
 | 폐기 | T3b.2 의 `/api/tiles/[...path]/route.ts` BFF proxy (commit `ecc52cc`) |
 
-## 결정
+## 후속 정정 (2026-05-07 EOD)
+
+본 ADR 의 채택 (A2-plugin + D-transport via Service Worker) 은 spike (commit `28d7eb2`) 결과 **wall**:
+
+> Service Worker 가 main thread fetch 만 가로챔 — mapbox-gl 의 vector tile worker 가 보내는 fetch 는 *worker scope 안의 별도 ServiceWorkerContainer*. SW 가 *worker thread 의 fetch 를 통제 못 함* (web platform spec 의 worker isolation).
+
+또한 본 ADR 의 "검토한 대안 — 전수" (§ 아래) 는 **2개 path 누락**:
+
+1. **X9** — PMTiles 분해 → flat `{z}/{x}/{y}.pbf` 정적 호스팅 (mapbox-gl 의 가장 표준 source `type:"vector" + tiles:[URL]`). trick 0, internal API 0.
+2. **X10** — `params.data.rawData` ArrayBuffer transfer (am2222/mapbox-pmtiles 패턴). 3 trick 중 2개 제거.
+
+**현재 채택** = [ADR 0021](./0021-static-vector-tile-decomposition.md) (X9). 본 ADR 의 결론 ("Naver SDK 폐기 안 하면 SSS 불가능") 은 **reject**. Naver SDK 안에서 X9 가 SSS 7기둥 100% 충족.
+
+**본 ADR 은 historical record 로 보존** — *X9 / X10 검토 누락 + SW worker uncontrolled wall* 의 spike 결과 박제.
+
+---
+
+## (Original) 결정
 
 `PMTiles` 통합 = **mapbox-gl plugin layer + Service Worker transport layer 의 분리** :
 

@@ -7,24 +7,9 @@ import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
 
-// `/pmtiles` — SP9 ADR 0019 의 정적 vector tile 단일 파일. mapbox-gl 의 PMTilesSource
-// (VectorTileSource subclass) 가 byte-range request 직접. 누구나 fetch 가능
-// (정적 vector tile = 비공개 정보 없음). production 은 R2 직결로 본 prefix 비활성.
-//
-// `/sw-pmtiles.js` — ADR 0019 의 Service Worker bundle. 정적 자산, 누구나 fetch.
-//   브라우저가 SW 등록 시 download.
-// `/__pmtiles__/` — ADR 0019 의 SW intercept path. SW 가 활성된 후에는 fetch 가 SW
-//   에서 처리되므로 server 까지 안 옴. SW 미활성 시점 (첫 로드 race) fallback 으로
-//   401 안 일으키게 allowlist (실 server 응답은 404 — SW 가 처리하므로 무관).
-const PUBLIC_PATHS = [
-  "/",
-  "/login",
-  "/forbidden",
-  "/api/auth",
-  "/pmtiles",
-  "/sw-pmtiles.js",
-  "/__pmtiles__",
-];
+// SP9 ADR 0021 채택 후 — 우리 origin 의 PMTiles/SW prefix 모두 폐기. 클라가 R2
+// (`NEXT_PUBLIC_TILES_BASE_URL`) 와 직결, 표준 mapbox-gl `type:"vector"` source.
+const PUBLIC_PATHS = ["/", "/login", "/forbidden", "/api/auth"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
@@ -101,9 +86,20 @@ export async function proxy(req: NextRequest) {
   const imgSrc = isDev
     ? "'self' data: blob: http: https:"
     : "'self' data: blob: https://*.map.naver.com https://map.naver.com https://*.map.naver.net https://map.naver.net https://*.pstatic.net";
+  // ADR 0021: vector tile 호스트 (R2) 의 origin 만 production CSP 에서 허용.
+  // process.env.NEXT_PUBLIC_TILES_BASE_URL 미설정 시 폴리곤 비활성 (지도 본체 정상).
+  const tilesOrigin = (() => {
+    const raw = process.env.NEXT_PUBLIC_TILES_BASE_URL;
+    if (!raw) return "";
+    try {
+      return new URL(raw).origin;
+    } catch {
+      return "";
+    }
+  })();
   const connectSrc = isDev
     ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
-    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com`;
+    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tilesOrigin ? ` ${tilesOrigin}` : ""}`;
 
   // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
   // 'strict-dynamic' 와 함께 modern browser 에서 호환 (CSP3).

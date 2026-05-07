@@ -1,55 +1,87 @@
 # 다음 작업 (Next Actions)
 
-> **갱신일**: 2026-05-07 (T3b.4 spike — A2+SW 의 worker-uncontrolled wall 발견, A2+Blob URL 회귀 결정 대기)
+> **갱신일**: 2026-05-07 EOD (T3b.4 finale — ADR 0021 채택, X9 = PMTiles 분해 → flat .pbf, mapbox-gl 표준 100%)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).
 
 ---
 
-## 🆕 1순위 — SP9: 지도 base layer (PMTiles 100%) — **T3b.4 결정 대기**
+## 🆕 1순위 — SP9: 지도 base layer — **ADR 0021 (X9) 채택, ETL R2 upload + 빌드 검증 잔여**
 
 ### 현재 상태 (2026-05-07 EOD)
 
-T1/T2/T3a/T3b.1/T3b.2/T4/T5 완료. ADR 0016/0017/0018/0019/0020 박제. 마지막 working commit `ecc52cc` (A2+Blob URL, polygon 71개 visible).
+T1/T2/T3a/T3b.1/T3b.2/T4/T5 완료. **T3b.4 finale = ADR 0021** ([0021-static-vector-tile-decomposition.md](../adr/0021-static-vector-tile-decomposition.md)) — A2+SW spike 결과 worker uncontrolled wall, A2+Blob URL 영구 3 trick. **X9 (PMTiles 분해 → flat `{z}/{x}/{y}.pbf` 정적 호스팅)** 으로 채택 — mapbox-gl 표준 100%, trick 0, internal API 0.
 
-**T3b.4 (frontend PMTiles 통합)**: 4개 path 전수조사 + spike 완료. *모든 path 의 wall 또는 trade-off 정직 박제됨*.
+### Path 5개 spike 결과 (ADR 0019 + ADR 0021 합본)
 
-### 4개 path 의 spike 결과
-
-| path | 결과 | 위치 |
+| path | 결과 | 결정 |
 |---|---|---|
-| **C — BFF proxy `/api/tiles`** | ✅ 작동 (commit `ecc52cc`) | 비표준 (Rust backend 정책 위반, dev/prod path 분기) |
-| **A2 + Blob URL** | ✅ 작동 (commit `59e5785`, 71 features visible) | 꼼수 3개 (main fetch, Blob churn, internal API) — 단 *Naver SDK 외부 제약* 의 결과 |
-| **A3 — workerSourceURL + monkey-patch** | ❌ wall — Naver fork 의 worker ajax 가 fetch reference 를 module load 시 closure 로 capture, 우리 monkey-patch bypass | 폐기 |
-| **A2 + SW** (방금 spike) | ❌ wall — Service Worker 가 main thread fetch 만 가로챔, mapbox-gl worker thread 의 fetch 는 *uncontrolled* (web platform spec) | 폐기 — 현재 작업 디렉터리 코드 |
+| C — BFF proxy `/api/tiles` | ✅ 작동 | 비표준 (Rust backend 정책 위반) |
+| A2 + Blob URL | ✅ 작동 (`59e5785`) | trick 3개 영구 부채 |
+| A3 — workerSourceURL + monkey-patch | ❌ wall (worker fetch closure capture) | 폐기 |
+| A2 + Service Worker | ❌ wall (worker uncontrolled by SW, web spec) | 폐기 |
+| **X9 — PMTiles 분해 → flat .pbf** | ✅ **mapbox-gl 표준 `type:"vector" + tiles:[URL]`** | **채택 (ADR 0021)** |
+| X10 — `params.data.rawData` ArrayBuffer transfer | ✅ 작동 (am2222 패턴) | trick 1개 (internal field) — X9 가 우월 |
 
-### 진짜 wall (정직 박제)
+### ADR 0019 의 결론 reject
 
-- **Naver SDK 의 mapbox-gl 사용 정책** + **mapbox-gl worker 의 SW 통제 불가 (web spec)** = 우리가 가질 수 있는 *최대 SSS = A2+Blob URL*
-- *진짜 무 우회* 가려면 Naver SDK 폐기 + vanilla mapbox-gl 채택 (architectural rebuild, 1-3개월). user 정책상 불가.
+ADR 0019 의 *전수 검토* 가 X9 / X10 를 누락. "Naver SDK 폐기 안 하면 SSS 불가" = **틀림**. Naver SDK 안에서 X9 가 SSS 7기둥 100% 충족.
 
-### 다음 결정 (T3b.4 finale)
+### 변경된 파일 (이번 commit 직전 working dir)
 
-**A2+Blob URL 으로 회귀 + ADR 0019 final 정정**:
-- 현재 작업 디렉터리의 A2+SW spike 코드 → A2+Blob URL (commit `59e5785`) 로 되돌림
-- ADR 0019 정정: SW path 의 worker-uncontrolled wall 추가 박제, 최종 채택 = *A2+Blob URL* (Naver SDK 외부 제약 인정)
-- "Blob URL 의 3 trick" 재 framing — *우리 꼼수 아님, web platform 표준 transport (Worker bootstrap, file API 등 production 표준 패턴)*
-- Tier A 위생 (HTTP cache headers + URL versioning) 진행
-- T3b.3 (V-World fetch Rust 모듈) — V-World API 복구 후
+**프론트** — A2+SW spike 코드 모두 폐기, X9 wire:
+- `apps/web/lib/pmtiles-source.ts` ❌ 삭제 (PMTilesSource subclass)
+- `apps/web/lib/pmtiles.ts` ❌ 삭제 (registerPmtilesSourceType)
+- `apps/web/lib/sw-register.ts` ❌ 삭제 (Service Worker register)
+- `apps/web/lib/workers/sw-pmtiles-src.ts` ❌ 삭제 (Service Worker source)
+- `apps/web/tests/e2e/pmtiles-debug.spec.ts` ❌ 삭제 (ADR 0019 spike 박제 — git history 보존)
+- `apps/web/components/listings/listing-map.tsx` 🔧 `type:"vector" + tiles:[URL_TEMPLATE]` path
+- `apps/web/proxy.ts` 🔧 PMTiles/SW 항목 PUBLIC_PATHS 폐기, R2 origin connectSrc 동적 추가
+- `apps/web/package.json` 🔧 build:sw-pmtiles + pmtiles dep 폐기
+- `apps/web/.env.local.example` 🔧 `NEXT_PUBLIC_TILES_BASE_URL` 추가
+
+**ETL** — ADR 0021 decompose step:
+- `services/etl-base-layer/src/gold/decompose.rs` ✨ 신규 (`tile-join --output-to-directory` spawn)
+- `services/etl-base-layer/src/gold/build.rs` 🔧 orchestration: tippecanoe → decompose
+- `services/etl-base-layer/src/gold/manifest.rs` 🔧 `tiles_url_template` + `flat_tile_count` 필드
+- `services/etl-base-layer/src/gold/mod.rs` 🔧 pub mod decompose
+- `services/etl-base-layer/src/main.rs` 🔧 CLI 출력 갱신
+- `services/etl-base-layer/Cargo.toml` 🔧 walkdir dep 추가
+
+**ADR**:
+- `docs/adr/0021-static-vector-tile-decomposition.md` ✨ 신규 (X9 채택)
+- `docs/adr/0019-pmtiles-source-via-addsourcetype.md` 🔧 Superseded marker
+- `docs/adr/0020-naver-vector-interaction-model.md` 🔧 probe scope = polygon-only 명시 + symbol layer 후속
+- `docs/adr/README.md` 🔧 인덱스 (0019/0020/0021)
+
+**Probe (ADR 0020 사각지대 보강)**:
+- `apps/web/tests/e2e/naver-all-features-probe.spec.ts` ✨ 신규 — symbol/line/circle/raster + multi-viewport + CadastralLayer 비교
+
+### 검증 (이번 commit 직전)
+
+- `cargo clippy -p etl-base-layer --all-targets -- -D warnings` ✅ 그린
+- `pnpm typecheck` (apps/web) ✅ 그린
+- `pnpm lint` (apps/web) ✅ 그린 (15 warnings 모두 e2e probe console.log — 의도)
 
 ### 다음 세션 진입점 (concrete)
 
-1. `git log --oneline -10` — 최근 commit 확인
-2. `git status` — A2+SW spike 코드가 working dir 에 있음 (커밋 안 됨)
-3. **결정 1**: A2+SW spike 코드를 별도 spike-result commit 으로 박제 후 revert, 또는 그냥 working dir reset
-4. **결정 2**: ADR 0019 정정 (working commit `59e5785` 채택, SW wall 박제)
-5. Tier A 위생 — `Cache-Control: max-age=31536000, immutable` + URL versioning (manifest 기반 hash)
-6. T3b.3 — V-World fetch 를 Node 스크립트 → Rust 모듈로 이관
+1. **commit + push** — 본 ADR 0021 + 프론트/ETL/probe 갈아끼우기 한 commit
+2. **ETL T3b.5 — R2 upload integration** (ADR 0021 § "ETL pipeline 변경"):
+   - `services/etl-base-layer/src/r2_upload.rs` 가 *flat tile directory* walk + batch PutObject (concurrent 100). 현재 R2Uploader 가 PMTiles 단일 파일 PUT 만 함.
+   - `Cache-Control: max-age=31536000, immutable` metadata 설정
+   - `Content-Type: application/vnd.mapbox-vector-tile` (또는 `application/x-protobuf`)
+   - `Content-Encoding: gzip` (tippecanoe 출력은 기본 gzip)
+3. **ETL T3b.3 — V-World fetch Rust 모듈** (Node 스크립트 prototype 폐기, 자동화 완성)
+4. **Local 빌드 + R2 검증** — 강남구 표본 SHP 으로 `cargo run -p etl-base-layer -- gold --layer parcels ...` → flat tile dir → R2 dev bucket upload → `curl https://r2/.../parcels/16/56500/26000.pbf` 검증
+5. **manifest.json 첫 publish** — `current_version=v1`, `tiles_url_template`. 프론트 `NEXT_PUBLIC_TILES_BASE_URL=https://r2-dev/gold/v1/`
+6. **e2e probe 확장 spec 돌려보기** — `pnpm exec playwright test naver-all-features-probe.spec.ts`. 결과: `var/sample/naver-all-features-{catalog,gangnam,bupyeong,seoul-station,cadastral}.json`. 결과 박제 → ADR 0020 § 후속 + (선택) 새 ADR (Naver POI runtime 활용 model)
+7. **T6 — GitHub Actions cron + manifest hot-swap + Sentry**
 
-T3b.x 의 각 phase 진단 + 결정 박제:
+### 발견 (사용자 needs 박제)
 
-- **ADR 0019** — PMTiles 통합. spike 4개 → 최종 채택 *A2+Blob URL* (다음 세션 정정 commit 예정).
-- **ADR 0020** — Naver vector 한계 박제. Naver 의 polygon vector 23개는 *시각 base 전용* (feature.id 없음, properties 카테고리만). 필지/건물 cadastral data 없음. 우리가 직접 PMTiles 채워야 함 — SP9 의 본질적 근거.
+- **건물 식별 needs 명시** (2026-05-07) → SP9 종료 후 **FU 40 (`buildings.pmtiles`) 우선순위 escalate** 검토. V-World `LT_C_SPBD` ETL → 별도 layer.
+- **probe scope 사각지대** — ADR 0020 의 polygon-only filter. 새 spec `naver-all-features-probe.spec.ts` 가 채워줌.
+- **Naver `CadastralLayer`** — Naver SDK 가 별도 옵션 cadastral overlay 제공. raster 추정. 우리 PMTiles 와 비교 필요 (probe spec 에 포함).
 
 **진입점**:
 
@@ -68,10 +100,11 @@ T3b.x 의 각 phase 진단 + 결정 박제:
 | T3b.1 | R2 업로드 (`aws-sdk-s3`) + Bronze archive + GoldManifest skeleton | ✅ | `4302ff4` |
 | T3b.2 | Gold pipeline — ogr2ogr + tippecanoe spawn (Win→WSL) + CLI gold subcommand | ✅ | `a12becd` |
 | T3b.3 | **V-World fetch Rust 모듈** (Node 스크립트 prototype 폐기, 자동화 완성) | ⏳ | — |
-| T3b.4 | **Frontend PMTiles 통합** — ADR 0019 의 PMTilesSource (VectorTileSource subclass) + Service Worker transport + Tier A 위생 (HTTP cache + URL versioning) | ⏳ | — |
+| T3b.4 | **Frontend X9 wire** — ADR 0021 (PMTiles 분해 → flat .pbf) + lib/pmtiles*.ts 폐기 + decompose.rs 신규 + manifest 확장 | ✅ | (이번 commit) |
+| T3b.5 | **R2 upload of flat tile directory** — concurrent batch PutObject + Cache-Control + Content-Type/Encoding metadata | ⏳ | — |
 | T4 | parcel-lookup crate + listing 등록 hooks + 검색 필터 | ✅ | `e87d7d6` |
 | T5 | 프론트 PMTiles 통합 (T3b.4 가 *재구현*) | ✅ | `ae48c54` |
-| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 + Tier 1 (자동 업데이트 SW) + Tier 3 (관측성 SP7) | ⏳ | — |
+| T6 | GitHub Actions cron + manifest hot-swap + Sentry 알림 + Tier 1 (자동 manifest poll) + Tier 3 (관측성 SP7) | ⏳ | — |
 
 **T3b.4 시작 진입점 (다음 단계)**:
 
