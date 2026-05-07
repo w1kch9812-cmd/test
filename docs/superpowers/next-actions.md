@@ -10,15 +10,21 @@
 
 **사용자 합의**: "ㄱㄱ" — 10일 작업, 각 layer 별 commit (review/rollback).
 
-### 이번 세션 commit (8개)
-- `cb93a96` feat(sp9-t3b.2): industrial complex zoom 0-16 (산단 모든 zoom visible)
-- `bfc7d29` feat(sp9-t3b.2): dtmk pipeline — R2 Bronze list/download/unzip + CLI `--bronze-prefix`
-- `6375d3d` docs(sp9-plan-d): next-actions 진행 상황 박제
-- `6c8c9a5` feat(sp9-t3b.2): tippecanoe `--no-tiny-polygon-reduction` (저줌도 polygon 그대로)
-- `24fc49c` feat(sp9-plan-d-l1): Dockerfile.etl — 결정성 빌드 (tippecanoe SHA + GDAL pin)
-- `657b6cf` feat(sp9-plan-d-l2): Verification — 강남 PNU + sha256 + tile spot-check
-- `95586ba` feat(sp9-plan-d): GitHub Actions sp9-base-layer-validation.yml (PR-time CI)
-- `ad27715` feat(sp9-plan-d): GitHub Actions sp9-base-layer-etl.yml (cron + dispatch)
+### 이번 세션 commit (16+개) — Plan D SSS 본격 진행
+- `cb93a96` zoom 0-16 (산단 모든 zoom)
+- `bfc7d29` dtmk pipeline + CLI `--bronze-prefix`
+- `6375d3d` next-actions
+- `6c8c9a5` `--no-tiny-polygon-reduction`
+- `24fc49c` L1 Dockerfile.etl 결정성
+- `657b6cf` L2 Verification
+- `95586ba` validation.yml
+- `ad27715` etl.yml
+- `001c9bc` **SSOT crate** sp9-base-layer-config (TIPPECANOE_VERSION 3중복 / parcel-dtmk-30563 5중복 / LayerKind matrix mirror / 강남 magic 좌표 모두 SSOT 통합)
+- `fde1ecd` L1+ base image digest pin + `--frozen`
+- `12e4509` L2+ verify JSON property exact-equal (substring 매칭 제거)
+- `764d0ac` L3+L10 atomic manifest flip via `promote` subcommand + lineage
+- `15a4110` L4 Sentry Rust SDK + JSON structured log + workflow sentry-cli
+- `2a3f11c` L8+rollback graceful shutdown + R2 retry policy + sp9-base-layer-rollback.yml
 
 ### 다음 즉시 (사용자 R2 자격 + 다운 완료된 273 zip 가정)
 
@@ -33,32 +39,53 @@ cargo run -p etl-base-layer -- gold \
 # 검증: ./var/gold/v_smoke/parcels.pmtiles 존재 + 강남 PNU 검증은 강남 prefix 로 별도.
 ```
 
-### Plan D 잔여 (각 layer = 별도 commit)
+### Plan D 진행 상태 (각 layer = 별도 commit)
 
-| Layer | 작업 | 추정 | 상태 |
+| Layer | 작업 | 상태 | commit |
 |---|---|---|---|
-| GH Actions validation | `sp9-base-layer-validation.yml` PR-time CI | 0.3d | ✅ 95586ba |
-| GH Actions etl | `sp9-base-layer-etl.yml` cron + dispatch | 0.5d | ✅ ad27715 (promote 는 skeleton) |
-| GH Actions rollback | `sp9-base-layer-rollback.yml` manifest revert | 0.2d | ⏳ |
-| L1 Reproducibility | `Dockerfile.etl` — pinned tippecanoe SHA + GDAL | 1d | ✅ 24fc49c |
-| L2 Verification | invariants — 강남 PNU, sha256, tile spot-check | 1d | ✅ 657b6cf |
-| L3 Atomicity | two-phase publish — staging → manifest flip → CDN purge | 0.5d | ⏳ etl.yml promote skeleton 활성 필요 |
-| L4 Observability | p50/p95/p99, cache hit, Sentry SDK 연동, Grafana SLO | 2d | ⏳ |
-| L5 Security | Cloudflare OIDC short-lived tokens, R2 SSE, audit, secret rotation | 1d | ⏳ |
-| L6 Lifecycle | old R2 prefix cleanup automation, deprecation policy | 0.5d | ⏳ |
-| L7 SLO + Runbook | explicit SLO, incident runbook, on-call | 1d | ⏳ |
-| L8 Build Resilience | OOM 감지, mid-build SIGKILL, 12h timeout overflow path | 1d | ⏳ |
-| L9 PR Preview | per-PR R2 prefix + Vercel preview URL + auto-cleanup | 0.5d | ⏳ |
-| L10 Data Lineage | manifest with V-World fetch time + tippecanoe SHA + git SHA | 0.5d | ⏳ |
+| **SSOT** | sp9-base-layer-config crate (TIPPECANOE_VERSION/DTMK_DS_ID/강남 PNU SSOT) | ✅ | 001c9bc |
+| GH Actions validation | PR-time CI (clippy/test/tippecanoe smoke/Dockerfile build/scraper-py) | ✅ | 95586ba |
+| GH Actions etl | cron + dispatch + setup job (SSOT load) + promote 실 wire | ✅ | ad27715 → 764d0ac |
+| GH Actions rollback | manifest revert via promote 재사용 | ✅ | 2a3f11c |
+| L1 Reproducibility | Dockerfile.etl + base image digest pin + `--frozen` | ✅ | 24fc49c → fde1ecd |
+| L2 Verification | 강남 PNU exact-equal (JSON properties) + sha256 + default-on | ✅ | 657b6cf → 12e4509 |
+| L3 Atomicity | staging spec + promote subcommand + CDN purge | ✅ | 764d0ac |
+| L4 Observability | Sentry Rust SDK init + tracing + JSON log + sentry-cli | ✅ | 15a4110 |
+| L7 SLO + Runbook | docs/sp9/sslo-runbook.md + 4 incident scenarios | ✅ | 본 commit |
+| L8 Build Resilience | tokio signal handling + R2 retry policy max_attempts=5 | ✅ | 2a3f11c |
+| L10 Data Lineage | manifest 의 BuildLineage + BronzeInput | ✅ | 764d0ac |
+| L5 Security | Cloudflare OIDC short-lived tokens, R2 SSE, audit, secret rotation | ⏳ | 다음 세션 |
+| L6 Lifecycle | old R2 prefix cleanup automation, deprecation policy | ⏳ | 다음 세션 |
+| L9 PR Preview | per-PR R2 prefix + Vercel preview | ⏸️ | 별도 ADR |
+| Integration test | mini-fixture E2E (R2 LocalStack) | ⏳ | 다음 세션 |
 
-### 다음 세션 진입점 (concrete)
+### 잔여 (다음 세션)
 
-**가장 자연스러운 다음 commit**: L3 Atomicity — `etl.yml` 의 promote phase 가 skeleton.
-실 구현 필요:
-1. main.rs `upload_gold_to_r2` 가 staging prefix (`gold/staging/<run-id>/`) 로 먼저 upload.
-2. 모든 layer 의 staging upload + verify 통과 후 manifest 만 atomic flip.
-3. Cloudflare CDN cache purge (manifest 만 — flat tile 은 immutable URL 이라 불필요).
-4. failure 시 staging buffer 만 남고 prod manifest 변경 없음 → degrade gracefully.
+1. **L5 Cloudflare OIDC** — `aws-actions/configure-aws-credentials@v4` `role-to-assume`
+   패턴으로 R2 short-lived token. 현재 long-lived `R2_ACCESS_KEY` 사용.
+2. **L6 Lifecycle** — `gold/staging/<old-version>/` cleanup workflow (월 1회 cron, 6개월
+   이상된 staging spec 만 삭제 — rollback retention 보장).
+3. **Integration test** — mini-fixture R2 (LocalStack) + 1 commit E2E.
+4. **Nationwide smoke** — 사용자 R2 자격 + 273 zip 다운 완료 후 GH Actions
+   `workflow_dispatch { target_version: v_dryrun_2026_05 }` 첫 실행 검증.
+
+### 진입점 (다음 세션)
+
+```bash
+# nationwide build 검증 (R2 dev bucket).
+# UI: GitHub Actions → SP9 Base Layer ETL → Run workflow
+#   target_version: v_dryrun_2026_05
+#   bronze_skip: false (다운 안 됐을 시) / true (이미 R2 에 있음)
+#   layers: parcels (작은 단위 먼저)
+#
+# promote 는 target_version 미지정 시만 자동. 수동:
+cargo run -p etl-base-layer -- promote --version v_dryrun_2026_05
+
+# 검증
+curl -s https://r2-dev.gongzzang.dev/gold/manifest.json | jq .
+```
+
+**Runbook** (production go-live 직전 reference): [docs/sp9/sslo-runbook.md](../sp9/sslo-runbook.md).
 
 ---
 
