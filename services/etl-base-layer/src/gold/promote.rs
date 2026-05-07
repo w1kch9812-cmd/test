@@ -52,6 +52,14 @@ pub enum PromoteError {
         /// 기대 R2 key.
         key: String,
     },
+    /// 특정 layer 의 flat tile 이 R2 에 0 개 — silent drop / partial PUT 의심.
+    #[error("no flat tiles found in {prefix} for layer {layer}")]
+    NoFlatTiles {
+        /// 누락 layer.
+        layer: String,
+        /// 검사한 prefix.
+        prefix: String,
+    },
     /// HTTP 통신 (Cloudflare CDN purge).
     #[error("cdn purge http: {0}")]
     Http(#[from] reqwest::Error),
@@ -190,14 +198,25 @@ pub struct PromoteResult {
     pub cdn_purged: Option<bool>,
 }
 
-/// promote — 모든 layer staging spec 검증 → manifest publish → CDN purge.
+/// promote — staging spec 검증 + flat tile 실재 검증 + previous manifest backup +
+/// new manifest publish + CDN purge.
+///
+/// SSS-grade atomicity steps:
+/// 1. 모든 layer staging spec 검증 + 모음.
+/// 2. **모든 layer 의 flat tile 실재 검증** — `gold/<version>/<layer>/` list_objects
+///    head check (silent R2 drop / partial PUT 차단).
+/// 3. **현재 manifest 백업** — `gold/manifest.json` → `gold/manifest.<prev_ver>.json`
+///    (없으면 first-publish, 처음에는 prev=None). 즉시 rollback 가능.
+/// 4. new manifest 빌드 (`previous_version=<old.current_version>`) + atomic PUT.
+/// 5. CDN purge (optional).
 ///
 /// # Errors
 ///
-/// - lineage 누락 (한 layer 라도 staging 미박제).
-/// - manifest publish 실패.
-/// - CDN purge 실패는 *warn* 처리 (promote 성공으로 간주, manifest 의 `no-cache` header
-///   가 fallback). `CLOUDFLARE_*` 환경변수 미설정 시 `cdn_purged = Some(false)` (skip).
+/// - staging spec 누락 (한 layer 라도 미박제) → degrade gracefully (manifest 변경 0).
+/// - flat tile 미존재 → degrade (silent drop 잡음).
+/// - manifest publish 실패 → degrade (백업 단계 후 publish 전 실패면 backup 만 있음).
+/// - CDN purge 실패는 warn (manifest no-cache header fallback).
+#[allow(clippy::too_many_lines)]
 #[instrument(skip(uploader, args), fields(version = args.version))]
 pub async fn run(
     uploader: &R2Uploader,
@@ -211,7 +230,64 @@ pub async fn run(
         info!(layer = %layer.layer_name(), "staging spec verified");
     }
 
-    // 2. manifest 빌드 + publish.
+    // 2. flat tile 실재 검증 — `gold/<version>/<layer>/` 안에 *최소 1개* .pbf 존재.
+    for &layer in args.layers {
+        let prefix = format!(
+            "{}/{}/{}/",
+            uploader.config().gold_prefix,
+            args.version,
+            layer.layer_name()
+        );
+        let listed = uploader.list_objects(&prefix).await?;
+        let pbf_count = listed
+            .iter()
+            .filter(|o| {
+                std::path::Path::new(&o.key)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("pbf"))
+            })
+            .count();
+        if pbf_count == 0 {
+            return Err(PromoteError::NoFlatTiles {
+                layer: layer.layer_name().to_owned(),
+                prefix,
+            });
+        }
+        info!(
+            layer = %layer.layer_name(),
+            pbf_count,
+            "flat tile existence verified"
+        );
+    }
+
+    // 3. 이전 manifest backup (있으면).
+    let manifest_key = format!("{}/manifest.json", uploader.config().gold_prefix);
+    let previous_version: Option<String> = match uploader.get_object_bytes(&manifest_key).await {
+        Ok(prev_bytes) => {
+            let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+            let prev_ver = prev
+                .get("current_version")
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
+            if let Some(ref pv) = prev_ver {
+                let backup_key = format!("{}/manifest.{pv}.json", uploader.config().gold_prefix);
+                // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
+                let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+                uploader
+                    .put_object_json(&backup_key, &raw, "public, max-age=31536000, immutable")
+                    .await?;
+                info!(backup_key = %backup_key, "previous manifest backed up (rollback ready)");
+            }
+            prev_ver
+        }
+        Err(UploadError::GetObject { .. }) => {
+            info!("no previous manifest — first publish");
+            None
+        }
+        Err(other) => return Err(PromoteError::R2(other)),
+    };
+
+    // 4. new manifest 빌드 + publish.
     let base = if args.public_url_base.ends_with('/') {
         args.public_url_base.to_owned()
     } else {
@@ -230,17 +306,21 @@ pub async fn run(
     let manifest = GoldManifest {
         current_version: args.version.to_owned(),
         current_activated_at: Utc::now(),
+        previous_version: previous_version.clone(),
         tiles_url_template,
         artifacts,
         manifest_updated_at: Utc::now(),
     };
-    let manifest_key = format!("{}/manifest.json", uploader.config().gold_prefix);
     uploader
         .put_object_json(&manifest_key, &manifest, "no-cache, max-age=0")
         .await?;
-    info!(manifest_key = %manifest_key, "manifest atomically published");
+    info!(
+        manifest_key = %manifest_key,
+        previous_version = ?previous_version,
+        "manifest atomically published"
+    );
 
-    // 3. CDN purge (optional).
+    // 5. CDN purge (optional).
     let cdn_purged = match cloudflare_purge(&manifest_key).await {
         Ok(true) => Some(true),
         Ok(false) => Some(false),

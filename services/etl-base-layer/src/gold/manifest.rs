@@ -109,6 +109,10 @@ pub struct GoldManifest {
     pub current_version: String,
     /// 활성 버전의 빌드 시각.
     pub current_activated_at: DateTime<Utc>,
+    /// 직전 활성 버전 (rollback target hint). 첫 publish 시 `None`.
+    /// 본 필드 + `gold/manifest.<previous_version>.json` 백업으로 즉시 rollback 가능.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub previous_version: Option<String>,
     /// ADR 0021 — flat tile URL template. `{layer}` 는 source-layer 이름 (parcels/admin/complex).
     /// 예: `https://r2.gongzzang.dev/gold/v3/{layer}/{z}/{x}/{y}.pbf`
     pub tiles_url_template: String,
@@ -132,6 +136,7 @@ impl GoldManifest {
         Self {
             current_version: version,
             current_activated_at: now,
+            previous_version: None,
             tiles_url_template,
             artifacts,
             manifest_updated_at: now,
