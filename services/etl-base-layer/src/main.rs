@@ -437,18 +437,17 @@ async fn prepare_dtmk_inputs(
         "dtmk fetch done"
     );
 
-    // L10 lineage — bronze 입력의 fingerprint 박제 (R2 list 응답의 size + ETag).
-    // 별도 list 호출이 비용 X (이미 dtmk fetch 가 list 했지만 결과 throw away).
-    let listed = uploader
-        .list_objects(&format!("{}/", bronze_prefix.trim_end_matches('/')))
-        .await?;
-    let bronze_inputs: Vec<BronzeInput> = listed
-        .into_iter()
-        .filter(|o| o.key.to_ascii_lowercase().ends_with(".zip"))
-        .map(|o| BronzeInput {
-            r2_key: o.key,
-            bytes: o.size,
-            etag: o.etag,
+    // L10 lineage — bronze 입력의 fingerprint 박제. dtmk fetch 결과의 *진짜 SHA-256*
+    // (다운로드 시점 streaming 계산) 를 r2_key 별로 모아 BronzeInput 으로 변환.
+    // ETag (R2 MD5) 는 추가 hint (cryptographic 강도 약함).
+    let bronze_inputs: Vec<BronzeInput> = fetched
+        .archives
+        .iter()
+        .map(|a| BronzeInput {
+            r2_key: a.r2_key.clone(),
+            bytes: a.zip_bytes,
+            etag: None,
+            sha256: a.sha256.clone(),
         })
         .collect();
 

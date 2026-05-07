@@ -43,10 +43,16 @@ pub struct BronzeInput {
     pub r2_key: String,
     /// 객체 size (bytes).
     pub bytes: u64,
-    /// R2 `ETag` — single-part PUT 시 MD5, multipart 시 합성. 일관 fingerprint.
+    /// R2 `ETag` — single-part PUT 시 MD5, multipart 시 합성.
+    /// 빠른 fingerprint 지만 cryptographic 강도 약함.
     /// `None` = R2 `list_objects` 응답에서 누락 (드물지만 가능).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
+    /// 진짜 SHA-256 (다운로드 직후 streaming 계산). L10 lineage 의 *진정한* fingerprint.
+    /// dtmk path 만 채움 (URL-driven bronze 는 미실현 — 추후 separate commit).
+    /// 빈 문자열 = 미계산.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sha256: String,
 }
 
 /// 단일 Gold 아티팩트 — 한 layer 의 빌드/검증 메타 + 프론트 동적 소비 hint.

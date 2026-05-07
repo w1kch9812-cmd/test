@@ -33,6 +33,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use futures_util::stream::{self, StreamExt};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tracing::{info, instrument, warn};
 
@@ -79,21 +80,20 @@ pub enum DtmkError {
 }
 
 /// 단일 시군구의 추출 결과.
-///
-/// `zip_path` / `zip_bytes` 는 현재 main pipeline 미소비지만 manifest 박제 (T6
-/// lineage commit) 와 audit 추적 용도로 보존 — 결정성 검증의 input.
 #[derive(Debug, Clone)]
 pub struct SigunguArchive {
     /// R2 key (예: `bronze/2026-05/parcel-dtmk-30563/LSMD_CONT_LDREG_충북_충주시.zip`).
     pub r2_key: String,
-    /// 다운로드된 zip 의 로컬 경로 (`<work_dir>/zips/<filename>`).
+    /// 다운로드된 zip 의 로컬 경로 (`<work_dir>/zips/<filename>`). audit 추적 + re-extract 용도.
     #[allow(dead_code)]
     pub zip_path: PathBuf,
     /// zip 안에서 추출된 .shp 의 절대 경로. ogr2ogr 의 입력으로 사용.
     pub shp_path: PathBuf,
     /// zip 파일 size (bytes).
-    #[allow(dead_code)]
     pub zip_bytes: u64,
+    /// L10 lineage — zip 파일 SHA-256 hex (다운로드 직후 streaming 계산).
+    /// R2 `ETag` (MD5 / multipart 합성) 보다 강한 fingerprint — manifest 의 진짜 input fingerprint.
+    pub sha256: String,
 }
 
 /// dtmk Bronze fetch 결과 — 다음 단계 (ogr2ogr) 가 소비할 입력 메타.
@@ -209,6 +209,15 @@ pub async fn fetch(
     }
     zip_pairs.sort_by(|a, b| a.0.key.cmp(&b.0.key));
 
+    // L10 lineage — 각 zip 의 SHA-256 streaming 계산. ETag (R2 MD5) 대비 cryptographic
+    // strong fingerprint. 273 시군구 × 50MB ≈ 14GB → sha256 500MB/s = ~30s 추가 (acceptable).
+    let mut zip_shas: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    for (obj, path) in &zip_pairs {
+        let sha = compute_file_sha256(path).await?;
+        zip_shas.insert(obj.key.clone(), sha);
+    }
+    let zip_shas = Arc::new(zip_shas);
+
     info!(
         downloaded = downloaded.load(Ordering::Relaxed),
         total_bytes = total_bytes.load(Ordering::Relaxed),
@@ -224,6 +233,7 @@ pub async fn fetch(
             .map(move |(obj, zip_path)| {
                 let extracted_dir = extracted_dir.clone();
                 let extracted_count = Arc::clone(&extracted_count_c);
+                let zip_shas = Arc::clone(&zip_shas);
                 async move {
                     // <stem> = LSMD_CONT_LDREG_충북_충주시 (filename 에서 .zip 제외).
                     let stem = zip_path
@@ -245,11 +255,13 @@ pub async fn fetch(
                             .ok_or_else(|| DtmkError::MissingShp {
                                 archive: zip_path.display().to_string(),
                             })?;
+                    let sha256 = zip_shas.get(&obj.key).cloned().unwrap_or_default();
                     Ok::<_, DtmkError>(SigunguArchive {
                         r2_key: obj.key,
                         zip_path,
                         shp_path,
                         zip_bytes: obj.size,
+                        sha256,
                     })
                 }
             })
@@ -277,6 +289,30 @@ pub async fn fetch(
         newly_downloaded,
         newly_extracted,
     })
+}
+
+/// 파일 SHA-256 streaming (큰 zip 메모리 적재 0). L10 lineage fingerprint.
+async fn compute_file_sha256(path: &Path) -> Result<String, DtmkError> {
+    use tokio::io::AsyncReadExt;
+    let mut file = tokio::fs::File::open(path)
+        .await
+        .map_err(|source| DtmkError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf).await.map_err(|source| DtmkError::Io {
+            path: path.display().to_string(),
+            source,
+        })?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hex::encode(hasher.finalize()))
 }
 
 /// 디렉터리 walk 에서 첫 번째 `.shp` 절대 경로 반환. 디렉터리 없으면 `Ok(None)`.
