@@ -10,9 +10,15 @@
 
 **사용자 합의**: "ㄱㄱ" — 10일 작업, 각 layer 별 commit (review/rollback).
 
-### 이번 세션 commit
+### 이번 세션 commit (8개)
 - `cb93a96` feat(sp9-t3b.2): industrial complex zoom 0-16 (산단 모든 zoom visible)
 - `bfc7d29` feat(sp9-t3b.2): dtmk pipeline — R2 Bronze list/download/unzip + CLI `--bronze-prefix`
+- `6375d3d` docs(sp9-plan-d): next-actions 진행 상황 박제
+- `6c8c9a5` feat(sp9-t3b.2): tippecanoe `--no-tiny-polygon-reduction` (저줌도 polygon 그대로)
+- `24fc49c` feat(sp9-plan-d-l1): Dockerfile.etl — 결정성 빌드 (tippecanoe SHA + GDAL pin)
+- `657b6cf` feat(sp9-plan-d-l2): Verification — 강남 PNU + sha256 + tile spot-check
+- `95586ba` feat(sp9-plan-d): GitHub Actions sp9-base-layer-validation.yml (PR-time CI)
+- `ad27715` feat(sp9-plan-d): GitHub Actions sp9-base-layer-etl.yml (cron + dispatch)
 
 ### 다음 즉시 (사용자 R2 자격 + 다운 완료된 273 zip 가정)
 
@@ -29,19 +35,30 @@ cargo run -p etl-base-layer -- gold \
 
 ### Plan D 잔여 (각 layer = 별도 commit)
 
-| Layer | 작업 | 추정 |
-|---|---|---|
-| GH Actions | `sp9-base-layer-validation.yml` (PR) + `sp9-base-layer-etl.yml` (cron) + `sp9-base-layer-rollback.yml` | 1d |
-| L1 Reproducibility | `Dockerfile.etl` — pinned tippecanoe SHA + GDAL version | 1d |
-| L2 Verification | build artifact invariants — 강남 PNU 1168010100107370000, sha256, row-count Δ<5%, geometry validity | 1d |
-| L3 Atomicity | two-phase publish — tiles → manifest flip → CDN purge | 0.5d |
-| L4 Observability | p50/p95/p99 latency, cache hit, Sentry, Grafana SLO | 2d |
-| L5 Security | Cloudflare OIDC short-lived tokens, R2 SSE, audit, secret rotation | 1d |
-| L6 Lifecycle | old R2 prefix cleanup automation, deprecation policy | 0.5d |
-| L7 SLO + Runbook | explicit SLO, incident runbook, on-call | 1d |
-| L8 Build Resilience | OOM, mid-build SIGKILL, 12h timeout overflow path | 1d |
-| L9 PR Preview | per-PR R2 prefix + Vercel preview URL + auto-cleanup | 0.5d |
-| L10 Data Lineage | manifest with V-World fetch time + tippecanoe SHA + git SHA | 0.5d |
+| Layer | 작업 | 추정 | 상태 |
+|---|---|---|---|
+| GH Actions validation | `sp9-base-layer-validation.yml` PR-time CI | 0.3d | ✅ 95586ba |
+| GH Actions etl | `sp9-base-layer-etl.yml` cron + dispatch | 0.5d | ✅ ad27715 (promote 는 skeleton) |
+| GH Actions rollback | `sp9-base-layer-rollback.yml` manifest revert | 0.2d | ⏳ |
+| L1 Reproducibility | `Dockerfile.etl` — pinned tippecanoe SHA + GDAL | 1d | ✅ 24fc49c |
+| L2 Verification | invariants — 강남 PNU, sha256, tile spot-check | 1d | ✅ 657b6cf |
+| L3 Atomicity | two-phase publish — staging → manifest flip → CDN purge | 0.5d | ⏳ etl.yml promote skeleton 활성 필요 |
+| L4 Observability | p50/p95/p99, cache hit, Sentry SDK 연동, Grafana SLO | 2d | ⏳ |
+| L5 Security | Cloudflare OIDC short-lived tokens, R2 SSE, audit, secret rotation | 1d | ⏳ |
+| L6 Lifecycle | old R2 prefix cleanup automation, deprecation policy | 0.5d | ⏳ |
+| L7 SLO + Runbook | explicit SLO, incident runbook, on-call | 1d | ⏳ |
+| L8 Build Resilience | OOM 감지, mid-build SIGKILL, 12h timeout overflow path | 1d | ⏳ |
+| L9 PR Preview | per-PR R2 prefix + Vercel preview URL + auto-cleanup | 0.5d | ⏳ |
+| L10 Data Lineage | manifest with V-World fetch time + tippecanoe SHA + git SHA | 0.5d | ⏳ |
+
+### 다음 세션 진입점 (concrete)
+
+**가장 자연스러운 다음 commit**: L3 Atomicity — `etl.yml` 의 promote phase 가 skeleton.
+실 구현 필요:
+1. main.rs `upload_gold_to_r2` 가 staging prefix (`gold/staging/<run-id>/`) 로 먼저 upload.
+2. 모든 layer 의 staging upload + verify 통과 후 manifest 만 atomic flip.
+3. Cloudflare CDN cache purge (manifest 만 — flat tile 은 immutable URL 이라 불필요).
+4. failure 시 staging buffer 만 남고 prod manifest 변경 없음 → degrade gracefully.
 
 ---
 
