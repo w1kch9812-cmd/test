@@ -8,7 +8,7 @@ ADR [0016 PMTiles 100%](../../docs/adr/0016-medallion-base-layer-postgis-silver-
 
 - ✅ **T3a** — Bronze 다운로드 + sha256 + 로컬 manifest.json
 - ✅ **T3b.1 (현재)** — R2 업로드 path (`aws-sdk-s3`) + Bronze archive + manifest R2 upload + GoldManifest 데이터 모델
-- ⏳ **T3b.2** — SHP → GeoJSON (`ogr2ogr`, EPSG:5179 → EPSG:4326), `tippecanoe` spawn (parcels Z14-17 / admin Z6-12 / complex Z10-15), Gold artifact R2 upload, verify (강남 PNU 1168010100107370000 + row count Δ < 5%), Gold manifest hot-swap (`current_version` 갱신)
+- ⏳ **T3b.2** — SHP → GeoJSON (`ogr2ogr`, EPSG:5179 → EPSG:4326), `tippecanoe` spawn (parcels Z14-17 / admin Z6-12 / complex Z0-16 — 산단 모든 zoom visible), Gold artifact R2 upload, verify (강남 PNU 1168010100107370000 + row count Δ < 5%), Gold manifest hot-swap (`current_version` 갱신)
 
 ## 환경변수
 

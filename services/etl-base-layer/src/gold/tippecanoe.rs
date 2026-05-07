@@ -6,7 +6,8 @@
 //! Layer 별 zoom 스펙 (ADR 0016 §):
 //! - **parcels** Z14-17 — 매물 클릭 단위, 가까이서만 visible.
 //! - **admin**   Z6-12  — 행정구역 outline, 멀리서 visible.
-//! - **complex** Z10-15 — 산업단지 boundary, 중간 zoom.
+//! - **complex** Z0-16  — 산업단지 boundary, **모든 zoom 에서 visible** (사용자 SSS 요구).
+//!   → low-zoom 에 tippecanoe `--coalesce-smallest-as-needed` 가 sub-pixel polygon merge.
 //!
 //! flag 셋은 [gongzzang-design-lab build-pmtiles.ts] 검증된 값과 동일:
 //! `-P --no-feature-limit --no-tile-size-limit --drop-smallest-as-needed`
@@ -28,7 +29,7 @@ pub enum LayerKind {
     Parcels,
     /// 행정구역 (admin) Z6-12, layer 이름 `admin`.
     Admin,
-    /// 산업단지 (complex) Z10-15, layer 이름 `complex`.
+    /// 산업단지 (complex) Z0-16, layer 이름 `complex`. 모든 zoom 에서 visible.
     Complex,
 }
 
@@ -55,7 +56,9 @@ impl LayerKind {
         match self {
             Self::Parcels => (14, 17),
             Self::Admin => (6, 12),
-            Self::Complex => (10, 15),
+            // 산업단지: 사용자 명시 요구 — "모든 zoom level 에서 visible" (SSS).
+            // tippecanoe 가 z0-5 에서 sub-pixel polygon coalesce 처리.
+            Self::Complex => (0, 16),
         }
     }
 
@@ -66,7 +69,8 @@ impl LayerKind {
         match self {
             Self::Parcels => 16,
             Self::Admin => 0,
-            Self::Complex => 12,
+            // 산업단지: 모든 zoom 에서 render (사용자 요구). tile_min_zoom=0 이라 source 데이터 존재 보장.
+            Self::Complex => 0,
         }
     }
 
@@ -262,7 +266,8 @@ mod tests {
         assert_eq!(LayerKind::Admin.layer_name(), "admin");
         assert_eq!(LayerKind::Admin.zoom_range(), (6, 12));
         assert_eq!(LayerKind::Complex.layer_name(), "complex");
-        assert_eq!(LayerKind::Complex.zoom_range(), (10, 15));
+        assert_eq!(LayerKind::Complex.zoom_range(), (0, 16));
+        assert_eq!(LayerKind::Complex.render_min_zoom(), 0);
     }
 
     #[tokio::test]
