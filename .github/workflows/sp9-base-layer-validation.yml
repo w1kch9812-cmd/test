@@ -148,12 +148,22 @@ jobs:
           # at maxzoom (z17), 강남 좌표 tile 이 있어야 함.
           ls ./var/gold/v_smoke/parcels/17/ | head -3 || echo "z17 디렉터리 없음"
 
-      - name: Decode + grep 강남 PNU
+      - name: Decode + jq 검증 (강남 PNU exact match)
         run: |
-          tippecanoe-decode -l parcels \
-            ./var/gold/v_smoke/parcels.pmtiles 17 111789 50783 \
-            | grep -F "1168010100107370000" \
-            && echo "✅ 강남 PNU detected at z17"
+          # tippecanoe-decode → jq 로 properties.pnu 정확 비교 (substring false-positive 차단).
+          # `cargo run gold` 단계의 verify 가 이미 JSON 파싱 검증 — 본 step 은 redundant guard.
+          decoded="$(tippecanoe-decode -l parcels \
+            ./var/gold/v_smoke/parcels.pmtiles 17 111789 50783)"
+          # Walking the FeatureCollection (or layer wrapper) and exact-equal pnu.
+          found="$(echo "$decoded" | jq '
+            ([.features // empty, (.[] // empty | .features // empty)] | add // [])
+            | map(.properties.pnu // empty) | any(. == "1168010100107370000")
+          ')"
+          if [ "$found" != "true" ]; then
+            echo "::error::강남 PNU not found in z17 tile (decode: ${decoded:0:200}...)"
+            exit 1
+          fi
+          echo "✅ 강남 PNU exact-match in z17 tile"
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Job 3: Dockerfile.etl 빌드 검증 — image 가 실제로 빌드되는지 (push 안 함).

@@ -56,7 +56,7 @@ use crate::gold::manifest::{GoldArtifact, GoldManifest};
 use crate::gold::shp_to_geojson::{self, Ogr2OgrArgs};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
-use crate::gold::verify::{self, lonlat_to_tile, TileSpec, VerifySpec};
+use crate::gold::verify::{self, lonlat_to_tile, TileExpectation, TileSpec, VerifySpec};
 use crate::r2_upload::R2Uploader;
 
 #[tokio::main]
@@ -469,13 +469,16 @@ async fn run_verify(
                 z: max_z,
                 x: gx,
                 y: gy,
-                must_contain: vec![landmark.pnu.to_owned()],
+                expectations: vec![TileExpectation::PropertyEquals {
+                    key: "pnu".to_owned(),
+                    value: landmark.pnu.to_owned(),
+                }],
             });
             info!(
                 landmark = landmark.label,
                 pnu = landmark.pnu,
                 tile = format!("{max_z}/{gx}/{gy}"),
-                "verify landmark scheduled",
+                "verify landmark scheduled (JSON property check)",
             );
         }
     }

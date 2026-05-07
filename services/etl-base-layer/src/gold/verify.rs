@@ -28,7 +28,20 @@ use tracing::{info, instrument, warn};
 
 use super::spawn::{build_command, Arg, Host, SpawnError};
 
-/// 단일 tile 의 expected invariant — `(z,x,y)` 에 모든 `must_contain` substring 등장.
+/// tile 안 어떤 feature 가 만족해야 하는 invariant.
+#[derive(Debug, Clone)]
+pub enum TileExpectation {
+    /// 해당 tile 의 *어떤* feature 의 `properties[<key>]` 가 `==<value>` 인 것이
+    /// *최소 1개* 존재. substring 매칭과 달리 JSON path 정확 비교 — false positive 0.
+    PropertyEquals {
+        /// `properties` 안의 key (예: `"pnu"`).
+        key: String,
+        /// 기대 값 (string 비교 — 숫자도 to_string 후).
+        value: String,
+    },
+}
+
+/// 단일 tile 의 expected invariants.
 #[derive(Debug, Clone)]
 pub struct TileSpec {
     /// zoom level. 통상 maxzoom (parcels=17, complex=16) 권장 — simplification 0 보장.
@@ -37,8 +50,8 @@ pub struct TileSpec {
     pub x: u32,
     /// tile y.
     pub y: u32,
-    /// 해당 tile 의 decoded JSON 안에 *반드시* 등장해야 할 substring 들.
-    pub must_contain: Vec<String>,
+    /// 해당 tile 가 만족해야 할 invariant 들 (모두 통과).
+    pub expectations: Vec<TileExpectation>,
 }
 
 /// Verify 입력.
@@ -92,17 +105,33 @@ pub enum VerifyError {
         /// stderr 마지막 4KB.
         stderr: String,
     },
-    /// 특정 tile 에 expected substring 없음.
-    #[error("tile {z}/{x}/{y}: missing expected substring {missing:?}")]
-    MissingSubstring {
+    /// 특정 tile 에 expected feature property 없음.
+    #[error("tile {z}/{x}/{y}: no feature with properties.{key}={value:?} (checked {feature_count} features)")]
+    MissingProperty {
         /// zoom.
         z: u8,
         /// tile x.
         x: u32,
         /// tile y.
         y: u32,
-        /// 빠진 substring (첫 번째).
-        missing: String,
+        /// 검사한 property key.
+        key: String,
+        /// 기대 값.
+        value: String,
+        /// 검사한 feature 수 (0 이면 tile 자체가 비어있음).
+        feature_count: usize,
+    },
+    /// `tippecanoe-decode` 출력 JSON 파싱 실패.
+    #[error("tile {z}/{x}/{y}: invalid JSON output: {detail}")]
+    InvalidJson {
+        /// zoom.
+        z: u8,
+        /// tile x.
+        x: u32,
+        /// tile y.
+        y: u32,
+        /// 파싱 에러.
+        detail: String,
     },
 }
 
@@ -126,10 +155,12 @@ pub async fn compute_sha256(path: &Path) -> Result<String, VerifyError> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// 단일 tile 디코드 + substring 체크.
+/// 단일 tile 디코드 + JSON 파싱 후 expectation 검사.
 ///
-/// `tippecanoe-decode -l <layer> <pmtiles> <z> <x> <y>` → stdout = GeoJSON Feature 들의
-/// FeatureCollection. 본 함수는 stdout 전체를 메모리에 로드 (한 tile 은 ~10KB ~ 수MB).
+/// `tippecanoe-decode -l <layer> <pmtiles> <z> <x> <y>` → stdout = GeoJSON
+/// FeatureCollection (또는 한 layer 짜리 wrapper). 본 함수가 stdout 을 `serde_json::Value`
+/// 로 파싱 → `features[].properties[<key>] == <value>` 검사. substring 매칭 대비 false
+/// positive 0 (PNU 가 다른 tile metadata 에 우연 등장하는 케이스 차단).
 async fn check_tile(
     host: Host,
     pmtiles: &Path,
@@ -164,18 +195,69 @@ async fn check_tile(
             stderr: trimmed,
         });
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    for needle in &spec.must_contain {
-        if !stdout.contains(needle.as_str()) {
-            return Err(VerifyError::MissingSubstring {
-                z: spec.z,
-                x: spec.x,
-                y: spec.y,
-                missing: needle.clone(),
-            });
+
+    // tippecanoe-decode 출력 = `{"type":"FeatureCollection","features":[...]}`
+    // (single layer 출력은 layer wrapper 추가될 수도 있음 → 양쪽 처리).
+    let json: serde_json::Value =
+        serde_json::from_slice(&output.stdout).map_err(|e| VerifyError::InvalidJson {
+            z: spec.z,
+            x: spec.x,
+            y: spec.y,
+            detail: format!("{e}"),
+        })?;
+    let features = collect_features(&json);
+    for expectation in &spec.expectations {
+        match expectation {
+            TileExpectation::PropertyEquals { key, value } => {
+                let found = features.iter().any(|f| {
+                    f.get("properties")
+                        .and_then(|p| p.get(key))
+                        .and_then(prop_to_string)
+                        .as_deref()
+                        == Some(value.as_str())
+                });
+                if !found {
+                    return Err(VerifyError::MissingProperty {
+                        z: spec.z,
+                        x: spec.x,
+                        y: spec.y,
+                        key: key.clone(),
+                        value: value.clone(),
+                        feature_count: features.len(),
+                    });
+                }
+            }
         }
     }
     Ok(())
+}
+
+/// `tippecanoe-decode` 출력에서 모든 Feature object 수집. layer wrapper 유무 양쪽 처리.
+fn collect_features(json: &serde_json::Value) -> Vec<&serde_json::Value> {
+    let mut out: Vec<&serde_json::Value> = Vec::new();
+    // case A: top-level `{"type":"FeatureCollection","features":[...]}`.
+    if let Some(features) = json.get("features").and_then(|v| v.as_array()) {
+        out.extend(features.iter());
+    }
+    // case B: `{"<layer_name>":{"type":"FeatureCollection","features":[...]}, ...}`.
+    if let Some(obj) = json.as_object() {
+        for v in obj.values() {
+            if let Some(features) = v.get("features").and_then(|f| f.as_array()) {
+                out.extend(features.iter());
+            }
+        }
+    }
+    out
+}
+
+/// JSON value → string 비교용 표현. 숫자는 to_string, 문자열은 그대로, 그 외 None.
+fn prop_to_string(v: &serde_json::Value) -> Option<String> {
+    match v {
+        serde_json::Value::String(s) => Some(s.clone()),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
 }
 
 /// 전체 verify 파이프라인 — sha256 + file size + tile 들의 substring 체크.
@@ -293,5 +375,81 @@ mod tests {
         // (0, 0) at z0 → (0, 0).
         let (x, y) = lonlat_to_tile(0.0, 0.0, 0);
         assert_eq!((x, y), (0, 0));
+    }
+
+    #[test]
+    fn collect_features_handles_layer_wrapper() {
+        // case A — flat FeatureCollection.
+        let flat = serde_json::json!({
+            "type": "FeatureCollection",
+            "features": [{"properties": {"pnu": "abc"}}]
+        });
+        assert_eq!(collect_features(&flat).len(), 1);
+
+        // case B — layer wrapper (`tippecanoe-decode -l X` 의 옛 출력 패턴).
+        let wrapped = serde_json::json!({
+            "parcels": {"type": "FeatureCollection", "features": [
+                {"properties": {"pnu": "p1"}},
+                {"properties": {"pnu": "p2"}},
+            ]}
+        });
+        assert_eq!(collect_features(&wrapped).len(), 2);
+    }
+
+    #[test]
+    fn prop_to_string_covers_common_types() {
+        assert_eq!(
+            prop_to_string(&serde_json::json!("hello")),
+            Some("hello".to_owned())
+        );
+        assert_eq!(
+            prop_to_string(&serde_json::json!(42)),
+            Some("42".to_owned())
+        );
+        assert_eq!(
+            prop_to_string(&serde_json::json!(true)),
+            Some("true".to_owned())
+        );
+        assert_eq!(prop_to_string(&serde_json::json!(null)), None);
+        assert_eq!(prop_to_string(&serde_json::json!({"k": "v"})), None);
+    }
+
+    #[test]
+    fn property_equals_finds_match() {
+        let features = [
+            serde_json::json!({"properties": {"pnu": "1168010100107370000"}}),
+            serde_json::json!({"properties": {"pnu": "9999"}}),
+        ];
+        let refs: Vec<&serde_json::Value> = features.iter().collect();
+        // simulate the inner check.
+        let target = "1168010100107370000";
+        let found = refs.iter().any(|f| {
+            f.get("properties")
+                .and_then(|p| p.get("pnu"))
+                .and_then(prop_to_string)
+                .as_deref()
+                == Some(target)
+        });
+        assert!(found, "must find target PNU");
+    }
+
+    #[test]
+    fn property_equals_rejects_substring_only_match() {
+        // 사용자 요구의 핵심 테스트: substring 매칭이 false positive 만들 수 있던 상황.
+        // `1168010100107370` 가 다른 PNU `11680101001073700001` 의 prefix substring.
+        // PropertyEquals 는 정확 비교라 negative 결과여야 함.
+        let features = [serde_json::json!({"properties": {
+            "pnu": "11680101001073700001"  // expected 와 다름 (1자리 더 김).
+        }})];
+        let refs: Vec<&serde_json::Value> = features.iter().collect();
+        let target = "1168010100107370000";
+        let found = refs.iter().any(|f| {
+            f.get("properties")
+                .and_then(|p| p.get("pnu"))
+                .and_then(prop_to_string)
+                .as_deref()
+                == Some(target)
+        });
+        assert!(!found, "exact equality must reject substring-only match");
     }
 }
