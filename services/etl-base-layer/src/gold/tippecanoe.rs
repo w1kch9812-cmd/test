@@ -68,9 +68,9 @@ impl LayerKind {
     pub const fn render_min_zoom(self) -> u8 {
         match self {
             Self::Parcels => 16,
-            Self::Admin => 0,
-            // 산업단지: 모든 zoom 에서 render (사용자 요구). tile_min_zoom=0 이라 source 데이터 존재 보장.
-            Self::Complex => 0,
+            // admin: outline 은 z0 부터 visible. complex (산업단지): 사용자 요구 — 모든 zoom 에서
+            // render. 둘 다 0 이라 같은 arm.
+            Self::Admin | Self::Complex => 0,
         }
     }
 

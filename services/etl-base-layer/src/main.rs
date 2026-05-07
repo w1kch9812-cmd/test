@@ -40,6 +40,7 @@ mod r2_upload;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
@@ -48,9 +49,11 @@ use std::collections::BTreeMap;
 
 use sha2::{Digest, Sha256};
 
+use crate::bronze::dtmk::{self, DtmkFetchArgs};
 use crate::config::Config;
 use crate::gold::build::{build_layer, BuildResult};
 use crate::gold::manifest::{GoldArtifact, GoldManifest};
+use crate::gold::shp_to_geojson::{self, Ogr2OgrArgs};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
 use crate::r2_upload::R2Uploader;
@@ -125,7 +128,17 @@ async fn run_bronze() -> ExitCode {
 struct GoldOpts {
     layer: LayerKind,
     output_dir: PathBuf,
+    /// 사용자가 직접 준비한 `GeoJSON` 입력 (positional). `--bronze-prefix` 와 mutually exclusive.
     inputs: Vec<PathBuf>,
+    /// R2 Bronze prefix (예: `bronze/2026-05/parcel-dtmk-30563/`). 지정 시 dtmk pipeline
+    /// (R2 다운 + unzip + ogr2ogr) 가 `GeoJSON` 입력 자동 생성.
+    bronze_prefix: Option<String>,
+    /// dtmk pipeline 작업 디렉터리. 기본 `<output_dir>/../dtmk-work`.
+    work_dir: Option<PathBuf>,
+    /// dtmk pipeline 다운로드 동시성 (기본 8).
+    concurrency: usize,
+    /// 입력 SHP 의 source SRS (V-World dtmk = `EPSG:5186`, 공공데이터포털 일부 = `EPSG:5179`).
+    source_srs: String,
 }
 
 #[derive(Debug)]
@@ -152,6 +165,10 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
     let mut layer: Option<LayerKind> = None;
     let mut output_dir: Option<PathBuf> = None;
     let mut inputs: Vec<PathBuf> = Vec::new();
+    let mut bronze_prefix: Option<String> = None;
+    let mut work_dir: Option<PathBuf> = None;
+    let mut concurrency: usize = 8;
+    let mut source_srs: String = "EPSG:5186".to_owned();
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -167,13 +184,55 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
                     .ok_or_else(|| ArgError("--output needs a value".into()))?;
                 output_dir = Some(PathBuf::from(v));
             }
+            "--bronze-prefix" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--bronze-prefix needs a value".into()))?;
+                bronze_prefix = Some(v.clone());
+            }
+            "--work-dir" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--work-dir needs a value".into()))?;
+                work_dir = Some(PathBuf::from(v));
+            }
+            "--concurrency" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--concurrency needs a value".into()))?;
+                concurrency = v
+                    .parse::<usize>()
+                    .map_err(|e| ArgError(format!("--concurrency parse: {e}")))?;
+            }
+            "--source-srs" => {
+                let v = iter
+                    .next()
+                    .ok_or_else(|| ArgError("--source-srs needs a value".into()))?;
+                source_srs.clone_from(v);
+            }
             other => inputs.push(PathBuf::from(other)),
         }
     }
+    let layer = layer.ok_or_else(|| ArgError("--layer is required".into()))?;
+    let output_dir = output_dir.ok_or_else(|| ArgError("--output is required".into()))?;
+    if inputs.is_empty() && bronze_prefix.is_none() {
+        return Err(ArgError(
+            "either positional GeoJSON inputs or --bronze-prefix is required".into(),
+        ));
+    }
+    if !inputs.is_empty() && bronze_prefix.is_some() {
+        return Err(ArgError(
+            "--bronze-prefix and positional inputs are mutually exclusive".into(),
+        ));
+    }
     Ok(GoldOpts {
-        layer: layer.ok_or_else(|| ArgError("--layer is required".into()))?,
-        output_dir: output_dir.ok_or_else(|| ArgError("--output is required".into()))?,
+        layer,
+        output_dir,
         inputs,
+        bronze_prefix,
+        work_dir,
+        concurrency,
+        source_srs,
     })
 }
 
@@ -188,17 +247,13 @@ async fn run_gold(args: &[String]) -> ExitCode {
         }
     };
 
-    if opts.inputs.is_empty() {
-        error!("gold: at least one input GeoJSON path is required");
-        return ExitCode::from(2);
-    }
-
     let host = Host::detect();
     info!(
         host = ?host,
         layer = %opts.layer.layer_name(),
         output_dir = %opts.output_dir.display(),
-        inputs = opts.inputs.len(),
+        positional_inputs = opts.inputs.len(),
+        bronze_prefix = ?opts.bronze_prefix,
         "starting gold build"
     );
 
@@ -211,8 +266,26 @@ async fn run_gold(args: &[String]) -> ExitCode {
         }
     }
 
+    // dtmk path: R2 → unzip → ogr2ogr → GeoJSON inputs. positional path 와 disjoint.
+    let geojson_inputs: Vec<PathBuf> = if let Some(prefix) = opts.bronze_prefix.as_deref() {
+        match prepare_dtmk_inputs(host, &opts, prefix).await {
+            Ok(v) => v,
+            Err(e) => {
+                error!(error = %e, "dtmk preparation failed");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        opts.inputs.clone()
+    };
+
+    if geojson_inputs.is_empty() {
+        error!("no GeoJSON inputs after preparation — aborting");
+        return ExitCode::FAILURE;
+    }
+
     // 입력 path → &Path borrow vec.
-    let input_refs: Vec<&std::path::Path> = opts.inputs.iter().map(PathBuf::as_path).collect();
+    let input_refs: Vec<&std::path::Path> = geojson_inputs.iter().map(PathBuf::as_path).collect();
 
     let result = match build_layer(host, &opts.output_dir, opts.layer, &input_refs).await {
         Ok(r) => r,
@@ -236,11 +309,7 @@ async fn run_gold(args: &[String]) -> ExitCode {
     // ADR 0021 § ETL pipeline — R2 가 설정되어 있으면 flat tile + manifest publish.
     let cfg = Config::from_env();
     if let Some(r2_cfg) = cfg.r2 {
-        let version = cfg
-            .gold_version
-            .as_deref()
-            .unwrap_or("v_local")
-            .to_owned();
+        let version = cfg.gold_version.as_deref().unwrap_or("v_local").to_owned();
         match upload_gold_to_r2(&r2_cfg, &version, opts.layer, &result).await {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
@@ -252,6 +321,108 @@ async fn run_gold(args: &[String]) -> ExitCode {
         info!("R2_* env not set → local-only mode (build artifact ready at flat_tiles_dir)");
         ExitCode::SUCCESS
     }
+}
+
+/// dtmk pipeline — R2 Bronze prefix → 로컬 unzip → ogr2ogr → `GeoJSON` 모음.
+///
+/// 1. `R2Uploader` 생성 (Config 의 R2 자격이 *반드시* 설정돼 있어야 함).
+/// 2. [`bronze::dtmk::fetch`] — 273 시군구 zip 다운 + unzip.
+/// 3. 각 .shp → `<work_dir>/geojson/<stem>.geojson` (ogr2ogr, idempotent skip).
+/// 4. `GeoJSON` path 들 반환 — `build_layer` 가 tippecanoe 입력으로 사용.
+#[allow(clippy::cognitive_complexity)]
+async fn prepare_dtmk_inputs(
+    host: Host,
+    opts: &GoldOpts,
+    bronze_prefix: &str,
+) -> Result<Vec<PathBuf>, Box<dyn std::error::Error>> {
+    let cfg = Config::from_env();
+    let r2_cfg = cfg
+        .r2
+        .clone()
+        .ok_or_else(|| -> Box<dyn std::error::Error> {
+            "R2 credentials not configured — set R2_ACCOUNT_ID/R2_ACCESS_KEY/R2_SECRET_KEY/R2_BUCKET".into()
+        })?;
+    let uploader = R2Uploader::new(r2_cfg);
+
+    let work_dir = opts.work_dir.clone().unwrap_or_else(|| {
+        opts.output_dir
+            .parent()
+            .map_or_else(|| PathBuf::from("./var/dtmk-work"), |p| p.join("dtmk-work"))
+    });
+    info!(work_dir = %work_dir.display(), "dtmk work dir");
+
+    let fetched = dtmk::fetch(
+        &uploader,
+        &DtmkFetchArgs {
+            prefix: bronze_prefix,
+            work_dir: &work_dir,
+            concurrency: opts.concurrency,
+        },
+    )
+    .await?;
+    info!(
+        archives = fetched.archives.len(),
+        downloaded = fetched.newly_downloaded,
+        extracted = fetched.newly_extracted,
+        "dtmk fetch done"
+    );
+
+    // ogr2ogr 사전 체크.
+    match shp_to_geojson::check_available(host).await {
+        Ok(v) => info!(version = %v, "ogr2ogr available"),
+        Err(e) => return Err(format!("ogr2ogr not available: {e}").into()),
+    }
+
+    let geojson_dir = work_dir.join("geojson");
+    tokio::fs::create_dir_all(&geojson_dir).await?;
+
+    // ogr2ogr 동시 — 시군구 별 1 spawn. 디스크 + CPU 부담 → concurrency cap.
+    let mut tasks: Vec<tokio::task::JoinHandle<Result<PathBuf, String>>> = Vec::new();
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(opts.concurrency.max(1)));
+    for arch in fetched.archives {
+        let permit = Arc::clone(&semaphore).acquire_owned().await?;
+        let geojson_dir = geojson_dir.clone();
+        let source_srs = opts.source_srs.clone();
+        let host_c = host;
+        let task = tokio::spawn(async move {
+            let _permit = permit; // hold until done.
+            let stem = arch
+                .shp_path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("shp")
+                .to_owned();
+            let out = geojson_dir.join(format!("{stem}.geojson"));
+            // idempotent skip — 출력 .geojson 가 이미 비어있지 않으면 재사용.
+            let skip = matches!(tokio::fs::metadata(&out).await, Ok(m) if m.len() > 0);
+            if skip {
+                return Ok(out);
+            }
+            let args = Ogr2OgrArgs {
+                input_shp: &arch.shp_path,
+                output_geojson: &out,
+                source_srs: &source_srs,
+                target_srs: "EPSG:4326",
+            };
+            shp_to_geojson::run(host_c, &args)
+                .await
+                .map_err(|e| format!("{}: {e}", arch.shp_path.display()))?;
+            Ok(out)
+        });
+        tasks.push(task);
+    }
+
+    let mut geojsons: Vec<PathBuf> = Vec::with_capacity(tasks.len());
+    for t in tasks {
+        let p = t.await??;
+        geojsons.push(p);
+    }
+    geojsons.sort();
+    info!(
+        geojson_count = geojsons.len(),
+        "ogr2ogr conversion complete"
+    );
+    Ok(geojsons)
 }
 
 /// ADR 0021 — flat tile 디렉터리 + manifest 를 R2 publish.
@@ -337,7 +508,12 @@ async fn upload_gold_to_r2(
     // 프론트는 `addSource({ type: "vector", url: "...parcels.json" })` 한 줄 → mapbox-gl
     // 자동 fetch + minzoom/maxzoom/tiles 적용. 우리 manifest fetch 코드 0.
     let tilejson = build_tilejson(r2_cfg, version, layer);
-    let tilejson_key = format!("{}/{}/{}.json", r2_cfg.gold_prefix, version, layer.layer_name());
+    let tilejson_key = format!(
+        "{}/{}/{}.json",
+        r2_cfg.gold_prefix,
+        version,
+        layer.layer_name()
+    );
     uploader
         .put_object_json(&tilejson_key, &tilejson, "public, max-age=300")
         .await?;

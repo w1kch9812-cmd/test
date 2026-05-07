@@ -1,6 +1,14 @@
 //! Bronze 단계 — 외부 SHP/GeoJSON 다운로드 + sha256 + 로컬 저장 + R2 archive 업로드.
 //!
-//! 흐름:
+//! ## 모듈 구성
+//!
+//! - **본 파일** (mod.rs): URL-driven HTTP download path (T3a + T3b.1 단순 source).
+//!   환경변수 `BRONZE_*_URL` 들에 1:1 mapping 되는 외부 단일 파일들을 처리.
+//! - [`dtmk`]: R2 → 로컬 다운 + unzip path. Python `dtmk_vworld.py` 가 이미 R2 에
+//!   적재해 둔 Bronze 273 시군구 SHP zip 을 ETL 측이 *재소비* 하기 위한 진입점.
+//!
+//! ## URL-driven 흐름 (본 파일)
+//!
 //! 1. [`Config::sources`] 순회
 //! 2. [`download_one`] — HTTP GET stream → 로컬 파일 + sha256 동시 계산
 //! 3. R2 활성 시 (`Config::r2 = Some`) — 로컬 파일 → R2 `<bronze_prefix>/<batch_label>/<filename>`
@@ -12,6 +20,8 @@
 // FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b.2 에서
 // retry 정책 함께 검토 (월 1회 cron, 외부 dependency 우선순위 낮음).
 #![allow(clippy::disallowed_types)]
+
+pub mod dtmk;
 
 use std::path::{Path, PathBuf};
 

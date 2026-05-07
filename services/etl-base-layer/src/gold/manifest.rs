@@ -120,9 +120,13 @@ mod tests {
     use chrono::TimeZone;
 
     fn fixture_artifact(key: &str) -> GoldArtifact {
+        // source_layer 는 key 의 마지막 segment — `gold/v3/admin` → `admin`. 그 결과 JSON
+        // 안에서 같은 layer 이름이 *map key* 와 *source_layer 값* 으로 동시 등장하지만,
+        // 둘 다 본 layer 의 이름이라 알파벳 순 검증에 영향 없음.
+        let source_layer = key.rsplit('/').next().unwrap_or(key).to_owned();
         GoldArtifact {
             key: key.into(),
-            source_layer: "parcels".into(),
+            source_layer,
             pmtiles_bytes: 1_234,
             pmtiles_sha256: "abc".into(),
             built_at: Utc.with_ymd_and_hms(2026, 5, 6, 10, 0, 0).unwrap(),

@@ -55,12 +55,21 @@ impl R2Config {
     }
 }
 
-/// R2 업로드 에러.
+/// R2 업로드 / 다운로드 에러.
 #[derive(Debug, Error)]
 pub enum UploadError {
     /// 로컬 파일 읽기 실패.
     #[error("read file {path} failed: {source}")]
     ReadFile {
+        /// 대상 파일 경로.
+        path: String,
+        /// 원인.
+        #[source]
+        source: std::io::Error,
+    },
+    /// 로컬 파일 쓰기 실패 (download path).
+    #[error("write file {path} failed: {source}")]
+    WriteFile {
         /// 대상 파일 경로.
         path: String,
         /// 원인.
@@ -79,6 +88,30 @@ pub enum UploadError {
         /// 원인 stringify (`DisplayErrorContext`).
         detail: String,
     },
+    /// S3 `GetObject` API 실패.
+    #[error("get_object {key} failed: {detail}")]
+    GetObject {
+        /// 대상 객체 key.
+        key: String,
+        /// 원인 stringify.
+        detail: String,
+    },
+    /// S3 `ListObjectsV2` API 실패.
+    #[error("list_objects {prefix} failed: {detail}")]
+    ListObjects {
+        /// 대상 prefix.
+        prefix: String,
+        /// 원인 stringify.
+        detail: String,
+    },
+    /// `GetObject` body stream 읽기 실패.
+    #[error("body stream {key} failed: {detail}")]
+    BodyStream {
+        /// 대상 객체 key.
+        key: String,
+        /// 원인 stringify.
+        detail: String,
+    },
     /// JSON 직렬화 실패.
     #[error("json serialize failed: {0}")]
     JsonSerialize(#[from] serde_json::Error),
@@ -91,6 +124,17 @@ pub struct DirectoryUploadResult {
     pub uploaded: u64,
     /// 총 bytes (`PutObject` body 합).
     pub total_bytes: u64,
+}
+
+/// `list_objects` 가 반환하는 단일 객체 메타.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteObject {
+    /// 전체 key (prefix 포함).
+    pub key: String,
+    /// 객체 size (bytes). idempotent skip 비교에 사용.
+    pub size: u64,
+    /// HTTP `If-Match` 등에 쓸 `ETag` (있으면). R2 가 항상 보장하지는 않음 → `Option`.
+    pub etag: Option<String>,
 }
 
 /// R2 업로더 — `aws-sdk-s3` Client 래퍼.
@@ -258,12 +302,13 @@ impl R2Uploader {
                 let success = Arc::clone(&success_clone);
                 let bytes = Arc::clone(&bytes_clone);
                 async move {
-                    let body = ByteStream::from_path(&path)
-                        .await
-                        .map_err(|e| UploadError::ReadFile {
-                            path: path.display().to_string(),
-                            source: std::io::Error::other(e),
-                        })?;
+                    let body =
+                        ByteStream::from_path(&path)
+                            .await
+                            .map_err(|e| UploadError::ReadFile {
+                                path: path.display().to_string(),
+                                source: std::io::Error::other(e),
+                            })?;
                     let len = tokio::fs::metadata(&path)
                         .await
                         .map(|m| m.len())
@@ -307,11 +352,130 @@ impl R2Uploader {
 
         let count = success.load(Ordering::Relaxed);
         let total_bytes = bytes.load(Ordering::Relaxed);
-        info!(uploaded = count, bytes = total_bytes, "batch upload complete");
+        info!(
+            uploaded = count,
+            bytes = total_bytes,
+            "batch upload complete"
+        );
         Ok(DirectoryUploadResult {
             uploaded: count,
             total_bytes,
         })
+    }
+
+    /// `ListObjectsV2` paginated — `prefix` 하위 모든 객체 메타 반환.
+    ///
+    /// R2 의 `ListObjectsV2` 는 default 1000 객체/page → continuation token 으로 loop.
+    /// 273 시군구 SHP zip 가정 시 1 page 면 충분하지만 안전하게 pagination 구현.
+    ///
+    /// # Errors
+    ///
+    /// `ListObjectsV2` API 실패.
+    #[instrument(skip(self), fields(bucket = %self.config.bucket, prefix = %prefix))]
+    pub async fn list_objects(&self, prefix: &str) -> Result<Vec<RemoteObject>, UploadError> {
+        let mut all = Vec::new();
+        let mut continuation: Option<String> = None;
+        loop {
+            let mut req = self
+                .client
+                .list_objects_v2()
+                .bucket(&self.config.bucket)
+                .prefix(prefix);
+            if let Some(token) = continuation.as_deref() {
+                req = req.continuation_token(token);
+            }
+            let resp = req.send().await.map_err(|e| UploadError::ListObjects {
+                prefix: prefix.to_owned(),
+                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+            })?;
+            for obj in resp.contents() {
+                if let Some(key) = obj.key() {
+                    all.push(RemoteObject {
+                        key: key.to_owned(),
+                        size: u64::try_from(obj.size().unwrap_or(0)).unwrap_or(0),
+                        etag: obj.e_tag().map(str::to_owned),
+                    });
+                }
+            }
+            if resp.is_truncated().unwrap_or(false) {
+                continuation = resp.next_continuation_token().map(str::to_owned);
+                if continuation.is_none() {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        info!(count = all.len(), "list_objects complete");
+        Ok(all)
+    }
+
+    /// `GetObject` → 로컬 파일 stream 저장. 메모리 적재 X (대용량 SHP zip 가정).
+    ///
+    /// 부모 디렉터리는 자동 생성. 출력 파일은 *덮어쓰기* (`fs::File::create`).
+    /// idempotent skip 은 호출자가 사전 size 비교로 처리 (본 메서드는 항상 다운).
+    ///
+    /// # Errors
+    ///
+    /// `GetObject` API 실패 / body stream 실패 / 디스크 I/O 실패.
+    #[instrument(
+        skip(self, dest),
+        fields(bucket = %self.config.bucket, key = %key, dest = %dest.display()),
+    )]
+    pub async fn download_to_file(&self, key: &str, dest: &Path) -> Result<u64, UploadError> {
+        if let Some(parent) = dest.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|source| UploadError::WriteFile {
+                    path: parent.display().to_string(),
+                    source,
+                })?;
+        }
+
+        let resp = self
+            .client
+            .get_object()
+            .bucket(&self.config.bucket)
+            .key(key)
+            .send()
+            .await
+            .map_err(|e| UploadError::GetObject {
+                key: key.to_owned(),
+                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+            })?;
+
+        let mut body = resp.body;
+        let mut file =
+            tokio::fs::File::create(dest)
+                .await
+                .map_err(|source| UploadError::WriteFile {
+                    path: dest.display().to_string(),
+                    source,
+                })?;
+        let mut total: u64 = 0;
+        use tokio::io::AsyncWriteExt;
+        // ByteStream impl Stream → futures_util::StreamExt::next.
+        while let Some(chunk) = body.next().await {
+            let chunk = chunk.map_err(|e| UploadError::BodyStream {
+                key: key.to_owned(),
+                detail: format!("{e}"),
+            })?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|source| UploadError::WriteFile {
+                    path: dest.display().to_string(),
+                    source,
+                })?;
+            total += chunk.len() as u64;
+        }
+        file.flush()
+            .await
+            .map_err(|source| UploadError::WriteFile {
+                path: dest.display().to_string(),
+                source,
+            })?;
+        info!(bytes = total, "download complete");
+        Ok(total)
     }
 
     /// JSON pretty-encoded 객체 업로드. `content_type=application/json`.
