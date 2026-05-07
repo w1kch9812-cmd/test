@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPush = vi.fn();
 const mockBack = vi.fn();
+const mockReplace = vi.fn();
 const mockSearchParams = new URLSearchParams();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush, back: mockBack, replace: vi.fn() }),
+  useRouter: () => ({ push: mockPush, back: mockBack, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/listings",
 }));
@@ -17,6 +18,7 @@ import { usePanelStack } from "./use-panel-stack";
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
+  mockReplace.mockClear();
   mockSearchParams.delete("p");
 });
 
@@ -64,5 +66,38 @@ describe("usePanelStack", () => {
     const { result } = renderHook(() => usePanelStack());
     expect(result.current.stack.entries).toHaveLength(0);
     // depth-0 = silent recover (Sentry 이벤트는 telemetry.test.ts 가 검증)
+  });
+
+  it("refuses push when depth would exceed PANEL_DEPTH_MAX", () => {
+    // Hydrate with depth=8 (max).
+    const long = Array.from({ length: 8 }, () => "parcel:1168010100107370000.summary").join(">");
+    mockSearchParams.set("p", long);
+    const { result } = renderHook(() => usePanelStack());
+    expect(result.current.stack.entries).toHaveLength(8);
+
+    act(() => {
+      result.current.push({
+        kind: "parcel",
+        id: "1168010100107370001",
+        view: "summary",
+      });
+    });
+    // push must be refused — router.push not called.
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("truncate uses router.replace (not push) — does not extend history", () => {
+    mockSearchParams.set(
+      "p",
+      "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary",
+    );
+    const { result } = renderHook(() => usePanelStack());
+    act(() => {
+      result.current.truncate(1);
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith("/listings?p=parcel%3A1168010100107370000.summary", {
+      scroll: false,
+    });
   });
 });

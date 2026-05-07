@@ -68,7 +68,7 @@ describe("g1Codec", () => {
     if (!r.ok) expect(r.error).toBe(ParseError.DepthExceeded);
   });
 
-  it("returns Malformed for empty input round-trip", () => {
+  it("treats empty string as empty stack (length-0)", () => {
     // empty string is a valid empty stack — caller decides which
     const r = g1Codec.deserialize("");
     expect(r.ok).toBe(true);
