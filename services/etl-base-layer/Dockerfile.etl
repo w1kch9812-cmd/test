@@ -21,8 +21,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: tippecanoe builder
 # felt/tippecanoe v2.80.0 (immutable git tag — 배포자가 GitHub Release 로 박제).
+#
+# ubuntu:22.04 base 가 *digest* 로 pin — tag (`:22.04`) 는 mutable 이라 새 base
+# build 시 silent drift. 본 digest = 2026-05-07 시점의 ubuntu:22.04 의 sha256.
+# 갱신: `docker pull ubuntu:22.04 && docker inspect ... --format='{{index .RepoDigests 0}}'`
+# 후 본 줄 + Stage 3 의 ubuntu digest 같이 변경 + commit.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM ubuntu:22.04 AS tippecanoe-builder
+FROM ubuntu:22.04@sha256:962f6cadeae0ea6284001009daa4cc9a8c37e75d1f5191cf0eb83fe565b63dd7 AS tippecanoe-builder
 
 ARG TIPPECANOE_VERSION=2.80.0
 ARG DEBIAN_FRONTEND=noninteractive
@@ -45,10 +50,10 @@ RUN make -j"$(nproc)" \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Rust builder — etl-base-layer 정적 link 권장 (deploy 단순).
-# rust:1.88-slim-bookworm 의 정확 digest 는 `docker pull` 후 `docker images --digests`
-# 결과를 본 Dockerfile 에 박제 (TODO: L10 Data Lineage 단계에서 pin).
+# rust:1.88-slim-bookworm digest pinned (Cargo.lock + 본 digest = byte-level 결정성).
+# 갱신: `docker pull rust:1.88-slim-bookworm && docker inspect ...`.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM rust:1.88-slim-bookworm AS rust-builder
+FROM rust:1.88-slim-bookworm@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS rust-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -69,18 +74,19 @@ COPY crates/ crates/
 COPY services/api/ services/api/
 COPY services/outbox-publisher/ services/outbox-publisher/
 
-# 2. 본격 빌드 — release 모드 + 정적 link (musl 선택지지만 일단 glibc).
+# 2. 본격 빌드 — release + --frozen (Cargo.lock drift 차단). musl 선택지지만 일단 glibc.
 COPY services/etl-base-layer/src services/etl-base-layer/src
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target \
-    cargo build --release -p etl-base-layer \
+    cargo build --release --frozen -p etl-base-layer \
     && cp /build/target/release/etl-base-layer /usr/local/bin/etl-base-layer \
     && /usr/local/bin/etl-base-layer --help 2>&1 | head -5 || true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 3: Runtime — slim ubuntu + gdal-bin + tippecanoe + etl-base-layer.
+# Stage 1 와 *동일* digest — 두 곳 동시 갱신 (drift 0).
 # ─────────────────────────────────────────────────────────────────────────────
-FROM ubuntu:22.04 AS runtime
+FROM ubuntu:22.04@sha256:962f6cadeae0ea6284001009daa4cc9a8c37e75d1f5191cf0eb83fe565b63dd7 AS runtime
 
 ARG DEBIAN_FRONTEND=noninteractive
 
