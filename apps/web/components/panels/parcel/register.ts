@@ -29,8 +29,6 @@ defineKind({
     }),
     listings: defineView<"parcel", ListingsResponse>({
       component: ParcelListingsCard,
-      // T6 will move pnu to top-level fetchListings input + remove from filters;
-      // until then, set on filters.
       fetcher: (id) =>
         fetchListings({
           filters: {
@@ -41,10 +39,10 @@ defineKind({
             minPriceKrw: undefined,
             maxPriceKrw: undefined,
             sort: "created_at_desc",
-            pnu: id,
             adminCode: undefined,
             landUseType: undefined,
           },
+          pnu: id,
         }),
       staleTime: 60_000,
       links: [],
