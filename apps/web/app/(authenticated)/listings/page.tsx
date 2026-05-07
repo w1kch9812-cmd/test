@@ -3,8 +3,10 @@ import { getTranslations } from "next-intl/server";
 import { FilterBar } from "@/components/listings/filter-bar";
 import { ListingCardList } from "@/components/listings/listing-card-list";
 import { ListingMap } from "@/components/listings/listing-map";
-import { ParcelInfoPanel } from "@/components/listings/parcel-info-panel";
+import "@/components/panels/listing/register"; // SP10: side-effect kind register
+import "@/components/panels/parcel/register"; // SP10: side-effect kind register
 import { SearchBar } from "@/components/listings/search-bar";
+import { PanelRenderer } from "@/lib/panel/panel-renderer";
 
 export default async function ListingsPage() {
   const t = await getTranslations("listings.page");
@@ -27,12 +29,12 @@ export default async function ListingsPage() {
           <ListingMap />
         </section>
         <aside className="overflow-y-auto border-l border-[var(--color-hairline)] bg-[var(--color-canvas)]">
-          <div className="px-4 pt-3">
-            <ParcelInfoPanel />
-          </div>
           <ListingCardList />
         </aside>
       </div>
+      {/* SP10: PanelRenderer 는 fixed overlay — single mount. xl 에서 우측 840px,
+          그 외 viewport 는 fixed inset-0 fullscreen. */}
+      <PanelRenderer />
     </main>
   );
 }

@@ -2,6 +2,7 @@
 import { Badge } from "@gongzzang/ui";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
+import { useState } from "react";
 import type { ListingDetail } from "@/lib/listings/api";
 import { formatAreaPyeong, formatPriceKrw } from "@/lib/listings/format";
 import type { PanelStackEntry } from "@/lib/panel/types";
@@ -14,11 +15,12 @@ export function ListingSummaryCard({
   data: ListingDetail;
 }) {
   const t = useTranslations("panels.listing.summary");
+  const [imageBroken, setImageBroken] = useState(false);
   const cover = data.photos?.[0];
 
   return (
     <div className="flex flex-col gap-4 p-6">
-      {cover && (
+      {cover && !imageBroken && (
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-[var(--color-surface-cream-strong)]">
           <Image
             src={`/api/listings/${entry.id}/photos/${cover.r2_key}`}
@@ -26,7 +28,13 @@ export function ListingSummaryCard({
             fill
             className="object-cover"
             sizes="(max-width: 1280px) 100vw, 600px"
+            onError={() => setImageBroken(true)}
           />
+        </div>
+      )}
+      {cover && imageBroken && (
+        <div className="aspect-[4/3] w-full overflow-hidden rounded-md bg-[var(--color-surface-cream-strong)] p-4 text-[length:var(--text-caption)] text-[var(--color-muted)]">
+          {cover.caption ?? t("photoUnavailable")}
         </div>
       )}
       <header className="flex items-center gap-2">
