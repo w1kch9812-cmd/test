@@ -41,7 +41,6 @@ describe("toSearchParams (round trip)", () => {
       minPriceKrw: undefined,
       maxPriceKrw: undefined,
       sort: "price_asc",
-      pnu: undefined,
       adminCode: undefined,
       landUseType: undefined,
     };

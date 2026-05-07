@@ -43,6 +43,7 @@ export type ListingsResponse = z.infer<typeof ListingsResponseSchema>;
 export interface FetchListingsInput {
   filters: ListingFilters;
   bounds?: { south: number; west: number; north: number; east: number };
+  pnu?: string;
   page?: number;
   size?: number;
 }
@@ -53,6 +54,7 @@ export async function fetchListings(input: FetchListingsInput): Promise<Listings
     const { south, west, north, east } = input.bounds;
     sp.set("bounds", `${south},${west},${north},${east}`);
   }
+  if (input.pnu) sp.set("pnu", input.pnu);
   if (input.page !== undefined) sp.set("page", String(input.page));
   if (input.size !== undefined) sp.set("size", String(input.size));
 
