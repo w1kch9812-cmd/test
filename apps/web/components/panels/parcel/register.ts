@@ -1,40 +1,34 @@
 // apps/web/components/panels/parcel/register.ts
-import type { ComponentType } from "react";
-import { fetchBuildings } from "@/lib/api/buildings";
-import { fetchParcel } from "@/lib/api/parcels";
-import { fetchListings } from "@/lib/listings/api";
-import { defineKind } from "@/lib/panel/registry";
-import type { PanelStackEntry } from "@/lib/panel/types";
+// Side-effect-only module: importing this file triggers defineKind('parcel') once.
+// No exports. T6 imports it from app/listings/page.tsx for registration.
+
+import { type BuildingsResponse, fetchBuildings } from "@/lib/api/buildings";
+import { fetchParcel, type ParcelInfo } from "@/lib/api/parcels";
+import { fetchListings, type ListingsResponse } from "@/lib/listings/api";
+import { defineKind, defineView } from "@/lib/panel/registry";
 import { ParcelBuildingsCard } from "./buildings";
 import { ParcelListingsCard } from "./listings";
 import { ParcelEmptyCard, ParcelErrorCard, ParcelLoadingSkeleton } from "./skeletons";
 import { ParcelSummaryCard } from "./summary";
 
-// Registry stores components with `data: unknown` (TData defaults to unknown
-// in PanelViewDefinition). Each kind's view components are zod-parsed before
-// reaching them at runtime — see fetchParcel/fetchBuildings/fetchListings —
-// but the registry's invariant generic forces a structural cast at registration.
-type ParcelEntry = Extract<PanelStackEntry, { kind: "parcel" }>;
-type ParcelViewComponent = ComponentType<{ entry: ParcelEntry; data: unknown }>;
-
 defineKind({
   kind: "parcel",
   idPattern: /^\d{19}$/,
   views: {
-    summary: {
-      component: ParcelSummaryCard as unknown as ParcelViewComponent,
+    summary: defineView<"parcel", ParcelInfo>({
+      component: ParcelSummaryCard,
       fetcher: (id) => fetchParcel(id),
       staleTime: 5 * 60_000,
       links: [],
-    },
-    buildings: {
-      component: ParcelBuildingsCard as unknown as ParcelViewComponent,
+    }),
+    buildings: defineView<"parcel", BuildingsResponse>({
+      component: ParcelBuildingsCard,
       fetcher: (id) => fetchBuildings(id),
       staleTime: 5 * 60_000,
       links: [],
-    },
-    listings: {
-      component: ParcelListingsCard as unknown as ParcelViewComponent,
+    }),
+    listings: defineView<"parcel", ListingsResponse>({
+      component: ParcelListingsCard,
       // T6 will move pnu to top-level fetchListings input + remove from filters;
       // until then, set on filters.
       fetcher: (id) =>
@@ -54,11 +48,14 @@ defineKind({
         }),
       staleTime: 60_000,
       links: [],
-    },
+    }),
   },
   loadingComponent: ParcelLoadingSkeleton,
   errorComponent: ParcelErrorCard,
   emptyComponent: ParcelEmptyCard,
+  // parcel data flows through V-World which is auth-gated upstream + the
+  // /listings map (only entry point) is auth-gated, so true is the safe pick.
+  // Spec § 6 example shows false; we diverge consciously here.
   authGate: { required: true },
   i18nNamespace: "panels.parcel",
   telemetryAttrs: (entry) => ({ pnu: entry.id }),

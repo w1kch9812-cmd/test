@@ -65,6 +65,33 @@ export function getView<K extends PanelKind>(
   return def?.views[view] as PanelViewDefinition<K> | undefined;
 }
 
+/**
+ * Per-view variance-erasure helper. Each registered view's `data` flows through
+ * a typed `fetcher: (id) => Promise<TData>` and is consumed by `component:
+ * ComponentType<{data: TData}>`, but the registry's `views` map slot is
+ * `PanelViewDefinition<K, unknown>` (closed under all kinds). `defineView`
+ * lets each kind's register.ts express the typed view inline:
+ *
+ * ```ts
+ * summary: defineView<'parcel', ParcelInfo>({
+ *   component: ParcelSummaryCard,
+ *   fetcher: fetchParcel,
+ *   staleTime: 5 * 60_000,
+ *   links: [],
+ * }),
+ * ```
+ *
+ * TS infers TData from the fetcher return type, validates the component's
+ * `data` prop against TData, then erases TData to `unknown` for storage.
+ * Runtime safety is preserved by the fetcher's zod parse (each kind's
+ * fetchParcel/fetchBuildings/etc. zod-parses before resolving).
+ */
+export function defineView<K extends PanelKind, TData>(
+  v: PanelViewDefinition<K, TData>,
+): PanelViewDefinition<K> {
+  return v as unknown as PanelViewDefinition<K>;
+}
+
 /** TEST ONLY — clears registry between tests. */
 export function _resetRegistryForTests(): void {
   REGISTRY.clear();
