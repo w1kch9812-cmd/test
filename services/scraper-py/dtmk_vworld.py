@@ -52,7 +52,7 @@ def required(name: str) -> str:
 
 # ===== V-World 사이트 client =====
 LOGIN_URL = "https://www.vworld.kr/v4po_usrlogin_a004.do"
-DTMK_URL = "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}"
+DTMK_URL = "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}&datPageSize=1000"
 DOWNLOAD_URL = "https://www.vworld.kr/dtmk/downloadResourceFile.do?ds_id={ds_id}&fileNo={file_no}"
 
 
@@ -61,6 +61,34 @@ class FileEntry(NamedTuple):
     file_no: str
     file_size: int  # KB? 또는 bytes — V-World 의 단위 검증 필요. onclick 의 세 번째 인자.
     sigungu: str | None = None  # filename 추출 후 채움
+
+
+class _IterStream:
+    """`Iterator[bytes]` → file-like read() — boto3 `upload_fileobj` 와 호환.
+
+    curl_cffi 의 `iter_content` 결과를 boto3 multipart upload 에 흘림. 메모리는
+    chunk 단위만 사용 (~64KB).
+    """
+
+    def __init__(self, it):
+        self._it = it
+        self._buffer = b""
+
+    def read(self, n: int = -1) -> bytes:
+        if n is None or n < 0:
+            chunks = [self._buffer]
+            self._buffer = b""
+            for chunk in self._it:
+                chunks.append(chunk)
+            return b"".join(chunks)
+        while len(self._buffer) < n:
+            try:
+                self._buffer += next(self._it)
+            except StopIteration:
+                break
+        out = self._buffer[:n]
+        self._buffer = self._buffer[n:]
+        return out
 
 
 def make_session() -> cffi.Session:
@@ -195,26 +223,32 @@ def main() -> int:
         # 실 size 는 Content-Length 헤더로 비교. 단 여기선 onclick 의 size_kb 를 사용.
         # 정확한 비교는 다음 단계 (manifest 의 sha256 비교).
         # *file_no 만으로 R2 key 결정* — sigungu 명은 응답 헤더에서 받음.
-        with session.get(url, stream=True, timeout=600) as r:
-            r.raise_for_status()
-            disp = r.headers.get("Content-Disposition")
-            filename = filename_from_disposition(disp) or f"file-{entry.file_no}.zip"
-            sigungu = sigungu_from_filename(filename)
-            content_len = int(r.headers.get("Content-Length", "0"))
-            key = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}/{filename}"
+        # curl_cffi 의 Response 는 `with` context manager 미지원 — 직접 변수 할당.
+        r = session.get(url, stream=True, timeout=600)
+        r.raise_for_status()
+        disp = r.headers.get("Content-Disposition")
+        filename = filename_from_disposition(disp) or f"file-{entry.file_no}.zip"
+        sigungu = sigungu_from_filename(filename)
+        content_len = int(r.headers.get("Content-Length", "0"))
+        key = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}/{filename}"
 
-            # idempotent — 이미 같은 size 의 object 가 R2 에 있으면 skip.
-            existing = r2_head(r2, bucket, key)
-            if existing and int(existing.get("ContentLength", 0)) == content_len and content_len > 0:
-                print(
-                    f"[{idx:3d}/{len(entries)}] skip {sigungu} ({content_len:,}B, R2 동일)",
-                    flush=True,
-                )
-                return sigungu, False, 0
+        # idempotent — 이미 같은 size 의 object 가 R2 에 있으면 skip.
+        existing = r2_head(r2, bucket, key)
+        if existing and int(existing.get("ContentLength", 0)) == content_len and content_len > 0:
+            r.close()
+            print(
+                f"[{idx:3d}/{len(entries)}] skip {sigungu} ({content_len:,}B, R2 동일)",
+                flush=True,
+            )
+            return sigungu, False, 0
 
-            # streaming PUT — 메모리에 안 담음.
+        # streaming PUT — iter_content 로 chunk 받아 BytesIO buffer 거쳐 upload_fileobj.
+        # boto3 가 multipart 자동 — 메모리는 chunk 단위만 사용.
+        # S3 metadata 는 ASCII only — sigungu 한글은 URL-encode 후 박제.
+        from urllib.parse import quote as url_quote
+        try:
             r2.upload_fileobj(
-                r.raw,  # curl_cffi 의 raw streaming response
+                _IterStream(r.iter_content(chunk_size=64 * 1024)),
                 bucket,
                 key,
                 ExtraArgs={
@@ -222,16 +256,18 @@ def main() -> int:
                     "Metadata": {
                         "ds_id": entry.ds_id,
                         "file_no": entry.file_no,
-                        "sigungu": sigungu,
+                        "sigungu_urlencoded": url_quote(sigungu, safe=""),
                         "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     },
                 },
             )
-            print(
-                f"[{idx:3d}/{len(entries)}] PUT {sigungu} ({content_len:,}B → s3://{bucket}/{key})",
-                flush=True,
-            )
-            return sigungu, True, content_len
+        finally:
+            r.close()
+        print(
+            f"[{idx:3d}/{len(entries)}] PUT {sigungu} ({content_len:,}B -> s3://{bucket}/{key})",
+            flush=True,
+        )
+        return sigungu, True, content_len
 
     # concurrent download (V-World 서버 부담 고려 default 3 parallel).
     started = time.time()
