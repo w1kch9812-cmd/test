@@ -763,20 +763,28 @@ fn build_tilejson(
 }
 
 fn init_tracing() {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,etl_base_layer=debug"));
     // L4: prod 는 ETL_LOG_FORMAT=json (CloudWatch / Datadog 자동 파싱). dev = pretty (default).
     let json_mode = std::env::var("ETL_LOG_FORMAT").as_deref() == Ok("json");
+
+    // sentry-tracing layer — error/warn level 의 tracing event 자동 Sentry breadcrumb 변환.
+    // SENTRY_DSN 미설정 시 init_sentry 가 None 반환 → sentry::Hub 가 no-op → layer 도 무동작.
+    let sentry_layer = sentry_tracing::layer().enable_span_attributes();
+
+    let registry = tracing_subscriber::registry()
+        .with(filter)
+        .with(sentry_layer);
     if json_mode {
-        tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_target(true)
-            .json()
+        registry
+            .with(tracing_subscriber::fmt::layer().with_target(true).json())
             .init();
     } else {
-        tracing_subscriber::fmt()
-            .with_env_filter(filter)
-            .with_target(true)
+        registry
+            .with(tracing_subscriber::fmt::layer().with_target(true))
             .init();
     }
 }

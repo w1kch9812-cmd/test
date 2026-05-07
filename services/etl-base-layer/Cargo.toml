@@ -36,7 +36,8 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 dotenvy = "0.15"
 tracing = { workspace = true }
 # json feature — L4 prod 에서 ETL_LOG_FORMAT=json (CloudWatch / Datadog 자동 파싱).
-tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"] }
+# registry feature — sentry-tracing layer 가 .with() 호출에 필수.
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json", "registry"] }
 # R2 (Cloudflare R2 = S3-호환) 업로드 — SP9 T3b.1.
 # rustls 강제 (workspace 정책: reqwest/sqlx 모두 rustls-tls 사용, openssl 의존 회피).
 #
