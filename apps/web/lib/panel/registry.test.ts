@@ -8,19 +8,25 @@ afterEach(() => {
 
 const DummyComponent = () => null;
 
+const dummyView = {
+  component: DummyComponent,
+  fetcher: async () => ({}),
+  staleTime: 60_000,
+  links: [],
+};
+
+const parcelViews = {
+  summary: dummyView,
+  buildings: dummyView,
+  listings: dummyView,
+};
+
 describe("registry", () => {
   it("registers and retrieves a kind", () => {
     defineKind({
       kind: "parcel",
       idPattern: /^\d{19}$/,
-      views: {
-        summary: {
-          component: DummyComponent,
-          fetcher: async () => ({}),
-          staleTime: 60_000,
-          links: [],
-        },
-      },
+      views: parcelViews,
       loadingComponent: DummyComponent,
       errorComponent: DummyComponent,
       emptyComponent: DummyComponent,
@@ -36,14 +42,7 @@ describe("registry", () => {
     const def = {
       kind: "parcel" as const,
       idPattern: /^\d{19}$/,
-      views: {
-        summary: {
-          component: DummyComponent,
-          fetcher: async () => ({}),
-          staleTime: 60_000,
-          links: [],
-        },
-      },
+      views: parcelViews,
       loadingComponent: DummyComponent,
       errorComponent: DummyComponent,
       emptyComponent: DummyComponent,
@@ -63,14 +62,7 @@ describe("registry", () => {
     defineKind({
       kind: "parcel",
       idPattern: /^\d{19}$/,
-      views: {
-        summary: {
-          component: DummyComponent,
-          fetcher: async () => ({}),
-          staleTime: 60_000,
-          links: [],
-        },
-      },
+      views: parcelViews,
       loadingComponent: DummyComponent,
       errorComponent: DummyComponent,
       emptyComponent: DummyComponent,

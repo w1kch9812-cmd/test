@@ -44,7 +44,9 @@ export function usePanelStack(): UsePanelStackResult {
       if (serialized) sp.set("p", serialized);
       else sp.delete("p");
       const qs = sp.toString();
-      router.push(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+      const url = `${pathname}${qs ? `?${qs}` : ""}`;
+      // Next.js typed routes — the `?p=...` URL is dynamic, not statically routable.
+      router.push(url as never, { scroll: false });
     },
     [pathname, router, searchParams],
   );
