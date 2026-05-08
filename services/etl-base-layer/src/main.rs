@@ -593,8 +593,10 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
     let uploader = R2Uploader::new(r2_cfg);
 
     info!(version = %version, "promote start (atomic manifest flip)");
-    // SSOT — `Sp9Layer::ALL` 가 단일 출처. `LayerKind::all_vec()` 가 그 reflection.
-    let layers = LayerKind::all_vec();
+    // SSOT — `Sp9Layer::is_active_in_etl()` 가 단일 출처. promote 는 *active* layer 만
+    // staging spec 검증 (Round 4 stop-hook fix — admin/complex 같은 inactive layer 의
+    // `MissingLineage` false-positive 차단). matrix 와 동일 SSOT 통과.
+    let layers = LayerKind::active_vec();
     match promote::run(
         &uploader,
         &PromoteArgs {

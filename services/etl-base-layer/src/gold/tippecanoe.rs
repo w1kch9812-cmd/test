@@ -38,15 +38,33 @@ impl LayerKind {
     /// 모든 variant — `sp9_base_layer_config::Layer::ALL` 로부터 derive.
     /// **SSOT**: 새 layer 추가 시 `sp9_base_layer_config::Layer` 에만 추가하면 됨.
     /// `From<Sp9Layer>` 가 exhaustive match 라 compiler 가 누락 차단.
+    /// **주의**: ETL matrix / promote 검증은 [`Self::active_vec`] 사용 — 본 iterator 는
+    /// inactive layer (admin/complex) 도 포함. registry / 전수 검증 용도.
+    #[allow(dead_code)] // active_vec() 가 동일 path 사용 — registry 용도 보존
     pub fn all() -> impl Iterator<Item = Self> {
         Sp9Layer::ALL.iter().map(|l| Self::from(*l))
     }
 
-    /// 모든 variant 의 owned vec — `&[LayerKind]` 가 필요한 callsite (promote subcommand 등).
-    /// 한 번 호출 후 borrow 로 share — alloc 비용 1회.
+    /// 모든 variant 의 owned vec — registry / 전수 iterate 가 필요한 callsite.
+    /// **주의**: ETL matrix / promote 검증은 [`Self::active_vec`] 사용 (admin/complex 같은
+    /// inactive layer 제외). 본 함수는 *registry* 용도 (Layer enum 의 모든 variant 표시).
     #[must_use]
+    #[allow(dead_code)] // active_vec() 가 ETL path 의 main caller — 본 함수는 registry 보존
     pub fn all_vec() -> Vec<Self> {
         Self::all().collect()
+    }
+
+    /// **현재 ETL build-active** layer 의 owned vec — Round 4 stop-hook fix.
+    /// `Sp9Layer::is_active_in_etl()` SSOT 통과한 variant 만. promote 의 staging spec
+    /// 검증 / matrix iteration 이 본 함수 사용 — admin/complex 같은 inactive layer 의
+    /// `MissingLineage` false-positive 차단 (ADR 0027).
+    #[must_use]
+    pub fn active_vec() -> Vec<Self> {
+        Sp9Layer::ALL
+            .iter()
+            .filter(|l| l.is_active_in_etl())
+            .map(|l| Self::from(*l))
+            .collect()
     }
 
     /// PMTiles 안의 layer 이름 (프론트 `addLayer({ "source-layer": ... })` 에 매칭).
@@ -352,6 +370,34 @@ mod tests {
                 "name drift: LayerKind={kind:?} vs Sp9Layer={layer:?}",
             );
         }
+    }
+
+    /// Round 4 stop-hook fix — `active_vec()` 는 `is_active_in_etl()=true` 만. promote
+    /// 가 본 함수 통과해야 inactive layer (admin/complex) 의 staging spec 미박제로 인한
+    /// `MissingLineage` false-positive 차단.
+    #[test]
+    fn active_vec_excludes_inactive_layers() {
+        let active = LayerKind::active_vec();
+        // ADR 0027 — 현재 active = parcels 만.
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].layer_name(), "parcels");
+    }
+
+    /// SSOT alignment — `LayerKind::active_vec` 와 `Sp9Layer::is_active_in_etl` 이
+    /// 동일한 active set 을 반환해야 함. 둘이 drift 하면 promote / workflow matrix /
+    /// SSOT JSON 출력 셋이 어긋남.
+    #[test]
+    fn active_vec_matches_sp9_is_active_in_etl() {
+        let active_names: Vec<&str> = LayerKind::active_vec()
+            .iter()
+            .map(|k| k.layer_name())
+            .collect();
+        let expected: Vec<&str> = Sp9Layer::ALL
+            .iter()
+            .filter(|l| l.is_active_in_etl())
+            .map(|l| l.name())
+            .collect();
+        assert_eq!(active_names, expected);
     }
 
     #[tokio::test]
