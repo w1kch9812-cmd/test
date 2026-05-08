@@ -184,6 +184,10 @@ async fn main() {
 
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let dev_mode = env::var("AUTH_DEV_MODE").unwrap_or_default() == "true";
+    // audit 2026-05-08 round 2: production 모드 SSOT. NoOp wire / Redis 부재 / secret 누락
+    // 등 모든 fail_fast_production 분기가 본 변수 공유 (중복 재계산 제거).
+    let is_production = std::env::var("APP_ENV").as_deref() == Ok("production")
+        || std::env::var("NODE_ENV").as_deref() == Ok("production");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -217,9 +221,7 @@ async fn main() {
             Arc::new(VWorldParcelInfoLookup::new(reader))
         }
         Err(e) => {
-            let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
-                || std::env::var("NODE_ENV").as_deref() == Ok("production");
-            if is_prod {
+            if is_production {
                 fail_fast_production(&format!(
                     "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {e}"
                 ));
@@ -255,7 +257,12 @@ async fn main() {
         Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
     };
     // SP-Obs T7: Redis pool 을 jti_denylist + health check 양쪽이 공유.
-    // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open).
+    // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open). production 은 fail-fast.
+    //
+    // audit 2026-05-08 round 2 (Codex 발견): REDIS_URL 미설정 → `jti_denylist = None` →
+    // middleware 가 `if let Some(dl)` 로 검사 자체 skip = revoked JTI 통과 (fail-open).
+    // `fail_closed_on_denylist_error` 는 *Redis error* 만 잡지 *Redis 부재* 는 못 잡음.
+    // 따라서 production 에서는 Redis 자체가 없으면 startup 차단.
     let redis_pool_shared: Option<Arc<deadpool_redis::Pool>> =
         env::var("REDIS_URL").ok().map(|url| {
             let pool = RedisCfg::from_url(url)
@@ -264,8 +271,13 @@ async fn main() {
             Arc::new(pool)
         });
     if redis_pool_shared.is_none() {
+        if is_production {
+            fail_fast_production(
+                "REDIS_URL 미설정 — JTI denylist None = revoked token 통과 (fail-open). production 은 Redis 필수.",
+            );
+        }
         tracing::warn!(
-            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (fail-open). Set REDIS_URL in production."
+            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (dev fail-open). production 은 fail-fast 차단됨."
         );
     }
 
@@ -277,9 +289,6 @@ async fn main() {
             dl
         });
 
-    // audit 2026-05-08: production 모드 detection — JTI denylist Redis error 시 fail-closed.
-    let is_production = std::env::var("APP_ENV").as_deref() == Ok("production")
-        || std::env::var("NODE_ENV").as_deref() == Ok("production");
     let auth_state = AuthState {
         verifier,
         user_repo,
@@ -292,9 +301,7 @@ async fn main() {
     let internal_auth_secret = match std::env::var("INTERNAL_AUTH_SECRET") {
         Ok(s) if !s.trim().is_empty() => Arc::<str>::from(s),
         _ => {
-            let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
-                || std::env::var("NODE_ENV").as_deref() == Ok("production");
-            if is_prod {
+            if is_production {
                 fail_fast_production(
                     "INTERNAL_AUTH_SECRET 미설정 — /internal/auth/event 무인증 차단 위해 필수",
                 );
@@ -390,9 +397,7 @@ async fn main() {
             .ok()
             .filter(|v| !v.trim().is_empty())
             .is_some();
-        let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
-            || std::env::var("NODE_ENV").as_deref() == Ok("production");
-        if !has_key && is_prod {
+        if !has_key && is_production {
             fail_fast_production(
                 "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
                  가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
