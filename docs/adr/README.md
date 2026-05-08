@@ -70,3 +70,4 @@
 | [0021](./0021-static-vector-tile-decomposition.md) | PMTiles 분해 → 정적 `{z}/{x}/{y}.pbf` (mapbox-gl 표준 100%, trick 0) | Accepted |
 | [0022](./0022-bronze-scraping-isolated-python-service.md) | Bronze HTML scraping = 격리 Python service (`services/scraper-py/`) + Scrapling | Accepted |
 | [0023](./0023-audit-2026-05-08-hardening.md) | Codex audit 2026-05-08 hardening — `/internal/auth/event` shared secret + production fail-fast + JTI fail-closed + structured map errors | Accepted (partial — handoff) |
+| [0024](./0024-etl-cancel-protocol-immediate-abort.md) | ETL cancel protocol — 즉시 abort + L3 staging atomicity 보호 (state machine 거부) | Accepted |

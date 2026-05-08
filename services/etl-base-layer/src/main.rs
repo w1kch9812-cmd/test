@@ -86,9 +86,10 @@ async fn async_main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let subcommand = args.first().map_or("bronze", String::as_str);
 
-    // L8 — graceful shutdown handler. Ctrl+C / SIGTERM 시 즉시 abort 보다 *current
-    // step abort + cleanup* 이 더 좋지만 ETL 의 모든 step 이 atomic spec staging 이라
-    // (L3) 즉시 abort 도 안전. 본 핸들러는 user-facing 메시지 + 130 (SIGINT) exit code.
+    // L8 — graceful shutdown handler. Ctrl+C / SIGTERM 시 즉시 abort.
+    // 본 결정의 정당화는 ADR 0024 (`docs/adr/0024-etl-cancel-protocol-immediate-abort.md`):
+    // L3 staging atomicity 가 partial state 를 prod 에서 차단하므로 즉시 abort 가 안전.
+    // tippecanoe resume 불가 + 월 1회 cron 이라 state machine 의 cost > value.
     let task = match subcommand {
         "bronze" | "" => tokio::spawn(run_bronze()),
         "gold" => tokio::spawn(run_gold(args[1..].to_vec())),
