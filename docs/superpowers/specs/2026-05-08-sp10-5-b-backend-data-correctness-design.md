@@ -64,29 +64,55 @@ impl RawSanitizer for AllowlistSanitizer { /* ... */ }
 
 ### 3.3 SanitizingRawCapture
 
+기존 `RawCapture` trait 시그니처([crates/data-clients/raw-capture/src/lib.rs:46-52](../../../crates/data-clients/raw-capture/src/lib.rs#L46-L52)) 와 *완전히 일치* 하는 impl 을 채택. 인자 순서 `(pnu, source, raw: &Value, fetched_at: DateTime<Utc>)` 와 `Result<(), RawCaptureError>` 반환을 그대로 따른다.
+
 ```rust
 // crates/data-clients/raw-capture/src/capture.rs (신규)
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use raw_capture_client::{RawCapture, RawCaptureError};
+use std::sync::Arc;
+
 pub struct SanitizingRawCapture<C: RawCapture> {
     inner: C,
     sanitizer: Arc<dyn RawSanitizer>,
 }
 
-impl<C: RawCapture> RawCapture for SanitizingRawCapture<C> {
-    async fn capture(&self, source: &str, pnu: &str, raw: serde_json::Value) -> Result<()> {
-        let sanitized = self.sanitizer.sanitize(&raw);
+#[async_trait]
+impl<C: RawCapture + Send + Sync> RawCapture for SanitizingRawCapture<C> {
+    async fn capture(
+        &self,
+        pnu: &str,
+        source: &str,
+        raw: &serde_json::Value,
+        fetched_at: DateTime<Utc>,
+    ) -> Result<(), RawCaptureError> {
+        let sanitized = self.sanitizer.sanitize(raw);
         if sanitized.dropped_count > 0 {
             tracing::warn!(
-                target = "raw.capture.schema_drift",
-                source = source,
+                target: "raw.capture.schema_drift",
+                pnu = %pnu,
+                source = %source,
                 schema_hash = %sanitized.schema_hash,
                 dropped_count = sanitized.dropped_count,
+                "raw_response sanitizer dropped unknown fields"
             );
         }
-        self.inner.capture(source, pnu, sanitized.value).await?;
-        Ok(())
+        // SanitizedRaw.value 는 owned. inner trait 이 borrow 받으므로 새 binding 으로 넘김.
+        let sanitized_value = sanitized.value;
+        self.inner
+            .capture(pnu, source, &sanitized_value, fetched_at)
+            .await
     }
 }
 ```
+
+**self-review 노트** — `PgRawCapture`([crates/db/src/raw_capture.rs:14-56](../../../crates/db/src/raw_capture.rs#L14-L56)) INSERT 시그니처는 현재 `(pnu, source, raw, fetched_at)` 4-인자만 받고 `schema_hash` / `sanitizer_version` 컬럼은 모른다. v1 에서 두 가지 길:
+
+- 길 A (선택): `SanitizingRawCapture` 가 `schema_hash` / `sanitizer_version` 을 *tracing/telemetry 메타데이터* 로만 발행하고 PgRawCapture INSERT 자체는 4-인자 그대로. DB 의 신규 컬럼은 별도 `crates/db/src/raw_capture.rs` 시그니처 확장이 필요 (T3 에 합류).
+- 길 B: `RawCapture` trait 자체에 `metadata: SanitizerMetadata` optional 인자를 추가. trait 변경은 모든 impl 영향 → 비용 큼.
+
+**길 A 채택**. T3 에서 `PgRawCapture` 를 `(pnu, source, raw, fetched_at, sanitizer_version, schema_hash)` 6-인자로 *별도 신규 메서드 또는 신규 wrapper struct* 로 확장.
 
 ### 3.4 Two-tier Sink
 
@@ -100,6 +126,10 @@ Tier 2 (vault) 를 먼저 호출하여 fail-fast 를 보장한다.
 
 ```rust
 // crates/data-clients/raw-capture/src/capture.rs
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use raw_capture_client::{RawCapture, RawCaptureError};
+
 /// Tier 1 (sanitized) + Tier 2 (vault) fan-out. Tier 2 먼저 호출 → fail-fast 보장.
 pub struct DualTierCapture<S, V> {
     sanitized: S, // SanitizingRawCapture<PgRawCapture>  — Tier 1 정제 경로
@@ -112,22 +142,34 @@ where
     S: RawCapture + Send + Sync,
     V: RawCapture + Send + Sync,
 {
-    async fn capture(&self, source: &str, pnu: &str, raw: serde_json::Value) -> Result<()> {
-        // Tier 2 먼저: vault INSERT 실패 → 전체 fail-fast, Tier 1 기록 차단
-        self.vault.capture(source, pnu, raw.clone()).await?;
-        // Tier 1: 정제된 JSON 저장
-        self.sanitized.capture(source, pnu, raw).await
+    async fn capture(
+        &self,
+        pnu: &str,
+        source: &str,
+        raw: &serde_json::Value,
+        fetched_at: DateTime<Utc>,
+    ) -> Result<(), RawCaptureError> {
+        // Tier 2 먼저: vault INSERT 실패 → 전체 fail-fast, Tier 1 기록 차단.
+        self.vault.capture(pnu, source, raw, fetched_at).await?;
+        // Tier 1: sanitized 경로 (raw 는 inner sanitizer 가 폐기/정제).
+        self.sanitized.capture(pnu, source, raw, fetched_at).await
     }
 }
 ```
 
-`services/api/src/main.rs` 에서 wiring:
+`services/api/src/main.rs` (210-221, 390-413 wiring 영향) 에서 — 현재 `PgRawCapture` 단독 주입을 `DualTierCapture` 합성체로 교체:
+
 ```rust
-let capture = DualTierCapture {
-    sanitized: SanitizingRawCapture::new(pg_raw_capture, sanitizer),
-    vault: PgPiiVaultCapture::new(pool.clone(), kms_client.clone()),
-};
+let sanitizer = AllowlistSanitizer::for_source("data_go_kr_building"); // 또는 vworld_parcel
+let pg_raw_capture = PgRawCapture::new(pool.clone());
+let pii_vault       = PgPiiVaultCapture::new(pool.clone(), kms_client.clone());
+let capture: Arc<dyn RawCapture> = Arc::new(DualTierCapture {
+    sanitized: SanitizingRawCapture::new(pg_raw_capture, Arc::new(sanitizer)),
+    vault: pii_vault,
+});
 ```
+
+기존 `Arc::new(PgRawCapture::new(pool.clone()))` 직접 주입(T7 audit-fix `b784e76` 에서 도입) 은 위 합성체로 대체된다.
 
 ---
 
@@ -229,12 +271,21 @@ UPDATE parcel_external_data
 
 ```sql
 -- migrations/30007_pii_vault.sql
--- ADR 근거: parcel_external_data PK 가 (pnu, source) composite 이므로 surrogate UUID FK 는
--- 컴파일 전 fail. 변경 최소화를 위해 composite REFERENCES 채택 (옵션 A).
+-- ADR 근거: parcel_external_data PK 가 (pnu, source) composite 이고 컬럼 타입이
+-- char(19) / varchar(40) 이므로 vault 테이블도 *완전히 동일 타입* 사용 (PostgreSQL FK 는
+-- referencing/referenced 컬럼 타입이 정확히 일치해야 함). source CHECK 도 fail-safe 로
+-- 별도 추가 (DRY 안 되지만 vault 단독으로도 enum 보장).
 CREATE TABLE parcel_external_data_pii_vault (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  pnu              TEXT        NOT NULL,
-  source           TEXT        NOT NULL,
+  pnu              char(19)    NOT NULL,
+  source           varchar(40) NOT NULL CHECK (source IN (
+      'vworld',                          -- legacy alias (30007a 이전 row)
+      'vworld_parcel',                   -- 지적 폴리곤 endpoint
+      'data_go_kr_building',
+      'data_go_kr_land',
+      'data_go_kr_realtransaction',
+      'korean_law'
+  )),
   FOREIGN KEY (pnu, source) REFERENCES parcel_external_data(pnu, source) ON DELETE CASCADE,
   ciphertext_blob  BYTEA       NOT NULL,
   kms_key_id       TEXT        NOT NULL,
@@ -247,6 +298,27 @@ ALTER TABLE parcel_external_data_pii_vault ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY vault_admin_only ON parcel_external_data_pii_vault
   USING (current_setting('app.role', true) = 'admin');
+```
+
+**source taxonomy 확장 (선행 마이그레이션 30007a)** — V-World 다중 endpoint 대비. 기존 `parcel_external_data` CHECK 제약([migrations/30006_parcel_external_data.sql:13-19](../../../migrations/30006_parcel_external_data.sql#L13-L19)) 은 `vworld` 만 허용 → §5.3 의 `vworld_parcel` 사용 위해 30007a 가 30007 보다 먼저 적용:
+
+```sql
+-- migrations/30007a_source_taxonomy_expansion.sql
+-- V003_07a: source taxonomy expansion — V-World 다중 endpoint 대비.
+-- 'vworld' 는 legacy alias 로 유지하되, 신규 INSERT 는 구체 endpoint name 사용.
+ALTER TABLE parcel_external_data DROP CONSTRAINT parcel_external_data_source_check;
+ALTER TABLE parcel_external_data ADD CONSTRAINT parcel_external_data_source_check
+    CHECK (source IN (
+        'vworld',                          -- legacy
+        'vworld_parcel',                   -- 지적 폴리곤 endpoint
+        'data_go_kr_building',
+        'data_go_kr_land',
+        'data_go_kr_realtransaction',
+        'korean_law'
+    ));
+
+-- 기존 'vworld' row 들을 backfill (legacy alias 정리)
+UPDATE parcel_external_data SET source = 'vworld_parcel' WHERE source = 'vworld';
 ```
 
 ### 6.3 AWS KMS Envelope Encryption (ADR 0025, ADR 0028)
@@ -304,12 +376,18 @@ Query: purpose=incident_investigation|drift_diagnosis|customer_request
 
 ```sql
 -- migrations/30010_external_data_expires_constraint.sql
+-- 기존 NULL 레코드 backfill 선행 (NOT NULL 제약 추가 전)
+UPDATE parcel_external_data
+   SET expires_at = fetched_at + INTERVAL '90 days'  -- 가장 긴 TTL 기준 보수적 backfill
+ WHERE expires_at IS NULL;
+
 ALTER TABLE parcel_external_data
   ALTER COLUMN expires_at SET NOT NULL;
 
+-- parcel_external_data 의 시점 컬럼은 fetched_at (captured_at 아님 — DDL 30006 참조).
 ALTER TABLE parcel_external_data
   ADD CONSTRAINT check_expires_future
-  CHECK (expires_at > captured_at);
+  CHECK (expires_at > fetched_at);
 
 CREATE INDEX idx_external_data_expires ON parcel_external_data (expires_at);
 CREATE INDEX idx_pii_vault_expires ON parcel_external_data_pii_vault (expires_at);
@@ -432,6 +510,9 @@ services/api/tests/sp10_backend_data_correctness.rs (신규):
 
 ### 10.5 Health Shape 검증
 
+**현재 상태** ([services/api/src/routes/health.rs:45-125](../../../services/api/src/routes/health.rs#L45-L125)) — `HealthResponse` 는 `{ "status": "ok" }` 단순 구조. SP10.5-B 가 신규 `ReadinessResponse` 타입을 정의하고 `/healthz/ready` 핸들러에서 nested `checks` 를 직렬화하도록 확장. 기존 `liveness` (`/healthz`) 는 변경 없음 (단순 200 OK 유지).
+
+확장 후 응답 shape:
 ```json
 GET /healthz/ready -> 200
 {
@@ -445,7 +526,7 @@ GET /healthz/ready -> 200
 }
 ```
 
-production 환경에서 building_reader: degraded 시 서비스 시작 차단(fail-fast panic).
+`status` 는 모든 `checks` 가 "ok"/"live" 일 때 "ok", 하나라도 "degraded"면 "degraded", "down"이면 "down". production 환경에서 building_reader 가 NoOp(키 미설정) 으로 부팅 시도 시 `fail_fast_production` 가 panic — `/healthz/ready` 응답 자체가 발행되지 않음 (서비스 시작 차단). dev/staging 에서만 `degraded` 응답이 가능.
 
 ---
 
@@ -453,16 +534,18 @@ production 환경에서 building_reader: degraded 시 서비스 시작 차단(fa
 
 | 파일 | 라인 | 변경 내용 |
 |---|---|---|
-| crates/data-clients/raw-capture/src/lib.rs | 40-89 | RawCapture trait 유지, SanitizingRawCapture + DualTierCapture 모듈 re-export 추가 |
-| crates/db/src/raw_capture.rs | 14-56 | sanitizer_version/schema_hash INSERT 포함 |
-| crates/data-clients/data-go-kr/src/building_register/reader.rs | 117-128 | 변경 없음 (wrapper transparent) |
-| crates/data-clients/data-go-kr/src/building_register/reader.rs | 37 | RAW_CAPTURE_SOURCE = "data_go_kr_building" 유지 |
-| crates/data-clients/vworld/src/reader.rs | 35-96 | VWorldParcelReader::new 파라미터: SanitizingRawCapture wrapper 수용 |
-| services/api/src/main.rs | 210-221 | V-World capture: DualTierCapture { sanitized: SanitizingRawCapture::new(pg_raw_capture, sanitizer), vault: PgPiiVaultCapture::new(...) } |
-| services/api/src/main.rs | 331-335 | health route: degraded 응답 구조 포함 |
-| services/api/src/main.rs | 390-413 | NoOpBuildingRegisterReader → DataGoKrBuildingReader live swap |
-| services/api/src/routes/health.rs | 45-125 | /healthz/ready 응답 shape 확장 |
-| services/api/tests/sp10_panel_endpoints.rs | 29-36, 148-250 | app_builder(state) 사용 실 router 호출로 재작성 |
+| crates/data-clients/raw-capture/src/lib.rs | 40-89 | RawCapture trait 시그니처 *유지* (`pnu, source, raw: &Value, fetched_at` / `Result<(), RawCaptureError>`). 신규 `SanitizingRawCapture` + `DualTierCapture` 를 동일 모듈 또는 `capture.rs` 신규 파일로 추가 후 `pub use` re-export |
+| crates/db/src/raw_capture.rs | 14-56 | 기존 `PgRawCapture::insert` 4-인자 유지. 신규 메서드 또는 wrapper 로 `(pnu, source, raw, fetched_at, sanitizer_version, schema_hash, license, api_version)` 8-인자 INSERT path 추가 (T3 — lineage 컬럼 30008 대응) |
+| crates/data-clients/data-go-kr/src/building_register/reader.rs | 117-128 | 변경 없음 (wrapper transparent — 기존 `raw_capture.capture(pnu, source, &raw, now)` 호출이 이미 신규 trait 시그니처 일치) |
+| crates/data-clients/data-go-kr/src/building_register/reader.rs | 37 | `RAW_CAPTURE_SOURCE = "data_go_kr_building"` 유지 |
+| crates/data-clients/vworld/src/reader.rs | 35-96 | `VWorldParcelReader::new(client, raw_capture)` 시그니처 *유지*. 단 호출자가 주입하는 `Arc<dyn RawCapture>` 가 `DualTierCapture` 합성체로 교체됨 (Reader 자체엔 변경 없음) |
+| services/api/src/main.rs | 210-221 | V-World capture wire 가 현재 `Arc::new(PgRawCapture::new(pool.clone()))` 직접 주입 (b784e76) → `DualTierCapture { sanitized: SanitizingRawCapture::new(PgRawCapture, AllowlistSanitizer::for_source("vworld_parcel")), vault: PgPiiVaultCapture::new(pool, kms) }` 합성체로 교체 |
+| services/api/src/main.rs | 331-335 | `/healthz/ready` 라우트의 핸들러를 신규 `ReadinessResponse` 반환형으로 교체. AppState 에 `building_reader_status` / `vault_kms_status` 핸들 추가 |
+| services/api/src/main.rs | 390-413 | `Arc::new(NoOpBuildingRegisterReader)` → `Arc::new(DataGoKrBuildingReader::new(client, dual_tier_capture.clone()))` swap. `has_key` 분기 + `is_production` 시 `fail_fast_production` 패턴 (현재 코드와 동일) 유지. 키 없고 production 이면 부팅 panic (변경 0). 키 없고 non-production 이면 NoOp 유지 + `building_reader: degraded` 표시 |
+| services/api/src/routes/health.rs | 45-125 | 기존 `HealthResponse { status: String }` 유지 (liveness 용). 신규 `ReadinessResponse { status: String, checks: ReadinessChecks }` + `ReadinessChecks { db, redis, building_reader, vault_kms: String }` 정의. readiness 핸들러를 새 응답형으로 교체 |
+| services/api/src/main.rs | (신규 위치) | services/api 가 현재 `app_builder(state) -> Router` 같은 factory 를 *export 하지 않음*. T7 에서 `services/api/src/lib.rs` (또는 `state.rs`) 에 `pub fn app_router(state: AppState) -> Router` 또는 `pub fn build_app(state) -> Router` 추가 — 실 통합 테스트가 main.rs 의 wiring 을 그대로 호출 가능하도록 |
+| services/api/tests/sp10_panel_endpoints.rs | 29-36, 148-250 | 현재 `spawn_test_app()` 로컬 헬퍼 (핸들러 부분 재구현) → `app_router(test_state)` 직접 호출 + `axum_test::TestServer::new(app_router(...))` 패턴으로 재작성 |
+| migrations/30006_parcel_external_data.sql | (선행 마이그레이션) | 30007a 가 이 테이블의 source CHECK 를 확장 (변경 없음 — 30006 자체는 그대로) |
 
 ---
 
@@ -488,17 +571,27 @@ services/api/src/
     raw_vault.rs
 
 migrations/
-  30007_pii_vault.sql
-  30008_external_data_lineage.sql
-  30009_raw_vault_access_log.sql
-  30010_external_data_expires_constraint.sql
+  30007a_source_taxonomy_expansion.sql   (vworld → vworld_parcel rename, CHECK 확장)
+  30007_pii_vault.sql                    (Tier 2 vault + RLS + composite FK)
+  30008_external_data_lineage.sql        (license, api_version, sanitizer_version, schema_hash)
+  30009_raw_vault_access_log.sql         (admin 조회 audit log)
+  30010_external_data_expires_constraint.sql  (expires_at NOT NULL + CHECK + index)
 
 infra/
-  kms-key.ts
+  kms-key.ts                             (Pulumi PII vault CMK; AGENTS.md §1 — 인프라는 코드만)
+
+services/api/src/
+  lib.rs                                 (또는 main.rs 에서 app_router 분리; 통합 테스트 export 용)
 
 services/api/tests/
   sp10_backend_data_correctness.rs
 ```
+
+**Cargo.toml 의존성 추가** (T1/T3/T7 에 분산):
+- `crates/data-clients/raw-capture/Cargo.toml` — `sha2` (schema hash 산출). `async-trait` / `chrono` / `tracing` / `serde_json` 은 이미 존재.
+- `crates/db/Cargo.toml` — `aws-sdk-kms` (Tier 2 envelope encryption), `aes-gcm` (DEK 로 ciphertext_blob 암호화).
+- `services/api/Cargo.toml` (dev-dependencies) — `axum-test` (실 router 통합 테스트), `localstack` 또는 `aws-sdk-kms` mock 헬퍼.
+- `infra/package.json` — `@pulumi/aws` (KMS 리소스). 기존 의존성 확인 후 누락이면 추가.
 
 ---
 
@@ -510,18 +603,21 @@ services/api/tests/
 - crates/data-clients/raw-capture/src/capture.rs 작성: SanitizingRawCapture (schema drift tracing::warn! 포함) + DualTierCapture (Tier 2 먼저 호출 fail-fast fan-out)
 - Unit test: allowlist drop/retain, schema_hash determinism
 
-### T2: Allowlist 정의
+### T2: Allowlist 정의 + source taxonomy 확장
 
+- migrations/30007a_source_taxonomy_expansion.sql: `parcel_external_data` CHECK 확장 (`vworld_parcel` 추가) + 기존 `vworld` row 를 `vworld_parcel` 로 backfill UPDATE
 - sources/data_go_kr_building.rs: 7-path allowlist const 정의
 - sources/vworld_parcel.rs: V-World allowlist const 정의
-- AllowlistSanitizer 인스턴스 생성 함수 export
+- AllowlistSanitizer::for_source(&str) 팩토리 함수 export
 
-### T3: Two-tier Vault 마이그레이션 + PgPiiVaultCapture
+### T3: Two-tier Vault 마이그레이션 + PgPiiVaultCapture + Lineage 컬럼
 
-- migrations/30007_pii_vault.sql: vault table + RLS + KMS column
-- migrations/30008_external_data_lineage.sql: lineage columns
-- crates/db/src/pii_vault.rs: PgPiiVaultCapture (aws-sdk-kms GenerateDataKey + AES-256-GCM encrypt + INSERT)
-- infra/kms-key.ts: Pulumi KMS key 정의
+- migrations/30007_pii_vault.sql: vault table + RLS + composite FK (pnu char(19), source varchar(40))
+- migrations/30008_external_data_lineage.sql: `license`, `api_version`, `sanitizer_version`, `schema_hash` 컬럼 추가 + legacy backfill (`schema_hash = 'legacy:' || md5(...)`, `sanitizer_version = 0`)
+- crates/db/src/raw_capture.rs: `PgRawCapture` 에 lineage-aware 신규 메서드 또는 wrapper struct (8-인자 INSERT)
+- crates/db/src/pii_vault.rs: PgPiiVaultCapture (`aws-sdk-kms` GenerateDataKey → AES-256-GCM encrypt full raw → ciphertext_blob INSERT). `RawCapture` trait impl 시그니처는 `(pnu, source, &Value, fetched_at)` 그대로
+- infra/kms-key.ts: Pulumi `aws.kms.Key` ("pii-vault-key", `enableKeyRotation: true`, `deletionWindowInDays: 30`)
+- Cargo.toml 의존성: `sha2` (raw-capture), `aws-sdk-kms` + `aes-gcm` (db)
 
 ### T4: expires_at NOT NULL + Cleanup Task
 
@@ -531,9 +627,8 @@ services/api/tests/
 
 ### T5: Building Reader Live Wiring
 
-- services/api/src/main.rs:390-413: NoOp → DataGoKrBuildingReader::new(client, SanitizingRawCapture::new(...)) swap
-- has_key 분기 + is_production fail-fast 유지
-- /healthz/ready building_reader check 연결
+- services/api/src/main.rs:390-413: 기존 `Arc::new(NoOpBuildingRegisterReader)` → `Arc::new(DataGoKrBuildingReader::new(client, dual_tier_capture.clone()))` swap. 단 `has_key` 분기와 `if !has_key && is_production { fail_fast_production(...) }` 패턴은 *현재 코드 그대로 유지* — production 에서 `DATA_GO_KR_API_KEY` 미설정 시 부팅 panic. dev/staging 에서 키 없으면 NoOp 유지하되 AppState 의 `building_reader_status = "degraded"` 로 표시
+- /healthz/ready 핸들러가 AppState 의 `building_reader_status` 를 읽어 응답 직렬화 (T7 의 `ReadinessResponse` 와 연결)
 
 ### T6: Vault Access RBAC Admin Endpoint + Audit Log
 
@@ -544,10 +639,12 @@ services/api/tests/
 
 ### T7: Integration Test 재작성 + Health Degraded
 
-- services/api/src/state.rs: AppState, app_builder(state) -> Router export
-- services/api/tests/sp10_panel_endpoints.rs:29-36, 148-250: app_builder 사용 실 router 호출로 재작성
-- services/api/tests/sp10_backend_data_correctness.rs: PII fixture 포함 신규 통합 테스트
-- services/api/src/routes/health.rs:45-125: degraded shape 확장
+- services/api/src/lib.rs (또는 main.rs 분리): `pub fn app_router(state: AppState) -> Router` 신규 export. 현재 services/api 는 router/state factory 를 export 하지 않으므로 통합 테스트가 `spawn_test_app()` 로컬 헬퍼로 핸들러 부분 재구현 — 이걸 *실 main.rs wiring* 과 동일한 factory 를 export 하도록 분리
+- services/api/src/state.rs: `AppState` 정의 (DB pool, redis pool, building_reader_status, vault_kms_status, kms_client 등 모든 wiring 핸들 포함). main.rs 가 `AppState::from_env()` 로 빌드 후 `app_router(state)` 호출
+- services/api/tests/sp10_panel_endpoints.rs:29-36, 148-250: 핸들러 재구현 → `app_router(test_state)` 직접 호출 + `axum_test::TestServer::new(...)` 패턴
+- services/api/tests/sp10_backend_data_correctness.rs (신규): PII fixture 포함 통합 테스트 (Tier 1 sanitized 검증 / Tier 2 vault 암호화 검증 / admin RBAC 403 / audit log INSERT / health degraded)
+- services/api/src/routes/health.rs:45-125: 기존 `HealthResponse` 유지 + 신규 `ReadinessResponse { status, checks: ReadinessChecks }` 추가. readiness 핸들러를 `AppState` 에서 status 읽어 직렬화하도록 수정
+- Cargo.toml dev-dependency: `axum-test` 추가
 
 ---
 
