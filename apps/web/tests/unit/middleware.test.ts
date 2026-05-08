@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 import { createSession } from "@/lib/session/store";
-import { proxy as middleware } from "@/proxy";
+import { middleware } from "@/middleware";
 
 describe("middleware", () => {
   beforeEach(async () => {
