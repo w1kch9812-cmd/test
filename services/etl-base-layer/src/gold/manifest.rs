@@ -34,6 +34,22 @@ pub struct BuildLineage {
     pub layer_name: String,
     /// 빌드 환경 — `production` / `staging` / `dev` 등 (env-driven).
     pub build_environment: String,
+    /// **데이터 라이선스** — Round 3 P1 (Codex audit `manifest.rs:22` finding).
+    /// 공공데이터 활용 약관 / 출처 표기 의무 박제. 미설정 시 `None` (legacy / dev).
+    /// 권장 값 (V-World dtmk): `"공공누리 제1유형: 출처표시"`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_license: Option<String>,
+    /// **원본 데이터 source URL** — V-World dtmk 같은 정부 사이트의 *직접* 다운로드 URL
+    /// (또는 dataset landing 페이지). audit / re-fetch / 약관 변경 추적용.
+    /// 미설정 시 `None`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub source_url: Option<String>,
+    /// **Correlation ID** — Round 3 P1. ETL 한 번 실행의 unique identifier.
+    /// workflow `run_id` (`${{ github.run_id }}`) 또는 random ULID. Sentry / log /
+    /// Cloudflare R2 access log 모두 본 ID 로 cross-reference 가능.
+    /// 미설정 시 `None` (dev / smoke).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub correlation_id: Option<String>,
 }
 
 /// Bronze archive 의 lineage entry — promote 단계의 검증 input.

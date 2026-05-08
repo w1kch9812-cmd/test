@@ -741,6 +741,7 @@ async fn upload_gold_to_r2(
     let sha256 = verify::compute_sha256(&build.output_path).await?;
 
     // L10 lineage — git SHA / build env / bronze inputs 박제.
+    // Round 3 P1 — license / source URL / correlation_id 박제 (env-driven, 옵션).
     let lineage = BuildLineage {
         tippecanoe_version: sp9_base_layer_config::TIPPECANOE_VERSION.to_owned(),
         git_sha: std::env::var("GIT_SHA").unwrap_or_else(|_| "unknown".to_owned()),
@@ -749,6 +750,10 @@ async fn upload_gold_to_r2(
         source_srs: source_srs.as_str().to_owned(),
         layer_name: layer.layer_name().to_owned(),
         build_environment: std::env::var("ETL_BUILD_ENV").unwrap_or_else(|_| "dev".to_owned()),
+        source_license: nonempty_env_var("ETL_SOURCE_LICENSE"),
+        source_url: nonempty_env_var("ETL_SOURCE_URL"),
+        correlation_id: nonempty_env_var("CORRELATION_ID")
+            .or_else(|| nonempty_env_var("GITHUB_RUN_ID")),
     };
 
     let spec = ArtifactSpec {
@@ -807,6 +812,15 @@ fn build_tilejson(
     })
 }
 
+/// 환경변수가 set 되어 있고 trim 후 비어있지 않으면 `Some(value)`, 아니면 `None`.
+/// Round 3 P1 — license / source URL / `correlation_id` 같은 *옵션 lineage* 항목용.
+fn nonempty_env_var(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|v| v.trim().to_owned())
+        .filter(|v| !v.is_empty())
+}
+
 /// `R2_PUBLIC_URL_BASE` env → [`R2PublicBase`] 검증된 newtype.
 ///
 /// 미설정 / 빈 문자열 / scheme 위반 / host 부재 모두 fail-fast — placeholder URL 발행 0.
@@ -856,6 +870,14 @@ fn init_sentry() -> Option<sentry::ClientInitGuard> {
     let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_BUILD_ENV")
         .unwrap_or_else(|_| "dev".to_owned())
         .into();
+    // Round 3 P1 — traces_sample_rate env-driven (이전에 0.0 hardcode → SLO 측정 불가).
+    // ETL 월 1회 cron 이라 traces=1.0 도 비용 무관, 단 dev / CI smoke 는 0.0 default.
+    // production workflow 가 `SENTRY_TRACES_SAMPLE_RATE=1.0` 명시 set.
+    let traces_sample_rate: f32 = std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+        .unwrap_or(0.0)
+        .clamp(0.0, 1.0);
     let guard = sentry::init((
         dsn,
         sentry::ClientOptions {
@@ -863,9 +885,20 @@ fn init_sentry() -> Option<sentry::ClientInitGuard> {
             environment: Some(environment),
             // 100% sampling — ETL 은 월 1회 cron 이라 비용 무관, 모든 에러 보고.
             sample_rate: 1.0,
-            traces_sample_rate: 0.0,
+            traces_sample_rate,
             ..Default::default()
         },
     ));
+
+    // Round 3 P1 — correlation_id 를 Sentry global scope tag 로 박제. 모든 에러 / span
+    // 이 본 ID 와 cross-reference 가능 (Sentry UI 의 search filter, log aggregator 등).
+    if let Some(corr_id) = nonempty_env_var("CORRELATION_ID")
+        .or_else(|| nonempty_env_var("GITHUB_RUN_ID"))
+    {
+        sentry::configure_scope(|scope| {
+            scope.set_tag("correlation_id", &corr_id);
+        });
+    }
+
     Some(guard)
 }

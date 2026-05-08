@@ -263,8 +263,15 @@ jobs:
           # L2 verify — default-on (SSOT 의 VERIFY_LANDMARKS 자동 검증).
           # MIN_BYTES override — SSOT 의 NATIONWIDE_PMTILES_MIN_BYTES 와 동일 값.
           VERIFY_MIN_BYTES: ${{ needs.setup.outputs.nationwide_pmtiles_min_bytes }}
-          # Sentry 통합 (L4 — 다음 commit 으로 SDK 활성).
+          # Round 3 P1 — Sentry traces sampling 활성 + correlation_id (workflow run_id).
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_TRACES_SAMPLE_RATE: "1.0"
+          ETL_BUILD_ENV: "production"
+          GIT_SHA: ${{ github.sha }}
+          CORRELATION_ID: ${{ github.run_id }}
+          # Round 3 P1 — license / source URL lineage (V-World dtmk 표준 박제).
+          ETL_SOURCE_LICENSE: "공공누리 제1유형: 출처표시"
+          ETL_SOURCE_URL: "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30563"
         run: |
           # parcels 만 dtmk pipeline. admin/complex 는 별도 SHP 소스 (V-World 행정구역 /
           # 공공데이터포털 산업단지) — 현재 미구현. 임시 동일 prefix.

@@ -408,6 +408,9 @@ mod tests {
                 source_srs: "EPSG:5186".into(),
                 layer_name: "parcels".into(),
                 build_environment: "dev".into(),
+                source_license: None,
+                source_url: None,
+                correlation_id: None,
             },
         };
         let json = serde_json::to_vec_pretty(&spec).expect("serialize");
@@ -437,7 +440,7 @@ mod tests {
                 "bronze_inputs": [],
                 "source_srs": "EPSG:5186",
                 "layer_name": "parcels",
-                "build_environment": "dev"
+                "build_environment": "dev",
             }
         });
         let result: Result<ArtifactSpec, _> = serde_json::from_value(bad_json);
@@ -464,7 +467,7 @@ mod tests {
                 "bronze_inputs": [],
                 "source_srs": "EPSG:5186",
                 "layer_name": "parcels",
-                "build_environment": "dev"
+                "build_environment": "dev",
             }
         });
         let result: Result<ArtifactSpec, _> = serde_json::from_value(bad_json);
