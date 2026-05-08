@@ -3,8 +3,9 @@
 | | |
 |---|---|
 | 작성일 | 2026-05-07 |
-| 상태 | Accepted |
+| 상태 | Accepted (구현 디테일은 [ADR 0025](./0025-bronze-scraping-workflow-orchestrator-not-rust-spawn.md) 가 amendment — *격리 원칙* 그대로) |
 | 선행 | [ADR 0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md), [ADR 0021](./0021-static-vector-tile-decomposition.md), [AGENTS.md § 1](../../AGENTS.md) |
+| Amendment | [ADR 0025](./0025-bronze-scraping-workflow-orchestrator-not-rust-spawn.md) — § "Rust 측 책임" 의 *Rust 가 Python spawn* 패턴은 **GitHub Actions workflow phase split** 으로 변경 (격리 원칙은 그대로 유지) |
 
 ## 결정
 

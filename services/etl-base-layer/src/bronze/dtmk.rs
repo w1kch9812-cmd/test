@@ -8,6 +8,10 @@
 //! `<bronze_prefix>/<batch>/parcel-dtmk-<dsId>/` 아래에 적재. 본 모듈은 그
 //! Bronze 자산을 ETL 측에서 *재소비* (Rust 가 R2 → 로컬 → unzip → ogr2ogr 입력).
 //!
+//! Rust 가 Python 을 *spawn 하지 않는* 이유는 [ADR 0025](../../../../../../docs/adr/0025-bronze-scraping-workflow-orchestrator-not-rust-spawn.md)
+//! 박제. GitHub Actions workflow 가 Phase 1 (Python bronze) → Phase 2 (Rust gold) →
+//! Phase 3 (Rust promote) 로 split — 본 모듈은 Phase 2 의 Bronze 재소비 단계.
+//!
 //! ## 흐름
 //!
 //! 1. R2 [`R2Uploader::list_objects`] — `<prefix>/*.zip` 목록
