@@ -145,6 +145,7 @@ dependencies = [
  "serde_json",
  "shared-kernel",
  "sqlx",
+ "subtle",
  "tokio",
  "tower-http",
  "tracing",

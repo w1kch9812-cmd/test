@@ -123,7 +123,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
       }
     }
   } catch (err) {
-    console.warn("[ListingMap] parcels layer 추가 실패 — 무시", err);
+    // audit 2026-05-08: silent swallow → structured log (operator visibility).
+    // *parcels* 는 핵심 layer — 실패 시 사용자 시각 영향 큼. error level.
+    logMapLayerFailure("parcels-fill", err, { kind: "core", source: "parcels" });
   }
 
   // ===== 행정구역 (admin) — ETL 빌드 후 활성 (TileJSON 200 OK 시) =====
@@ -143,8 +145,10 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
         },
       });
     }
-  } catch {
-    // admin TileJSON 미발행 (ETL 미빌드) — 정상 silent skip.
+  } catch (err) {
+    // audit 2026-05-08: silent swallow → structured log. admin 은 *부가 layer* (gracefully
+    // optional) — info level. ETL 미빌드 / TileJSON 404 = 예상 (degraded 정상).
+    logMapLayerFailure("admin-fill", err, { kind: "optional", source: "admin" });
   }
 
   // ===== 산업단지 (complex) — ETL 빌드 후 활성 =====
@@ -165,8 +169,34 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
         },
       });
     }
-  } catch {
-    // complex TileJSON 미발행 — 정상 silent skip.
+  } catch (err) {
+    // audit 2026-05-08: silent swallow → structured log.
+    logMapLayerFailure("complex-fill", err, { kind: "optional", source: "complex" });
+  }
+}
+
+/**
+ * Map layer 등록 실패 시 *구조화* log emit (audit 2026-05-08 fix).
+ *
+ * 이전 silent skip 의 문제: production 에서 *왜 폴리곤 안 보이는지* 불가시. 본 helper 는
+ * - kind=core: error level (사용자 시각 영향 큰 layer 의 실패 — Sentry / Grafana alert 트리거)
+ * - kind=optional: info level (ETL 미빌드 같은 *예상 degraded* 시나리오)
+ * 둘 다 message structure 일관 — log aggregation 에서 grep 가능.
+ *
+ * Naver SDK 의 internal API (`_mapbox`) 의존 + style.load timing race 가 본 layer 의
+ * 가장 흔한 실패 원인. ADR 0019 의 박제된 trade-off — 우회 불가능, observability 로 mitigation.
+ */
+function logMapLayerFailure(
+  layerId: string,
+  err: unknown,
+  ctx: { kind: "core" | "optional"; source: string },
+): void {
+  const message = err instanceof Error ? err.message : String(err);
+  const payload = { event: "map_layer_register_failed", layerId, ...ctx, message };
+  if (ctx.kind === "core") {
+    console.error("[ListingMap]", JSON.stringify(payload));
+  } else {
+    console.info("[ListingMap]", JSON.stringify(payload));
   }
 }
 

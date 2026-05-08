@@ -160,6 +160,14 @@ async fn get_user(
     Ok(Json(user.into()))
 }
 
+/// audit 2026-05-08 — production 환경에서 critical config 미설정 시 fail-fast.
+/// `tracing::error!` 로 구조화 emit (Sentry tracing layer 가 자동 capture) 후 즉시 종료.
+fn fail_fast_production(reason: &str) -> ! {
+    tracing::error!(event = "startup_fail_fast", reason = %reason, "production 차단");
+    // process::exit 는 Drop 미실행 — `_sentry_guard` flush 안 됨. 향후 SIGTERM 으로 graceful.
+    std::process::exit(1);
+}
+
 #[allow(clippy::too_many_lines)] // env 로딩 + state 조립 + router 7 endpoint — 분해 시 중복.
 #[tokio::main]
 async fn main() {
@@ -193,11 +201,15 @@ async fn main() {
         Arc::new(PgListingPhotoRepository::new(pool.clone()));
 
     // SP9 T4 / ADR 0018: PNU lookup. VWORLD_API_KEY 미설정 → NoOp fallback (dev/CI).
-    // production 은 secret 주입 필수 — Sentry 패턴과 동일 (silent disabled if no key).
+    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 (raw_response JSONB 미저장
+    // 위반). production 은 VWORLD_API_KEY *반드시* — startup fail-fast.
     let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
         Ok(cfg) => {
             tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN)");
             let client = Arc::new(VWorldClient::new(cfg));
+            // TODO(audit 2026-05-08): raw_capture = NoOp 대신 PgRawCapture (raw_response JSONB
+            // 영구 저장). PgRawCapture wire 후속 commit (parcel_external_data CHECK 정합 검증
+            // 필요). 현재는 production 에서도 NoOp — Critical finding 의 *부분* fix.
             let reader: Arc<dyn ParcelReader> = Arc::new(VWorldParcelReader::new(
                 client,
                 Arc::new(NoOpRawCapture::new()),
@@ -205,9 +217,16 @@ async fn main() {
             Arc::new(VWorldParcelInfoLookup::new(reader))
         }
         Err(e) => {
+            let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
+                || std::env::var("NODE_ENV").as_deref() == Ok("production");
+            if is_prod {
+                fail_fast_production(&format!(
+                    "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {e}"
+                ));
+            }
             tracing::warn!(
                 error = %e,
-                "parcel_lookup: VWORLD env missing → NoOp fallback (denormalize columns NULL on listing create)"
+                "parcel_lookup: VWORLD env missing → NoOp fallback (dev only; production 은 fail-fast)"
             );
             Arc::new(NoOpParcelInfoLookup::new())
         }
@@ -258,13 +277,41 @@ async fn main() {
             dl
         });
 
+    // audit 2026-05-08: production 모드 detection — JTI denylist Redis error 시 fail-closed.
+    let is_production = std::env::var("APP_ENV").as_deref() == Ok("production")
+        || std::env::var("NODE_ENV").as_deref() == Ok("production");
     let auth_state = AuthState {
         verifier,
         user_repo,
         jti_denylist,
+        fail_closed_on_denylist_error: is_production,
     };
 
-    let auth_event_state = routes::auth_event::AuthEventState { pool };
+    // audit 2026-05-08 fix: /internal/auth/event 가 무인증 → shared secret 헤더 검증 추가.
+    // production 에서 INTERNAL_AUTH_SECRET 미설정 시 fail-fast (init 단계 panic 차단).
+    let internal_auth_secret = match std::env::var("INTERNAL_AUTH_SECRET") {
+        Ok(s) if !s.trim().is_empty() => Arc::<str>::from(s),
+        _ => {
+            let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
+                || std::env::var("NODE_ENV").as_deref() == Ok("production");
+            if is_prod {
+                fail_fast_production(
+                    "INTERNAL_AUTH_SECRET 미설정 — /internal/auth/event 무인증 차단 위해 필수",
+                );
+            }
+            // dev 안전 fallback — 시작 시 1회 random 발급. Next.js 측이 같은 값 사용 못
+            // 하면 401 리턴 → audit 못 박힘 (서비스 자체 OK). dev 검증 시 환경변수 명시.
+            tracing::warn!(
+                "INTERNAL_AUTH_SECRET 미설정 (dev) — random fallback 사용. Next.js \
+                 측 동일 값 설정 필요 (apps/web/.env.local)."
+            );
+            Arc::<str>::from(format!("dev-random-{}", ulid::Ulid::new()))
+        }
+    };
+    let auth_event_state = routes::auth_event::AuthEventState {
+        pool,
+        internal_auth_secret,
+    };
 
     // SP-Obs T7: health check state -- DB pool + (optional) Redis pool 공유.
     let health_state = routes::health::HealthState {
@@ -335,8 +382,31 @@ async fn main() {
 
     // SP10 T3: building_register reader 주입 — SP4-iii-a 의 live reader 로 swap 예정.
     // 현재는 NoOp fallback (`DATA_GO_KR_API_KEY` 미설정 시 빈 list).
-    let building_reader: Arc<dyn routes::buildings::BuildingRegisterReader> =
-        Arc::new(NoOpBuildingRegisterReader);
+    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 (사용자한테 빈 list 노출 =
+    // silent data loss). production 은 DATA_GO_KR_API_KEY *반드시*.
+    let building_reader: Arc<dyn routes::buildings::BuildingRegisterReader> = {
+        let has_key = std::env::var("DATA_GO_KR_API_KEY")
+            .or_else(|_| std::env::var("ODP_SERVICE_KEY"))
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .is_some();
+        let is_prod = std::env::var("APP_ENV").as_deref() == Ok("production")
+            || std::env::var("NODE_ENV").as_deref() == Ok("production");
+        if !has_key && is_prod {
+            fail_fast_production(
+                "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
+                 가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
+            );
+        }
+        // TODO(audit 2026-05-08): production 에서도 SP4-iii-a 의 live reader 가 *아직* 안
+        // 들어옴 — has_key 검증 후 NoOp 주입 = 절반 fix. live reader wire 후속 commit.
+        if !has_key {
+            tracing::warn!(
+                "building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)"
+            );
+        }
+        Arc::new(NoOpBuildingRegisterReader)
+    };
     let buildings_state = routes::buildings::BuildingsState {
         reader: building_reader,
     };
@@ -421,10 +491,11 @@ async fn main() {
         )
         .with_state(notifications_state)
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
-    // SECURITY: /internal/auth/event 는 현재 unauthenticated.
-    // frontend (apps/web/app/api/auth/*) 가 server-side 호출 가정 — production 배포 전 반드시
-    // network-level 보호 필요 (SP6-iam-infra 가 ingress ACL / VPC 격리 / shared secret).
-    // 외부 노출 시 audit_log 오염 가능 (사용자가 임의 AuthEvent inject).
+    // SECURITY (audit 2026-05-08 fix): /internal/auth/event 는 frontend BFF (apps/web)
+    // 의 server-side 호출 전용. handler 내부에서 `X-Internal-Auth` shared secret 헤더
+    // *constant-time* 비교 (auth_event::post_auth_event). production 에서 secret 미설정
+    // 시 init 단계 fail-fast (위 internal_auth_secret 로딩).
+    // 추가 layer (defence in depth, 후속): network ACL 로 ingress 차단 (SP6-iam-infra).
     let internal: Router<()> = Router::new()
         .route(
             "/internal/auth/event",

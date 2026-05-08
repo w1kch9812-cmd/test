@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { emitAuthEvent } from "@/lib/auth/internal-event";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { exchangeCode, type TokenResult } from "@/lib/oidc";
@@ -127,10 +128,4 @@ export async function GET(req: NextRequest) {
   });
 }
 
-async function emitAuthEvent(event: string, payload: Record<string, unknown>): Promise<void> {
-  await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/internal/auth/event`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ event, payload }),
-  });
-}
+// emitAuthEvent — apps/web/lib/auth/internal-event.ts SSOT helper 사용 (audit 2026-05-08).

@@ -8,7 +8,7 @@ create table "user" (
     phone_kr_hash varchar(64),                          -- SHA-256 해시 (PIPA)
     display_name varchar(100) not null,
     user_kind varchar(20) not null check (user_kind in ('individual', 'corporation')),
-    business_number varchar(12),                        -- XXX-XX-XXXXX (검증된 사업자만)
+    business_number varchar(12),                        -- format 000-00-00000 (검증된 사업자만)
     business_verified_at timestamptz,
     broker_license_number varchar(50),                  -- 공인중개사 자격번호
     broker_verified_at timestamptz,

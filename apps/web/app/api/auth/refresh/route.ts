@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { emitAuthEvent } from "@/lib/auth/internal-event";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { refreshTokens, type TokenResult } from "@/lib/oidc";
@@ -40,14 +41,10 @@ export async function POST(req: NextRequest) {
           refresh_token: current.refresh_token,
         });
       } catch {
-        await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/internal/auth/event`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            event: "RefreshFailed",
-            payload: { user_sub: current.sub, jti: current.jti },
-          }),
-        }).catch(() => undefined);
+        await emitAuthEvent("RefreshFailed", {
+          user_sub: current.sub,
+          jti: current.jti,
+        });
         // I5: zombie session 방지 — refresh_token 만료 시 session 도 종료
         await deleteSession(sid);
         return problem({
@@ -77,19 +74,12 @@ export async function POST(req: NextRequest) {
         REFRESH_TTL_SEC,
       );
 
-      await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/internal/auth/event`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          event: "RefreshSucceeded",
-          payload: {
-            user_sub: next.sub,
-            prev_jti: current.jti,
-            new_jti: next.jti,
-            exp: newExp,
-          },
-        }),
-      }).catch(() => undefined);
+      await emitAuthEvent("RefreshSucceeded", {
+        user_sub: next.sub,
+        prev_jti: current.jti,
+        new_jti: next.jti,
+        exp: newExp,
+      });
 
       return NextResponse.json({ ok: true });
     },

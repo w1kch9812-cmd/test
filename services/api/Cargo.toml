@@ -34,6 +34,8 @@ async-trait = { workspace = true }
 ulid = { workspace = true }
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }
+# audit 2026-05-08: /internal/auth/event 의 shared secret 검증 — constant-time 비교 (timing attack 방어).
+subtle = "2"
 
 [lints]
 workspace = true

@@ -18,6 +18,10 @@ const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_REDIRECT_URI: z.string().url(),
   REDIS_URL: z.string().url(),
   SESSION_SECRET: z.string().min(32),
+  // audit 2026-05-08: services/api 의 /internal/auth/event shared secret. Rust API
+  // 와 *동일 값* 공유 — 미설정 시 401 (audit log 누락만, 서비스 정상). production
+  // 은 Pulumi secret. dev 는 .env.local.
+  INTERNAL_AUTH_SECRET: z.string().min(16).default("dev-internal-auth-must-be-shared"),
 });
 
 const isServer = typeof window === "undefined";
@@ -32,6 +36,7 @@ const parsed = Schema.safeParse({
   ZITADEL_REDIRECT_URI: process.env.ZITADEL_REDIRECT_URI,
   REDIS_URL: process.env.REDIS_URL,
   SESSION_SECRET: process.env.SESSION_SECRET,
+  INTERNAL_AUTH_SECRET: process.env.INTERNAL_AUTH_SECRET,
 });
 
 if (!parsed.success) {

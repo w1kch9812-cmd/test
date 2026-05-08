@@ -73,6 +73,9 @@ fn main() -> ExitCode {
     runtime.block_on(async_main())
 }
 
+// audit 2026-05-08: cognitive complexity 28/15. CLI subcommand dispatch + env load
+// 직선 흐름이라 분해 시 *흐름 추적 어려워짐*. 별도 refactor (file split) 시 module 분리.
+#[allow(clippy::cognitive_complexity)]
 async fn async_main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let subcommand = args.first().map_or("bronze", String::as_str);
@@ -514,6 +517,9 @@ async fn prepare_dtmk_inputs(
 ///
 /// CLI: `etl-base-layer promote --version <ver>`. layer 목록은 SSOT 의 `Layer::ALL` 자동.
 /// 환경변수: `R2_*` 자격 + `R2_PUBLIC_URL_BASE` (manifest URL 의 base) + (선택) `CLOUDFLARE_*`.
+// audit 2026-05-08: cognitive complexity 61/15. CLI args parse + 검증 + atomic flip
+// + CDN purge 직선 흐름. 분해 시 *atomicity 보장* 흐름 흩어져 risk. 별도 refactor.
+#[allow(clippy::cognitive_complexity)]
 async fn run_promote_cli(args: Vec<String>) -> ExitCode {
     let mut version: Option<String> = None;
     let mut iter = args.iter();
@@ -589,6 +595,9 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
 /// - `VERIFY_MIN_BYTES` — 파일 size 최소. 미설정 시 SSOT default
 ///   (`NATIONWIDE_PMTILES_MIN_BYTES`) 적용 — 항상 강제 (silent build fail 감지).
 /// - `VERIFY_DISABLE=1` — dev / micro-fixture 빌드 명시적 disable. CI 에선 절대 set 금지.
+// audit 2026-05-08: cognitive complexity 26/15. layer-별 verification + size + sample
+// PNU 검증 직선 흐름. 분해 시 verification 흐름 흩어져 가독성 ↓.
+#[allow(clippy::cognitive_complexity)]
 async fn run_verify(
     host: Host,
     build: &BuildResult,
@@ -657,7 +666,9 @@ async fn run_verify(
 /// 매뉴얼 manifest 발행 안 함 — promote 단계 책임.
 // 6 args 는 본 함수의 책임 범위 (R2 cfg / version / layer / build / lineage 자료들).
 // 분해해도 helper 가 더 어색 → 의도적 allow.
-#[allow(clippy::too_many_arguments)]
+// audit 2026-05-08: cognitive complexity 33/15. R2 batch upload + 메타 + lineage 직선
+// 흐름. 분해 시 atomicity 흐름 흩어져 risk. 별도 refactor 시 step 별 모듈 분리.
+#[allow(clippy::too_many_arguments, clippy::cognitive_complexity)]
 async fn upload_gold_to_r2(
     r2_cfg: &crate::r2_upload::R2Config,
     version: &str,

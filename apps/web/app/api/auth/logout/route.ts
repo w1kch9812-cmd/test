@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { emitAuthEvent } from "@/lib/auth/internal-event";
 import { env } from "@/lib/env";
 import { buildEndSessionUrl } from "@/lib/oidc";
 import { deleteSidCookie, SID_COOKIE_NAME } from "@/lib/session/cookie";
@@ -32,15 +33,8 @@ export async function POST(req: NextRequest) {
 
   await deleteSession(sid);
 
-  // audit_log emit (best-effort)
-  await fetch(`${env.NEXT_PUBLIC_API_BASE_URL}/internal/auth/event`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      event: "Logout",
-      payload: { user_sub: session.sub, jti: session.jti },
-    }),
-  }).catch(() => undefined);
+  // audit_log emit — emitAuthEvent helper 가 X-Internal-Auth header + best-effort 처리.
+  await emitAuthEvent("Logout", { user_sub: session.sub, jti: session.jti });
 
   // back-channel logout — Zitadel 의 post_logout_redirect_uri 는 전체 URL 필요
   // env.ZITADEL_REDIRECT_URI 의 origin 기반으로 "/" 생성

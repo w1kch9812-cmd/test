@@ -37,6 +37,9 @@ pub struct AuthState {
     pub user_repo: Arc<dyn UserRepository>,
     /// `JTI` denylist (`SP6-i`) — `None` 이면 검증 skip (fail-open).
     pub jti_denylist: Option<Arc<dyn crate::jti_denylist::JtiDenylist>>,
+    /// audit 2026-05-08: production 모드 여부. `true` 시 denylist Redis error → fail-closed
+    /// (Expired). `false` (dev) 시 fail-open — gracefulm degradation 으로 dev UX 보존.
+    pub fail_closed_on_denylist_error: bool,
 }
 
 /// `Bearer <jwt>` 검증 + `User` 자동 생성 + `Extension<AuthenticatedUser>` 주입.
@@ -50,6 +53,9 @@ pub struct AuthState {
 /// # Errors
 ///
 /// 모든 인증 실패는 [`AuthError`] 로 매핑되어 `IntoResponse` 됩니다.
+// audit 2026-05-08: env-aware fail-closed 분기 추가 → cognitive complexity 20/15.
+// 분해 시 *분기* 가 흩어져 흐름 추적 어려움 — 의식적 allow.
+#[allow(clippy::cognitive_complexity)]
 pub async fn auth_layer(
     State(state): State<AuthState>,
     mut req: Request<Body>,
@@ -72,22 +78,31 @@ pub async fn auth_layer(
 
     // SP6-i: JTI denylist (logout / refresh rotation / role change 시 즉시 무효).
     //
-    // SSS 결정: fail-open 정책 (Redis 장애 시 JWT 검증만 통과).
-    // - spec § 3.1 의 "Redis 다운 시 인증 차단" 은 session SSOT (frontend 의 session lookup) 차원.
-    //   Redis 가 다운되면 Set-Cookie sid → session payload 조회 불가 → frontend 가 401.
-    // - 본 backend 의 jti denylist 는 다른 layer — Redis 장애 시 fail-close 시 모든 backend
-    //   요청이 401 → cascade 장애. 가용성 우선 결정.
-    // - mitigation: access_token TTL 5분 + JWT signature 검증 + audit_log warn.
-    // - SP7-i 가 Sentry alert 추가 시 silent 보안 약화 차단.
+    // 정책 (audit 2026-05-08 — environment-aware):
+    // - production (`fail_closed_on_denylist_error = true`): Redis error → 401 (fail-closed).
+    //   logout 후 revoked token 의 5분 window 동안 재사용 risk 차단. cascade 장애 시
+    //   사용자 401 — observability (Sentry) 가 즉시 alert.
+    // - dev (`false`): Redis 장애 시 fail-open — graceful degradation 으로 dev UX 보존.
+    //   mitigation: access_token TTL 5분 + JWT signature 검증 + audit_log warn.
     if let Some(dl) = &state.jti_denylist {
         match dl.is_denied(&claims.jti).await {
             Ok(true) => return Err(AuthError::Expired),
             Ok(false) => {}
-            Err(e) => tracing::warn!(
-                error = %e,
-                jti = %claims.jti,
-                "jti denylist check failed (fail-open)"
-            ),
+            Err(e) => {
+                if state.fail_closed_on_denylist_error {
+                    tracing::error!(
+                        error = %e,
+                        jti = %claims.jti,
+                        "jti denylist check failed (fail-CLOSED, production)"
+                    );
+                    return Err(AuthError::Expired);
+                }
+                tracing::warn!(
+                    error = %e,
+                    jti = %claims.jti,
+                    "jti denylist check failed (fail-open, dev)"
+                );
+            }
         }
     }
 
