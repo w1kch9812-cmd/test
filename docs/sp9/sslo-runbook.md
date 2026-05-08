@@ -1,6 +1,6 @@
 # SP9 Base Layer — SLO + Runbook (Plan D L7)
 
-> **갱신일**: 2026-05-07
+> **갱신일**: 2026-05-08 (Round 4 enterprise audit — secret rotation / backup retention / compliance / DR 박제)
 > **Owner**: Platform / SP9
 > **연계**: [sp9-base-layer-etl.yml](../../.github/workflows/sp9-base-layer-etl.yml) · [sp9-base-layer-rollback.yml](../../.github/workflows/sp9-base-layer-rollback.yml) · [crates/sp9-base-layer-config](../../crates/sp9-base-layer-config/) (SSOT)
 
@@ -168,3 +168,125 @@ secondary origin failover. 현재 미구현 (R2 SLA 99.9% 신뢰).
 - [ ] § 2.4 rollback workflow 가 dispatch 가능한 권한 (Actions write) 부여 확인.
 - [ ] 본 runbook 의 § 2 의 4 incident scenario 가 실제 staging 에서 1번씩 시뮬레이션
       완료 (특히 § 2.4 rollback 절차).
+
+---
+
+## 5. Secret rotation 정책 (Round 4 enterprise audit)
+
+**원칙**: 모든 production secret 은 *명시 회전 주기* + *dual-secret window* (overlap
+window 동안 old/new 양쪽 valid) 박제. 회전 시 ETL 무중단 보장.
+
+| Secret | 회전 주기 | Dual window | 회전 절차 |
+|---|---|---|---|
+| `R2_ACCESS_KEY` / `R2_SECRET_KEY` | 90일 | 7일 (old/new 동시 활성) | Cloudflare R2 dashboard → 새 token 발급 → GHA secret 갱신 → 다음 cron 검증 → 7일 후 old token 폐기 |
+| `VWORLD_USERNAME` / `VWORLD_PASSWORD` | **연 1회 또는 incident 시** | 없음 (계정 자체) | V-World 계정 비밀번호 변경 → GHA secret 갱신 → 즉시 cron dispatch 검증 |
+| `CLOUDFLARE_API_TOKEN` | 90일 | 7일 | Cloudflare → API tokens → 새 token (zone purge scope) → GHA secret 갱신 → 다음 promote 검증 → 7일 후 old token revoke |
+| `SENTRY_DSN` | 무한 (project 단위) | N/A | 회전 불필요. project 분리 시에만 갱신 |
+| `GITHUB_TOKEN` | workflow scope (자동) | N/A | GHA 가 자동 |
+
+**실패 시 fallback**:
+- R2 token 회전 후 next cron 실패 → manifest 변경 0 (L3 atomicity) → 클라이언트 영향 0
+- V-World password 회전 후 phase 1 실패 → bronze refresh skip (`bronze_skip=true`) +
+  기존 R2 zip 재사용 → 다음 manual run 으로 복구
+
+**audit log**: 각 secret 회전 시 `docs/sp9/secret-rotation-history.md` 에 (date, who,
+which secret) 박제. PIPC 감사 대비.
+
+---
+
+## 6. Backup retention + RPO / RTO (Round 4 enterprise audit)
+
+### 6.1 Manifest backup chain
+
+`gold/manifest.json` 의 publish 시 `gold/manifest.<previous_version>.json` 으로 backup
+(L3 promote, [services/etl-base-layer/src/gold/promote.rs](../../services/etl-base-layer/src/gold/promote.rs)).
+
+| 항목 | 정책 |
+|---|---|
+| 보존 개수 | **최근 12개 manifest** (1년치, 매월 1회 cron 기준) |
+| 보존 mechanism | R2 immutable URL — flat tile 은 자동 보존, manifest backup 은 명시 PUT |
+| 청소 정책 | manifest 13개 째 부터 oldest 자동 삭제 (별도 cron, 미구현 — TODO ADR 0028) |
+| 복구 절차 | § 2.4 — workflow_dispatch `target_version=<old>` |
+
+**RPO** (Recovery Point Objective): **0 분** — manifest atomic flip 직전 상태 = R2 의
+`manifest.<prev>.json` 그대로. 데이터 손실 0.
+
+**RTO** (Recovery Time Objective): **5 분** — § 2.4 workflow run 시간 (manifest 1개
+PUT + Cloudflare CDN purge).
+
+### 6.2 Flat tile 보존
+
+`gold/v<N>/<layer>/{z}/{x}/{y}.pbf` — URL versioning 으로 immutable. 1년 cache,
+override 불가. tile 손상 = 새 version 빌드 + manifest flip.
+
+**RPO/RTO**: tile 자체는 *항상* 이전 version 의 client cache + R2 두 layer 보존.
+tile 손상 = 클라이언트 자동 stale-while-revalidate fallback + 다음 manifest hot-swap
+시 새 version fetch.
+
+---
+
+## 7. Compliance (Round 4 enterprise audit)
+
+### 7.1 PIPC / 개인정보보호법
+
+**판정**: SP9 base layer 데이터에 **개인정보 0** — V-World dtmk 의 *연속지적도* 는
+필지 polygon + PNU + 지번 정보만 (소유자 정보 X). PIPC 적용 대상 아님.
+
+**감사 trail**: 본 판정은 ADR 또는 별도 compliance log 에 박제 필요. 현재는 본 § 7
+이 SSOT. 데이터 schema 가 변경되어 *PII 가 추가되는 경우* (e.g. 소유자 정보 통합)
+즉시 PIPC 적용 + 데이터 마스킹 + 별도 ADR.
+
+### 7.2 공공누리 제1유형 출처표시
+
+V-World dtmk 데이터의 라이선스. *클라이언트* 의무:
+- 매물 페이지 footer 에 출처 표기 (현재 미박제 — TODO frontend ADR)
+- 본 라이선스 텍스트 = `crates/sp9-base-layer-config::DTMK_LICENSE` (Round 4 SSOT 박제)
+
+**lineage**: `BuildLineage.source_license` + `BuildLineage.source_url` 에 박제됨
+(Round 3 P1 + Round 4 SSOT). 클라이언트가 manifest 의 lineage 를 읽어 footer 동적
+렌더 가능.
+
+### 7.3 GitHub Actions log retention
+
+기본 90일 — `actions/upload-artifact@v4` 의 `retention-days: 90` (SBOM artifacts).
+audit trail (manifest 자체) 은 R2 에 영구 박제 — log 의존 0.
+
+---
+
+## 8. Disaster recovery (DR)
+
+### 8.1 R2 region outage
+
+**현재**: 단일 Cloudflare R2 region (CF default). SLA 99.9% (월 ~43 분 down 허용).
+
+**RTO**: Cloudflare 복구 시간 의존 (외부). 통상 < 1 시간.
+
+**Mitigation 옵션** (별도 ADR 미구현):
+- 멀티 리전 R2 replication
+- manifest CDN 의 secondary origin (e.g. AWS S3 cross-region)
+- 클라이언트의 stale-while-revalidate + offline cache (현재 미적용)
+
+### 8.2 V-World 사이트 outage
+
+**영향**: phase 1 (Bronze refresh) 만 — phase 2 (Gold) 가 R2 의 *기존* zip 재사용 가능.
+
+**fallback**:
+- 사용자가 `workflow_dispatch { bronze_skip: true }` 로 Gold 만 재빌드
+- R2 의 마지막 성공 batch 재사용 (~1개월 stale 까지 허용)
+- V-World 가 1개월+ down 시 데이터 stale → 사용자 공지 + ADR 갱신
+
+**RTO**: Bronze refresh 가 *복구된 후* 다음 cron (월 1회) 또는 manual dispatch.
+SP9 SLO 침해 incident 로 분류.
+
+### 8.3 GitHub Actions outage
+
+**영향**: ETL cron / manual dispatch 모두 차단.
+
+**fallback**: workflow yml 을 local Rust ETL binary 로 실행 가능 (모든 step 은
+`./target/release/etl-base-layer gold/promote` 호출). dev 머신이나 별도 EC2 에서.
+
+**RTO**: GitHub 복구 (외부) 또는 manual local run (~4-8h).
+
+### 8.4 사용자 측 (브라우저) outage
+
+해당 없음 — base layer 는 정적 R2 객체. CDN edge 가 모든 사용자 fetch 처리.
