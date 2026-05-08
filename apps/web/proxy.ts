@@ -84,13 +84,13 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
 }
 
 /**
- * Next.js Edge middleware — *모든 request* 의 auth gate + CSP nonce + rate limit.
+ * Next.js 16 `proxy` — *모든 request* 의 auth gate + CSP nonce + rate limit.
  *
- * 본 file 이 `apps/web/middleware.ts` 위치 + `middleware` 이름 export 일 때만 Next.js
- * 가 자동 invoke. 잘못된 위치/이름 = silent dead code → CSP/auth/rate-limit 무력.
- * Audit (2026-05-08) 발견: 이전 `apps/web/proxy.ts` + `proxy` 함수 = dead code.
+ * Next.js 16 부터 `middleware.ts` → `proxy.ts` 로 rename (deprecated).
+ * runtime = `nodejs` (configurable 안 됨) — `node:crypto` / Redis 직접 사용 가능.
+ * 본 file 이 `apps/web/proxy.ts` + `proxy` 이름 export 일 때만 Next.js 가 자동 invoke.
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const url = req.nextUrl;
 
   // 1. Rate limit (auth routes only)
