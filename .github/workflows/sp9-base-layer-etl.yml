@@ -63,6 +63,7 @@ jobs:
       rust_toolchain_version: ${{ steps.print.outputs.rust_toolchain_version }}
       dtmk_download_concurrency: ${{ steps.print.outputs.dtmk_download_concurrency }}
       nationwide_pmtiles_min_bytes: ${{ steps.print.outputs.nationwide_pmtiles_min_bytes }}
+      dtmk_ds_id: ${{ steps.print.outputs.dtmk_ds_id }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -74,7 +75,9 @@ jobs:
           json="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- json)"
           echo "$json" | jq .
           # 각 key → output (다른 job 이 ${{ needs.setup.outputs.X }} 로 소비).
-          for key in tippecanoe_version tippecanoe_git_sha gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes; do
+          # dtmk_ds_id 는 Round 4 P1 — workflow YAML 안 source URL / Bronze prefix
+          # 모두 본 출력 통과 (이전엔 phase 별 별도 cargo run + 일부는 하드코딩).
+          for key in tippecanoe_version tippecanoe_git_sha gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes dtmk_ds_id; do
               val="$(echo "$json" | jq -r ".${key}")"
               echo "${key}=${val}" >> "$GITHUB_OUTPUT"
           done
@@ -134,10 +137,16 @@ jobs:
           name: scraper-py-sbom
           path: services/scraper-py/python-sbom.json
           retention-days: 90
-      - name: Compute SSOT DTMK_DS_ID (Round 3 P0 — Python 하드코딩 제거)
+      - name: Pull SSOT DTMK_DS_ID from setup (Round 4 #1 — single SSOT source)
         id: ssot
         run: |
-          DTMK_DS_ID="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)"
+          # Round 4 P1 — setup job 의 출력을 그대로 사용 (단일 SSOT entry point).
+          # 이전: phase 별 cargo run 중복 + 일부는 inline 하드코딩.
+          DTMK_DS_ID="${{ needs.setup.outputs.dtmk_ds_id }}"
+          if [ -z "$DTMK_DS_ID" ]; then
+            echo "::error::setup job 의 dtmk_ds_id output 비어있음"
+            exit 1
+          fi
           echo "dtmk_ds_id=${DTMK_DS_ID}" >> "$GITHUB_OUTPUT"
       - name: Run dtmk_vworld
         working-directory: services/scraper-py
@@ -246,8 +255,10 @@ jobs:
         run: |
           BATCH="$(date -u +%Y-%m)"
           # SSOT — sp9-base-layer-config 의 dtmk_bronze_prefix() 와 동일 format
-          # (Rust + workflow 양쪽 한 source 강제 — 본 step 도 print binary 의 변종).
-          PREFIX="bronze/${BATCH}/parcel-dtmk-$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)/"
+          # (Rust + workflow 양쪽 한 source 강제). Round 4 #1 — setup outputs 의 SSOT
+          # const 만 통과 (이전: 매 job 마다 cargo run 중복).
+          DTMK_DS_ID="${{ needs.setup.outputs.dtmk_ds_id }}"
+          PREFIX="bronze/${BATCH}/parcel-dtmk-${DTMK_DS_ID}/"
           echo "prefix=${PREFIX}" >> "$GITHUB_OUTPUT"
           echo "batch=${BATCH}" >> "$GITHUB_OUTPUT"
 
@@ -270,8 +281,9 @@ jobs:
           GIT_SHA: ${{ github.sha }}
           CORRELATION_ID: ${{ github.run_id }}
           # Round 3 P1 — license / source URL lineage (V-World dtmk 표준 박제).
+          # Round 4 #1 — DS_ID 하드코딩 제거. setup outputs 의 SSOT 와 동일 변수 통과.
           ETL_SOURCE_LICENSE: "공공누리 제1유형: 출처표시"
-          ETL_SOURCE_URL: "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30563"
+          ETL_SOURCE_URL: "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=${{ needs.setup.outputs.dtmk_ds_id }}"
         run: |
           # parcels 만 dtmk pipeline. admin/complex 는 별도 SHP 소스 (V-World 행정구역 /
           # 공공데이터포털 산업단지) — 현재 미구현. 임시 동일 prefix.
