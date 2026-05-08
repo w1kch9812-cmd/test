@@ -26,7 +26,17 @@ const PUBLIC_PATHS = [
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
-const BROKER_PATHS = ["/listings/new", "/listings/edit"];
+//
+// audit 2026-05-08 round 2 (P4 — Codex 발견): BROKER 게이트 SSOT.
+// `/listings/new` exact + `/listings/<id>/edit` (dynamic id) 두 패턴.
+// 새 broker-gated path 추가 시 본 배열 한 곳만 수정 → `isBrokerGated` 자동 반영.
+type BrokerRule =
+  | { kind: "exact"; path: string }
+  | { kind: "prefix-suffix"; prefix: string; suffix: string };
+const BROKER_GATED_RULES: readonly BrokerRule[] = [
+  { kind: "exact", path: "/listings/new" },
+  { kind: "prefix-suffix", prefix: "/listings/", suffix: "/edit" },
+];
 const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
 
 function isPublic(pathname: string): boolean {
@@ -38,11 +48,10 @@ function isAdmin(pathname: string): boolean {
 }
 
 function isBrokerGated(pathname: string): boolean {
-  // /listings/new exact + /listings/<id>/edit (정규식 미사용 단순 매칭).
-  if (pathname === "/listings/new" || pathname.endsWith("/edit")) {
-    return pathname.startsWith("/listings/");
-  }
-  return false;
+  return BROKER_GATED_RULES.some((rule) => {
+    if (rule.kind === "exact") return pathname === rule.path;
+    return pathname.startsWith(rule.prefix) && pathname.endsWith(rule.suffix);
+  });
 }
 
 async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null> {
