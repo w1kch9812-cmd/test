@@ -65,6 +65,8 @@ jobs:
       dtmk_download_concurrency: ${{ steps.print.outputs.dtmk_download_concurrency }}
       nationwide_pmtiles_min_bytes: ${{ steps.print.outputs.nationwide_pmtiles_min_bytes }}
       dtmk_ds_id: ${{ steps.print.outputs.dtmk_ds_id }}
+      dtmk_license: ${{ steps.print.outputs.dtmk_license }}
+      dtmk_source_url: ${{ steps.print.outputs.dtmk_source_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -76,9 +78,9 @@ jobs:
           json="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- json)"
           echo "$json" | jq .
           # 각 key → output (다른 job 이 ${{ needs.setup.outputs.X }} 로 소비).
-          # dtmk_ds_id 는 Round 4 P1 — workflow YAML 안 source URL / Bronze prefix
-          # 모두 본 출력 통과 (이전엔 phase 별 별도 cargo run + 일부는 하드코딩).
-          for key in tippecanoe_version tippecanoe_git_sha gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes dtmk_ds_id; do
+          # dtmk_ds_id / dtmk_license / dtmk_source_url 은 Round 4 SSOT — workflow YAML
+          # 안 모든 V-World 메타 (DS_ID / license / source URL) 가 본 출력 통과.
+          for key in tippecanoe_version tippecanoe_git_sha gdal_version_pin rust_toolchain_version dtmk_download_concurrency nationwide_pmtiles_min_bytes dtmk_ds_id dtmk_license dtmk_source_url; do
               val="$(echo "$json" | jq -r ".${key}")"
               echo "${key}=${val}" >> "$GITHUB_OUTPUT"
           done
@@ -164,7 +166,9 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           # SSOT inject — Rust config crate 의 const 단일 출처. Python 측 하드코딩 0.
           DTMK_DS_ID: ${{ steps.ssot.outputs.dtmk_ds_id }}
-          DTMK_PARALLEL: "3"
+          # Round 4 SSOT — phase 1 의 ThreadPoolExecutor max_workers 도 sp9-config 의
+          # `DTMK_DOWNLOAD_CONCURRENCY` 와 동일 값. 이전 `"3"` 하드코딩 제거.
+          DTMK_PARALLEL: ${{ needs.setup.outputs.dtmk_download_concurrency }}
         run: python dtmk_vworld.py
       - name: Summary (SSOT prefix)
         id: summary
@@ -290,9 +294,10 @@ jobs:
           GIT_SHA: ${{ github.sha }}
           CORRELATION_ID: ${{ github.run_id }}
           # Round 3 P1 — license / source URL lineage (V-World dtmk 표준 박제).
-          # Round 4 #1 — DS_ID 하드코딩 제거. setup outputs 의 SSOT 와 동일 변수 통과.
-          ETL_SOURCE_LICENSE: "공공누리 제1유형: 출처표시"
-          ETL_SOURCE_URL: "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=${{ needs.setup.outputs.dtmk_ds_id }}"
+          # Round 4 SSOT — license / source URL 모두 sp9-config 단일 출처. 이전엔
+          # license 텍스트 하드코딩 + URL 의 dsId 하드코딩 (둘 다 trick).
+          ETL_SOURCE_LICENSE: ${{ needs.setup.outputs.dtmk_license }}
+          ETL_SOURCE_URL: ${{ needs.setup.outputs.dtmk_source_url }}
         run: |
           # ADR 0027 — admin/complex 는 `Layer::is_active_in_etl()` false 라 matrix 에서
           # 자동 제외. parcels 만 빌드. 향후 admin/complex source 가 결정되면 lib.rs 의

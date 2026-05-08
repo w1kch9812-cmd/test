@@ -71,6 +71,23 @@ pub const DTMK_DOWNLOAD_CONCURRENCY: usize = 8;
 /// 100MB 미만 = silent build fail 의심 → verify 단계에서 차단.
 pub const NATIONWIDE_PMTILES_MIN_BYTES: u64 = 104_857_600;
 
+/// V-World dtmk 데이터의 라이선스 — Round 4 #B SSOT. workflow ETL_SOURCE_LICENSE
+/// 와 lineage `BuildLineage.source_license` 가 본 const 통과. drift 차단.
+pub const DTMK_LICENSE: &str = "공공누리 제1유형: 출처표시";
+
+/// V-World dtmk dataset 의 source URL template (`{ds_id}` placeholder).
+///
+/// 실제 URL 은 `dtmk_source_url()` 헬퍼 또는 workflow 의
+/// `${{ needs.setup.outputs.dtmk_source_url }}` 변수 치환으로 생성.
+/// Round 4 SSOT — license / source URL 양쪽 박제.
+pub const DTMK_SOURCE_URL_TEMPLATE: &str = "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}";
+
+/// `DTMK_SOURCE_URL_TEMPLATE` 의 `{ds_id}` 를 [`DTMK_DS_ID`] 로 치환한 절대 URL.
+#[must_use]
+pub fn dtmk_source_url() -> String {
+    DTMK_SOURCE_URL_TEMPLATE.replace("{ds_id}", &DTMK_DS_ID.to_string())
+}
+
 /// SP9 base layer 의 정식 layer 식별자. `etl-base-layer::LayerKind` 의 SSOT.
 ///
 /// `LayerKind` 가 zoom range 등 build-time geometry 정책을 owner — 본 enum 은 *infra*
@@ -178,6 +195,10 @@ pub struct ConfigSnapshot {
     pub dtmk_download_concurrency: usize,
     /// `NATIONWIDE_PMTILES_MIN_BYTES`.
     pub nationwide_pmtiles_min_bytes: u64,
+    /// `DTMK_LICENSE`.
+    pub dtmk_license: String,
+    /// `dtmk_source_url()` — DS_ID 치환된 절대 URL.
+    pub dtmk_source_url: String,
     /// 모든 layer 의 lowercase 이름 (registry / Rust LayerKind reflection 용).
     pub layers: Vec<String>,
     /// **현재 ETL build-active** layer 만 (Round 4 #2). workflow matrix 가 본 출력만
@@ -201,6 +222,8 @@ impl ConfigSnapshot {
             target_srs_web: TARGET_SRS_WEB.to_owned(),
             dtmk_download_concurrency: DTMK_DOWNLOAD_CONCURRENCY,
             nationwide_pmtiles_min_bytes: NATIONWIDE_PMTILES_MIN_BYTES,
+            dtmk_license: DTMK_LICENSE.to_owned(),
+            dtmk_source_url: dtmk_source_url(),
             layers: Layer::ALL.iter().map(|l| l.name().to_owned()).collect(),
             active_layers: Layer::ALL
                 .iter()

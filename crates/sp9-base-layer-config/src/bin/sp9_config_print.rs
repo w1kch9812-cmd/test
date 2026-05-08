@@ -80,6 +80,8 @@ fn main() -> ExitCode {
                 "target_srs_web" => snapshot.target_srs_web,
                 "dtmk_download_concurrency" => snapshot.dtmk_download_concurrency.to_string(),
                 "nationwide_pmtiles_min_bytes" => snapshot.nationwide_pmtiles_min_bytes.to_string(),
+                "dtmk_license" => snapshot.dtmk_license,
+                "dtmk_source_url" => snapshot.dtmk_source_url,
                 other => {
                     eprintln!("unknown key: {other}");
                     return ExitCode::from(2);
