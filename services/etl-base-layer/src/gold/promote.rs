@@ -28,6 +28,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use sp9_base_layer_config::{R2PublicBase, Version};
 use thiserror::Error;
 use tracing::{info, instrument, warn};
@@ -83,7 +84,11 @@ pub enum PromoteError {
 }
 
 /// 한 layer 의 build artifact 메타 — R2 staging 에 박제 후 promote 가 모음.
-#[derive(Debug, Clone)]
+///
+/// `Serialize` + `Deserialize` 양쪽 — write/read 가 *동일 schema* 통과 (P0 typed 검증):
+/// staging spec 의 누락 필드 / 오타 / 변조는 [`serde_json::from_slice`] 단계에서 거부.
+/// 더 이상 `serde_json::Value` + `unwrap_or_default()` path 0.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactSpec {
     /// PMTiles + flat tiles 의 R2 prefix (예: `gold/v3/parcels`).
     pub key_prefix: String,
@@ -117,18 +122,10 @@ pub async fn write_staging_spec(
     spec: &ArtifactSpec,
 ) -> Result<(), PromoteError> {
     let key = uploader.config().staging_spec_key(version, layer.layer_name());
-    // serde 친화적인 JSON 표현 — `ArtifactSpec` 의 필드 그대로.
-    let payload = serde_json::json!({
-        "key_prefix": spec.key_prefix,
-        "pmtiles_bytes": spec.pmtiles_bytes,
-        "pmtiles_sha256": spec.pmtiles_sha256,
-        "row_count": spec.row_count,
-        "flat_tile_count": spec.flat_tile_count,
-        "flat_tiles_total_bytes": spec.flat_tiles_total_bytes,
-        "lineage": spec.lineage,
-    });
+    // typed `ArtifactSpec` 그대로 직렬화 — read 측 `read_staging_artifact` 가
+    // 동일 schema 로 typed deserialize 하므로 누락/오타 자동 거부 (P0 typed gate).
     uploader
-        .put_object_json(&key, &payload, "no-cache, max-age=0")
+        .put_object_json(&key, spec, "no-cache, max-age=0")
         .await?;
     info!(key = %key, "staging spec written");
     Ok(())
@@ -137,6 +134,10 @@ pub async fn write_staging_spec(
 /// staging 에서 layer 의 spec 읽어 [`GoldArtifact`] 로 변환.
 ///
 /// 누락 시 [`PromoteError::MissingLineage`] — promote 가 atomic 보장 (한 layer 라도 빠지면 abort).
+///
+/// **P0 typed gate** (Codex Round 3 발견 fix): `serde_json::Value` + `unwrap_or_default()`
+/// 가 누락 필드를 0/empty 로 통과시키던 trick 제거. [`ArtifactSpec`] 으로 typed
+/// deserialize → 필드 부재 / 타입 오류 시 [`PromoteError::Json`] 으로 fail-fast.
 async fn read_staging_artifact(
     uploader: &R2Uploader,
     version: &Version,
@@ -152,28 +153,24 @@ async fn read_staging_artifact(
             layer: layer.layer_name().to_owned(),
             key,
         })?;
-    let raw: serde_json::Value = serde_json::from_slice(&bytes)?;
-
-    let lineage: BuildLineage = serde_json::from_value(raw["lineage"].clone())?;
+    // typed `ArtifactSpec` 으로 deserialize — 누락 필드는 serde_json 에러로 abort.
+    let spec: ArtifactSpec = serde_json::from_slice(&bytes)?;
     let (tile_min_zoom, tile_max_zoom) = layer.zoom_range();
     Ok(GoldArtifact {
-        key: raw["key_prefix"].as_str().unwrap_or_default().to_owned(),
+        key: spec.key_prefix,
         source_layer: layer.layer_name().to_owned(),
-        pmtiles_bytes: raw["pmtiles_bytes"].as_u64().unwrap_or(0),
-        pmtiles_sha256: raw["pmtiles_sha256"]
-            .as_str()
-            .unwrap_or_default()
-            .to_owned(),
-        built_at: lineage.built_at,
-        row_count: raw["row_count"].as_u64(),
-        flat_tile_count: raw["flat_tile_count"].as_u64().unwrap_or(0),
-        flat_tiles_total_bytes: raw["flat_tiles_total_bytes"].as_u64().unwrap_or(0),
+        pmtiles_bytes: spec.pmtiles_bytes,
+        pmtiles_sha256: spec.pmtiles_sha256,
+        built_at: spec.lineage.built_at,
+        row_count: spec.row_count,
+        flat_tile_count: spec.flat_tile_count,
+        flat_tiles_total_bytes: spec.flat_tiles_total_bytes,
         tile_min_zoom,
         tile_max_zoom,
         render_min_zoom: layer.render_min_zoom(),
         render_max_zoom: layer.render_max_zoom(),
         cache_max_age_seconds: layer.cache_max_age_seconds(),
-        lineage: Some(lineage),
+        lineage: Some(spec.lineage),
     })
 }
 
@@ -386,7 +383,93 @@ async fn cloudflare_purge(manifest_key: &str) -> Result<bool, PromoteError> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
+    use super::ArtifactSpec;
+
+    /// P0 typed gate (Codex Round 3 발견 fix): staging spec round-trip.
+    /// `write_staging_spec` 가 직렬화한 JSON 이 `ArtifactSpec` 으로 1:1 round-trip.
+    #[test]
+    fn artifact_spec_round_trips_typed() {
+        use super::BuildLineage;
+        use chrono::TimeZone;
+        let spec = ArtifactSpec {
+            key_prefix: "gold/v3/parcels".into(),
+            pmtiles_bytes: 1_234_567,
+            pmtiles_sha256: "abc123".into(),
+            row_count: Some(1_400_000_000),
+            flat_tile_count: 800_000,
+            flat_tiles_total_bytes: 8_000_000_000,
+            lineage: BuildLineage {
+                tippecanoe_version: "2.79.0".into(),
+                git_sha: "deadbeef".into(),
+                built_at: chrono::Utc.with_ymd_and_hms(2026, 5, 8, 12, 0, 0).unwrap(),
+                bronze_inputs: vec![],
+                source_srs: "EPSG:5186".into(),
+                layer_name: "parcels".into(),
+                build_environment: "dev".into(),
+            },
+        };
+        let json = serde_json::to_vec_pretty(&spec).expect("serialize");
+        let back: ArtifactSpec = serde_json::from_slice(&json).expect("deserialize");
+        assert_eq!(back.key_prefix, spec.key_prefix);
+        assert_eq!(back.pmtiles_bytes, spec.pmtiles_bytes);
+        assert_eq!(back.flat_tile_count, spec.flat_tile_count);
+        assert_eq!(back.row_count, spec.row_count);
+        assert_eq!(back.lineage.source_srs, "EPSG:5186");
+    }
+
+    /// P0 typed gate: 누락 필드는 `unwrap_or_default()` 로 통과 안 되고 거부됨.
+    /// `serde_json::Value` + `as_u64().unwrap_or(0)` 의 trick 이 이전엔 silent 0 으로 통과시킴.
+    #[test]
+    fn artifact_spec_rejects_missing_required_field() {
+        // `pmtiles_bytes` 누락 — 이전 path 에선 `unwrap_or(0)` 로 0 반환.
+        let bad_json = serde_json::json!({
+            "key_prefix": "gold/v3/parcels",
+            "pmtiles_sha256": "abc",
+            "row_count": null,
+            "flat_tile_count": 100,
+            "flat_tiles_total_bytes": 200,
+            "lineage": {
+                "tippecanoe_version": "2.79.0",
+                "git_sha": "x",
+                "built_at": "2026-05-08T00:00:00Z",
+                "bronze_inputs": [],
+                "source_srs": "EPSG:5186",
+                "layer_name": "parcels",
+                "build_environment": "dev"
+            }
+        });
+        let result: Result<ArtifactSpec, _> = serde_json::from_value(bad_json);
+        assert!(
+            result.is_err(),
+            "missing pmtiles_bytes must be rejected by serde, but got: {result:?}"
+        );
+    }
+
+    /// P0 typed gate: 잘못된 타입 (string vs u64) 도 거부.
+    #[test]
+    fn artifact_spec_rejects_wrong_type() {
+        let bad_json = serde_json::json!({
+            "key_prefix": "gold/v3/parcels",
+            "pmtiles_bytes": "not-a-number", // 잘못된 타입
+            "pmtiles_sha256": "abc",
+            "row_count": null,
+            "flat_tile_count": 100,
+            "flat_tiles_total_bytes": 200,
+            "lineage": {
+                "tippecanoe_version": "2.79.0",
+                "git_sha": "x",
+                "built_at": "2026-05-08T00:00:00Z",
+                "bronze_inputs": [],
+                "source_srs": "EPSG:5186",
+                "layer_name": "parcels",
+                "build_environment": "dev"
+            }
+        });
+        let result: Result<ArtifactSpec, _> = serde_json::from_value(bad_json);
+        assert!(result.is_err(), "wrong-type pmtiles_bytes must be rejected");
+    }
 
     #[test]
     fn staging_key_format() {

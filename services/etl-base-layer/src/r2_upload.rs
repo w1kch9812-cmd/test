@@ -178,6 +178,28 @@ pub enum UploadError {
     /// JSON 직렬화 실패.
     #[error("json serialize failed: {0}")]
     JsonSerialize(#[from] serde_json::Error),
+    /// `put_directory` 의 `concurrency` 인자가 0 — `buffer_unordered(0)` 은 stream 정지.
+    /// 호출자 정책 위반이라 컴파일 단계 차단보다 runtime fail-fast 선택.
+    #[error("put_directory concurrency must be ≥ 1, got 0")]
+    InvalidConcurrency,
+    /// `WalkDir` 가 디렉터리 traversal 중 I/O 에러 (권한 / broken symlink / readdir fail).
+    /// 이전 path 가 `filter_map(Result::ok)` 로 silent drop 하던 trick 제거.
+    #[error("walk dir {root} failed: {detail}")]
+    WalkDir {
+        /// traversal 시작 root.
+        root: String,
+        /// `walkdir::Error` 의 사람-가독 메시지 (path + os error).
+        detail: String,
+    },
+    /// `WalkDir` 가 발견한 파일을 `local_root` 의 *상대* 경로로 변환 못 함 (drive 차이 등).
+    /// 이전 path 가 `unwrap_or(&abs)` 로 절대경로 키를 silent 생성하던 trick 제거.
+    #[error("strip_prefix failed for {path} (root: {root})")]
+    StripPrefix {
+        /// 문제의 절대 경로.
+        path: String,
+        /// traversal root.
+        root: String,
+    },
     /// Circuit breaker 차단 / max-retries exceeded / timeout.
     #[error("breaker [{op}]: {detail}")]
     Breaker {
@@ -400,23 +422,40 @@ impl R2Uploader {
         key_prefix: &str,
         concurrency: usize,
     ) -> Result<DirectoryUploadResult, UploadError> {
+        // P0 (Codex Round 3): `buffer_unordered(0)` 은 stream 영구 pending — 빌드는 통과하지만
+        // 모든 PUT 이 stuck. fail-fast.
+        if concurrency == 0 {
+            return Err(UploadError::InvalidConcurrency);
+        }
         let key_prefix = key_prefix.trim_end_matches('/').to_owned();
-        let entries: Vec<(std::path::PathBuf, String)> = WalkDir::new(local_root)
-            .into_iter()
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().is_file())
-            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("pbf"))
-            .map(|e| {
-                let abs = e.path().to_path_buf();
-                let rel = abs
-                    .strip_prefix(local_root)
-                    .unwrap_or(&abs)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let key = format!("{key_prefix}/{rel}");
-                (abs, key)
-            })
-            .collect();
+        // P0 (Codex Round 3): WalkDir 의 I/O 에러를 silent drop 하지 않음. 권한 / broken
+        // symlink / readdir fail 모두 첫 에러에서 즉시 abort — partial upload 차단.
+        let mut entries: Vec<(std::path::PathBuf, String)> = Vec::new();
+        for entry_result in WalkDir::new(local_root) {
+            let entry = entry_result.map_err(|e| UploadError::WalkDir {
+                root: local_root.display().to_string(),
+                detail: e.to_string(),
+            })?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            if entry.path().extension().and_then(|x| x.to_str()) != Some("pbf") {
+                continue;
+            }
+            let abs = entry.path().to_path_buf();
+            // strip_prefix 실패 = local_root 와 entry 의 drive/UNC mismatch — silent 절대
+            // 경로 key 생성 trick 제거. 명시적 에러로 fail-fast.
+            let rel = abs
+                .strip_prefix(local_root)
+                .map_err(|_| UploadError::StripPrefix {
+                    path: abs.display().to_string(),
+                    root: local_root.display().to_string(),
+                })?
+                .to_string_lossy()
+                .replace('\\', "/");
+            let key = format!("{key_prefix}/{rel}");
+            entries.push((abs, key));
+        }
 
         info!(count = entries.len(), concurrency, "starting batch upload");
 
@@ -937,6 +976,21 @@ mod tests {
             .expect("upload");
 
         // wiremock 의 `expect(1)` 가 drop 시 검증 → 통과하면 PUT 1회 받음.
+    }
+
+    /// P0 (Codex Round 3): `concurrency: 0` 은 fail-fast — `buffer_unordered(0)`
+    /// 가 stream 정지 시키는 silent failure 차단.
+    #[tokio::test]
+    async fn put_directory_rejects_zero_concurrency() {
+        let server = MockServer::start().await;
+        let cfg = test_config("test-bucket");
+        let uploader = R2Uploader::with_endpoint_override(cfg, server.uri());
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let err = uploader
+            .put_directory(tmp.path(), "gold/v1/parcels", 0)
+            .await
+            .expect_err("concurrency=0 must reject");
+        assert!(matches!(err, UploadError::InvalidConcurrency));
     }
 
     /// 회귀 테스트 — Codex stop-time review 발견 (Round 2 hotfix):
