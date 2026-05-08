@@ -118,11 +118,9 @@ fn parse_items(raw: &Value) -> Result<Vec<BuildingItem>, BuildingRegisterError> 
 }
 
 fn parse_single_item(item: &Value) -> Result<BuildingItem, BuildingRegisterError> {
-    let mgm_bldrgst_pk = item
-        .get("mgmBldrgstPk")
-        .and_then(Value::as_str)
-        .ok_or("item.mgmBldrgstPk missing")?
-        .to_owned();
+    // mgmBldrgstPk: 실 응답은 JSON number (예: 1024112777), docs 의 "String 으로 받아라"
+    // 가이드와 다름. fixture (`tests/fixtures/live_*.json`) 검증. number / string 모두 처리.
+    let mgm_bldrgst_pk = parse_id_as_string(item, "mgmBldrgstPk")?;
     let bldg_nm = item
         .get("bldNm")
         .and_then(Value::as_str)
@@ -133,12 +131,9 @@ fn parse_single_item(item: &Value) -> Result<BuildingItem, BuildingRegisterError
         .and_then(Value::as_str)
         .ok_or("item.mainPurpsCdNm missing")?
         .to_owned();
-    let tot_area = item
-        .get("totArea")
-        .and_then(Value::as_str)
-        .ok_or("item.totArea missing")?
-        .parse::<f64>()
-        .map_err(|e| format!("totArea parse: {e}"))?;
+    // totArea: 실 응답은 JSON number (예: 212615.29), 일부 endpoint 는 string 으로 wrap.
+    // 둘 다 처리 — 라이브 fixture (`live_2026-05-08_*.json`) 검증.
+    let tot_area = parse_f64_field(item, "totArea")?;
     // useAprDay = `YYYYMMDD` 8자리. 빈 문자열 / 길이 불일치 → None.
     let use_apr_day = item
         .get("useAprDay")
@@ -156,9 +151,44 @@ fn parse_single_item(item: &Value) -> Result<BuildingItem, BuildingRegisterError
     })
 }
 
+/// 정부 API 가 ID 필드를 number 또는 string 둘 다 보내는 케이스 처리.
+///
+/// data.go.kr 의 `mgmBldrgstPk` 가 실 응답에서 JSON number (예: `1024112777`) 로 오는데
+/// docs 가이드는 "String 으로 저장" 이라 두 형식 모두 수용. boolean / null / array 는 거부.
+fn parse_id_as_string(item: &Value, field: &str) -> Result<String, BuildingRegisterError> {
+    match item.get(field) {
+        Some(Value::String(s)) => Ok(s.trim().to_owned()),
+        Some(Value::Number(n)) => Ok(n.to_string()),
+        Some(other) => Err(format!("item.{field} unexpected type: {other:?}").into()),
+        None => Err(format!("item.{field} missing").into()),
+    }
+}
+
+/// 정부 API 가 숫자 필드를 number 또는 string 둘 다 보내는 케이스 처리.
+///
+/// data.go.kr 의 `totArea`/`platArea`/`bcRat`/`vlRat`/`heit` 등 모든 수치 필드는
+/// 응답마다 number / string 변동. 빈 문자열 → "missing".
+fn parse_f64_field(item: &Value, field: &str) -> Result<f64, BuildingRegisterError> {
+    match item.get(field) {
+        Some(Value::Number(n)) => n
+            .as_f64()
+            .ok_or_else(|| format!("item.{field} not f64-representable").into()),
+        Some(Value::String(s)) => {
+            let t = s.trim();
+            if t.is_empty() {
+                return Err(format!("item.{field} missing (empty string)").into());
+            }
+            t.parse::<f64>()
+                .map_err(|e| format!("item.{field} parse: {e}").into())
+        }
+        Some(other) => Err(format!("item.{field} unexpected type: {other:?}").into()),
+        None => Err(format!("item.{field} missing").into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
     use super::*;
 
@@ -222,6 +252,51 @@ mod tests {
         });
         let items = parse_items(&raw).expect("parse ok");
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn parse_items_handles_number_mgm_bldrgst_pk() {
+        // 실 API 응답 검증 (2026-05-08 강남구 역삼동 737 호출 결과).
+        // mgmBldrgstPk 가 JSON number 로 옴 — `Value::as_str` 만 쓰면 None 으로 떨어져 502 발생.
+        let raw = ok_response(&serde_json::json!({
+            "mgmBldrgstPk": 1_024_112_777_i64,
+            "bldNm": "강남파이낸스센터",
+            "mainPurpsCdNm": "업무시설",
+            "totArea": 212_615.29,
+            "useAprDay": "20010731"
+        }));
+        let items = parse_items(&raw).expect("parse ok");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].mgm_bldrgst_pk, "1024112777");
+        assert!((items[0].tot_area - 212_615.29).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn parse_items_handles_live_fixture() {
+        // 2026-05-08 라이브 호출 fixture — 정부 API 가 *지금* 실제로 보내는 응답.
+        // schema drift 발생 시 본 테스트가 가장 먼저 깨짐.
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("crates/data-clients/data-go-kr/tests/fixtures/live_2026-05-08_gangnam_yeoksam_737.json");
+        let raw_str = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read fixture {}: {}", path.display(), e));
+        let raw: Value = serde_json::from_str(&raw_str).expect("valid JSON");
+        let items = parse_items(&raw).expect("parse live fixture");
+        assert_eq!(items.len(), 1);
+        // 실 PK number → string conversion 검증.
+        assert_eq!(items[0].mgm_bldrgst_pk, "1024112777");
+        // totArea = 212615.29 (대형 건물).
+        assert!(items[0].tot_area > 200_000.0);
+    }
+
+    #[test]
+    fn parse_id_as_string_rejects_invalid_types() {
+        let item = serde_json::json!({"a": true, "b": null, "c": []});
+        assert!(parse_id_as_string(&item, "a").is_err());
+        assert!(parse_id_as_string(&item, "b").is_err());
+        assert!(parse_id_as_string(&item, "c").is_err());
+        assert!(parse_id_as_string(&item, "missing").is_err());
     }
 
     #[test]
