@@ -20,6 +20,7 @@ use std::path::Path;
 use thiserror::Error;
 use tracing::{info, instrument};
 
+use sp9_base_layer_config::Layer as Sp9Layer;
 use super::spawn::{build_command, Arg, Host, SpawnError};
 
 /// tippecanoe 빌드 한 번 = 한 layer.
@@ -34,7 +35,23 @@ pub enum LayerKind {
 }
 
 impl LayerKind {
-    /// 모든 variant — manifest 박제 시 iterate (multi-layer build orchestration).
+    /// 모든 variant — `sp9_base_layer_config::Layer::ALL` 로부터 derive.
+    /// **SSOT**: 새 layer 추가 시 `sp9_base_layer_config::Layer` 에만 추가하면 됨.
+    /// `Layer::ALL` 과 `LayerKind::ALL` 의 수동 미러링 제거 (P0.1).
+    #[allow(dead_code)]
+    pub fn all() -> impl Iterator<Item = Self> {
+        Sp9Layer::ALL.iter().map(|l| Self::from(*l))
+    }
+
+    /// 모든 variant 의 owned vec (iterate + collect 가 필요한 곳에서).
+    #[must_use]
+    #[allow(dead_code)]
+    pub fn all_vec() -> Vec<Self> {
+        Self::all().collect()
+    }
+
+    /// `&'static [Self]` 가 필요한 곳 — promote subcommand 의 `&[LayerKind]` 인자.
+    /// `const` 로 유지하되 `Layer::ALL` variant 순서와 동기화 보장.
     #[allow(dead_code)]
     pub const ALL: &'static [Self] = &[Self::Parcels, Self::Admin, Self::Complex];
 
@@ -93,6 +110,17 @@ impl LayerKind {
         31_536_000
     }
 }
+/// SSOT 브리지 — `sp9_base_layer_config::Layer` → `LayerKind` 자동 변환.
+/// `Layer::ALL` 이 추가되면 컴파일러가 이 match 에서 누락 variant 를 차단.
+impl From<Sp9Layer> for LayerKind {
+    fn from(l: Sp9Layer) -> Self {
+        match l {
+            Sp9Layer::Parcels => Self::Parcels,
+            Sp9Layer::Admin => Self::Admin,
+            Sp9Layer::Complex => Self::Complex,
+        }
+    }
+}
 
 /// tippecanoe 실행 설정.
 #[derive(Debug, Clone)]
@@ -110,6 +138,9 @@ pub struct TippecanoeArgs<'a> {
 pub struct TippecanoeResult {
     /// 출력 파일 크기 (bytes) — sanity 검증 (너무 작거나 크면 실패).
     pub output_bytes: u64,
+    /// tippecanoe 가 `--metadata-json` 에 박제한 실제 feature 수.
+    /// tippecanoe 버전이 해당 필드를 지원하지 않으면 `None`.
+    pub feature_count: Option<u64>,
 }
 
 /// tippecanoe 에러.
@@ -226,6 +257,13 @@ pub async fn run(
         "tippecanoe starting"
     );
 
+    // --metadata-json: tippecanoe 가 빌드 메타(feature_count 포함) 를 별도 파일로 박제.
+    // 임시 파일로 받아 feature_count 추출 후 삭제. 실패해도 빌드 자체는 계속.
+    let metadata_file = args.output.with_extension("tippecanoe-meta.json");
+    spawn_args.push(Arg::Lit("--metadata-json"));
+    // metadata_file_str 은 String 이라 Arg::Lit lifetime 불일치 — Arg::Path 사용.
+    spawn_args.push(Arg::Path(&metadata_file));
+
     let mut cmd = build_command(host, "tippecanoe", &spawn_args)?;
     let output = cmd.output().await?;
 
@@ -252,8 +290,39 @@ pub async fn run(
             })?;
     let output_bytes = meta.len();
 
-    info!(bytes = output_bytes, "tippecanoe complete");
-    Ok(TippecanoeResult { output_bytes })
+    // --metadata-json 에서 feature_count 추출 (실패해도 빌드 성공 — best-effort).
+    let feature_count = extract_feature_count(&metadata_file).await;
+    // 임시 메타파일 정리 — 실패해도 무시 (best-effort cleanup).
+    let _ = tokio::fs::remove_file(&metadata_file).await;
+
+    info!(bytes = output_bytes, ?feature_count, "tippecanoe complete");
+    Ok(TippecanoeResult { output_bytes, feature_count })
+}
+
+/// `--metadata-json` 파일에서 feature count 를 읽어 반환.
+/// tippecanoe 가 `{"layers":[{"features": N}]}` 형태로 박제. 필드 부재 / 파싱 실패 = `None`.
+async fn extract_feature_count(metadata_file: &std::path::Path) -> Option<u64> {
+    let bytes = tokio::fs::read(metadata_file).await.ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
+    // tippecanoe metadata schema: top-level `"features"` 또는 `"layers"[0]["features"]`.
+    if let Some(n) = v.get("features").and_then(serde_json::Value::as_u64) {
+        return Some(n);
+    }
+    // 일부 버전: `"vector_layers"` or `"tilestats" -> "layers"[0]["count"]`.
+    if let Some(layers) = v
+        .get("tilestats")
+        .and_then(|ts| ts.get("layers"))
+        .and_then(|l| l.as_array())
+    {
+        let total: u64 = layers
+            .iter()
+            .filter_map(|layer| layer.get("count").and_then(serde_json::Value::as_u64))
+            .sum();
+        if total > 0 {
+            return Some(total);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

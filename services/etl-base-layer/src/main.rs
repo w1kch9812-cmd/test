@@ -34,6 +34,7 @@
 
 mod bronze;
 mod config;
+mod error;
 mod gold;
 mod manifest;
 mod r2_upload;
@@ -47,6 +48,7 @@ use tracing_subscriber::EnvFilter;
 
 use crate::bronze::dtmk::{self, DtmkFetchArgs};
 use crate::config::Config;
+use crate::error::{PrepareError, UploadStepError, VerifyStepError};
 use crate::gold::build::{build_layer, BuildResult};
 use crate::gold::manifest::{BronzeInput, BuildLineage};
 use crate::gold::promote::{self, ArtifactSpec, PromoteArgs};
@@ -407,14 +409,12 @@ async fn prepare_dtmk_inputs(
     host: Host,
     opts: &GoldOpts,
     bronze_prefix: &str,
-) -> Result<(Vec<PathBuf>, Vec<BronzeInput>), Box<dyn std::error::Error>> {
+) -> Result<(Vec<PathBuf>, Vec<BronzeInput>), PrepareError> {
     let cfg = Config::from_env();
     let r2_cfg = cfg
         .r2
         .clone()
-        .ok_or_else(|| -> Box<dyn std::error::Error> {
-            "R2 credentials not configured — set R2_ACCOUNT_ID/R2_ACCESS_KEY/R2_SECRET_KEY/R2_BUCKET".into()
-        })?;
+.ok_or(PrepareError::R2NotConfigured)?;
     let uploader = R2Uploader::new(r2_cfg);
 
     let work_dir = opts.work_dir.clone().unwrap_or_else(|| {
@@ -457,17 +457,20 @@ async fn prepare_dtmk_inputs(
     // ogr2ogr 사전 체크.
     match shp_to_geojson::check_available(host).await {
         Ok(v) => info!(version = %v, "ogr2ogr available"),
-        Err(e) => return Err(format!("ogr2ogr not available: {e}").into()),
+        Err(e) => return Err(PrepareError::Ogr2OgrUnavailable(format!("{e}"))),
     }
 
     let geojson_dir = work_dir.join("geojson");
-    tokio::fs::create_dir_all(&geojson_dir).await?;
+    tokio::fs::create_dir_all(&geojson_dir).await.map_err(|source| PrepareError::Io {
+        path: geojson_dir.display().to_string(),
+        source,
+    })?;
 
     // ogr2ogr 동시 — 시군구 별 1 spawn. 디스크 + CPU 부담 → concurrency cap.
     let mut tasks: Vec<tokio::task::JoinHandle<Result<PathBuf, String>>> = Vec::new();
     let semaphore = Arc::new(tokio::sync::Semaphore::new(opts.concurrency.max(1)));
     for arch in fetched.archives {
-        let permit = Arc::clone(&semaphore).acquire_owned().await?;
+        let permit = Arc::clone(&semaphore).acquire_owned().await.map_err(|_| PrepareError::SemaphoreClosed)?;
         let geojson_dir = geojson_dir.clone();
         let source_srs = opts.source_srs.clone();
         let host_c = host;
@@ -501,7 +504,7 @@ async fn prepare_dtmk_inputs(
 
     let mut geojsons: Vec<PathBuf> = Vec::with_capacity(tasks.len());
     for t in tasks {
-        let p = t.await??;
+        let p = t.await?.map_err(PrepareError::ShpConversion)?;
         geojsons.push(p);
     }
     geojsons.sort();
@@ -602,7 +605,7 @@ async fn run_verify(
     host: Host,
     build: &BuildResult,
     layer: LayerKind,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), VerifyStepError> {
     if std::env::var("VERIFY_DISABLE").ok().as_deref() == Some("1") {
         warn!("VERIFY_DISABLE=1 — verification skipped (dev / micro-fixture only)");
         return Ok(());
@@ -676,7 +679,7 @@ async fn upload_gold_to_r2(
     build: &BuildResult,
     bronze_inputs: Vec<BronzeInput>,
     source_srs: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), UploadStepError> {
     let uploader = R2Uploader::new(r2_cfg.clone());
     let key_prefix = format!("{}/{}/{}", r2_cfg.gold_prefix, version, layer.layer_name());
     info!(version, layer = %layer.layer_name(), key_prefix = %key_prefix, "R2 batch upload start");
@@ -708,7 +711,7 @@ async fn upload_gold_to_r2(
         key_prefix: key_prefix.clone(),
         pmtiles_bytes: build.output_bytes,
         pmtiles_sha256: sha256,
-        row_count: 0, // tippecanoe metadata 의 feature 수 — 후속 commit (extract from --metadata).
+        row_count: build.feature_count, // tippecanoe --metadata-json 에서 추출 (P0.3).
         flat_tile_count: build.flat_tile_count,
         flat_tiles_total_bytes: build.flat_tiles_total_bytes,
         lineage,
@@ -718,7 +721,12 @@ async fn upload_gold_to_r2(
 
     // TileJSON 은 layer 단위 self-describe — promote 와 무관하게 layer 빌드 직후 publish OK
     // (URL 안 version 이 박혀있어 client 가 overwrite 안 됨).
-    let tilejson = build_tilejson(r2_cfg, version, layer);
+    // P0.2: R2_PUBLIC_URL_BASE 미설정 시 fail-fast — placeholder URL 절대 발행 금지.
+    let public_url_base = std::env::var("R2_PUBLIC_URL_BASE")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .ok_or(UploadStepError::PublicUrlMissing)?;
+    let tilejson = build_tilejson(r2_cfg, version, layer, &public_url_base);
     let tilejson_key = format!(
         "{}/{}/{}.json",
         r2_cfg.gold_prefix,
@@ -737,11 +745,10 @@ fn build_tilejson(
     r2_cfg: &crate::r2_upload::R2Config,
     version: &str,
     layer: LayerKind,
+    public_base: &str,
 ) -> serde_json::Value {
-    let public_base = std::env::var("R2_PUBLIC_URL_BASE")
-        .unwrap_or_else(|_| "https://<r2-public-host>/".to_owned());
-    let base = if public_base.ends_with('/') {
-        public_base
+    let base: String = if public_base.ends_with('/') {
+        public_base.to_owned()
     } else {
         format!("{public_base}/")
     };

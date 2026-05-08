@@ -82,8 +82,8 @@ pub struct ArtifactSpec {
     pub pmtiles_bytes: u64,
     /// PMTiles SHA-256.
     pub pmtiles_sha256: String,
-    /// 빌드 결과의 feature 수 (legacy 0 가능).
-    pub row_count: u64,
+    /// 빌드 결과의 feature 수. `None` = tippecanoe metadata 미지원/파싱 실패.
+    pub row_count: Option<u64>,
     /// flat tile 개수.
     pub flat_tile_count: u64,
     /// flat tile 합계 bytes.
@@ -164,7 +164,7 @@ async fn read_staging_artifact(
             .unwrap_or_default()
             .to_owned(),
         built_at: lineage.built_at,
-        row_count: raw["row_count"].as_u64().unwrap_or(0),
+        row_count: raw["row_count"].as_u64(),
         flat_tile_count: raw["flat_tile_count"].as_u64().unwrap_or(0),
         flat_tiles_total_bytes: raw["flat_tiles_total_bytes"].as_u64().unwrap_or(0),
         tile_min_zoom,

@@ -32,6 +32,9 @@ pub struct BuildResult {
     pub flat_tile_count: u64,
     /// .pbf 파일 총 bytes.
     pub flat_tiles_total_bytes: u64,
+    /// tippecanoe `--metadata-json` 에서 추출한 실제 feature 수.
+    /// tippecanoe 가 메타를 지원하지 않거나 파싱 실패 시 `None` (honest absence > fake zero).
+    pub feature_count: Option<u64>,
 }
 
 /// Gold 빌드 에러.
@@ -112,6 +115,7 @@ pub async fn build_layer(
         flat_tiles_dir = %flat_tiles_dir.display(),
         flat_tile_count = decomposed.tile_count,
         flat_tiles_total_bytes = decomposed.total_bytes,
+        feature_count = ?result.feature_count,
         "Gold layer build complete (PMTiles + flat tiles)"
     );
 
@@ -121,6 +125,7 @@ pub async fn build_layer(
         flat_tiles_dir,
         flat_tile_count: decomposed.tile_count,
         flat_tiles_total_bytes: decomposed.total_bytes,
+        feature_count: result.feature_count,
     })
 }
 

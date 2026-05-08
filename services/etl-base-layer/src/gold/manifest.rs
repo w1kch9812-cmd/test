@@ -77,7 +77,9 @@ pub struct GoldArtifact {
     /// 빌드 완료 시각 (UTC).
     pub built_at: DateTime<Utc>,
     /// feature 행 수 — `row_count_delta_pct < 5%` smoke 검증 기준.
-    pub row_count: u64,
+    /// `None` = tippecanoe metadata 미지원 또는 파싱 실패 (honest absence, 0 과 다름).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_count: Option<u64>,
     /// ADR 0021 — flat tile (.pbf) 개수.
     pub flat_tile_count: u64,
     /// ADR 0021 — flat tile 합계 bytes.
@@ -178,7 +180,7 @@ mod tests {
             pmtiles_bytes: 1_234,
             pmtiles_sha256: "abc".into(),
             built_at: Utc.with_ymd_and_hms(2026, 5, 6, 10, 0, 0).unwrap(),
-            row_count: 1_400_000_000,
+            row_count: Some(1_400_000_000),
             flat_tile_count: 800_000,
             flat_tiles_total_bytes: 8_000_000_000,
             tile_min_zoom: 14,

@@ -130,6 +130,7 @@ dependencies = [
  "axum",
  "bookmark-domain",
  "chrono",
+ "data-go-kr-client",
  "db",
  "deadpool-redis",
  "listing-domain",
