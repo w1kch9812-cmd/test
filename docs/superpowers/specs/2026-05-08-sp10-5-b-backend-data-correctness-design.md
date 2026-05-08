@@ -224,15 +224,28 @@ Denylist 방식은 신규 필드 추가 시 PII 누출을 막지 못한다. Allo
 
 ### 5.3 vworld_parcel Allowlist
 
-| 경로 | 내용 |
-|---|---|
-| /response/result/featureCollection/features/*/geometry | 지적 폴리곤 좌표 (EPSG:4326) |
-| /response/result/featureCollection/features/*/properties/pnu | 필지 고유번호 |
-| /response/result/featureCollection/features/*/properties/jibun | 지번 |
-| /response/result/featureCollection/features/*/properties/bchk | 본번/부번 구분 |
-| /response/result/featureCollection/features/*/properties/addr | 도로명주소 |
+근거 SSOT: [docs/data-sources/v-world.md](../../data-sources/v-world.md) 의 `LP_PA_CBND_BUBUN` properties 표 + 실 fixture [real_parcel_boundary_gangnam_yeoksam_737.json](../../../crates/data-clients/vworld/tests/fixtures/real_parcel_boundary_gangnam_yeoksam_737.json). 공시지가 (`jiga`) 는 PIPA 상 *공개 행정정보* (개인정보 아님) 이며 패널 핵심 표시 필드 → allowlist 포함.
 
-허용 경로 외 모든 필드는 동일하게 폐기된다.
+| 경로 | 내용 | 매핑 |
+|---|---|---|
+| /response/result/featureCollection/features/*/geometry | 지적 폴리곤 좌표 (EPSG:4326) | `Parcel.geom: MultiPolygonSrid` |
+| /response/result/featureCollection/features/*/properties/pnu | 필지 고유번호 (19자리) | `Parcel.pnu` |
+| /response/result/featureCollection/features/*/properties/jibun | 지번 ("737 대" 형식) | `Parcel.jibun_address` + `Parcel.land_use_type` |
+| /response/result/featureCollection/features/*/properties/bonbun | 본번 (4자리) | (예비; 향후 사용) |
+| /response/result/featureCollection/features/*/properties/bubun | 부번 (4자리) | (예비; 향후 사용) |
+| /response/result/featureCollection/features/*/properties/addr | 풀주소 (지번주소) | `Parcel.jibun_address` (우선) |
+| /response/result/featureCollection/features/*/properties/jiga | 공시지가 (₩/m²) | `Parcel.official_land_price_per_m2` |
+| /response/result/featureCollection/features/*/properties/gosi_year | 공시 연도 | `Parcel.gosi_year_month` |
+| /response/result/featureCollection/features/*/properties/gosi_month | 공시 월 | `Parcel.gosi_year_month` |
+| /response/service/* | service 메타 (operation, version, time) | drift 진단 |
+| /response/status | OK / NOT_FOUND / ERROR envelope | status 분기 |
+| /response/error/* | code / text (ERROR 케이스) | `ParseError::VWorldApi` 매핑 |
+| /response/record/* | total / current | pagination 진단 |
+| /response/page/* | total / current / size | pagination 진단 |
+
+**비허용 (자동 폐기)**: spec/fixture 에 등장하지 않는 모든 추가 필드. V-World provider 가 future schema 확장 시 schema_hash drift alert (§8.3) 가 P2/P1 로 발화 → ADR 후 allowlist 갱신.
+
+이전 v3 의 `bchk` 항목은 V-World 응답에 *존재하지 않는 필드* — fixture/docs 와 mismatch 였으므로 v4 에서 제거. `bonbun + bubun` 으로 대체.
 
 ### 5.4 Schema Hash
 
@@ -367,10 +380,16 @@ Query: purpose=incident_investigation|drift_diagnosis|customer_request
 
 ### 7.1 Source 별 TTL
 
+근거 SSOT: [docs/data-sources/data-go-kr.md](../../data-sources/data-go-kr.md) 의 "캐시 정책" 표 + V-World 운영 정책. raw_response 의 `expires_at` 은 *cache hit TTL* 과 동일 의미로 사용 — 만료 후 재호출/재정제 가 cleanup task 트리거.
+
 | source | TTL | 근거 |
 |---|---|---|
-| data_go_kr_building | 90일 | 건축물대장 변동 빈도 낮음, API 갱신 주기 반영 |
-| vworld_parcel | 30일 | 지적 변경 빈도 낮으나 공공 갱신 주기 고려 |
+| data_go_kr_building | 30일 | docs/data-sources/data-go-kr.md:60 ("건축물대장 변동 빈도 낮음") SSOT 일치 |
+| data_go_kr_land | 30일 | docs/data-sources/data-go-kr.md:61 — 토지대장 동일 정책 (FU; v1 미사용) |
+| vworld_parcel | 30일 | V-World 캐시 운영 정책 (Redis 24h cache + raw 30일 retention 분리; raw 는 audit/재현) |
+| korean_law | 90일 | 법령 변동 빈도 낮음 (FU; v1 미사용) |
+
+**raw vs cache 분리**: PIPA 21조 "보유 기간" 관점에서 raw_response 의 `expires_at` 은 *목적 달성 후 파기* 기준. 패널 표시 + drift 진단 목적에 30일 충분. 이전 v3 의 90일은 docs SSOT 와 mismatch → v4 에서 30일로 정합.
 
 ### 7.2 NOT NULL CHECK 제약 (ADR 0026)
 
