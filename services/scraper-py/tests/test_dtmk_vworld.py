@@ -20,6 +20,7 @@ from botocore.exceptions import (
     EndpointConnectionError,
     ReadTimeoutError,
 )
+from curl_cffi.requests import exceptions as cffi_exc
 
 # parent dir import — pyproject 의 packaging 미설정이라 path 주입.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -242,3 +243,72 @@ def test_r2_put_with_retry_exhausts_on_persistent_transport_failure() -> None:
             content_type="text/plain",
         )
     assert r2.put_object.call_count == 3
+
+
+# Round 4 #3 + #4 — `is_transient_for_retry` 회귀 (V-World cffi.HTTPError 4xx vs 5xx
+# + connection-level transport + R2 ClientError + transport_exception_types_main).
+
+def test_is_transient_cffi_http_4xx_returns_false() -> None:
+    """V-World 4xx (인증 만료 / dataset 부재) — 즉시 raise, retry 무의미."""
+    response = MagicMock()
+    response.status_code = 401
+    err = cffi_exc.HTTPError("unauthorized")
+    err.response = response
+    assert not dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_cffi_http_5xx_returns_true() -> None:
+    """V-World 5xx (server fault) — retry 대상."""
+    response = MagicMock()
+    response.status_code = 502
+    err = cffi_exc.HTTPError("bad gateway")
+    err.response = response
+    assert dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_cffi_no_response_returns_true() -> None:
+    """response 박제 0 = connection-level fail = retry."""
+    err = cffi_exc.HTTPError("no response")
+    assert dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_cffi_connection_error_returns_true() -> None:
+    """V-World cffi.ConnectionError — TCP 단계 fail, retry."""
+    err = cffi_exc.ConnectionError("tcp reset")
+    assert dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_botocore_5xx_returns_true() -> None:
+    """ClientError 5xx — retry."""
+    err = ClientError(
+        {"Error": {"Code": "InternalError"},
+         "ResponseMetadata": {"HTTPStatusCode": 500}},
+        "PutObject",
+    )
+    assert dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_botocore_4xx_returns_false() -> None:
+    """ClientError 4xx (AccessDenied) — immediate raise."""
+    err = ClientError(
+        {"Error": {"Code": "AccessDenied"},
+         "ResponseMetadata": {"HTTPStatusCode": 403}},
+        "PutObject",
+    )
+    assert not dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_botocore_throttling_returns_true() -> None:
+    """ClientError Throttling — retry (rate limit, 백오프 후 OK)."""
+    err = ClientError(
+        {"Error": {"Code": "Throttling"},
+         "ResponseMetadata": {"HTTPStatusCode": 429}},
+        "PutObject",
+    )
+    assert dtmk_vworld.is_transient_for_retry(err)
+
+
+def test_is_transient_unknown_exception_returns_false() -> None:
+    """예상 못 한 exception (programming error) — retry 안 함."""
+    assert not dtmk_vworld.is_transient_for_retry(ValueError("unexpected"))
+    assert not dtmk_vworld.is_transient_for_retry(KeyError("missing"))

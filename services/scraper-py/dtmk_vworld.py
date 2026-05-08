@@ -38,11 +38,11 @@ from botocore.exceptions import (
     SSLError,
 )
 from curl_cffi import requests as cffi
+from curl_cffi.requests import exceptions as cffi_exc
 from tenacity import (
     RetryError,
     Retrying,
     retry_if_exception,
-    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -122,7 +122,7 @@ def make_session() -> cffi.Session:
     return cffi.Session(impersonate="chrome120")
 
 
-# Module-level — `r2_put_with_retry` 와 caller 양쪽에서 공통 사용.
+# Module-level — `r2_put_with_retry` / `upload_one` / V-World 호출 모두 공유.
 # Transport-level transient = TCP / TLS / DNS 단계 실패. boto3 standard retry 가 일부
 # 커버하지만 우리 측 wrap 으로 추가 안전망 (특히 audit 같은 invariant path).
 transport_exception_types_main: tuple[type[Exception], ...] = (
@@ -133,18 +133,82 @@ transport_exception_types_main: tuple[type[Exception], ...] = (
     SSLError,
 )
 
+# R2 의 transient HTTP error code 화이트리스트. 4xx (AccessDenied / NoSuchBucket /
+# 잘못된 key) 는 retry 무의미 → immediate raise.
+R2_TRANSIENT_HTTP_CODES = frozenset(
+    {"InternalError", "ServiceUnavailable", "SlowDown", "Throttling"}
+)
+# 5xx 범위 (server fault) 는 무조건 transient.
+HTTP_5XX_MIN = 500
+HTTP_5XX_MAX = 600
+
+
+def is_transient_for_retry(exc: BaseException) -> bool:  # noqa: PLR0911
+    """Round 4 #3 + #4 — V-World HTTP / R2 PUT / R2 GET 모두 공유하는 retry predicate.
+
+    분류:
+    1. **Transport-level** (TCP / TLS / DNS): 무조건 retry.
+       - `transport_exception_types_main` (botocore BotoCoreError 서브클래스 + cffi
+         의 ConnectionError / Timeout 같은 connection 단계 예외)
+       - stdlib `ConnectionError` / `TimeoutError` (Python 표준)
+    2. **HTTP-level**:
+       - `cffi.HTTPError` (V-World raise_for_status): 4xx 즉시 raise (인증 만료 / 잘못된
+         endpoint), 5xx 만 retry. response.status_code 로 분류.
+       - `botocore.ClientError` (R2): 5xx / `R2_TRANSIENT_HTTP_CODES` 만 retry.
+    3. 그 외 모든 예외 = retry 안 함 (programming error / unknown).
+
+    이전 (Round 3) `retry_if_exception_type((cffi.RequestsError, ...))` 는 4xx HTTP
+    error 도 retry 대상에 포함시키는 trick — Round 4 #3 fix.
+    """
+    # (1a) cffi 의 connection 단계 transient (RequestsError 의 자손인 ConnectionError /
+    #      Timeout / DNSError / SSLError) — handshake / read 단계 fail.
+    cffi_transport = (
+        cffi_exc.ConnectionError,
+        cffi_exc.Timeout,
+        cffi_exc.DNSError,
+        cffi_exc.SSLError,
+        cffi_exc.ChunkedEncodingError,
+        cffi_exc.ContentDecodingError,
+        cffi_exc.IncompleteRead,
+    )
+    if isinstance(exc, cffi_transport):
+        return True
+    # (1b) botocore transport-level — 무조건 retry.
+    if isinstance(exc, transport_exception_types_main):
+        return True
+    # (1c) stdlib transport-level.
+    if isinstance(exc, (ConnectionError, TimeoutError)):
+        return True
+    # (2a) cffi.HTTPError — raise_for_status 가 raise, response.status_code 로 분류.
+    if isinstance(exc, cffi_exc.HTTPError):
+        response = getattr(exc, "response", None)
+        if response is None:
+            # response 박제 안 됐으면 connection-level fail 로 간주 → retry.
+            return True
+        status = getattr(response, "status_code", None)
+        if status is None:
+            return True
+        return HTTP_5XX_MIN <= int(status) < HTTP_5XX_MAX
+    # (2b) ClientError — 5xx / Throttling 만 retry.
+    if isinstance(exc, ClientError):
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+        if code in R2_TRANSIENT_HTTP_CODES:
+            return True
+        return isinstance(status, int) and HTTP_5XX_MIN <= status < HTTP_5XX_MAX
+    return False
+
 
 # ===== Retry policy (circuit-breaker Rust crate 와 동등) =====
-# Round 3 P0: V-World HTTP 호출은 timeout + retry + exponential backoff 강제.
-# - timeout 30s (login / list) ~ 600s (download stream) 는 호출 측에서 명시.
-# - retry max 2 (총 3 시도). exponential 1s → 2s → 4s.
-# - retry 가능 예외: HTTP-level transient (RequestException) + 5xx response.
-# `circuit-breaker::policy.rs::vworld_default()` 와 동일 정신.
+# Round 4 #3 — `_make_retrying` 가 typed `is_transient_for_retry` 사용.
+# 이전: `retry_if_exception_type((cffi.RequestsError, ...))` 가 4xx 도 retry.
+# 새: 4xx 는 첫 시도에서 즉시 raise → V-World 인증 실패 / dataset 부재 같은 SLO 위반
+# 시 빠른 fail-fast.
 def _make_retrying() -> Retrying:
     return Retrying(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=8),
-        retry=retry_if_exception_type((cffi.RequestsError, ConnectionError, TimeoutError)),
+        retry=retry_if_exception(is_transient_for_retry),
         reraise=True,
     )
 
@@ -197,30 +261,8 @@ def r2_put_with_retry(
 
     Note: streaming upload (`upload_fileobj`) 는 별도 wrap (chunk position rewind 필요).
     """
-    # 두 종류 transient retry 대상 (module-level `transport_exception_types_main` 참조):
-    # (1) Transport-level — TCP / TLS / DNS 단계 fail (connection refused, RST, timeout).
-    #     botocore 의 BotoCoreError 서브클래스. boto3 의 standard retry config 가 일부
-    #     커버하지만 우리 측에서도 명시적 wrap — *audit 박제 같은 must-succeed path* 의
-    #     추가 안전망.
-    # (2) HTTP-level — 연결은 됐지만 서버가 5xx / Throttling 응답.
-    #     `ClientError` 의 HTTP status / Error code 로 분류.
-    # 4xx (AccessDenied / NoSuchBucket / 잘못된 key) 는 *모두* immediate raise (재시도 무의미).
-    transient_http_codes = {"InternalError", "ServiceUnavailable", "SlowDown", "Throttling"}
-    http_5xx_min = 500
-    http_5xx_max = 600
-
-    def is_transient(exc: BaseException) -> bool:
-        # (1) Transport-level — TCP/TLS/DNS 실패는 무조건 retry 대상.
-        if isinstance(exc, transport_exception_types_main):
-            return True
-        # (2) HTTP-level — 5xx / Throttling 만 retry. 4xx 는 안 함.
-        if isinstance(exc, ClientError):
-            code = exc.response.get("Error", {}).get("Code", "")
-            status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
-            return code in transient_http_codes or (
-                isinstance(status, int) and http_5xx_min <= status < http_5xx_max
-            )
-        return False
+    # Round 4 #4 — module-level `is_transient_for_retry` 와 공유. V-World HTTP /
+    # R2 PUT / R2 GET 모두 동일 분류 규칙 통과 (drift 차단).
 
     args: dict[str, Any] = {
         "Bucket": bucket,
@@ -238,7 +280,7 @@ def r2_put_with_retry(
     for attempt in Retrying(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=8),
-        retry=retry_if_exception(is_transient),
+        retry=retry_if_exception(is_transient_for_retry),
         reraise=True,
     ):
         with attempt:
@@ -442,18 +484,12 @@ def main() -> int:
 
         # tenacity-wrapped download attempt loop. 매 attempt 마다 fresh GET (헤더 + body).
         # connection drop 시 partial bytes 안 쓰고 새로 시작 — 안전한 재시도.
-        # Round 3 stop-hook fix — boto3 transport exceptions 도 retry 대상에 포함.
+        # Round 4 #4 — `is_transient_for_retry` 공유 (V-World cffi.HTTPError 4xx 즉시
+        # raise, ClientError 5xx 만 retry, transport 무조건 retry). 이전엔 4xx 도 retry.
         for attempt in Retrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=2, max=30),
-            retry=retry_if_exception_type(
-                (
-                    cffi.RequestsError,
-                    ConnectionError,
-                    TimeoutError,
-                    *transport_exception_types_main,
-                )
-            ),
+            retry=retry_if_exception(is_transient_for_retry),
             reraise=True,
         ):
             with attempt:
