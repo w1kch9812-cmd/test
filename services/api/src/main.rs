@@ -551,8 +551,10 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(middleware::from_fn(http::request_id::request_id_layer));
 
-    let addr = "0.0.0.0:8080";
+    // env 로 listen 주소 override 가능 — port 충돌 (예: Apache httpd 가 8080 점유) 우회용.
+    // production 은 Pulumi / ECS task 가 PORT env 주입 표준, default 는 dev 호환 유지.
+    let addr = std::env::var("API_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_owned());
     tracing::info!("api listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
