@@ -10,7 +10,7 @@
 //! ## Circuit Breaker (T2 / Round 2)
 //!
 //! 모든 R2 호출 (`put_object_file` / `put_object_json` / `put_directory` / `list_objects`
-//! / `get_object_bytes` / `download_to_file`) 은 [`circuit_breaker::execute`] 를 통과 —
+//! / `try_get_object_bytes` / `download_to_file`) 은 [`circuit_breaker::execute`] 를 통과 —
 //! [`Policy::r2_default`] 정책 (timeout 8s, max 1 retry, open after 5 fail in 10s, 60s cooldown).
 //! `Breaker` 는 [`R2Uploader`] 안에 박제되어 모든 호출이 *동일* 상태 공유 — 시스템적
 //! 장애 시 batch upload 가 즉시 중단되어 stream 의 나머지 PUT 도 빠르게 실패.
@@ -644,34 +644,66 @@ impl R2Uploader {
         Ok(total)
     }
 
-    /// `GetObject` → 메모리 `Vec<u8>` 으로 collect (작은 객체 - manifest / spec - 가정).
-    /// 큰 객체는 [`Self::download_to_file`] 사용.
-    /// T2 — `GetObject` 호출만 breaker wrap.
+    /// `GetObject` of a *possibly-missing* object — NoSuchKey → `Ok(None)`.
+    ///
+    /// ## 왜 `get_object_bytes` 와 분리했나
+    ///
+    /// `get_object_bytes` 는 NoSuchKey 도 `UploadError::GetObject` 로 전파 → breaker 의
+    /// `record_failure` 가 호출됨. 이건 manifest *first publish* 같은 *expected miss*
+    /// path 에 치명적: (a) NoSuchKey 가 `MaxRetriesExceeded` 로 wrap → typed match 가
+    /// `UploadError::GetObject` 를 못 잡음 → first publish 가 영구 실패. (b) 반복되는
+    /// expected miss 가 circuit open 트리거 → 후속 정상 GET 도 차단.
+    ///
+    /// 본 메서드는 NoSuchKey 를 closure *안에서* `Ok(None)` 으로 흡수 — breaker 입장에서는
+    /// 성공이라 failure window 누적 0. 다른 모든 에러 (네트워크 / 5xx / 권한) 는 그대로
+    /// 전파해서 정상 breaker 로직 유지.
+    ///
+    /// ## 사용처
+    ///
+    /// - promote 단계의 `gold/manifest.json` fetch (first publish 시 None — 정상 path).
+    /// - promote 의 staging spec fetch (None → typed `MissingLineage` 에러로 매핑).
     ///
     /// # Errors
     ///
-    /// `GetObject` API / body stream 실패 / circuit open / timeout.
+    /// `GetObject` API / body stream 실패 (NoSuchKey 제외) / circuit open / timeout.
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
-    pub async fn get_object_bytes(&self, key: &str) -> Result<Vec<u8>, UploadError> {
+    pub async fn try_get_object_bytes(&self, key: &str) -> Result<Option<Vec<u8>>, UploadError> {
         let resp = breaker_execute(
             &self.breaker,
             &self.policy,
-            "r2.get_object_bytes",
+            "r2.try_get_object_bytes",
             || async {
-                self.client
+                match self
+                    .client
                     .get_object()
                     .bucket(&self.config.bucket)
                     .key(key)
                     .send()
                     .await
-                    .map_err(|e| UploadError::GetObject {
-                        key: key.to_owned(),
-                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-                    })
+                {
+                    Ok(r) => Ok(Some(r)),
+                    Err(e) => {
+                        // NoSuchKey 는 expected miss — breaker 입장에서는 성공으로 처리.
+                        if let Some(svc_err) = e.as_service_error() {
+                            if svc_err.is_no_such_key() {
+                                return Ok(None);
+                            }
+                        }
+                        Err(UploadError::GetObject {
+                            key: key.to_owned(),
+                            detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                        })
+                    }
+                }
             },
         )
         .await
-        .map_err(|e| breaker_to_upload("r2.get_object_bytes", e))?;
+        .map_err(|e| breaker_to_upload("r2.try_get_object_bytes", e))?;
+
+        let Some(resp) = resp else {
+            return Ok(None);
+        };
+
         let mut body = resp.body;
         let mut buf = Vec::new();
         while let Some(chunk) = body.next().await {
@@ -681,7 +713,7 @@ impl R2Uploader {
             })?;
             buf.extend_from_slice(&chunk);
         }
-        Ok(buf)
+        Ok(Some(buf))
     }
 
     /// JSON pretty-encoded 객체 업로드. `content_type=application/json`.
@@ -905,6 +937,70 @@ mod tests {
             .expect("upload");
 
         // wiremock 의 `expect(1)` 가 drop 시 검증 → 통과하면 PUT 1회 받음.
+    }
+
+    /// 회귀 테스트 — Codex stop-time review 발견 (Round 2 hotfix):
+    /// breaker wrap 이 first publish promote 를 깨뜨림. `try_get_object_bytes` 가
+    /// NoSuchKey 를 `Ok(None)` 으로 흡수해야 (1) typed `Option` 분기 + (2) breaker
+    /// failure window 누적 0.
+    #[tokio::test]
+    async fn try_get_object_bytes_returns_none_on_no_such_key() {
+        let server = MockServer::start().await;
+        // S3 NoSuchKey 응답 — 정확한 wire format (status 404 + AWS XML body).
+        Mock::given(method("GET"))
+            .and(path("/test-bucket/gold/manifest.json"))
+            .respond_with(ResponseTemplate::new(404).set_body_string(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+                 <Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message>\
+                 <Key>gold/manifest.json</Key><RequestId>test</RequestId></Error>",
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let cfg = test_config("test-bucket");
+        let uploader = R2Uploader::with_endpoint_override(cfg, server.uri());
+
+        let result = uploader
+            .try_get_object_bytes("gold/manifest.json")
+            .await
+            .expect("NoSuchKey must be Ok(None), not Err");
+        assert!(result.is_none(), "expected None for NoSuchKey, got Some");
+    }
+
+    /// 회귀 테스트 — NoSuchKey 가 breaker failure 로 카운트되지 않아야 함
+    /// (반복되는 expected miss 가 circuit open 트리거하면 first-publish 가 영구 차단됨).
+    #[tokio::test]
+    async fn try_get_object_bytes_no_such_key_does_not_open_breaker() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(404).set_body_string(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+                 <Error><Code>NoSuchKey</Code><Message>not found</Message></Error>",
+            ))
+            .mount(&server)
+            .await;
+
+        let cfg = test_config("test-bucket");
+        let mut uploader = R2Uploader::with_endpoint_override(cfg, server.uri());
+        // 매우 낮은 threshold — 만약 NoSuchKey 가 실패로 카운트되면 1번에 open.
+        uploader.policy = circuit_breaker::Policy {
+            timeout_ms: 1_000,
+            max_retries: 0,
+            retry_base_ms: 1,
+            open_threshold: 1,
+            open_window_ms: 60_000,
+            open_cooldown_ms: 60_000,
+        };
+
+        // 5번 연속 NoSuchKey — open 안 되어야 함.
+        for _ in 0..5 {
+            let r = uploader.try_get_object_bytes("missing.json").await;
+            assert!(
+                matches!(r, Ok(None)),
+                "expected Ok(None), got: {r:?}"
+            );
+        }
     }
 
     #[tokio::test]

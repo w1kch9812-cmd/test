@@ -143,17 +143,15 @@ async fn read_staging_artifact(
     layer: LayerKind,
 ) -> Result<GoldArtifact, PromoteError> {
     let key = uploader.config().staging_spec_key(version, layer.layer_name());
-    // body fetch — head 보다 더 명확한 에러.
-    let bytes = match uploader.get_object_bytes(&key).await {
-        Ok(b) => b,
-        Err(UploadError::GetObject { .. }) => {
-            return Err(PromoteError::MissingLineage {
-                layer: layer.layer_name().to_owned(),
-                key,
-            });
-        }
-        Err(other) => return Err(PromoteError::R2(other)),
-    };
+    // try_get_object_bytes → NoSuchKey 는 `Ok(None)` 으로 closure 안에서 흡수
+    // (breaker failure 누적 0). None 이면 typed `MissingLineage` 로 매핑.
+    let bytes = uploader
+        .try_get_object_bytes(&key)
+        .await?
+        .ok_or_else(|| PromoteError::MissingLineage {
+            layer: layer.layer_name().to_owned(),
+            key,
+        })?;
     let raw: serde_json::Value = serde_json::from_slice(&bytes)?;
 
     let lineage: BuildLineage = serde_json::from_value(raw["lineage"].clone())?;
@@ -264,39 +262,38 @@ pub async fn run(
         );
     }
 
-    // 3. 이전 manifest backup (있으면).
+    // 3. 이전 manifest backup (있으면). first publish 는 *expected miss* — breaker 가
+    //    failure 로 카운트하지 않도록 `try_get_object_bytes` 사용.
     let manifest_key = uploader.config().manifest_key();
-    let previous_version: Option<Version> = match uploader.get_object_bytes(&manifest_key).await {
-        Ok(prev_bytes) => {
-            let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
-            // current_version 은 Version newtype — invalid 라벨이 manifest 에 박혀있으면
-            // promote 단계에서 `PromoteError::InvalidPreviousVersion` 으로 거부.
-            let prev_ver = prev
-                .get("current_version")
-                .and_then(|v| v.as_str())
-                .map(|raw| {
-                    Version::new(raw).map_err(|e| PromoteError::InvalidPreviousVersion {
-                        raw: raw.to_owned(),
-                        detail: e.to_string(),
-                    })
+    let previous_version: Option<Version> = if let Some(prev_bytes) =
+        uploader.try_get_object_bytes(&manifest_key).await?
+    {
+        let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+        // current_version 은 Version newtype — invalid 라벨이 manifest 에 박혀있으면
+        // promote 단계에서 `PromoteError::InvalidPreviousVersion` 으로 거부.
+        let prev_ver = prev
+            .get("current_version")
+            .and_then(|v| v.as_str())
+            .map(|raw| {
+                Version::new(raw).map_err(|e| PromoteError::InvalidPreviousVersion {
+                    raw: raw.to_owned(),
+                    detail: e.to_string(),
                 })
-                .transpose()?;
-            if let Some(ref pv) = prev_ver {
-                let backup_key = uploader.config().manifest_backup_key(pv);
-                // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
-                let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
-                uploader
-                    .put_object_json(&backup_key, &raw, "public, max-age=31536000, immutable")
-                    .await?;
-                info!(backup_key = %backup_key, "previous manifest backed up (rollback ready)");
-            }
-            prev_ver
+            })
+            .transpose()?;
+        if let Some(ref pv) = prev_ver {
+            let backup_key = uploader.config().manifest_backup_key(pv);
+            // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
+            let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+            uploader
+                .put_object_json(&backup_key, &raw, "public, max-age=31536000, immutable")
+                .await?;
+            info!(backup_key = %backup_key, "previous manifest backed up (rollback ready)");
         }
-        Err(UploadError::GetObject { .. }) => {
-            info!("no previous manifest — first publish");
-            None
-        }
-        Err(other) => return Err(PromoteError::R2(other)),
+        prev_ver
+    } else {
+        info!("no previous manifest — first publish");
+        None
     };
 
     // 4. new manifest 빌드 + publish.
