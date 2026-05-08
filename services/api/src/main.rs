@@ -27,13 +27,13 @@ use axum::routing::get;
 use axum::{middleware, Json, Router};
 use db::listing::PgListingRepository;
 use db::listing_photo::PgListingPhotoRepository;
+use db::raw_capture::PgRawCapture;
 use db::user::PgUserRepository;
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use listing_domain::repository::ListingRepository;
 use listing_photo_domain::repository::ListingPhotoRepository;
 use parcel_domain::reader::ParcelReader;
 use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup, VWorldParcelInfoLookup};
-use raw_capture_client::NoOpRawCapture;
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
@@ -209,14 +209,14 @@ async fn main() {
     // 위반). production 은 VWORLD_API_KEY *반드시* — startup fail-fast.
     let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
         Ok(cfg) => {
-            tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN)");
+            tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
             let client = Arc::new(VWorldClient::new(cfg));
-            // TODO(audit 2026-05-08): raw_capture = NoOp 대신 PgRawCapture (raw_response JSONB
-            // 영구 저장). PgRawCapture wire 후속 commit (parcel_external_data CHECK 정합 검증
-            // 필요). 현재는 production 에서도 NoOp — Critical finding 의 *부분* fix.
+            // audit 2026-05-08 round 2 (P1 — Codex 발견): NoOpRawCapture → PgRawCapture.
+            // raw_response JSONB 영구 저장 (parcel_external_data, source='vworld').
+            // CHECK (source in ('vworld', ...)) 정합 검증 — migrations/30006_parcel_external_data.sql:13-19.
             let reader: Arc<dyn ParcelReader> = Arc::new(VWorldParcelReader::new(
                 client,
-                Arc::new(NoOpRawCapture::new()),
+                Arc::new(PgRawCapture::new(pool.clone())),
             ));
             Arc::new(VWorldParcelInfoLookup::new(reader))
         }
