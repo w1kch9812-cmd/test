@@ -26,8 +26,6 @@
 //! 다른 distro 면 `ETL_WSL_DISTRO=<name>` 환경변수.
 
 #![forbid(unsafe_code)]
-// main.rs: init failure panic 은 정답이라 expect/unwrap 허용.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
 // FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b.2 에서
 // retry 정책 함께 검토 (월 1회 cron 이라 외부 dependency 우선순위 낮음).
 #![allow(clippy::disallowed_types)]
@@ -68,6 +66,9 @@ fn main() -> ExitCode {
     let _sentry_guard = init_sentry();
     init_tracing();
 
+    // init failure: tokio runtime 은 OS resource limit 실패 외에는 성공 보장.
+    // panic 이 정답 — 프로세스 시작 실패 = 즉시 종료가 올바른 동작.
+    #[allow(clippy::expect_used)]
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

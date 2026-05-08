@@ -649,6 +649,93 @@ mod tests {
         );
     }
 
+    // P2: R2Config key layout SSOT property tests.
+    // 이 테스트들이 곧 "key layout 이 변경되면 컴파일러 차단" 보장.
+    // URL 변경 = ADR + 이 테스트 갱신 = backward-compatibility gate.
+
+    #[test]
+    fn gold_layer_prefix_layout() {
+        let cfg = test_config("bucket");
+        assert_eq!(
+            cfg.gold_layer_prefix("v3", "parcels"),
+            "gold/v3/parcels"
+        );
+    }
+
+    #[test]
+    fn tilejson_key_layout() {
+        let cfg = test_config("bucket");
+        assert_eq!(
+            cfg.tilejson_key("v3", "parcels"),
+            "gold/v3/parcels.json"
+        );
+    }
+
+    #[test]
+    fn manifest_key_layout() {
+        let cfg = test_config("bucket");
+        assert_eq!(cfg.manifest_key(), "gold/manifest.json");
+    }
+
+    #[test]
+    fn manifest_backup_key_layout() {
+        let cfg = test_config("bucket");
+        assert_eq!(
+            cfg.manifest_backup_key("v2"),
+            "gold/manifest.v2.json"
+        );
+    }
+
+    #[test]
+    fn staging_spec_key_layout() {
+        let cfg = test_config("bucket");
+        assert_eq!(
+            cfg.staging_spec_key("v3", "admin"),
+            "gold/staging/v3/admin.spec.json"
+        );
+    }
+
+    #[test]
+    fn tiles_url_template_with_trailing_slash() {
+        let cfg = test_config("bucket");
+        let url = cfg.tiles_url_template("https://r2.example.com/", "v3", "parcels");
+        assert_eq!(
+            url,
+            "https://r2.example.com/gold/v3/parcels/{z}/{x}/{y}.pbf"
+        );
+    }
+
+    #[test]
+    fn tiles_url_template_without_trailing_slash() {
+        let cfg = test_config("bucket");
+        let url = cfg.tiles_url_template("https://r2.example.com", "v3", "admin");
+        assert_eq!(
+            url,
+            "https://r2.example.com/gold/v3/admin/{z}/{x}/{y}.pbf"
+        );
+    }
+
+    #[test]
+    fn key_helpers_round_trip_coverage() {
+        // 모든 helper 가 gold_prefix 를 일관되게 prefix 로 사용하는지 확인.
+        // gold_prefix 변경 시 모든 key 가 한꺼번에 변경됨을 보장.
+        let cfg = R2Config {
+            account_id: "fake".into(),
+            access_key: "fake".into(),
+            secret_key: "fake".into(),
+            bucket: "bucket".into(),
+            bronze_prefix: "bronze".into(),
+            gold_prefix: "custom-gold".into(),
+        };
+        let prefix = cfg.gold_layer_prefix("v1", "parcels");
+        assert!(prefix.starts_with("custom-gold/"), "gold_prefix must be respected");
+        assert!(cfg.manifest_key().starts_with("custom-gold/"), "manifest must use gold_prefix");
+        assert!(
+            cfg.staging_spec_key("v1", "parcels").starts_with("custom-gold/"),
+            "staging key must use gold_prefix"
+        );
+    }
+
     #[tokio::test]
     async fn put_object_file_sends_body_and_headers() {
         let server = MockServer::start().await;
