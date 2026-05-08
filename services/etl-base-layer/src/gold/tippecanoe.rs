@@ -37,23 +37,17 @@ pub enum LayerKind {
 impl LayerKind {
     /// 모든 variant — `sp9_base_layer_config::Layer::ALL` 로부터 derive.
     /// **SSOT**: 새 layer 추가 시 `sp9_base_layer_config::Layer` 에만 추가하면 됨.
-    /// `Layer::ALL` 과 `LayerKind::ALL` 의 수동 미러링 제거 (P0.1).
-    #[allow(dead_code)]
+    /// `From<Sp9Layer>` 가 exhaustive match 라 compiler 가 누락 차단.
     pub fn all() -> impl Iterator<Item = Self> {
         Sp9Layer::ALL.iter().map(|l| Self::from(*l))
     }
 
-    /// 모든 variant 의 owned vec (iterate + collect 가 필요한 곳에서).
+    /// 모든 variant 의 owned vec — `&[LayerKind]` 가 필요한 callsite (promote subcommand 등).
+    /// 한 번 호출 후 borrow 로 share — alloc 비용 1회.
     #[must_use]
-    #[allow(dead_code)]
     pub fn all_vec() -> Vec<Self> {
         Self::all().collect()
     }
-
-    /// `&'static [Self]` 가 필요한 곳 — promote subcommand 의 `&[LayerKind]` 인자.
-    /// `const` 로 유지하되 `Layer::ALL` variant 순서와 동기화 보장.
-    #[allow(dead_code)]
-    pub const ALL: &'static [Self] = &[Self::Parcels, Self::Admin, Self::Complex];
 
     /// PMTiles 안의 layer 이름 (프론트 `addLayer({ "source-layer": ... })` 에 매칭).
     /// **SSOT** — 프론트 `LAYER_IDS` 가 본 enum 의 reflection.
@@ -341,6 +335,23 @@ mod tests {
         assert_eq!(LayerKind::Complex.layer_name(), "complex");
         assert_eq!(LayerKind::Complex.zoom_range(), (0, 16));
         assert_eq!(LayerKind::Complex.render_min_zoom(), 0);
+    }
+
+    #[test]
+    fn all_vec_matches_sp9_layer_all_in_count_and_name() {
+        // SSOT 보증 — `LayerKind::all_vec()` 가 `Sp9Layer::ALL` 의 reflection.
+        // Sp9Layer 에 새 variant 추가 시 `From<Sp9Layer> for LayerKind` 의 exhaustive
+        // match 가 컴파일러 에러로 차단 — 본 test 는 *layer_name 일관성* 추가 검증.
+        let kinds = LayerKind::all_vec();
+        let layers = Sp9Layer::ALL;
+        assert_eq!(kinds.len(), layers.len(), "count drift between LayerKind and Sp9Layer");
+        for (kind, layer) in kinds.iter().zip(layers.iter()) {
+            assert_eq!(
+                kind.layer_name(),
+                layer.name(),
+                "name drift: LayerKind={kind:?} vs Sp9Layer={layer:?}",
+            );
+        }
     }
 
     #[tokio::test]

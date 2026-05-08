@@ -184,7 +184,7 @@ async fn read_staging_artifact(
 pub struct PromoteArgs<'a> {
     /// promote 할 version (newtype — invalid 라벨 컴파일 차단).
     pub version: &'a Version,
-    /// 검증할 layer 들. 통상 `LayerKind::ALL`.
+    /// 검증할 layer 들. 통상 `LayerKind::all_vec().as_slice()` — `Sp9Layer::ALL` SSOT 자동 반영.
     pub layers: &'a [LayerKind],
     /// `tiles_url_template` 의 R2 public host (newtype — scheme/host 검증).
     pub public_url_base: &'a R2PublicBase,

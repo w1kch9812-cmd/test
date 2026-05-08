@@ -87,8 +87,9 @@ pub enum Layer {
 }
 
 impl Layer {
-    /// 모든 variants — workflow matrix 자동 generate, `etl-base-layer::LayerKind`
-    /// 신규 추가 시 본 배열 + `LayerKind::ALL` 양쪽 동시 갱신해야 함 (build 결과 동등).
+    /// 모든 variants — workflow matrix 자동 generate. **SSOT** — `etl-base-layer::LayerKind`
+    /// 가 본 배열을 reflection (`From<Layer> for LayerKind` 가 exhaustive match → 새 variant
+    /// 추가 시 컴파일러가 차단). `LayerKind::all_vec()` 가 본 배열을 base 로 동적 생성.
     pub const ALL: &'static [Self] = &[Self::Parcels, Self::Admin, Self::Complex];
 
     /// lowercase 이름 (`"parcels"`/`"admin"`/`"complex"`). PMTiles 안 source-layer + R2 prefix.

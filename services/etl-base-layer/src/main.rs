@@ -590,11 +590,13 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
     let uploader = R2Uploader::new(r2_cfg);
 
     info!(version = %version, "promote start (atomic manifest flip)");
+    // SSOT — `Sp9Layer::ALL` 가 단일 출처. `LayerKind::all_vec()` 가 그 reflection.
+    let layers = LayerKind::all_vec();
     match promote::run(
         &uploader,
         &PromoteArgs {
             version: &version,
-            layers: LayerKind::ALL,
+            layers: &layers,
             public_url_base: &public_base,
         },
     )
