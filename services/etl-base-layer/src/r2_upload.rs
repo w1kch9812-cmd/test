@@ -7,7 +7,13 @@
 //! - 파일 업로드 (`put_object_file`) — Bronze SHP archive / Gold `PMTiles`
 //! - JSON 업로드 (`put_object_json`) — manifest / index 파일
 //!
-//! T3b.1 = R2 업로드 path 만. ogr2ogr / tippecanoe / verify 는 T3b.2.
+//! ## Circuit Breaker (T2 / Round 2)
+//!
+//! 모든 R2 호출 (`put_object_file` / `put_object_json` / `put_directory` / `list_objects`
+//! / `get_object_bytes` / `download_to_file`) 은 [`circuit_breaker::execute`] 를 통과 —
+//! [`Policy::r2_default`] 정책 (timeout 8s, max 1 retry, open after 5 fail in 10s, 60s cooldown).
+//! `Breaker` 는 [`R2Uploader`] 안에 박제되어 모든 호출이 *동일* 상태 공유 — 시스템적
+//! 장애 시 batch upload 가 즉시 중단되어 stream 의 나머지 PUT 도 빠르게 실패.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -21,6 +27,7 @@ use aws_sdk_s3::config::{
 };
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
+use circuit_breaker::{execute as breaker_execute, Breaker, BreakerError, Policy};
 use futures_util::stream::{self, StreamExt};
 use sp9_base_layer_config::{R2PublicBase, Version};
 use thiserror::Error;
@@ -171,6 +178,27 @@ pub enum UploadError {
     /// JSON 직렬화 실패.
     #[error("json serialize failed: {0}")]
     JsonSerialize(#[from] serde_json::Error),
+    /// Circuit breaker 차단 / max-retries exceeded / timeout.
+    #[error("breaker [{op}]: {detail}")]
+    Breaker {
+        /// 호출 op 이름 (e.g. `r2.put_object_file`).
+        op: &'static str,
+        /// `BreakerError::{Open|Timeout|MaxRetriesExceeded|Inner}` 의 사람-가독.
+        detail: String,
+    },
+}
+
+/// `BreakerError<UploadError>` → `UploadError` 변환 helper.
+fn breaker_to_upload(op: &'static str, e: BreakerError<UploadError>) -> UploadError {
+    match e {
+        // inner error 가 R2 SDK 호출 자체의 실패면 그 카테고리 그대로 노출 (Put/Get/List).
+        BreakerError::Inner(inner) => inner,
+        // 그 외 (Open / Timeout / MaxRetriesExceeded) 는 breaker variant 로 박제.
+        other => UploadError::Breaker {
+            op,
+            detail: other.to_string(),
+        },
+    }
 }
 
 /// 디렉터리 batch upload 결과.
@@ -196,10 +224,15 @@ pub struct RemoteObject {
 /// R2 업로더 — `aws-sdk-s3` Client 래퍼.
 ///
 /// 한 번 생성하면 여러 객체 업로드에 재사용. Client 는 connection pool 을 내부 보유.
+/// `Breaker` 는 모든 호출이 공유 — systemic 장애 시 빠른 차단.
 #[derive(Debug, Clone)]
 pub struct R2Uploader {
     client: S3Client,
     config: R2Config,
+    /// T2 — circuit breaker 상태 공유 (모든 R2 호출이 동일 인스턴스).
+    breaker: Arc<Breaker>,
+    /// `Policy::r2_default()` 박제 — Copy 타입이라 매번 호출에 그대로 통과.
+    policy: Policy,
 }
 
 impl R2Uploader {
@@ -236,7 +269,12 @@ impl R2Uploader {
             .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(5))
             .build();
         let client = S3Client::from_conf(s3_config);
-        Self { client, config }
+        Self {
+            client,
+            config,
+            breaker: Arc::new(Breaker::new()),
+            policy: Policy::r2_default(),
+        }
     }
 
     /// 외부 endpoint override — 테스트용 (wiremock 등 mock S3).
@@ -261,7 +299,21 @@ impl R2Uploader {
             .force_path_style(true)
             .build();
         let client = S3Client::from_conf(s3_config);
-        Self { client, config }
+        // 테스트는 timeout 짧게 + retry 0 — wiremock 응답이 즉시이라 breaker 의미 적음.
+        let test_policy = Policy {
+            timeout_ms: 5_000,
+            max_retries: 0,
+            retry_base_ms: 1,
+            open_threshold: 99, // 테스트가 의도적 fail 상황 만들어도 open 안 되도록.
+            open_window_ms: 1_000,
+            open_cooldown_ms: 1_000,
+        };
+        Self {
+            client,
+            config,
+            breaker: Arc::new(Breaker::new()),
+            policy: test_policy,
+        }
     }
 
     /// 설정 (bucket / prefix) 접근자.
@@ -272,9 +324,11 @@ impl R2Uploader {
 
     /// 파일을 R2 객체로 업로드. `content_type` 은 R2 가 그대로 보존 → 클라이언트 fetch 시 사용.
     ///
+    /// T2 — `circuit-breaker` wrap. timeout/retry/open 정책은 [`Policy::r2_default`].
+    ///
     /// # Errors
     ///
-    /// 파일 read 실패 / `PutObject` 실패.
+    /// 파일 read 실패 / `PutObject` 실패 / circuit open / max-retries / timeout.
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn put_object_file(
         &self,
@@ -282,13 +336,6 @@ impl R2Uploader {
         path: &Path,
         content_type: &str,
     ) -> Result<(), UploadError> {
-        let body = ByteStream::from_path(path)
-            .await
-            .map_err(|e| UploadError::ReadFile {
-                path: path.display().to_string(),
-                source: std::io::Error::other(e),
-            })?;
-
         info!(
             r2_op = "PutObject",
             r2_bucket = %self.config.bucket,
@@ -296,23 +343,34 @@ impl R2Uploader {
             "uploading file → R2"
         );
 
-        self.client
-            .put_object()
-            .bucket(&self.config.bucket)
-            .key(key)
-            .body(body)
-            .content_type(content_type)
-            .cache_control("public, max-age=31536000")
-            // L5 Security — R2 server-side encryption (AES256). R2 default 가 이미
-            // encrypted at rest 지만 `x-amz-server-side-encryption: AES256` header 명시 →
-            // audit 정합 (audit log 가 SSE 사용 박제 가능).
-            .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
-            .send()
-            .await
-            .map_err(|e| UploadError::PutObject {
-                key: key.to_owned(),
-                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-            })?;
+        breaker_execute(&self.breaker, &self.policy, "r2.put_object_file", || async {
+            let body = ByteStream::from_path(path)
+                .await
+                .map_err(|e| UploadError::ReadFile {
+                    path: path.display().to_string(),
+                    source: std::io::Error::other(e),
+                })?;
+            self.client
+                .put_object()
+                .bucket(&self.config.bucket)
+                .key(key)
+                .body(body)
+                .content_type(content_type)
+                .cache_control("public, max-age=31536000")
+                // L5 Security — R2 server-side encryption (AES256). R2 default 가 이미
+                // encrypted at rest 지만 `x-amz-server-side-encryption: AES256` header 명시 →
+                // audit 정합 (audit log 가 SSE 사용 박제 가능).
+                .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
+                .send()
+                .await
+                .map_err(|e| UploadError::PutObject {
+                    key: key.to_owned(),
+                    detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                })?;
+            Ok::<(), UploadError>(())
+        })
+        .await
+        .map_err(|e| breaker_to_upload("r2.put_object_file", e))?;
 
         info!("file uploaded");
         Ok(())
@@ -335,6 +393,7 @@ impl R2Uploader {
         skip(self, local_root),
         fields(bucket = %self.config.bucket, prefix = %key_prefix, root = %local_root.display()),
     )]
+    #[allow(clippy::too_many_lines)] // T2: breaker wrapping 추가로 100줄 초과 — 분해 시 stream pipeline 흐름 흩어짐.
     pub async fn put_directory(
         &self,
         local_root: &Path,
@@ -372,36 +431,51 @@ impl R2Uploader {
                 let bucket = self.config.bucket.clone();
                 let success = Arc::clone(&success_clone);
                 let bytes = Arc::clone(&bytes_clone);
+                let breaker = Arc::clone(&self.breaker);
+                let policy = self.policy;
                 async move {
-                    let body =
-                        ByteStream::from_path(&path)
-                            .await
-                            .map_err(|e| UploadError::ReadFile {
-                                path: path.display().to_string(),
-                                source: std::io::Error::other(e),
-                            })?;
-                    let len = tokio::fs::metadata(&path)
-                        .await
-                        .map(|m| m.len())
-                        .unwrap_or(0);
-                    client
-                        .put_object()
-                        .bucket(&bucket)
-                        .key(&key)
-                        .body(body)
-                        .content_type("application/x-protobuf")
-                        .content_encoding("gzip") // tippecanoe 출력은 default gzip
-                        .cache_control("public, max-age=31536000, immutable")
-                        .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
-                        .send()
-                        .await
-                        .map_err(|e| UploadError::PutObject {
-                            key: key.clone(),
-                            detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-                        })?;
-                    success.fetch_add(1, Ordering::Relaxed);
-                    bytes.fetch_add(len, Ordering::Relaxed);
-                    Ok::<(), UploadError>(())
+                    // T2 — 각 PUT 마다 breaker 통과. systemic 장애 시 stream 잔여 PUT 도 즉시 fail.
+                    breaker_execute(&breaker, &policy, "r2.put_directory_item", || {
+                        let client = client.clone();
+                        let bucket = bucket.clone();
+                        let path = path.clone();
+                        let key = key.clone();
+                        let success = Arc::clone(&success);
+                        let bytes = Arc::clone(&bytes);
+                        async move {
+                            let body =
+                                ByteStream::from_path(&path)
+                                    .await
+                                    .map_err(|e| UploadError::ReadFile {
+                                        path: path.display().to_string(),
+                                        source: std::io::Error::other(e),
+                                    })?;
+                            let len = tokio::fs::metadata(&path)
+                                .await
+                                .map(|m| m.len())
+                                .unwrap_or(0);
+                            client
+                                .put_object()
+                                .bucket(&bucket)
+                                .key(&key)
+                                .body(body)
+                                .content_type("application/x-protobuf")
+                                .content_encoding("gzip") // tippecanoe 출력은 default gzip
+                                .cache_control("public, max-age=31536000, immutable")
+                                .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
+                                .send()
+                                .await
+                                .map_err(|e| UploadError::PutObject {
+                                    key: key.clone(),
+                                    detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                                })?;
+                            success.fetch_add(1, Ordering::Relaxed);
+                            bytes.fetch_add(len, Ordering::Relaxed);
+                            Ok::<(), UploadError>(())
+                        }
+                    })
+                    .await
+                    .map_err(|e| breaker_to_upload("r2.put_directory_item", e))
                 }
             })
             .buffer_unordered(concurrency)
@@ -439,27 +513,38 @@ impl R2Uploader {
     ///
     /// R2 의 `ListObjectsV2` 는 default 1000 객체/page → continuation token 으로 loop.
     /// 273 시군구 SHP zip 가정 시 1 page 면 충분하지만 안전하게 pagination 구현.
+    /// T2 — 각 page 마다 breaker 통과 (long pagination 의 systemic fail 차단).
     ///
     /// # Errors
     ///
-    /// `ListObjectsV2` API 실패.
+    /// `ListObjectsV2` API 실패 / circuit open / max-retries / timeout.
     #[instrument(skip(self), fields(bucket = %self.config.bucket, prefix = %prefix))]
     pub async fn list_objects(&self, prefix: &str) -> Result<Vec<RemoteObject>, UploadError> {
         let mut all = Vec::new();
         let mut continuation: Option<String> = None;
         loop {
-            let mut req = self
-                .client
-                .list_objects_v2()
-                .bucket(&self.config.bucket)
-                .prefix(prefix);
-            if let Some(token) = continuation.as_deref() {
-                req = req.continuation_token(token);
-            }
-            let resp = req.send().await.map_err(|e| UploadError::ListObjects {
-                prefix: prefix.to_owned(),
-                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-            })?;
+            let token = continuation.clone();
+            let resp = breaker_execute(
+                &self.breaker,
+                &self.policy,
+                "r2.list_objects",
+                || async {
+                    let mut req = self
+                        .client
+                        .list_objects_v2()
+                        .bucket(&self.config.bucket)
+                        .prefix(prefix);
+                    if let Some(t) = token.as_deref() {
+                        req = req.continuation_token(t);
+                    }
+                    req.send().await.map_err(|e| UploadError::ListObjects {
+                        prefix: prefix.to_owned(),
+                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                    })
+                },
+            )
+            .await
+            .map_err(|e| breaker_to_upload("r2.list_objects", e))?;
             for obj in resp.contents() {
                 if let Some(key) = obj.key() {
                     all.push(RemoteObject {
@@ -486,10 +571,11 @@ impl R2Uploader {
     ///
     /// 부모 디렉터리는 자동 생성. 출력 파일은 *덮어쓰기* (`fs::File::create`).
     /// idempotent skip 은 호출자가 사전 size 비교로 처리 (본 메서드는 항상 다운).
+    /// T2 — `GetObject` 호출만 breaker wrap (body stream 은 connection 후 단일 흐름).
     ///
     /// # Errors
     ///
-    /// `GetObject` API 실패 / body stream 실패 / 디스크 I/O 실패.
+    /// `GetObject` API 실패 / body stream 실패 / 디스크 I/O 실패 / circuit open / timeout.
     #[instrument(
         skip(self, dest),
         fields(bucket = %self.config.bucket, key = %key, dest = %dest.display()),
@@ -504,17 +590,25 @@ impl R2Uploader {
                 })?;
         }
 
-        let resp = self
-            .client
-            .get_object()
-            .bucket(&self.config.bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| UploadError::GetObject {
-                key: key.to_owned(),
-                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-            })?;
+        let resp = breaker_execute(
+            &self.breaker,
+            &self.policy,
+            "r2.get_object_initiate",
+            || async {
+                self.client
+                    .get_object()
+                    .bucket(&self.config.bucket)
+                    .key(key)
+                    .send()
+                    .await
+                    .map_err(|e| UploadError::GetObject {
+                        key: key.to_owned(),
+                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                    })
+            },
+        )
+        .await
+        .map_err(|e| breaker_to_upload("r2.get_object_initiate", e))?;
 
         let mut body = resp.body;
         let mut file =
@@ -552,23 +646,32 @@ impl R2Uploader {
 
     /// `GetObject` → 메모리 `Vec<u8>` 으로 collect (작은 객체 - manifest / spec - 가정).
     /// 큰 객체는 [`Self::download_to_file`] 사용.
+    /// T2 — `GetObject` 호출만 breaker wrap.
     ///
     /// # Errors
     ///
-    /// `GetObject` API / body stream 실패.
+    /// `GetObject` API / body stream 실패 / circuit open / timeout.
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn get_object_bytes(&self, key: &str) -> Result<Vec<u8>, UploadError> {
-        let resp = self
-            .client
-            .get_object()
-            .bucket(&self.config.bucket)
-            .key(key)
-            .send()
-            .await
-            .map_err(|e| UploadError::GetObject {
-                key: key.to_owned(),
-                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-            })?;
+        let resp = breaker_execute(
+            &self.breaker,
+            &self.policy,
+            "r2.get_object_bytes",
+            || async {
+                self.client
+                    .get_object()
+                    .bucket(&self.config.bucket)
+                    .key(key)
+                    .send()
+                    .await
+                    .map_err(|e| UploadError::GetObject {
+                        key: key.to_owned(),
+                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                    })
+            },
+        )
+        .await
+        .map_err(|e| breaker_to_upload("r2.get_object_bytes", e))?;
         let mut body = resp.body;
         let mut buf = Vec::new();
         while let Some(chunk) = body.next().await {
@@ -584,13 +687,14 @@ impl R2Uploader {
     /// JSON pretty-encoded 객체 업로드. `content_type=application/json`.
     ///
     /// manifest / index 류에 사용 — 작은 (~10KB) 페이로드 가정.
+    /// T2 — circuit breaker wrap.
     ///
     /// `T: Sync` 는 `#[instrument]` 가 만드는 future 가 multi-thread runtime
     /// 에서도 안전하게 await 되도록 강제 (clippy `future_not_send`).
     ///
     /// # Errors
     ///
-    /// JSON 직렬화 실패 / `PutObject` 실패.
+    /// JSON 직렬화 실패 / `PutObject` 실패 / circuit open / max-retries / timeout.
     #[instrument(skip(self, value), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn put_object_json<T: serde::Serialize + Sync>(
         &self,
@@ -609,20 +713,29 @@ impl R2Uploader {
             "uploading json → R2"
         );
 
-        self.client
-            .put_object()
-            .bucket(&self.config.bucket)
-            .key(key)
-            .body(ByteStream::from(json))
-            .content_type("application/json")
-            .cache_control(cache_control)
-            .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
-            .send()
-            .await
-            .map_err(|e| UploadError::PutObject {
-                key: key.to_owned(),
-                detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-            })?;
+        // breaker 의 retry 가 새 future 를 매번 만들기 때문에 body 도 매 호출마다 fresh.
+        // `Arc<Vec<u8>>` 으로 share — clone 비용 감소.
+        let json_arc = Arc::new(json);
+        breaker_execute(&self.breaker, &self.policy, "r2.put_object_json", || async {
+            let body = ByteStream::from(json_arc.as_ref().clone());
+            self.client
+                .put_object()
+                .bucket(&self.config.bucket)
+                .key(key)
+                .body(body)
+                .content_type("application/json")
+                .cache_control(cache_control)
+                .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
+                .send()
+                .await
+                .map_err(|e| UploadError::PutObject {
+                    key: key.to_owned(),
+                    detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                })?;
+            Ok::<(), UploadError>(())
+        })
+        .await
+        .map_err(|e| breaker_to_upload("r2.put_object_json", e))?;
 
         info!("json uploaded");
         Ok(())
@@ -631,7 +744,7 @@ impl R2Uploader {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used)]
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
     use super::*;
     use serde_json::json;
@@ -836,6 +949,66 @@ mod tests {
             .put_object_file("bronze/x.bin", tmp.path(), "application/octet-stream")
             .await
             .expect_err("should fail");
-        assert!(matches!(err, UploadError::PutObject { .. }));
+        // T2 — breaker wrap: inner error 가 MaxRetriesExceeded 로 전파 → `Breaker` variant.
+        // op 식별자 + 원본 stderr (`InternalError`) 가 detail 에 보존됨을 검증.
+        match err {
+            UploadError::Breaker { op, detail } => {
+                assert_eq!(op, "r2.put_object_file");
+                assert!(
+                    detail.contains("InternalError") || detail.contains("put_object"),
+                    "breaker detail must preserve inner PutObject context: {detail}"
+                );
+            }
+            other => panic!("expected Breaker variant, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn breaker_opens_after_repeated_500_failures() {
+        // T2 회귀 — circuit-breaker 가 R2 systemic 장애 시 fast-fail 를 보장.
+        // open_threshold=5 (`Policy::r2_default`) 라 max_retries 1 + 의도적 5xx 가
+        // 누적되어 open 으로 전이.
+        let server = MockServer::start().await;
+        Mock::given(method("PUT"))
+            .respond_with(ResponseTemplate::new(500).set_body_string(
+                "<Error><Code>InternalError</Code><Message>oops</Message></Error>",
+            ))
+            .mount(&server)
+            .await;
+
+        let cfg = test_config("test-bucket");
+        // production-like policy 와 비슷하지만 timeout 짧게 + cooldown 짧게.
+        let mut uploader = R2Uploader::with_endpoint_override(cfg, server.uri());
+        uploader.policy = circuit_breaker::Policy {
+            timeout_ms: 1_000,
+            max_retries: 0,
+            retry_base_ms: 1,
+            open_threshold: 3,
+            open_window_ms: 60_000,
+            open_cooldown_ms: 60_000,
+        };
+
+        let mut tmp = tempfile::NamedTempFile::new().expect("tempfile");
+        tmp.write_all(b"x").expect("write");
+
+        // 3회 실패 누적 → 4회째 호출은 즉시 Open 으로 거부.
+        for _ in 0..3 {
+            let _ = uploader
+                .put_object_file("bronze/x.bin", tmp.path(), "application/octet-stream")
+                .await;
+        }
+        let err = uploader
+            .put_object_file("bronze/x.bin", tmp.path(), "application/octet-stream")
+            .await
+            .expect_err("breaker should be open");
+        match err {
+            UploadError::Breaker { detail, .. } => {
+                assert!(
+                    detail.contains("circuit open"),
+                    "expected open-state detail, got: {detail}"
+                );
+            }
+            other => panic!("expected Breaker(Open), got: {other:?}"),
+        }
     }
 }

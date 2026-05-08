@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config" }
+# T2 — R2 호출에 timeout/retry/circuit-breaker 적용 (AGENTS.md §3 Circuit Breaker).
+circuit-breaker = { path = "../../crates/circuit-breaker" }
 # L4 Observability — Sentry SDK proper integration (curl 깨진 endpoint 제거).
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }

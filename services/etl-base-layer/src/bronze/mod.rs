@@ -16,9 +16,14 @@
 //! 5. 전체 완료 후 manifest.json — 로컬 + R2 양쪽
 //!
 //! R2 미설정 시 (`Config::r2 = None`) → 로컬 전용 (T3a 호환). 검증 / dev 환경.
+//!
+//! ## Circuit Breaker
+//!
+//! Bronze URL-driven HTTP 다운로드 (`download_one`) 는 `reqwest::get` 의 connection-pool
+//! retry 만 사용. R2 측 PUT / GET 은 [`crate::r2_upload::R2Uploader`] 안의 circuit-breaker
+//! 가 wrap (T2, Round 2). V-World 사이트 직접 호출은 ADR 0022 의 isolated Python service
+//! (`scraper-py/dtmk_vworld.py`) 가 책임 — 본 Rust crate 는 R2 재소비만 한다.
 
-// FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b.2 에서
-// retry 정책 함께 검토 (월 1회 cron, 외부 dependency 우선순위 낮음).
 #![allow(clippy::disallowed_types)]
 
 pub mod dtmk;

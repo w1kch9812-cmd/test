@@ -26,8 +26,10 @@
 //! 다른 distro 면 `ETL_WSL_DISTRO=<name>` 환경변수.
 
 #![forbid(unsafe_code)]
-// FU 26 — etl-base-layer 는 일회성 batch CLI. circuit-breaker wrapping 은 T3b.2 에서
-// retry 정책 함께 검토 (월 1회 cron 이라 외부 dependency 우선순위 낮음).
+// T2 (Round 2): R2 호출은 `R2Uploader` 가 `circuit-breaker::execute` 로 wrap
+// (Policy::r2_default — timeout 8s, max 1 retry, open after 5 fail in 10s, 60s cooldown).
+// `clippy::disallowed_types` 는 `tokio::sync::Semaphore` 등 일부 std-lib 타입 직접 사용
+// (FU 26 lint 정책) 을 위한 crate-wide allow — circuit-breaker 적용과는 무관.
 #![allow(clippy::disallowed_types)]
 
 mod bronze;

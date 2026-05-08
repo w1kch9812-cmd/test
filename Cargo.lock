@@ -1498,6 +1498,7 @@ dependencies = [
  "aws-sdk-s3",
  "aws-smithy-types",
  "chrono",
+ "circuit-breaker",
  "dotenvy",
  "futures-util",
  "hex",
