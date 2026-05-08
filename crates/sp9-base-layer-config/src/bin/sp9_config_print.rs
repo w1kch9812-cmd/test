@@ -94,6 +94,18 @@ fn main() -> ExitCode {
             println!("{}", serde_json::to_string(&names).expect("json"));
             ExitCode::SUCCESS
         }
+        "active_layers" => {
+            // Round 4 #2 — workflow matrix 가 *현재 ETL build-active* layer 만 소비.
+            // `Layer::is_active_in_etl()` SSOT. admin/complex 는 source 미준비 →
+            // matrix 에서 제외 (silent partial build 차단). ADR 0027 박제.
+            let names: Vec<&str> = Layer::ALL
+                .iter()
+                .filter(|l| l.is_active_in_etl())
+                .map(|l| l.name())
+                .collect();
+            println!("{}", serde_json::to_string(&names).expect("json"));
+            ExitCode::SUCCESS
+        }
         "landmarks" => {
             println!(
                 "{}",
@@ -103,7 +115,7 @@ fn main() -> ExitCode {
         }
         other => {
             eprintln!(
-                "unknown subcommand `{other}` — use json | env | key <name> | layers | landmarks"
+                "unknown subcommand `{other}` — use json | env | key <name> | layers | active_layers | landmarks"
             );
             ExitCode::from(2)
         }

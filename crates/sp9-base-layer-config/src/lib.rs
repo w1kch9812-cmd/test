@@ -101,6 +101,20 @@ impl Layer {
             Self::Complex => "complex",
         }
     }
+
+    /// 본 layer 가 *현재 ETL build-active* 인지. Round 4 #2 (P0) — admin/complex 가
+    /// 별도 source 미준비 (V-World 행정구역 dataset / 공공데이터포털 산업단지 SHP).
+    /// **SSS-DEBT**: ADR 0027 박제 후 source 가 결정되면 본 함수의 분기를 `true` 로
+    /// 변경. 그 전에는 workflow matrix 가 본 함수를 통과한 *active* layer 만 빌드 →
+    /// admin/complex 가 parcels prefix 임시 재사용하던 trick 차단.
+    #[must_use]
+    pub const fn is_active_in_etl(self) -> bool {
+        match self {
+            Self::Parcels => true,
+            // 별도 source 미준비 — ADR 0027.
+            Self::Admin | Self::Complex => false,
+        }
+    }
 }
 
 /// dtmk Bronze R2 prefix 빌드 — `bronze/<batch>/parcel-dtmk-30563/`.
@@ -164,8 +178,11 @@ pub struct ConfigSnapshot {
     pub dtmk_download_concurrency: usize,
     /// `NATIONWIDE_PMTILES_MIN_BYTES`.
     pub nationwide_pmtiles_min_bytes: u64,
-    /// 모든 layer 의 lowercase 이름 (workflow matrix 입력).
+    /// 모든 layer 의 lowercase 이름 (registry / Rust LayerKind reflection 용).
     pub layers: Vec<String>,
+    /// **현재 ETL build-active** layer 만 (Round 4 #2). workflow matrix 가 본 출력만
+    /// 소비 — `is_active_in_etl()` 가 false 인 layer 는 build skip (silent partial 차단).
+    pub active_layers: Vec<String>,
     /// known landmarks (verify 사용).
     pub verify_landmarks: Vec<VerifyLandmark>,
 }
@@ -185,6 +202,11 @@ impl ConfigSnapshot {
             dtmk_download_concurrency: DTMK_DOWNLOAD_CONCURRENCY,
             nationwide_pmtiles_min_bytes: NATIONWIDE_PMTILES_MIN_BYTES,
             layers: Layer::ALL.iter().map(|l| l.name().to_owned()).collect(),
+            active_layers: Layer::ALL
+                .iter()
+                .filter(|l| l.is_active_in_etl())
+                .map(|l| l.name().to_owned())
+                .collect(),
             verify_landmarks: VERIFY_LANDMARKS.to_vec(),
         }
     }
@@ -208,6 +230,38 @@ mod tests {
         // workflow matrix 의 [parcels, admin, complex] 와 *반드시* 일치.
         let names: Vec<&str> = Layer::ALL.iter().map(|l| l.name()).collect();
         assert_eq!(names, vec!["parcels", "admin", "complex"]);
+    }
+
+    /// Round 4 #2 (ADR 0027) — admin/complex 가 source 미준비 라 ETL build-active 0.
+    /// `is_active_in_etl()` 의 분기를 변경할 때 본 test 도 반드시 함께 갱신 — workflow
+    /// matrix 와 SSOT contract.
+    #[test]
+    fn active_layers_excludes_unready_sources() {
+        let active: Vec<&str> = Layer::ALL
+            .iter()
+            .filter(|l| l.is_active_in_etl())
+            .map(|l| l.name())
+            .collect();
+        assert_eq!(
+            active,
+            vec!["parcels"],
+            "ADR 0027 — admin/complex 는 source 결정될 때까지 ETL matrix 제외"
+        );
+        assert!(Layer::Parcels.is_active_in_etl());
+        assert!(!Layer::Admin.is_active_in_etl());
+        assert!(!Layer::Complex.is_active_in_etl());
+    }
+
+    #[test]
+    fn snapshot_active_layers_subset_of_layers() {
+        let snap = ConfigSnapshot::current();
+        for active in &snap.active_layers {
+            assert!(
+                snap.layers.contains(active),
+                "active_layers must be subset of layers: {active} not in {:?}",
+                snap.layers
+            );
+        }
     }
 
     #[test]
