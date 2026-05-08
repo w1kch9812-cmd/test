@@ -29,7 +29,14 @@ from urllib.parse import unquote
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+    SSLError,
+)
 from curl_cffi import requests as cffi
 from tenacity import (
     RetryError,
@@ -115,6 +122,18 @@ def make_session() -> cffi.Session:
     return cffi.Session(impersonate="chrome120")
 
 
+# Module-level — `r2_put_with_retry` 와 caller 양쪽에서 공통 사용.
+# Transport-level transient = TCP / TLS / DNS 단계 실패. boto3 standard retry 가 일부
+# 커버하지만 우리 측 wrap 으로 추가 안전망 (특히 audit 같은 invariant path).
+transport_exception_types_main: tuple[type[Exception], ...] = (
+    EndpointConnectionError,
+    ConnectionClosedError,
+    ReadTimeoutError,
+    ConnectTimeoutError,
+    SSLError,
+)
+
+
 # ===== Retry policy (circuit-breaker Rust crate 와 동등) =====
 # Round 3 P0: V-World HTTP 호출은 timeout + retry + exponential backoff 강제.
 # - timeout 30s (login / list) ~ 600s (download stream) 는 호출 측에서 명시.
@@ -178,20 +197,30 @@ def r2_put_with_retry(
 
     Note: streaming upload (`upload_fileobj`) 는 별도 wrap (chunk position rewind 필요).
     """
-    # boto3 ClientError 중 transient (5xx / Throttling) 만 retry — 4xx (NoSuchBucket / AccessDenied)
-    # 는 즉시 raise 후 호출자가 fail-fast.
-    transient_codes = {"InternalError", "ServiceUnavailable", "SlowDown", "Throttling"}
+    # 두 종류 transient retry 대상 (module-level `transport_exception_types_main` 참조):
+    # (1) Transport-level — TCP / TLS / DNS 단계 fail (connection refused, RST, timeout).
+    #     botocore 의 BotoCoreError 서브클래스. boto3 의 standard retry config 가 일부
+    #     커버하지만 우리 측에서도 명시적 wrap — *audit 박제 같은 must-succeed path* 의
+    #     추가 안전망.
+    # (2) HTTP-level — 연결은 됐지만 서버가 5xx / Throttling 응답.
+    #     `ClientError` 의 HTTP status / Error code 로 분류.
+    # 4xx (AccessDenied / NoSuchBucket / 잘못된 key) 는 *모두* immediate raise (재시도 무의미).
+    transient_http_codes = {"InternalError", "ServiceUnavailable", "SlowDown", "Throttling"}
     http_5xx_min = 500
     http_5xx_max = 600
 
     def is_transient(exc: BaseException) -> bool:
-        if not isinstance(exc, ClientError):
-            return False
-        code = exc.response.get("Error", {}).get("Code", "")
-        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
-        return code in transient_codes or (
-            isinstance(status, int) and http_5xx_min <= status < http_5xx_max
-        )
+        # (1) Transport-level — TCP/TLS/DNS 실패는 무조건 retry 대상.
+        if isinstance(exc, transport_exception_types_main):
+            return True
+        # (2) HTTP-level — 5xx / Throttling 만 retry. 4xx 는 안 함.
+        if isinstance(exc, ClientError):
+            code = exc.response.get("Error", {}).get("Code", "")
+            status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+            return code in transient_http_codes or (
+                isinstance(status, int) and http_5xx_min <= status < http_5xx_max
+            )
+        return False
 
     args: dict[str, Any] = {
         "Bucket": bucket,
@@ -387,9 +416,10 @@ def main() -> int:
             },
         )
         print(f"[audit] raw HTML 박제 → s3://{bucket}/{audit_key}", flush=True)
-    except (ClientError, RetryError) as e:
+    except (ClientError, *transport_exception_types_main, RetryError) as e:
         sys.stderr.write(
-            f"FATAL: audit HTML PUT 실패 (3 시도 후) — Bronze 빌드 abort: {e}\n"
+            f"FATAL: audit HTML PUT 실패 (3 시도 후) — Bronze 빌드 abort: "
+            f"{type(e).__name__}: {e}\n"
         )
         return 2
 
@@ -412,12 +442,17 @@ def main() -> int:
 
         # tenacity-wrapped download attempt loop. 매 attempt 마다 fresh GET (헤더 + body).
         # connection drop 시 partial bytes 안 쓰고 새로 시작 — 안전한 재시도.
-        # 단 attempt 마다 Content-Length / sigungu 다시 확인하므로 idempotent skip 도 보장.
+        # Round 3 stop-hook fix — boto3 transport exceptions 도 retry 대상에 포함.
         for attempt in Retrying(
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=1, min=2, max=30),
             retry=retry_if_exception_type(
-                (cffi.RequestsError, ConnectionError, TimeoutError)
+                (
+                    cffi.RequestsError,
+                    ConnectionError,
+                    TimeoutError,
+                    *transport_exception_types_main,
+                )
             ),
             reraise=True,
         ):
@@ -496,6 +531,13 @@ def main() -> int:
                 code = e.response.get("Error", {}).get("Code", "?")
                 sys.stderr.write(
                     f"FAIL fileNo={entry.file_no}: R2 ClientError [{code}]: {e}\n"
+                )
+                results.append((f"fileNo-{entry.file_no}", False, -1))
+            except transport_exception_types_main as e:
+                # botocore transport-level — TCP/TLS/DNS 실패. tenacity 가 3 시도 후 reraise.
+                sys.stderr.write(
+                    f"FAIL fileNo={entry.file_no}: R2 transport error "
+                    f"({type(e).__name__}): {e}\n"
                 )
                 results.append((f"fileNo-{entry.file_no}", False, -1))
             except (OSError, ConnectionError, TimeoutError) as e:

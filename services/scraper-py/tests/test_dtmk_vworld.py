@@ -14,7 +14,12 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionClosedError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 
 # parent dir import — pyproject 의 packaging 미설정이라 path 주입.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -169,3 +174,71 @@ def test_r2_put_with_retry_passes_optional_headers() -> None:
     assert args.kwargs["Key"] == "audit/x.html"
     assert args.kwargs["CacheControl"] == "public, max-age=31536000, immutable"
     assert args.kwargs["Metadata"]["ds_id"] == "30563"
+
+
+# Round 3 stop-hook fix v2 — transport-level retry 회귀.
+# Codex finding: `ClientError` 만 retry 했으나 `BotoCoreError` 서브클래스 (transport
+# fail) 가 누락되어 R2 endpoint 가 connection drop / TLS handshake fail / DNS unreach
+# 인 케이스가 retry 안 됨.
+
+def test_r2_put_with_retry_retries_on_endpoint_connection_error() -> None:
+    """DNS / connection refused / endpoint unreachable — transport-level transient."""
+    r2 = MagicMock()
+    transport_err = EndpointConnectionError(endpoint_url="https://r2.test")
+    # 1차 fail (transport), 2차 success.
+    r2.put_object.side_effect = [transport_err, None]
+    dtmk_vworld.r2_put_with_retry(
+        r2,
+        bucket="b",
+        key="k",
+        body=b"x",
+        content_type="text/plain",
+    )
+    assert r2.put_object.call_count == 2
+
+
+def test_r2_put_with_retry_retries_on_connection_closed_error() -> None:
+    """TCP RST / connection closed mid-request — transport-level transient."""
+    r2 = MagicMock()
+    transport_err = ConnectionClosedError(endpoint_url="https://r2.test")
+    r2.put_object.side_effect = [transport_err, None]
+    dtmk_vworld.r2_put_with_retry(
+        r2,
+        bucket="b",
+        key="k",
+        body=b"x",
+        content_type="text/plain",
+    )
+    assert r2.put_object.call_count == 2
+
+
+def test_r2_put_with_retry_retries_on_read_timeout() -> None:
+    """upstream read timeout — transport-level transient."""
+    r2 = MagicMock()
+    transport_err = ReadTimeoutError(endpoint_url="https://r2.test")
+    # 2회 transient + 3회 success.
+    r2.put_object.side_effect = [transport_err, transport_err, None]
+    dtmk_vworld.r2_put_with_retry(
+        r2,
+        bucket="b",
+        key="k",
+        body=b"x",
+        content_type="text/plain",
+    )
+    assert r2.put_object.call_count == 3
+
+
+def test_r2_put_with_retry_exhausts_on_persistent_transport_failure() -> None:
+    """3회 모두 transport fail → 마지막에 reraise (RetryError 또는 원본 transport)."""
+    r2 = MagicMock()
+    transport_err = EndpointConnectionError(endpoint_url="https://r2.test")
+    r2.put_object.side_effect = transport_err
+    with pytest.raises(EndpointConnectionError):
+        dtmk_vworld.r2_put_with_retry(
+            r2,
+            bucket="b",
+            key="k",
+            body=b"x",
+            content_type="text/plain",
+        )
+    assert r2.put_object.call_count == 3
