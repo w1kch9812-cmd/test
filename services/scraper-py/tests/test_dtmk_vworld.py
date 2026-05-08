@@ -84,3 +84,88 @@ def test_r2_head_returns_metadata_on_success() -> None:
     result = dtmk_vworld.r2_head(r2, "bucket", "exists")
     assert result is not None
     assert result["ContentLength"] == 12345
+
+
+# Round 3 stop-hook fix — audit/retry guarantee 회귀 tests.
+
+def test_r2_put_with_retry_raises_immediately_on_4xx() -> None:
+    """4xx (AccessDenied / NoSuchBucket) 는 즉시 raise — retry 무의미."""
+    r2 = MagicMock()
+    err = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": "denied"},
+         "ResponseMetadata": {"HTTPStatusCode": 403}},
+        "PutObject",
+    )
+    r2.put_object.side_effect = err
+    with pytest.raises(ClientError) as exc_info:
+        dtmk_vworld.r2_put_with_retry(
+            r2,
+            bucket="b",
+            key="k",
+            body=b"x",
+            content_type="text/plain",
+        )
+    assert exc_info.value.response["Error"]["Code"] == "AccessDenied"
+    # 4xx 는 첫 시도에서만 — retry 안 됨.
+    assert r2.put_object.call_count == 1
+
+
+def test_r2_put_with_retry_retries_on_5xx_then_succeeds() -> None:
+    """5xx transient — tenacity 가 1차 fail 후 2차에서 성공."""
+    r2 = MagicMock()
+    transient_err = ClientError(
+        {"Error": {"Code": "InternalError", "Message": "oops"},
+         "ResponseMetadata": {"HTTPStatusCode": 500}},
+        "PutObject",
+    )
+    # 1차 fail, 2차 success.
+    r2.put_object.side_effect = [transient_err, None]
+    dtmk_vworld.r2_put_with_retry(
+        r2,
+        bucket="b",
+        key="k",
+        body=b"x",
+        content_type="text/plain",
+    )
+    assert r2.put_object.call_count == 2
+
+
+def test_r2_put_with_retry_exhausts_then_raises() -> None:
+    """3 시도 모두 5xx — 마지막에 ClientError raise."""
+    r2 = MagicMock()
+    transient_err = ClientError(
+        {"Error": {"Code": "ServiceUnavailable", "Message": "down"},
+         "ResponseMetadata": {"HTTPStatusCode": 503}},
+        "PutObject",
+    )
+    r2.put_object.side_effect = transient_err
+    with pytest.raises(ClientError) as exc_info:
+        dtmk_vworld.r2_put_with_retry(
+            r2,
+            bucket="b",
+            key="k",
+            body=b"x",
+            content_type="text/plain",
+        )
+    assert exc_info.value.response["Error"]["Code"] == "ServiceUnavailable"
+    assert r2.put_object.call_count == 3
+
+
+def test_r2_put_with_retry_passes_optional_headers() -> None:
+    """metadata + cache_control 인자가 boto3 put_object 에 그대로 전달."""
+    r2 = MagicMock()
+    r2.put_object.return_value = None
+    dtmk_vworld.r2_put_with_retry(
+        r2,
+        bucket="b",
+        key="audit/x.html",
+        body=b"<html/>",
+        content_type="text/html; charset=utf-8",
+        cache_control="public, max-age=31536000, immutable",
+        metadata={"ds_id": "30563"},
+    )
+    args = r2.put_object.call_args
+    assert args.kwargs["Bucket"] == "b"
+    assert args.kwargs["Key"] == "audit/x.html"
+    assert args.kwargs["CacheControl"] == "public, max-age=31536000, immutable"
+    assert args.kwargs["Metadata"]["ds_id"] == "30563"

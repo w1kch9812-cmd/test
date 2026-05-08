@@ -34,6 +34,7 @@ from curl_cffi import requests as cffi
 from tenacity import (
     RetryError,
     Retrying,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
@@ -156,6 +157,63 @@ def http_post_with_retry(
             return r
     msg = "_make_retrying must reraise on exhaustion"
     raise RuntimeError(msg)  # pragma: no cover
+
+
+def r2_put_with_retry(
+    r2: Any,
+    *,
+    bucket: str,
+    key: str,
+    body: bytes,
+    content_type: str,
+    cache_control: str | None = None,
+    metadata: dict[str, str] | None = None,
+) -> None:
+    """tenacity retry 로 wrap 된 small-payload R2 PUT.
+
+    boto3 의 standard retry config (5x) 위에 추가 wrapper — *전송 자체* 가 transient
+    fail 한 경우 (network reset / 5xx) 우리 측에서 한 번 더 보호. boto3 retry 가
+    이미 통과 못 한 케이스 = 5x 다 실패 = 진짜 systemic. retry 1 회 더 = 의미 적지만
+    *audit 박제 같은 "must succeed" path 의 추가 안전망*.
+
+    Note: streaming upload (`upload_fileobj`) 는 별도 wrap (chunk position rewind 필요).
+    """
+    # boto3 ClientError 중 transient (5xx / Throttling) 만 retry — 4xx (NoSuchBucket / AccessDenied)
+    # 는 즉시 raise 후 호출자가 fail-fast.
+    transient_codes = {"InternalError", "ServiceUnavailable", "SlowDown", "Throttling"}
+    http_5xx_min = 500
+    http_5xx_max = 600
+
+    def is_transient(exc: BaseException) -> bool:
+        if not isinstance(exc, ClientError):
+            return False
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+        return code in transient_codes or (
+            isinstance(status, int) and http_5xx_min <= status < http_5xx_max
+        )
+
+    args: dict[str, Any] = {
+        "Bucket": bucket,
+        "Key": key,
+        "Body": body,
+        "ContentType": content_type,
+    }
+    if cache_control:
+        args["CacheControl"] = cache_control
+    if metadata:
+        args["Metadata"] = metadata
+
+    # tenacity 의 retry_if_exception(은 *transient 만* retry 대상으로 한정.
+    # 4xx (AccessDenied / NoSuchBucket) 는 첫 시도 후 즉시 reraise — retry 무의미.
+    for attempt in Retrying(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception(is_transient),
+        reraise=True,
+    ):
+        with attempt:
+            r2.put_object(**args)
 
 
 def login(session: cffi.Session, username: str, password: str) -> None:
@@ -308,83 +366,115 @@ def main() -> int:
 
     r2 = make_r2()
 
-    # Round 3 P0 — audit trail. 페이지 변경 / regex miss 진단을 위해 raw HTML 박제.
+    # Round 3 (Codex stop-time review): audit trail 은 *guarantee* — best-effort 0.
+    # 페이지 변경 / regex miss 시 raw HTML 이 R2 에 박제 되어야 사후 진단 가능.
+    # audit PUT 실패 = main 작업 abort (audit 없는 Bronze 빌드는 SSS 불가).
     # path: bronze/<batch>/parcel-dtmk-<ds_id>/audit/<ISO-date>-list.html
-    # 빈 entries 라도 audit 박제 후 abort — 사후 분석 가능.
     iso_date = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
     audit_key = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}/audit/{iso_date}-list.html"
     try:
-        r2.put_object(
-            Bucket=bucket,
-            Key=audit_key,
-            Body=raw_html.encode("utf-8"),
-            ContentType="text/html; charset=utf-8",
-            CacheControl="public, max-age=31536000, immutable",
-            Metadata={"ds_id": ds_id, "fetched_at": iso_date, "entry_count": str(len(entries))},
+        r2_put_with_retry(
+            r2,
+            bucket=bucket,
+            key=audit_key,
+            body=raw_html.encode("utf-8"),
+            content_type="text/html; charset=utf-8",
+            cache_control="public, max-age=31536000, immutable",
+            metadata={
+                "ds_id": ds_id,
+                "fetched_at": iso_date,
+                "entry_count": str(len(entries)),
+            },
         )
         print(f"[audit] raw HTML 박제 → s3://{bucket}/{audit_key}", flush=True)
-    except ClientError as e:
-        # audit PUT 실패는 *경고*만 — 본 실행의 main 작업 (Bronze zip PUT) 차단 X.
-        sys.stderr.write(f"WARN: audit HTML PUT 실패 ({e.response.get('Error', {}).get('Code')})\n")
+    except (ClientError, RetryError) as e:
+        sys.stderr.write(
+            f"FATAL: audit HTML PUT 실패 (3 시도 후) — Bronze 빌드 abort: {e}\n"
+        )
+        return 2
 
     if not entries:
-        sys.stderr.write("ERROR: file list 비어있음 (페이지 변경 의심) — audit/ 박제 후 abort\n")
+        sys.stderr.write("ERROR: file list 비어있음 (페이지 변경 의심) — audit/ 박제됨, abort\n")
         return 2
 
     def upload_one(idx: int, entry: FileEntry) -> tuple[str, bool, int]:
         """단일 파일 다운 + R2 PUT. (sigungu, downloaded?, bytes).
 
-        Round 3 P0:
-        - V-World GET / R2 PUT 모두 typed exception (cffi.RequestsError / ClientError).
-        - 호출자 (`as_completed` loop) 가 Exception 분류해서 silent partial 차단.
+        Round 3 (Codex stop-time review) — download stream + PUT 둘 다 explicit retry:
+        - V-World GET stream 은 connection drop 흔함. tenacity Retrying 으로 *fresh
+          attempt* 마다 새 GET → partial bytes 누락 차단.
+        - boto3 upload_fileobj 는 자체 multipart retry (max_attempts=5) 보유. 추가
+          명시 wrap 은 over-engineering — boto3 fail = 5x 모두 fail = systemic.
+        - 호출자 (`as_completed` loop) 가 typed exception 분류 + stderr 박제.
         """
-        # 우선 헤더만 fetch — Content-Disposition 의 filename 으로 시군구명 추출.
         url = DOWNLOAD_URL.format(ds_id=entry.ds_id, file_no=entry.file_no)
-        # streaming 다운 — retry 는 wrap 안 함 (download 가 600s 라 backoff 의미 적음).
-        # connection drop 시 호출자 loop 가 exception 박제하고 partial 안 PUT 하도록.
-        r = session.get(url, stream=True, timeout=600)
-        r.raise_for_status()
-        disp = r.headers.get("Content-Disposition")
-        filename = filename_from_disposition(disp) or f"file-{entry.file_no}.zip"
-        sigungu = sigungu_from_filename(filename)
-        content_len = int(r.headers.get("Content-Length", "0"))
-        key = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}/{filename}"
+        key_prefix = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}"
 
-        # idempotent — 이미 같은 size 의 object 가 R2 에 있으면 skip.
-        existing = r2_head(r2, bucket, key)
-        if existing and int(existing.get("ContentLength", 0)) == content_len and content_len > 0:
-            r.close()
-            print(
-                f"[{idx:3d}/{len(entries)}] skip {sigungu} ({content_len:,}B, R2 동일)",
-                flush=True,
-            )
-            return sigungu, False, 0
+        # tenacity-wrapped download attempt loop. 매 attempt 마다 fresh GET (헤더 + body).
+        # connection drop 시 partial bytes 안 쓰고 새로 시작 — 안전한 재시도.
+        # 단 attempt 마다 Content-Length / sigungu 다시 확인하므로 idempotent skip 도 보장.
+        for attempt in Retrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=2, max=30),
+            retry=retry_if_exception_type(
+                (cffi.RequestsError, ConnectionError, TimeoutError)
+            ),
+            reraise=True,
+        ):
+            with attempt:
+                r = session.get(url, stream=True, timeout=600)
+                r.raise_for_status()
+                disp = r.headers.get("Content-Disposition")
+                filename = filename_from_disposition(disp) or f"file-{entry.file_no}.zip"
+                sigungu = sigungu_from_filename(filename)
+                content_len = int(r.headers.get("Content-Length", "0"))
+                key = f"{key_prefix}/{filename}"
 
-        # streaming PUT — iter_content 로 chunk 받아 BytesIO buffer 거쳐 upload_fileobj.
-        # boto3 가 multipart 자동 — 메모리는 chunk 단위만 사용.
-        # S3 metadata 는 ASCII only — sigungu 한글은 URL-encode 후 박제.
-        try:
-            r2.upload_fileobj(
-                _IterStream(r.iter_content(chunk_size=64 * 1024)),
-                bucket,
-                key,
-                ExtraArgs={
-                    "ContentType": "application/zip",
-                    "Metadata": {
-                        "ds_id": entry.ds_id,
-                        "file_no": entry.file_no,
-                        "sigungu_urlencoded": url_quote(sigungu, safe=""),
-                        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    },
-                },
-            )
-        finally:
-            r.close()
-        print(
-            f"[{idx:3d}/{len(entries)}] PUT {sigungu} ({content_len:,}B -> s3://{bucket}/{key})",
-            flush=True,
-        )
-        return sigungu, True, content_len
+                # idempotent — 이미 같은 size 의 object 가 R2 에 있으면 skip.
+                existing = r2_head(r2, bucket, key)
+                if (
+                    existing
+                    and int(existing.get("ContentLength", 0)) == content_len
+                    and content_len > 0
+                ):
+                    r.close()
+                    print(
+                        f"[{idx:3d}/{len(entries)}] skip {sigungu} ({content_len:,}B, R2 동일)",
+                        flush=True,
+                    )
+                    return sigungu, False, 0
+
+                # streaming PUT — boto3 가 multipart 자동 + 자체 retry (max 5).
+                # `_IterStream` 은 stream position rewind 못 함 — 본 attempt 가 fail 시
+                # 다음 attempt 가 새 GET 으로 stream 다시 받음.
+                try:
+                    r2.upload_fileobj(
+                        _IterStream(r.iter_content(chunk_size=64 * 1024)),
+                        bucket,
+                        key,
+                        ExtraArgs={
+                            "ContentType": "application/zip",
+                            "Metadata": {
+                                "ds_id": entry.ds_id,
+                                "file_no": entry.file_no,
+                                "sigungu_urlencoded": url_quote(sigungu, safe=""),
+                                "fetched_at": time.strftime(
+                                    "%Y-%m-%dT%H:%M:%SZ", time.gmtime()
+                                ),
+                            },
+                        },
+                    )
+                finally:
+                    r.close()
+                print(
+                    f"[{idx:3d}/{len(entries)}] PUT {sigungu} "
+                    f"({content_len:,}B -> s3://{bucket}/{key})",
+                    flush=True,
+                )
+                return sigungu, True, content_len
+        # tenacity reraise=True 가 보장 — 미도달 path.
+        msg = "tenacity must reraise on retry exhaustion"
+        raise RuntimeError(msg)  # pragma: no cover
 
     # concurrent download (V-World 서버 부담 고려 default 3 parallel).
     # Round 3 P0 — typed exception 분류. silent flatten 대신 (cffi/ClientError) 와 그 외
