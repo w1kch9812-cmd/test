@@ -74,12 +74,24 @@ pub enum PromoteError {
     #[error("cdn purge http: {0}")]
     Http(#[from] reqwest::Error),
     /// CDN purge 가 non-2xx 응답.
-    #[error("cdn purge failed status={status} body={body}")]
+    #[error("cdn purge failed status={status} body={body} body_read_error={body_read_error:?}")]
     CdnPurge {
         /// HTTP status.
         status: u16,
         /// 응답 body 처음 1024 바이트.
         body: String,
+        /// Round 4 #6 — body read 자체 실패 시 그 에러 박제 (이전엔 `unwrap_or_default()`
+        /// 로 silent loss). 진단 trail 보존.
+        body_read_error: Option<String>,
+    },
+    /// Round 4 #5 — production env 에서 CDN purge config (`CLOUDFLARE_API_TOKEN` /
+    /// `CLOUDFLARE_ZONE_ID` / `R2_PUBLIC_URL_BASE`) 가 누락. dev / staging 은 silent
+    /// skip 허용, production 은 fail-fast (manifest 가 stale CDN 으로 publish 되는
+    /// silent partial 차단).
+    #[error("CDN purge config missing in production: {missing} (set CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID / R2_PUBLIC_URL_BASE or override ETL_BUILD_ENV)")]
+    CdnPurgeMissingConfig {
+        /// 어느 env 가 누락됐는지.
+        missing: String,
     },
 }
 
@@ -185,6 +197,23 @@ pub struct PromoteArgs<'a> {
     pub public_url_base: &'a R2PublicBase,
 }
 
+/// Round 4 #5 — CDN purge 결과의 typed outcome (이전 `Option<bool>` 의 ambiguity 제거).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CdnPurgeOutcome {
+    /// Cloudflare API 200 OK — manifest URL purge 완료.
+    Purged,
+    /// dev / staging env (`ETL_BUILD_ENV != "production"`) 에서 CDN config 누락 시
+    /// silent skip — manifest 의 `Cache-Control: no-cache` 가 fallback.
+    SkippedDevMode,
+    /// CDN config 누락. production 에서는 본 variant 가 `PromoteError::CdnPurgeMissingConfig`
+    /// 로 변환 — 본 variant 는 `Promote` 단계 도달 안 함 (fail-fast).
+    #[allow(dead_code)]
+    SkippedNoConfig,
+    /// Cloudflare API 호출은 했으나 transient HTTP / 4xx 응답. promote 자체는 성공
+    /// (manifest 는 publish), CDN purge 만 실패. 상위 `PromoteError::CdnPurge` 로 박제.
+    Failed,
+}
+
 /// promote 결과.
 #[derive(Debug, Clone)]
 pub struct PromoteResult {
@@ -192,8 +221,8 @@ pub struct PromoteResult {
     pub current_version: String,
     /// publish 한 manifest object key.
     pub manifest_key: String,
-    /// CDN cache purge 시도 결과 (`Some(true)` = success, `Some(false)` = skipped, `None` = failed).
-    pub cdn_purged: Option<bool>,
+    /// Round 4 #5 — typed CDN purge outcome (이전 `Option<bool>`).
+    pub cdn_purge: CdnPurgeOutcome,
 }
 
 /// promote — staging spec 검증 + flat tile 실재 검증 + previous manifest backup +
@@ -320,38 +349,65 @@ pub async fn run(
         "manifest atomically published"
     );
 
-    // 5. CDN purge (optional).
-    let cdn_purged = match cloudflare_purge(&manifest_key).await {
-        Ok(true) => Some(true),
-        Ok(false) => Some(false),
+    // 5. CDN purge (Round 4 #5 typed outcome).
+    let cdn_purge = match cloudflare_purge(&manifest_key).await {
+        Ok(outcome) => outcome,
         Err(e) => {
             warn!(error = %e, "CDN purge failed — manifest no-cache header is fallback");
-            None
+            CdnPurgeOutcome::Failed
         }
     };
 
     Ok(PromoteResult {
         current_version: args.version.as_str().to_owned(),
         manifest_key,
-        cdn_purged,
+        cdn_purge,
     })
 }
 
 /// Cloudflare CDN purge — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` + `R2_PUBLIC_URL_BASE`
 /// 모두 set 시 활성. manifest 객체 URL 만 purge.
-async fn cloudflare_purge(manifest_key: &str) -> Result<bool, PromoteError> {
-    let Ok(token) = std::env::var("CLOUDFLARE_API_TOKEN") else {
-        return Ok(false);
+///
+/// Round 4 #5 (Codex audit): production env 에서 config 누락 = fail-fast (이전: silent
+/// `Ok(false)` 로 manifest 가 stale CDN 으로 publish 되는 trick). dev / staging 은
+/// silent skip 그대로 (`SkippedDevMode`).
+async fn cloudflare_purge(manifest_key: &str) -> Result<CdnPurgeOutcome, PromoteError> {
+    let token = std::env::var("CLOUDFLARE_API_TOKEN")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    let zone_id = std::env::var("CLOUDFLARE_ZONE_ID")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    let base = std::env::var("R2_PUBLIC_URL_BASE")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+
+    // typed unpack — 누락 detection 과 unwrap 을 하나의 match 로. production 시 fail-fast,
+    // 그 외 env 는 SkippedDevMode (manifest 의 no-cache header 가 fallback).
+    let (token, zone_id, base) = match (token, zone_id, base) {
+        (Some(t), Some(z), Some(b)) => (t, z, b),
+        (token, zone_id, base) => {
+            let missing: Vec<&str> = [
+                ("CLOUDFLARE_API_TOKEN", token.is_some()),
+                ("CLOUDFLARE_ZONE_ID", zone_id.is_some()),
+                ("R2_PUBLIC_URL_BASE", base.is_some()),
+            ]
+            .iter()
+            .filter_map(|(name, present)| if *present { None } else { Some(*name) })
+            .collect();
+            let is_production = std::env::var("ETL_BUILD_ENV")
+                .ok()
+                .as_deref()
+                .is_some_and(|v| v.eq_ignore_ascii_case("production"));
+            if is_production {
+                return Err(PromoteError::CdnPurgeMissingConfig {
+                    missing: missing.join(", "),
+                });
+            }
+            info!(missing = ?missing, "CDN purge skipped in non-production env");
+            return Ok(CdnPurgeOutcome::SkippedDevMode);
+        }
     };
-    let Ok(zone_id) = std::env::var("CLOUDFLARE_ZONE_ID") else {
-        return Ok(false);
-    };
-    let Ok(base) = std::env::var("R2_PUBLIC_URL_BASE") else {
-        return Ok(false);
-    };
-    if token.trim().is_empty() || zone_id.trim().is_empty() || base.trim().is_empty() {
-        return Ok(false);
-    }
 
     let url = format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache");
     let target_url = if base.ends_with('/') {
@@ -370,22 +426,135 @@ async fn cloudflare_purge(manifest_key: &str) -> Result<bool, PromoteError> {
         .await?;
     let status = resp.status();
     if !status.is_success() {
-        let body_text = resp.text().await.unwrap_or_default();
-        let truncated = body_text.chars().take(1024).collect::<String>();
+        // Round 4 #6 — body read 실패도 typed 박제. 이전 `unwrap_or_default()` silent loss 제거.
+        let (body, body_read_error) = match resp.text().await {
+            Ok(text) => (text.chars().take(1024).collect::<String>(), None),
+            Err(e) => (String::new(), Some(format!("body read failed: {e}"))),
+        };
         return Err(PromoteError::CdnPurge {
             status: status.as_u16(),
-            body: truncated,
+            body,
+            body_read_error,
         });
     }
     info!(target = %target_url, "CDN cache purged");
-    Ok(true)
+    Ok(CdnPurgeOutcome::Purged)
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+    #![allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::panic,
+        clippy::await_holding_lock,  // env-mutating tests 는 process-global 이라 lock-held await 필요
+    )]
 
-    use super::ArtifactSpec;
+    use std::sync::Mutex;
+
+    use super::{cloudflare_purge, ArtifactSpec, CdnPurgeOutcome, PromoteError};
+
+    /// process-global env mutation 직렬화. 모든 cloudflare_purge 테스트가 본 mutex 통과.
+    /// `cargo test` 의 thread parallelism 과 env race 차단.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_cdn_env() {
+        for k in [
+            "CLOUDFLARE_API_TOKEN",
+            "CLOUDFLARE_ZONE_ID",
+            "R2_PUBLIC_URL_BASE",
+            "ETL_BUILD_ENV",
+        ] {
+            std::env::remove_var(k);
+        }
+    }
+
+    /// Round 4 #5 — CDN config 누락 + ETL_BUILD_ENV != production = `SkippedDevMode`.
+    #[tokio::test]
+    async fn cloudflare_purge_skips_silently_in_dev_mode() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "dev");
+        let outcome = cloudflare_purge("gold/manifest.json")
+            .await
+            .expect("dev mode skip");
+        assert_eq!(outcome, CdnPurgeOutcome::SkippedDevMode);
+        clear_cdn_env();
+    }
+
+    /// Round 4 #5 — CDN config 누락 + ETL_BUILD_ENV=production = fail-fast (silent path 0).
+    #[tokio::test]
+    async fn cloudflare_purge_fails_fast_in_production_when_config_missing() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "production");
+        let err = cloudflare_purge("gold/manifest.json")
+            .await
+            .expect_err("production mode missing-config = fail-fast");
+        match err {
+            PromoteError::CdnPurgeMissingConfig { missing } => {
+                assert!(
+                    missing.contains("CLOUDFLARE_API_TOKEN"),
+                    "missing detail must include token: {missing}"
+                );
+                assert!(missing.contains("CLOUDFLARE_ZONE_ID"));
+                assert!(missing.contains("R2_PUBLIC_URL_BASE"));
+            }
+            other => panic!("expected CdnPurgeMissingConfig, got: {other:?}"),
+        }
+        clear_cdn_env();
+    }
+
+    /// Round 4 #5 — production mode 인데 *부분* config (1개만 누락) → 같은 fail-fast.
+    #[tokio::test]
+    async fn cloudflare_purge_fails_fast_in_production_when_partial_config() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("CLOUDFLARE_API_TOKEN", "fake-token");
+        std::env::set_var("CLOUDFLARE_ZONE_ID", "fake-zone");
+        // R2_PUBLIC_URL_BASE 만 누락.
+        let err = cloudflare_purge("gold/manifest.json")
+            .await
+            .expect_err("partial config = fail-fast");
+        match err {
+            PromoteError::CdnPurgeMissingConfig { missing } => {
+                assert!(missing.contains("R2_PUBLIC_URL_BASE"), "{missing}");
+                assert!(!missing.contains("CLOUDFLARE_API_TOKEN"), "{missing}");
+            }
+            other => panic!("expected CdnPurgeMissingConfig, got: {other:?}"),
+        }
+        clear_cdn_env();
+    }
+
+    /// Round 4 #6 — `PromoteError::CdnPurge` 의 `body_read_error` 필드가 typed.
+    /// body read 가 성공했으면 None, 실패했으면 Some(에러 메시지).
+    #[test]
+    fn cdn_purge_error_body_read_error_field_default_is_none() {
+        let err = PromoteError::CdnPurge {
+            status: 502,
+            body: "Bad Gateway".into(),
+            body_read_error: None,
+        };
+        let display = format!("{err}");
+        assert!(display.contains("body=Bad Gateway"), "{display}");
+        assert!(display.contains("body_read_error=None"), "{display}");
+    }
+
+    #[test]
+    fn cdn_purge_error_preserves_body_read_error() {
+        let err = PromoteError::CdnPurge {
+            status: 503,
+            body: String::new(),
+            body_read_error: Some("io: connection reset".into()),
+        };
+        let display = format!("{err}");
+        assert!(
+            display.contains("connection reset"),
+            "body_read_error must propagate: {display}"
+        );
+    }
+
 
     /// P0 typed gate (Codex Round 3 발견 fix): staging spec round-trip.
     /// `write_staging_spec` 가 직렬화한 JSON 이 `ArtifactSpec` 으로 1:1 round-trip.

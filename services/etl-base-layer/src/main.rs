@@ -609,7 +609,7 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
             info!(
                 version = %result.current_version,
                 manifest_key = %result.manifest_key,
-                cdn_purged = ?result.cdn_purged,
+                cdn_purge = ?result.cdn_purge,
                 "promote complete — manifest atomic flip done"
             );
             ExitCode::SUCCESS
