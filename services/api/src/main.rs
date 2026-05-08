@@ -209,6 +209,12 @@ async fn main() {
     // SP9 T4 / ADR 0018: PNU lookup. VWORLD_API_KEY 미설정 → NoOp fallback (dev/CI).
     // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 (raw_response JSONB 미저장
     // 위반). production 은 VWORLD_API_KEY *반드시* — startup fail-fast.
+    // audit 2026-05-08 round 2 (P1 + P2 ship-safety): PgRawCapture 인스턴스 공유 —
+    // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 capture sink 사용
+    // (parcel_external_data UPSERT 대상, 다른 source 라벨로 구분).
+    let raw_capture: Arc<dyn raw_capture_client::RawCapture> =
+        Arc::new(PgRawCapture::new(pool.clone()));
+
     let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
         Ok(cfg) => {
             tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
@@ -218,7 +224,7 @@ async fn main() {
             // CHECK (source in ('vworld', ...)) 정합 검증 — migrations/30006_parcel_external_data.sql:13-19.
             let reader: Arc<dyn ParcelReader> = Arc::new(VWorldParcelReader::new(
                 client,
-                Arc::new(PgRawCapture::new(pool.clone())),
+                Arc::clone(&raw_capture),
             ));
             Arc::new(VWorldParcelInfoLookup::new(reader))
         }
@@ -426,7 +432,12 @@ async fn main() {
                         base_url,
                     },
                 ));
-                Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(client)) as Arc<dyn routes::buildings::BuildingRegisterReader>
+                // audit 2026-05-08 round 2 (P2 ship-safety fix): raw_capture 공유 →
+                // parcel_external_data (pnu, 'data_go_kr_building') UPSERT.
+                Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(
+                    client,
+                    Arc::clone(&raw_capture),
+                )) as Arc<dyn routes::buildings::BuildingRegisterReader>
             },
         )
     };

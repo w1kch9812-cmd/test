@@ -10,22 +10,36 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
 use data_go_kr_client::{building_register::BuildingRegisterClient, pnu_split, DataGoKrClient};
+use raw_capture_client::RawCapture;
 use serde_json::Value;
 use shared_kernel::pnu::Pnu;
+use tracing::warn;
 
 use crate::routes::buildings::{BuildingItem, BuildingRegisterError, BuildingRegisterReader};
 
+/// `parcel_external_data.source` CHECK 의 라벨. `migrations/30006_parcel_external_data.sql:13-19`
+/// 의 enum-like 제약 (`data_go_kr_building`) 과 정확히 일치.
+const RAW_CAPTURE_SOURCE: &str = "data_go_kr_building";
+
 /// `BuildingRegisterReader` 의 data.go.kr 라이브 구현체.
+///
+/// `getBrTitleInfo` raw JSON 을 `RawCapture` 로 best-effort 보존 — `parcel_external_data`
+/// (pnu, `data_go_kr_building`) UPSERT. 보존 실패는 warn 로그 + 응답 정상 진행 (SSOT 보호).
 pub struct DataGoKrBuildingRegisterReader {
     client: Arc<DataGoKrClient>,
+    raw_capture: Arc<dyn RawCapture>,
 }
 
 impl DataGoKrBuildingRegisterReader {
     /// 새 [`DataGoKrBuildingRegisterReader`].
     #[must_use]
-    pub const fn new(client: Arc<DataGoKrClient>) -> Self {
-        Self { client }
+    pub const fn new(client: Arc<DataGoKrClient>, raw_capture: Arc<dyn RawCapture>) -> Self {
+        Self {
+            client,
+            raw_capture,
+        }
     }
 }
 
@@ -47,6 +61,22 @@ impl BuildingRegisterReader for DataGoKrBuildingRegisterReader {
                 .fetch_title_info(parts)
                 .await
                 .map_err(|e| Box::new(e) as BuildingRegisterError)?;
+
+            // raw_capture best-effort — 보존 실패는 warn 후 정상 진행 (응답 자체는 OK).
+            // AGENTS.md § 3 "raw 응답 보존" + audit 2026-05-08 round 2 (P2 ship-safety fix).
+            if let Err(capture_err) = self
+                .raw_capture
+                .capture(pnu.as_str(), RAW_CAPTURE_SOURCE, &raw, Utc::now())
+                .await
+            {
+                warn!(
+                    pnu = %pnu.as_str(),
+                    source = RAW_CAPTURE_SOURCE,
+                    error = %capture_err,
+                    "raw_capture failed — proceeding with parsed result"
+                );
+            }
+
             parse_items(&raw)
         })
     }
