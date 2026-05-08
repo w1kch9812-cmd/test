@@ -100,6 +100,33 @@ impl R2RawCaptureConfig {
     pub fn endpoint_url(&self) -> String {
         format!("https://{}.r2.cloudflarestorage.com", self.account_id)
     }
+
+    /// `fallback_dir` 가 `Some` 일 때, 실제로 mkdir + 쓰기 가능한지 startup 에서 확정 검증.
+    ///
+    /// audit 2026-05-08 round 4 (Codex stop-time review): env 존재만 검사하면
+    /// 경로가 잘못된 / 권한 없는 / 디스크 풀 케이스 잡지 못함 → 첫 R2 실패에서
+    /// raw 영구 손실. 본 함수는 mkdir + temp file write+delete 로 *진짜* writable 확정.
+    ///
+    /// `None` (fallback 미설정) → `Ok(())` — 호출자가 production 여부로 별도 처리.
+    ///
+    /// # Errors
+    /// `mkdir -p` 실패 / probe write 실패 / probe unlink 실패 → 그대로 전파.
+    pub fn ensure_fallback_writable(&self) -> Result<(), std::io::Error> {
+        let Some(dir) = self.fallback_dir.as_ref() else {
+            return Ok(());
+        };
+        std::fs::create_dir_all(dir)?;
+        // probe 파일 — 충돌 회피 위해 epoch nanos. 실제 write+delete 로 권한 + 디스크 둘 다 검증.
+        let probe = dir.join(format!(
+            ".gongzzang-bronze-probe-{}",
+            Utc::now()
+                .timestamp_nanos_opt()
+                .unwrap_or_else(|| Utc::now().timestamp_micros())
+        ));
+        std::fs::write(&probe, b"probe")?;
+        std::fs::remove_file(&probe)?;
+        Ok(())
+    }
 }
 
 fn require_env(name: &'static str) -> Result<String, R2ConfigError> {
@@ -339,6 +366,37 @@ mod tests {
         assert_eq!(path, tmp.path().join(key));
         let content = std::fs::read_to_string(&path).expect("read back");
         assert_eq!(content, "{\"raw\":true}");
+    }
+
+    #[test]
+    fn ensure_fallback_writable_creates_missing_dir() {
+        let tmp = TempDir::new().expect("tempdir");
+        let nested = tmp.path().join("a/b/c"); // 미존재
+        assert!(!nested.exists());
+        let mut c = cfg();
+        c.fallback_dir = Some(nested.clone());
+        c.ensure_fallback_writable().expect("mkdir + probe ok");
+        assert!(nested.exists() && nested.is_dir());
+        // probe 파일은 자동 삭제됨.
+        let leftover: Vec<_> = std::fs::read_dir(&nested).unwrap().collect();
+        assert!(leftover.is_empty(), "probe leftover 있음");
+    }
+
+    #[test]
+    fn ensure_fallback_writable_none_is_ok() {
+        // fallback 미설정 케이스 — 호출자가 production 여부 별도 처리.
+        cfg().ensure_fallback_writable().expect("None should be ok");
+    }
+
+    #[test]
+    fn ensure_fallback_writable_rejects_when_path_is_file() {
+        let tmp = TempDir::new().expect("tempdir");
+        let file_path = tmp.path().join("not-a-dir");
+        std::fs::write(&file_path, b"i am a file").unwrap();
+        let mut c = cfg();
+        c.fallback_dir = Some(file_path);
+        // create_dir_all 이 path 가 file 이면 "Not a directory" 또는 "File exists" 에러.
+        assert!(c.ensure_fallback_writable().is_err());
     }
 
     #[test]

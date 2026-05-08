@@ -216,14 +216,28 @@ async fn main() {
     // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 sink 공유.
     let raw_capture: Arc<dyn raw_capture_client::RawCapture> = match r2_raw_capture::R2RawCaptureConfig::from_env() {
         Ok(cfg) => {
-            // audit 2026-05-08 round 3 (Codex stop-time review): production 에서
-            // BRONZE_FALLBACK_DIR 미설정 = R2 PUT 실패 시 raw 영구 손실 차단 path 0
-            // (raw-loss fix 가 *production 에 존재 안 함*). production 은 *반드시*.
+            // audit 2026-05-08 round 3 (Codex): production 에서 BRONZE_FALLBACK_DIR
+            // 미설정 = R2 PUT 실패 시 raw 영구 손실 차단 path 0. production 은 *반드시*.
             if is_production && cfg.fallback_dir.is_none() {
                 fail_fast_production(
                     "BRONZE_FALLBACK_DIR 미설정 — R2 PUT 실패 시 raw 영구 손실. \
                      production 은 ADR 0026 의 디스크 fallback 필수 \
                      (예: /var/lib/gongzzang/bronze-fallback)",
+                );
+            }
+            // audit 2026-05-08 round 4 (Codex): env 존재만 검사하면 잘못된 경로 / 권한
+            // / 디스크 풀 케이스 잡지 못함. mkdir + write probe 로 *진짜* writable 확정.
+            if let Err(e) = cfg.ensure_fallback_writable() {
+                if is_production {
+                    fail_fast_production(&format!(
+                        "BRONZE_FALLBACK_DIR ({:?}) mkdir/write probe 실패 — production 차단: {e}",
+                        cfg.fallback_dir
+                    ));
+                }
+                tracing::warn!(
+                    error = %e,
+                    fallback_dir = ?cfg.fallback_dir,
+                    "BRONZE_FALLBACK_DIR not writable (dev only — production 은 fail-fast)"
                 );
             }
             tracing::info!(
