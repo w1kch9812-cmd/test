@@ -1,3 +1,7 @@
-scrapling>=0.4.7
-curl_cffi>=0.15.0
-boto3>=1.43.0
+# Runtime dependencies — pinned (Round 3 P0: `>=` range = supply-chain drift trick).
+# 갱신 시 `pip-audit` 출력 + 사용자 검토 후 PR.
+# pyproject.toml 과 동기화 (mypy/ruff dev tool 은 pyproject 만).
+scrapling==0.4.7
+curl_cffi==0.15.0
+boto3==1.43.0
+tenacity==9.0.0

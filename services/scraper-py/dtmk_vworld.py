@@ -1,11 +1,16 @@
-"""V-World dtmk SHP zip 자동 다운로드 → R2 Bronze archive (SP9 ADR 0021).
+"""V-World dtmk SHP zip 자동 다운로드 → R2 Bronze archive (SP9 ADR 0021 + ADR 0025).
 
 핵심 정신:
 - *정적 데이터 (필지 polygon)* 는 *우리 R2 영구 저장*. runtime API 호출 0.
-- 매일 cron 가능: dtmk 페이지 fileSize 비교 → 변경된 시군구만 부분 다운.
-- subprocess pattern (tippecanoe / ogr2ogr 와 동일) — Rust ETL 이 spawn.
+- 매월 cron (workflow phase 1, ADR 0025) — Rust ETL 측이 R2 재소비.
 
-자세한 architecture: docs/adr/0022-bronze-scraping-isolated-python.md (작성 예정)
+Round 3 P0 hardening:
+- DTMK_DS_ID 는 env-driven SSOT (Rust `sp9_base_layer_config::DTMK_DS_ID` reflection)
+- V-World HTTP 호출은 tenacity retry — `circuit-breaker` Rust crate 와 동등 정책
+- `except Exception` 제거 — typed exception (botocore ClientError / cffi RequestException)
+- raw HTML response 보존 — 페이지 변경 시 audit trail (`bronze/.../audit/<date>-list.html`)
+
+자세한 architecture: docs/adr/0022-bronze-scraping-isolated-python-service.md
 """
 
 from __future__ import annotations
@@ -18,11 +23,21 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
+from urllib.parse import quote as url_quote
+from urllib.parse import unquote
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from curl_cffi import requests as cffi
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 
 # ===== .env loader =====
@@ -70,7 +85,10 @@ class _IterStream:
     chunk 단위만 사용 (~64KB).
     """
 
-    def __init__(self, it):
+    def __init__(self, it: Any) -> None:
+        # `it` 은 `Iterator[bytes]` 인데 curl_cffi 의 iter_content 가 type stubs 가 없어
+        # Any. 본 클래스가 byte iterator 를 file-like 로 adapt 하는 single-purpose 라
+        # `Any` 가 실용적.
         self._it = it
         self._buffer = b""
 
@@ -96,13 +114,58 @@ def make_session() -> cffi.Session:
     return cffi.Session(impersonate="chrome120")
 
 
+# ===== Retry policy (circuit-breaker Rust crate 와 동등) =====
+# Round 3 P0: V-World HTTP 호출은 timeout + retry + exponential backoff 강제.
+# - timeout 30s (login / list) ~ 600s (download stream) 는 호출 측에서 명시.
+# - retry max 2 (총 3 시도). exponential 1s → 2s → 4s.
+# - retry 가능 예외: HTTP-level transient (RequestException) + 5xx response.
+# `circuit-breaker::policy.rs::vworld_default()` 와 동일 정신.
+def _make_retrying() -> Retrying:
+    return Retrying(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=1, max=8),
+        retry=retry_if_exception_type((cffi.RequestsError, ConnectionError, TimeoutError)),
+        reraise=True,
+    )
+
+
+def http_get_with_retry(session: cffi.Session, url: str, *, timeout: int) -> cffi.Response:
+    """tenacity retry 로 wrap 된 GET. 3 시도 + exponential backoff."""
+    for attempt in _make_retrying():
+        with attempt:
+            r = session.get(url, timeout=timeout)
+            r.raise_for_status()
+            return r
+    msg = "_make_retrying must reraise on exhaustion"
+    raise RuntimeError(msg)  # pragma: no cover — tenacity reraise 가 보장
+
+
+def http_post_with_retry(
+    session: cffi.Session,
+    url: str,
+    *,
+    data: dict[str, str],
+    headers: dict[str, str],
+    timeout: int,
+) -> cffi.Response:
+    """tenacity retry POST."""
+    for attempt in _make_retrying():
+        with attempt:
+            r = session.post(url, data=data, headers=headers, timeout=timeout)
+            r.raise_for_status()
+            return r
+    msg = "_make_retrying must reraise on exhaustion"
+    raise RuntimeError(msg)  # pragma: no cover
+
+
 def login(session: cffi.Session, username: str, password: str) -> None:
     """V-World 로그인 — base64 encode username/password POST.
 
     검증된 endpoint: /v4po_usrlogin_a004.do (common_login.js 분석 결과).
+    Round 3 P0 — tenacity retry wrap (transient 5xx / connection drop 자동 복구).
     """
     # 메인 페이지 GET — 초기 cookie (PJSESSIONID / SSCSID / WMONID) 발급.
-    session.get("https://www.vworld.kr/v4po_main.do", timeout=30)
+    http_get_with_retry(session, "https://www.vworld.kr/v4po_main.do", timeout=30)
     data = {
         "usrIdeE": base64.b64encode(username.encode("utf-8")).decode("ascii"),
         "usrPwdE": base64.b64encode(password.encode("utf-8")).decode("ascii"),
@@ -113,8 +176,7 @@ def login(session: cffi.Session, username: str, password: str) -> None:
         "X-Requested-With": "XMLHttpRequest",
         "Origin": "https://www.vworld.kr",
     }
-    r = session.post(LOGIN_URL, data=data, headers=headers, timeout=30)
-    r.raise_for_status()
+    r = http_post_with_retry(session, LOGIN_URL, data=data, headers=headers, timeout=30)
     body = r.json()
     rm = body.get("resultMap", {})
     if rm.get("result") != "success":
@@ -123,11 +185,15 @@ def login(session: cffi.Session, username: str, password: str) -> None:
     print(f"[login] {rm.get('usrNam', '?')} 로그인 OK", flush=True)
 
 
-def fetch_file_list(session: cffi.Session, ds_id: str) -> list[FileEntry]:
-    """dtmk 페이지 GET → onclick 의 listFnc.download(dsId, fileNo, fileSize) 추출."""
+def fetch_file_list(session: cffi.Session, ds_id: str) -> tuple[list[FileEntry], str]:
+    """dtmk 페이지 GET → onclick 의 listFnc.download(dsId, fileNo, fileSize) 추출.
+
+    Round 3 P0:
+    - tenacity retry wrap.
+    - **raw HTML 반환** — 호출자가 audit trail 로 R2 박제 (페이지 변경 시 진단).
+    """
     url = DTMK_URL.format(ds_id=ds_id)
-    r = session.get(url, timeout=30)
-    r.raise_for_status()
+    r = http_get_with_retry(session, url, timeout=30)
     html = r.text
     pattern = re.compile(
         r"listFnc\.download\s*\(\s*'(\d+)'\s*,\s*'(\d+)'\s*,\s*'(\d+)'\s*\)"
@@ -138,13 +204,14 @@ def fetch_file_list(session: cffi.Session, ds_id: str) -> list[FileEntry]:
         if ds != ds_id:
             continue
         entries.append(FileEntry(ds_id=ds, file_no=file_no, file_size=int(size_str)))
-    return entries
+    return entries, html
 
 
 def filename_from_disposition(header: str | None) -> str | None:
     """Content-Disposition: attachment; filename=LSMD_CONT_LDREG_충북_충주시.zip; → 그 이름.
 
     URL-encoded 파일명 (예: `%EC%B6%A9%EB%B6%81`) 자동 decode.
+    Round 3 P0 — `except Exception` 제거. urllib unquote 는 입력이 str 이면 항상 성공.
     """
     if not header:
         return None
@@ -152,12 +219,8 @@ def filename_from_disposition(header: str | None) -> str | None:
     if not m:
         return None
     raw = m.group(1).strip().strip('"')
-    try:
-        from urllib.parse import unquote
-
-        return unquote(raw)
-    except Exception:
-        return raw
+    # unquote 는 invalid percent-encoding 시 원문 그대로 반환 — 예외 안 던짐.
+    return unquote(raw)
 
 
 def sigungu_from_filename(name: str) -> str:
@@ -167,7 +230,8 @@ def sigungu_from_filename(name: str) -> str:
 
 
 # ===== R2 client =====
-def make_r2():
+def make_r2() -> Any:
+    # boto3.client 는 stubs 가 없어 Any return 이 자연. 격리 service 의 표준 pattern.
     cfg = Config(
         signature_version="s3v4",
         retries={"max_attempts": 5, "mode": "standard"},
@@ -183,17 +247,42 @@ def make_r2():
     )
 
 
-def r2_head(r2, bucket: str, key: str) -> dict | None:
-    """R2 의 object 메타 조회. 없으면 None."""
+def r2_head(r2: Any, bucket: str, key: str) -> dict[str, Any] | None:
+    """R2 의 object 메타 조회. NoSuchKey/404 = `None`. 다른 에러 = 그대로 raise.
+
+    Round 3 P0 (Codex audit `dtmk_vworld.py:190` finding):
+    - 이전 path 가 `except Exception` 으로 권한/네트워크/NoSuchKey 모두 흡수 → silent
+      drift 위험 (예: invalid creds 가 idempotent skip 으로 위장).
+    - 새 path: NoSuchKey/404 만 None 으로 흡수, 그 외 모든 ClientError 는 raise.
+    """
+    # NoSuchKey 의 표준 wire 표현 — code 가 "404" string 또는 "NoSuchKey", 또는 HTTP 404.
+    not_found_codes = ("404", "NoSuchKey")
+    not_found_status = 404
     try:
         return r2.head_object(Bucket=bucket, Key=key)
-    except Exception:
-        return None
+    except ClientError as e:
+        # botocore 의 ClientError 는 dict response 박제. 404 / NoSuchKey 만 expected miss.
+        code = e.response.get("Error", {}).get("Code")
+        status = e.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in not_found_codes or status == not_found_status:
+            return None
+        raise
 
 
 # ===== main =====
 def main() -> int:
-    ds_id = "30563"  # 연속지적도_전국
+    # **SSOT** — Round 3 P0 fix: hardcode 제거. workflow 가 Rust config crate 의
+    # `sp9-config-print key dtmk_ds_id` 출력을 `DTMK_DS_ID` env 로 inject. dev local 은
+    # 사용자가 명시 set 또는 *명시 default* 를 주석으로 박제 (silent drift 차단).
+    # `crates/sp9-base-layer-config/src/lib.rs:54` 의 `DTMK_DS_ID` const 가 단일 출처.
+    ds_id = required("DTMK_DS_ID")
+    if not ds_id.isdigit():
+        sys.stderr.write(
+            f"ERROR: DTMK_DS_ID must be numeric, got {ds_id!r}. "
+            "workflow가 cargo run -p sp9-base-layer-config --bin sp9-config-print "
+            "key dtmk_ds_id 출력을 정확히 inject하는지 확인.\n"
+        )
+        return 2
     bucket = required("R2_BUCKET")
     bronze_prefix = ENV.get("R2_BRONZE_PREFIX", "bronze").rstrip("/")
     # batch label = YYYY-MM (월 1 archive). 매일 incremental 시는 같은 batch 안에서 file 변경.
@@ -207,23 +296,52 @@ def main() -> int:
     login(session, username, password)
 
     print(f"[probe] dtmk dsId={ds_id} 의 file list 가져오는 중...", flush=True)
-    entries = fetch_file_list(session, ds_id)
-    print(f"[probe] 총 {len(entries)} files (size KB sum = {sum(e.file_size for e in entries):,})", flush=True)
-    if not entries:
-        sys.stderr.write("ERROR: file list 비어있음 (페이지 변경?)\n")
+    try:
+        entries, raw_html = fetch_file_list(session, ds_id)
+    except (cffi.RequestsError, RetryError) as e:
+        sys.stderr.write(f"ERROR: dtmk file list fetch 실패 (3 시도 모두 실패): {e}\n")
         return 2
+    print(
+        f"[probe] 총 {len(entries)} files (size KB sum = {sum(e.file_size for e in entries):,})",
+        flush=True,
+    )
 
     r2 = make_r2()
 
+    # Round 3 P0 — audit trail. 페이지 변경 / regex miss 진단을 위해 raw HTML 박제.
+    # path: bronze/<batch>/parcel-dtmk-<ds_id>/audit/<ISO-date>-list.html
+    # 빈 entries 라도 audit 박제 후 abort — 사후 분석 가능.
+    iso_date = time.strftime("%Y-%m-%dT%H-%M-%SZ", time.gmtime())
+    audit_key = f"{bronze_prefix}/{batch}/parcel-dtmk-{ds_id}/audit/{iso_date}-list.html"
+    try:
+        r2.put_object(
+            Bucket=bucket,
+            Key=audit_key,
+            Body=raw_html.encode("utf-8"),
+            ContentType="text/html; charset=utf-8",
+            CacheControl="public, max-age=31536000, immutable",
+            Metadata={"ds_id": ds_id, "fetched_at": iso_date, "entry_count": str(len(entries))},
+        )
+        print(f"[audit] raw HTML 박제 → s3://{bucket}/{audit_key}", flush=True)
+    except ClientError as e:
+        # audit PUT 실패는 *경고*만 — 본 실행의 main 작업 (Bronze zip PUT) 차단 X.
+        sys.stderr.write(f"WARN: audit HTML PUT 실패 ({e.response.get('Error', {}).get('Code')})\n")
+
+    if not entries:
+        sys.stderr.write("ERROR: file list 비어있음 (페이지 변경 의심) — audit/ 박제 후 abort\n")
+        return 2
+
     def upload_one(idx: int, entry: FileEntry) -> tuple[str, bool, int]:
-        """단일 파일 다운 + R2 PUT. (sigungu, downloaded?, bytes)"""
+        """단일 파일 다운 + R2 PUT. (sigungu, downloaded?, bytes).
+
+        Round 3 P0:
+        - V-World GET / R2 PUT 모두 typed exception (cffi.RequestsError / ClientError).
+        - 호출자 (`as_completed` loop) 가 Exception 분류해서 silent partial 차단.
+        """
         # 우선 헤더만 fetch — Content-Disposition 의 filename 으로 시군구명 추출.
         url = DOWNLOAD_URL.format(ds_id=entry.ds_id, file_no=entry.file_no)
-        # idempotent skip — R2 의 같은 키 + 비슷한 size 면 다운 안 함.
-        # 실 size 는 Content-Length 헤더로 비교. 단 여기선 onclick 의 size_kb 를 사용.
-        # 정확한 비교는 다음 단계 (manifest 의 sha256 비교).
-        # *file_no 만으로 R2 key 결정* — sigungu 명은 응답 헤더에서 받음.
-        # curl_cffi 의 Response 는 `with` context manager 미지원 — 직접 변수 할당.
+        # streaming 다운 — retry 는 wrap 안 함 (download 가 600s 라 backoff 의미 적음).
+        # connection drop 시 호출자 loop 가 exception 박제하고 partial 안 PUT 하도록.
         r = session.get(url, stream=True, timeout=600)
         r.raise_for_status()
         disp = r.headers.get("Content-Disposition")
@@ -245,7 +363,6 @@ def main() -> int:
         # streaming PUT — iter_content 로 chunk 받아 BytesIO buffer 거쳐 upload_fileobj.
         # boto3 가 multipart 자동 — 메모리는 chunk 단위만 사용.
         # S3 metadata 는 ASCII only — sigungu 한글은 URL-encode 후 박제.
-        from urllib.parse import quote as url_quote
         try:
             r2.upload_fileobj(
                 _IterStream(r.iter_content(chunk_size=64 * 1024)),
@@ -270,16 +387,31 @@ def main() -> int:
         return sigungu, True, content_len
 
     # concurrent download (V-World 서버 부담 고려 default 3 parallel).
+    # Round 3 P0 — typed exception 분류. silent flatten 대신 (cffi/ClientError) 와 그 외
+    # 분리해서 stderr 로깅. exit 1 (failed > 0) 가 workflow 측 alert 트리거.
     started = time.time()
     results: list[tuple[str, bool, int]] = []
     with ThreadPoolExecutor(max_workers=parallel) as ex:
         futs = {ex.submit(upload_one, i + 1, e): e for i, e in enumerate(entries)}
         for fut in as_completed(futs):
+            entry = futs[fut]
             try:
                 results.append(fut.result())
-            except Exception as e:
-                entry = futs[fut]
-                sys.stderr.write(f"FAIL fileNo={entry.file_no}: {e}\n")
+            except cffi.RequestsError as e:
+                sys.stderr.write(
+                    f"FAIL fileNo={entry.file_no}: V-World HTTP error: {e}\n"
+                )
+                results.append((f"fileNo-{entry.file_no}", False, -1))
+            except ClientError as e:
+                code = e.response.get("Error", {}).get("Code", "?")
+                sys.stderr.write(
+                    f"FAIL fileNo={entry.file_no}: R2 ClientError [{code}]: {e}\n"
+                )
+                results.append((f"fileNo-{entry.file_no}", False, -1))
+            except (OSError, ConnectionError, TimeoutError) as e:
+                sys.stderr.write(
+                    f"FAIL fileNo={entry.file_no}: I/O error: {type(e).__name__}: {e}\n"
+                )
                 results.append((f"fileNo-{entry.file_no}", False, -1))
 
     elapsed = time.time() - started

@@ -100,11 +100,45 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: services/scraper-py/requirements.txt
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
       - name: pip install
         working-directory: services/scraper-py
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          # Round 3 P0 supply-chain gate — pip-audit / cyclonedx (SBOM).
+          pip install pip-audit==2.7.3 cyclonedx-bom==4.7.0 ruff mypy pytest
+      - name: Lint (ruff strict)
+        working-directory: services/scraper-py
+        run: python -m ruff check .
+      - name: Type check (mypy)
+        working-directory: services/scraper-py
+        run: python -m mypy dtmk_vworld.py
+      - name: Unit test (pytest)
+        working-directory: services/scraper-py
+        run: python -m pytest tests/
+      - name: pip-audit (Round 3 P0 supply-chain)
+        working-directory: services/scraper-py
+        run: |
+          # known CVE 검출 — pinned 의존성에 vulnerability 가 있으면 즉시 차단.
+          # 새 release 가 fix 한 CVE 만 alarm — `--ignore-vuln` 으로 known-mitigated 박제.
+          python -m pip_audit -r requirements.txt --strict
+      - name: SBOM (CycloneDX, Round 3 P0)
+        working-directory: services/scraper-py
+        run: |
+          python -m cyclonedx_py requirements -i requirements.txt -o python-sbom.json --output-format JSON
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scraper-py-sbom
+          path: services/scraper-py/python-sbom.json
+          retention-days: 90
+      - name: Compute SSOT DTMK_DS_ID (Round 3 P0 — Python 하드코딩 제거)
+        id: ssot
+        run: |
+          DTMK_DS_ID="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)"
+          echo "dtmk_ds_id=${DTMK_DS_ID}" >> "$GITHUB_OUTPUT"
       - name: Run dtmk_vworld
         working-directory: services/scraper-py
         env:
@@ -114,17 +148,16 @@ jobs:
           R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
           R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # SSOT inject — Rust config crate 의 const 단일 출처. Python 측 하드코딩 0.
+          DTMK_DS_ID: ${{ steps.ssot.outputs.dtmk_ds_id }}
           DTMK_PARALLEL: "3"
         run: python dtmk_vworld.py
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with: { shared-key: sp9-etl }
       - name: Summary (SSOT prefix)
         id: summary
         run: |
-          # SSOT — Rust 측의 dtmk_bronze_prefix() 와 *동일* format.
+          # SSOT — Rust 측의 dtmk_bronze_prefix() 와 *동일* format. ssot 단계에서 이미 캐시.
           BATCH="$(date -u +%Y-%m)"
-          DTMK_DS_ID="$(cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- key dtmk_ds_id)"
+          DTMK_DS_ID="${{ steps.ssot.outputs.dtmk_ds_id }}"
           echo "manifest_url=bronze/${BATCH}/parcel-dtmk-${DTMK_DS_ID}/" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────────────────
@@ -176,8 +209,28 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with: { shared-key: sp9-etl }
 
+      # Round 3 P0 supply-chain gates (Rust 측). Bronze 측은 phase1 에서 이미 적용.
+      - name: cargo-deny (license + advisories + duplicates)
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+      - name: gitleaks (secret scan)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build etl-base-layer (release, --frozen)
         run: cargo build -p etl-base-layer --release --frozen
+
+      - name: SBOM (CycloneDX, Round 3 P0)
+        run: |
+          cargo install --locked cargo-cyclonedx --version 0.5.7
+          cargo cyclonedx -p etl-base-layer --format json -f rust-etl-sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: etl-base-layer-sbom-${{ matrix.layer }}
+          path: rust-etl-sbom.json
+          retention-days: 90
 
       - name: Compute version label
         id: ver
