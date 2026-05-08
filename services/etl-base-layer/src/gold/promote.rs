@@ -28,6 +28,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
+use sp9_base_layer_config::{R2PublicBase, Version};
 use thiserror::Error;
 use tracing::{info, instrument, warn};
 
@@ -59,6 +60,14 @@ pub enum PromoteError {
         layer: String,
         /// 검사한 prefix.
         prefix: String,
+    },
+    /// 이전 manifest 의 `current_version` 이 [`Version`] 형식 위반 (R2 외부 변조 / 구버전 manifest).
+    #[error("invalid previous_version in manifest: {raw:?} ({detail})")]
+    InvalidPreviousVersion {
+        /// manifest 에서 읽힌 원본 문자열.
+        raw: String,
+        /// [`sp9_base_layer_config::TypeError`] 의 사람-가독 메시지.
+        detail: String,
     },
     /// HTTP 통신 (Cloudflare CDN purge).
     #[error("cdn purge http: {0}")]
@@ -100,10 +109,10 @@ pub struct ArtifactSpec {
 /// # Errors
 ///
 /// JSON 직렬화 / R2 PUT 실패.
-#[instrument(skip(uploader, spec), fields(version, layer))]
+#[instrument(skip(uploader, spec), fields(version = %version, layer))]
 pub async fn write_staging_spec(
     uploader: &R2Uploader,
-    version: &str,
+    version: &Version,
     layer: LayerKind,
     spec: &ArtifactSpec,
 ) -> Result<(), PromoteError> {
@@ -130,7 +139,7 @@ pub async fn write_staging_spec(
 /// 누락 시 [`PromoteError::MissingLineage`] — promote 가 atomic 보장 (한 layer 라도 빠지면 abort).
 async fn read_staging_artifact(
     uploader: &R2Uploader,
-    version: &str,
+    version: &Version,
     layer: LayerKind,
 ) -> Result<GoldArtifact, PromoteError> {
     let key = uploader.config().staging_spec_key(version, layer.layer_name());
@@ -173,12 +182,12 @@ async fn read_staging_artifact(
 /// promote 입력.
 #[derive(Debug, Clone)]
 pub struct PromoteArgs<'a> {
-    /// promote 할 version (예: `v3`).
-    pub version: &'a str,
+    /// promote 할 version (newtype — invalid 라벨 컴파일 차단).
+    pub version: &'a Version,
     /// 검증할 layer 들. 통상 `LayerKind::ALL`.
     pub layers: &'a [LayerKind],
-    /// `tiles_url_template` 의 R2 public host (예: `https://r2.gongzzang.dev/`).
-    pub public_url_base: &'a str,
+    /// `tiles_url_template` 의 R2 public host (newtype — scheme/host 검증).
+    pub public_url_base: &'a R2PublicBase,
 }
 
 /// promote 결과.
@@ -211,7 +220,7 @@ pub struct PromoteResult {
 /// - manifest publish 실패 → degrade (백업 단계 후 publish 전 실패면 backup 만 있음).
 /// - CDN purge 실패는 warn (manifest no-cache header fallback).
 #[allow(clippy::too_many_lines)]
-#[instrument(skip(uploader, args), fields(version = args.version))]
+#[instrument(skip(uploader, args), fields(version = %args.version))]
 pub async fn run(
     uploader: &R2Uploader,
     args: &PromoteArgs<'_>,
@@ -225,12 +234,13 @@ pub async fn run(
     }
 
     // 2. flat tile 실재 검증 — `gold/<version>/<layer>/` 안에 *최소 1개* .pbf 존재.
+    // SSOT: `gold_layer_prefix(version, layer)` helper — trailing `/` 만 추가.
     for &layer in args.layers {
         let prefix = format!(
-            "{}/{}/{}/",
-            uploader.config().gold_prefix,
-            args.version,
-            layer.layer_name()
+            "{}/",
+            uploader
+                .config()
+                .gold_layer_prefix(args.version, layer.layer_name())
         );
         let listed = uploader.list_objects(&prefix).await?;
         let pbf_count = listed
@@ -256,13 +266,21 @@ pub async fn run(
 
     // 3. 이전 manifest backup (있으면).
     let manifest_key = uploader.config().manifest_key();
-    let previous_version: Option<String> = match uploader.get_object_bytes(&manifest_key).await {
+    let previous_version: Option<Version> = match uploader.get_object_bytes(&manifest_key).await {
         Ok(prev_bytes) => {
             let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+            // current_version 은 Version newtype — invalid 라벨이 manifest 에 박혀있으면
+            // promote 단계에서 `PromoteError::InvalidPreviousVersion` 으로 거부.
             let prev_ver = prev
                 .get("current_version")
                 .and_then(|v| v.as_str())
-                .map(str::to_owned);
+                .map(|raw| {
+                    Version::new(raw).map_err(|e| PromoteError::InvalidPreviousVersion {
+                        raw: raw.to_owned(),
+                        detail: e.to_string(),
+                    })
+                })
+                .transpose()?;
             if let Some(ref pv) = prev_ver {
                 let backup_key = uploader.config().manifest_backup_key(pv);
                 // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
@@ -292,9 +310,9 @@ pub async fn run(
     );
 
     let manifest = GoldManifest {
-        current_version: args.version.to_owned(),
+        current_version: args.version.as_str().to_owned(),
         current_activated_at: Utc::now(),
-        previous_version: previous_version.clone(),
+        previous_version: previous_version.as_ref().map(|v| v.as_str().to_owned()),
         tiles_url_template,
         artifacts,
         manifest_updated_at: Utc::now(),
@@ -319,7 +337,7 @@ pub async fn run(
     };
 
     Ok(PromoteResult {
-        current_version: args.version.to_owned(),
+        current_version: args.version.as_str().to_owned(),
         manifest_key,
         cdn_purged,
     })
@@ -376,6 +394,7 @@ mod tests {
     #[test]
     fn staging_key_format() {
         use crate::r2_upload::R2Config;
+        use sp9_base_layer_config::Version;
         let cfg = R2Config {
             account_id: "fake".into(),
             access_key: "fake".into(),
@@ -384,8 +403,9 @@ mod tests {
             bronze_prefix: "bronze".into(),
             gold_prefix: "gold".into(),
         };
+        let v = Version::new("v3").expect("test version");
         assert_eq!(
-            cfg.staging_spec_key("v3", "parcels"),
+            cfg.staging_spec_key(&v, "parcels"),
             "gold/staging/v3/parcels.spec.json"
         );
     }

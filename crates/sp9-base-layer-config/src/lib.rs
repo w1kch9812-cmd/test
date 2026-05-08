@@ -28,6 +28,9 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::doc_markdown)]
 
+pub mod types;
+pub use types::{R2PublicBase, Srs, TypeError, Version};
+
 use serde::{Deserialize, Serialize};
 
 /// `tippecanoe` git tag (sanity 표시용). 진짜 결정성은 [`TIPPECANOE_GIT_SHA`].

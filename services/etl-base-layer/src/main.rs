@@ -41,6 +41,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use sp9_base_layer_config::{R2PublicBase, Srs, Version};
 use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
@@ -193,8 +194,8 @@ struct GoldOpts {
     work_dir: Option<PathBuf>,
     /// dtmk pipeline 다운로드 동시성 (기본 8).
     concurrency: usize,
-    /// 입력 SHP 의 source SRS (V-World dtmk = `EPSG:5186`, 공공데이터포털 일부 = `EPSG:5179`).
-    source_srs: String,
+    /// 입력 SHP 의 source SRS (newtype — `EPSG:<digits>` 강제).
+    source_srs: Srs,
 }
 
 #[derive(Debug)]
@@ -225,7 +226,10 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
     let mut work_dir: Option<PathBuf> = None;
     // SSOT: sp9_base_layer_config 의 default. CLI flag 로 override 가능.
     let mut concurrency: usize = sp9_base_layer_config::DTMK_DOWNLOAD_CONCURRENCY;
-    let mut source_srs: String = sp9_base_layer_config::SOURCE_SRS_VWORLD.to_owned();
+    // SSOT default — `Srs::new` 를 거치므로 SOURCE_SRS_VWORLD 가 invalid 면 컴파일 후
+    // 첫 호출에서 fail-fast.
+    let mut source_srs: Srs = Srs::new(sp9_base_layer_config::SOURCE_SRS_VWORLD)
+        .map_err(|e| ArgError(format!("SOURCE_SRS_VWORLD invalid: {e}")))?;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -265,7 +269,8 @@ fn parse_gold_args(args: &[String]) -> Result<GoldOpts, ArgError> {
                 let v = iter
                     .next()
                     .ok_or_else(|| ArgError("--source-srs needs a value".into()))?;
-                source_srs.clone_from(v);
+                source_srs = Srs::new(v.as_str())
+                    .map_err(|e| ArgError(format!("--source-srs parse: {e}")))?;
             }
             other => inputs.push(PathBuf::from(other)),
         }
@@ -376,7 +381,13 @@ async fn run_gold(args: Vec<String>) -> ExitCode {
     // ADR 0021 § ETL pipeline — R2 가 설정되어 있으면 flat tile + manifest publish.
     let cfg = Config::from_env();
     if let Some(r2_cfg) = cfg.r2 {
-        let version = cfg.gold_version.as_deref().unwrap_or("v_local").to_owned();
+        // version newtype — `cfg.gold_version` 이 이미 검증된 `Option<Version>` 라
+        // unwrap-by-default 가 안전하게 dev 폴백 (`v_local`) 사용.
+        let version: Version = cfg.gold_version.unwrap_or_else(|| {
+            // SSOT default — `Version::new` 가 거부할 일 없는 안전한 라벨.
+            #[allow(clippy::expect_used)]
+            Version::new("v_local").expect("v_local must be a valid Version literal")
+        });
         match upload_gold_to_r2(
             &r2_cfg,
             &version,
@@ -470,10 +481,14 @@ async fn prepare_dtmk_inputs(
     // ogr2ogr 동시 — 시군구 별 1 spawn. 디스크 + CPU 부담 → concurrency cap.
     let mut tasks: Vec<tokio::task::JoinHandle<Result<PathBuf, String>>> = Vec::new();
     let semaphore = Arc::new(tokio::sync::Semaphore::new(opts.concurrency.max(1)));
+    // SSOT target SRS — `EPSG:4326` (mapbox-gl 표준). newtype 한 번 검증 후 task 들에 clone.
+    let target_srs: Srs = Srs::new(sp9_base_layer_config::TARGET_SRS_WEB)
+        .map_err(|e| PrepareError::Config(format!("TARGET_SRS_WEB invalid: {e}")))?;
     for arch in fetched.archives {
         let permit = Arc::clone(&semaphore).acquire_owned().await.map_err(|_| PrepareError::SemaphoreClosed)?;
         let geojson_dir = geojson_dir.clone();
         let source_srs = opts.source_srs.clone();
+        let target_srs = target_srs.clone();
         let host_c = host;
         let task = tokio::spawn(async move {
             let _permit = permit; // hold until done.
@@ -492,8 +507,8 @@ async fn prepare_dtmk_inputs(
             let args = Ogr2OgrArgs {
                 input_shp: &arch.shp_path,
                 output_geojson: &out,
-                source_srs: &source_srs,
-                target_srs: "EPSG:4326",
+                source_srs: source_srs.as_str(),
+                target_srs: target_srs.as_str(),
             };
             shp_to_geojson::run(host_c, &args)
                 .await
@@ -547,16 +562,27 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
         return ExitCode::from(2);
     };
 
+    // version 은 newtype 으로 검증 — invalid 라벨이면 R2 path 발행 직전 차단.
+    let version = match Version::new(version) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(error = %e, "invalid --version (must match `^v[a-z0-9_-]+$`)");
+            return ExitCode::from(2);
+        }
+    };
+
     let cfg = Config::from_env();
     let Some(r2_cfg) = cfg.r2 else {
         error!("R2_* env not set — promote requires R2 access");
         return ExitCode::FAILURE;
     };
-    let public_base = match std::env::var("R2_PUBLIC_URL_BASE") {
-        Ok(v) if !v.trim().is_empty() => v,
-        _ => {
+    // R2_PUBLIC_URL_BASE 도 newtype — scheme/host 검증 단계에서 fail-fast.
+    let public_base = match read_r2_public_base() {
+        Ok(p) => p,
+        Err(e) => {
             error!(
-                "R2_PUBLIC_URL_BASE env required for promote (manifest tiles_url_template host)"
+                error = %e,
+                "R2_PUBLIC_URL_BASE invalid for promote (manifest tiles_url_template host)"
             );
             return ExitCode::FAILURE;
         }
@@ -687,15 +713,15 @@ async fn run_verify(
 #[allow(clippy::too_many_arguments, clippy::cognitive_complexity)]
 async fn upload_gold_to_r2(
     r2_cfg: &crate::r2_upload::R2Config,
-    version: &str,
+    version: &Version,
     layer: LayerKind,
     build: &BuildResult,
     bronze_inputs: Vec<BronzeInput>,
-    source_srs: &str,
+    source_srs: &Srs,
 ) -> Result<(), UploadStepError> {
     let uploader = R2Uploader::new(r2_cfg.clone());
     let key_prefix = r2_cfg.gold_layer_prefix(version, layer.layer_name());
-    info!(version, layer = %layer.layer_name(), key_prefix = %key_prefix, "R2 batch upload start");
+    info!(version = %version, layer = %layer.layer_name(), key_prefix = %key_prefix, "R2 batch upload start");
 
     let upload = uploader
         .put_directory(&build.flat_tiles_dir, &key_prefix, 100)
@@ -715,7 +741,7 @@ async fn upload_gold_to_r2(
         git_sha: std::env::var("GIT_SHA").unwrap_or_else(|_| "unknown".to_owned()),
         built_at: chrono::Utc::now(),
         bronze_inputs,
-        source_srs: source_srs.to_owned(),
+        source_srs: source_srs.as_str().to_owned(),
         layer_name: layer.layer_name().to_owned(),
         build_environment: std::env::var("ETL_BUILD_ENV").unwrap_or_else(|_| "dev".to_owned()),
     };
@@ -734,11 +760,9 @@ async fn upload_gold_to_r2(
 
     // TileJSON 은 layer 단위 self-describe — promote 와 무관하게 layer 빌드 직후 publish OK
     // (URL 안 version 이 박혀있어 client 가 overwrite 안 됨).
-    // P0.2: R2_PUBLIC_URL_BASE 미설정 시 fail-fast — placeholder URL 절대 발행 금지.
-    let public_url_base = std::env::var("R2_PUBLIC_URL_BASE")
-        .ok()
-        .filter(|v| !v.trim().is_empty())
-        .ok_or(UploadStepError::PublicUrlMissing)?;
+    // P0.2: R2_PUBLIC_URL_BASE 미설정 / scheme 위반 시 fail-fast — placeholder URL 절대 발행 금지.
+    let public_url_base = read_r2_public_base()
+        .map_err(|detail| UploadStepError::PublicUrlMissing { detail })?;
     let tilejson = build_tilejson(r2_cfg, version, layer, &public_url_base);
     let tilejson_key = r2_cfg.tilejson_key(version, layer.layer_name());
     uploader
@@ -751,16 +775,16 @@ async fn upload_gold_to_r2(
 /// Mapbox `TileJSON` 3.0.0 spec 직렬화. layer 메타 (zoom range / tiles url / `vector_layers`).
 fn build_tilejson(
     r2_cfg: &crate::r2_upload::R2Config,
-    version: &str,
+    version: &Version,
     layer: LayerKind,
-    public_base: &str,
+    public_base: &R2PublicBase,
 ) -> serde_json::Value {
     let tiles_url = r2_cfg.tiles_url_template(public_base, version, layer.layer_name());
     let (min_z, max_z) = layer.zoom_range();
     serde_json::json!({
         "tilejson": "3.0.0",
         "name": layer.layer_name(),
-        "description": format!("gongzzang gold v{version} {}", layer.layer_name()),
+        "description": format!("gongzzang gold {version} {}", layer.layer_name()),
         "tiles": [tiles_url],
         "minzoom": min_z,
         "maxzoom": max_z,
@@ -776,6 +800,18 @@ fn build_tilejson(
             }
         }]
     })
+}
+
+/// `R2_PUBLIC_URL_BASE` env → [`R2PublicBase`] 검증된 newtype.
+///
+/// 미설정 / 빈 문자열 / scheme 위반 / host 부재 모두 fail-fast — placeholder URL 발행 0.
+fn read_r2_public_base() -> Result<R2PublicBase, String> {
+    let raw = std::env::var("R2_PUBLIC_URL_BASE")
+        .map_err(|_| "R2_PUBLIC_URL_BASE env is not set".to_owned())?;
+    if raw.trim().is_empty() {
+        return Err("R2_PUBLIC_URL_BASE is empty".to_owned());
+    }
+    R2PublicBase::new(raw).map_err(|e| e.to_string())
 }
 
 fn init_tracing() {

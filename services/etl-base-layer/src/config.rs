@@ -12,6 +12,8 @@
 use std::env;
 use std::path::PathBuf;
 
+use sp9_base_layer_config::Version;
+
 use crate::r2_upload::R2Config;
 
 /// SHP/GeoJSON 다운로드 source 정의.
@@ -41,11 +43,11 @@ pub struct Config {
     pub sources: Vec<BronzeSource>,
     /// R2 자격 증명 + 버킷. 미설정 시 `None` — 로컬 전용 모드 (T3a 동작 유지).
     pub r2: Option<R2Config>,
-    /// Gold 버전 라벨 (예: `v3`). T3b.2 에서 `PMTiles` 빌드 prefix 로 사용.
-    /// 미설정 시 `batch_label` 기반 폴백 (`v<YYYY-MM>` 형태는 빌드 시점에 결정).
-    /// T3b.1 에서는 환경변수만 캡처 — 소비는 T3b.2 의 gold pipeline.
+    /// Gold 버전 라벨 (newtype — `^v[a-z0-9_-]+$` 검증). T3b.2 에서 `PMTiles` 빌드
+    /// prefix 로 사용. 미설정 시 `None` — 호출자가 폴백 라벨 결정 (보통 `v_local`).
+    /// `GOLD_VERSION` env 가 invalid 형식이면 `from_env` 가 panic — fail-fast.
     #[allow(dead_code)]
-    pub gold_version: Option<String>,
+    pub gold_version: Option<Version>,
 }
 
 impl Config {
@@ -104,9 +106,22 @@ impl Config {
         }
 
         let r2 = build_r2_config();
+        // GOLD_VERSION 은 newtype 검증을 거침 — invalid 라벨은 ETL 시작 직후 fail-fast.
+        // dev 폴백을 호출자가 처리하도록 본 함수는 `None` 만 반환 (raw env 미설정).
         let gold_version = env::var("GOLD_VERSION")
             .ok()
-            .filter(|v| !v.trim().is_empty());
+            .filter(|v| !v.trim().is_empty())
+            .map(|raw| {
+                Version::new(raw.clone()).unwrap_or_else(|e| {
+                    // production 에서 GOLD_VERSION 이 잘못된 채 들어오면 fail-fast.
+                    // panic 은 main.rs init 시점이라 의미가 명확 — 후속 R2 path 가
+                    // placeholder 라벨로 오염되지 않게 차단.
+                    #[allow(clippy::panic)]
+                    {
+                        panic!("GOLD_VERSION invalid: {e} (raw={raw:?})")
+                    }
+                })
+            });
 
         Self {
             bronze_dir,

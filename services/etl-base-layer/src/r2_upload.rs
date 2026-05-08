@@ -22,6 +22,7 @@ use aws_sdk_s3::config::{
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
 use futures_util::stream::{self, StreamExt};
+use sp9_base_layer_config::{R2PublicBase, Version};
 use thiserror::Error;
 use tracing::{info, instrument, warn};
 use walkdir::WalkDir;
@@ -56,14 +57,15 @@ impl R2Config {
 
     /// Gold layer flat tile prefix: `<gold_prefix>/<version>/<layer>`.
     /// **SSOT** — 모든 gold key 생성이 이 helper 를 통해야 함.
+    /// `version` 은 검증된 [`Version`] 만 받음 — 잘못된 라벨 생성 시점 차단.
     #[must_use]
-    pub fn gold_layer_prefix(&self, version: &str, layer_name: &str) -> String {
+    pub fn gold_layer_prefix(&self, version: &Version, layer_name: &str) -> String {
         format!("{}/{}/{}", self.gold_prefix, version, layer_name)
     }
 
     /// Gold layer `TileJSON` key: `<gold_prefix>/<version>/<layer>.json`.
     #[must_use]
-    pub fn tilejson_key(&self, version: &str, layer_name: &str) -> String {
+    pub fn tilejson_key(&self, version: &Version, layer_name: &str) -> String {
         format!("{}/{}/{}.json", self.gold_prefix, version, layer_name)
     }
 
@@ -74,25 +76,33 @@ impl R2Config {
     }
 
     /// Gold manifest backup key: `<gold_prefix>/manifest.<version>.json`.
+    /// `version` 은 [`Version`] — 백업 키도 동일 검증 통과.
     #[must_use]
-    pub fn manifest_backup_key(&self, version: &str) -> String {
+    pub fn manifest_backup_key(&self, version: &Version) -> String {
         format!("{}/manifest.{}.json", self.gold_prefix, version)
     }
 
     /// Gold staging spec key: `<gold_prefix>/staging/<version>/<layer>.spec.json`.
     #[must_use]
-    pub fn staging_spec_key(&self, version: &str, layer_name: &str) -> String {
+    pub fn staging_spec_key(&self, version: &Version, layer_name: &str) -> String {
         format!("{}/staging/{}/{}.spec.json", self.gold_prefix, version, layer_name)
     }
 
     /// Tiles URL template for `TileJSON` / manifest:
     /// `<public_base>/<gold_prefix>/<version>/<layer>/{z}/{x}/{y}.pbf`.
+    /// `public_base` / `version` 모두 newtype — invalid scheme/host/format 시점 차단.
     #[must_use]
-    pub fn tiles_url_template(&self, public_base: &str, version: &str, layer_name: &str) -> String {
-        let base = if public_base.ends_with('/') {
-            public_base.to_owned()
+    pub fn tiles_url_template(
+        &self,
+        public_base: &R2PublicBase,
+        version: &Version,
+        layer_name: &str,
+    ) -> String {
+        let raw = public_base.as_str();
+        let base = if raw.ends_with('/') {
+            raw.to_owned()
         } else {
-            format!("{public_base}/")
+            format!("{raw}/")
         };
         #[allow(clippy::literal_string_with_formatting_args)]
         {
@@ -653,11 +663,19 @@ mod tests {
     // 이 테스트들이 곧 "key layout 이 변경되면 컴파일러 차단" 보장.
     // URL 변경 = ADR + 이 테스트 갱신 = backward-compatibility gate.
 
+    fn v(s: &str) -> Version {
+        Version::new(s).expect("test version must be valid")
+    }
+
+    fn pub_base(s: &str) -> R2PublicBase {
+        R2PublicBase::new(s).expect("test public base must be valid")
+    }
+
     #[test]
     fn gold_layer_prefix_layout() {
         let cfg = test_config("bucket");
         assert_eq!(
-            cfg.gold_layer_prefix("v3", "parcels"),
+            cfg.gold_layer_prefix(&v("v3"), "parcels"),
             "gold/v3/parcels"
         );
     }
@@ -666,7 +684,7 @@ mod tests {
     fn tilejson_key_layout() {
         let cfg = test_config("bucket");
         assert_eq!(
-            cfg.tilejson_key("v3", "parcels"),
+            cfg.tilejson_key(&v("v3"), "parcels"),
             "gold/v3/parcels.json"
         );
     }
@@ -681,7 +699,7 @@ mod tests {
     fn manifest_backup_key_layout() {
         let cfg = test_config("bucket");
         assert_eq!(
-            cfg.manifest_backup_key("v2"),
+            cfg.manifest_backup_key(&v("v2")),
             "gold/manifest.v2.json"
         );
     }
@@ -690,7 +708,7 @@ mod tests {
     fn staging_spec_key_layout() {
         let cfg = test_config("bucket");
         assert_eq!(
-            cfg.staging_spec_key("v3", "admin"),
+            cfg.staging_spec_key(&v("v3"), "admin"),
             "gold/staging/v3/admin.spec.json"
         );
     }
@@ -698,7 +716,11 @@ mod tests {
     #[test]
     fn tiles_url_template_with_trailing_slash() {
         let cfg = test_config("bucket");
-        let url = cfg.tiles_url_template("https://r2.example.com/", "v3", "parcels");
+        let url = cfg.tiles_url_template(
+            &pub_base("https://r2.example.com/"),
+            &v("v3"),
+            "parcels",
+        );
         assert_eq!(
             url,
             "https://r2.example.com/gold/v3/parcels/{z}/{x}/{y}.pbf"
@@ -708,7 +730,11 @@ mod tests {
     #[test]
     fn tiles_url_template_without_trailing_slash() {
         let cfg = test_config("bucket");
-        let url = cfg.tiles_url_template("https://r2.example.com", "v3", "admin");
+        let url = cfg.tiles_url_template(
+            &pub_base("https://r2.example.com"),
+            &v("v3"),
+            "admin",
+        );
         assert_eq!(
             url,
             "https://r2.example.com/gold/v3/admin/{z}/{x}/{y}.pbf"
@@ -727,11 +753,12 @@ mod tests {
             bronze_prefix: "bronze".into(),
             gold_prefix: "custom-gold".into(),
         };
-        let prefix = cfg.gold_layer_prefix("v1", "parcels");
+        let ver = v("v1");
+        let prefix = cfg.gold_layer_prefix(&ver, "parcels");
         assert!(prefix.starts_with("custom-gold/"), "gold_prefix must be respected");
         assert!(cfg.manifest_key().starts_with("custom-gold/"), "manifest must use gold_prefix");
         assert!(
-            cfg.staging_spec_key("v1", "parcels").starts_with("custom-gold/"),
+            cfg.staging_spec_key(&ver, "parcels").starts_with("custom-gold/"),
             "staging key must use gold_prefix"
         );
     }

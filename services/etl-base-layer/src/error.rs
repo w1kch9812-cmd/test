@@ -50,6 +50,9 @@ pub enum PrepareError {
     /// ogr2ogr spawn 작업 내부에서 String 에러 반환.
     #[error("shp conversion: {0}")]
     ShpConversion(String),
+    /// SSOT 설정 파싱 실패 (e.g. `TARGET_SRS_WEB` 가 newtype 검증 거부).
+    #[error("config: {0}")]
+    Config(String),
 }
 
 impl From<tokio::sync::AcquireError> for PrepareError {
@@ -72,11 +75,14 @@ pub enum VerifyStepError {
 /// R2 업로드 단계 에러 (`upload_gold_to_r2`).
 #[derive(Debug, Error)]
 pub enum UploadStepError {
-    /// `R2_PUBLIC_URL_BASE` env 미설정 (P0.2 fail-fast).
+    /// `R2_PUBLIC_URL_BASE` env 미설정 또는 newtype 검증 위반 (P0.2 fail-fast).
     #[error(
-        "R2_PUBLIC_URL_BASE env is not set — refusing to emit placeholder URL.          Set R2_PUBLIC_URL_BASE=https://r2.example.com in environment."
+        "R2_PUBLIC_URL_BASE invalid: {detail}. Set R2_PUBLIC_URL_BASE=https://r2.example.com in environment."
     )]
-    PublicUrlMissing,
+    PublicUrlMissing {
+        /// 사용자 가독 사유 (env 미설정 / scheme 위반 / host 부재 등).
+        detail: String,
+    },
     /// R2 `PutObject` / `ListObjects`.
     #[error("r2 upload: {0}")]
     R2(#[from] UploadError),
@@ -91,10 +97,3 @@ pub enum UploadStepError {
     Build(#[from] BuildError),
 }
 
-/// `R2_PUBLIC_URL_BASE` 미설정 — placeholder URL 발행 금지 (P0.2 fail-fast).
-#[derive(Debug, Error)]
-#[error(
-    "R2_PUBLIC_URL_BASE env is not set — refusing to emit placeholder URL. \
-     Set R2_PUBLIC_URL_BASE=https://r2.example.com in environment."
-)]
-pub struct R2PublicUrlMissing;
