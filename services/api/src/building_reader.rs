@@ -134,20 +134,45 @@ fn parse_single_item(item: &Value) -> Result<BuildingItem, BuildingRegisterError
     // totArea: 실 응답은 JSON number (예: 212615.29), 일부 endpoint 는 string 으로 wrap.
     // 둘 다 처리 — 라이브 fixture (`live_2026-05-08_*.json`) 검증.
     let tot_area = parse_f64_field(item, "totArea")?;
-    // useAprDay = `YYYYMMDD` 8자리. 빈 문자열 / 길이 불일치 → None.
-    let use_apr_day = item
-        .get("useAprDay")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| s.len() == 8)
-        .map(str::to_owned);
 
     Ok(BuildingItem {
+        // 식별자 / 위치
         mgm_bldrgst_pk,
         bldg_nm,
+        plat_plc: parse_optional_string(item, "platPlc"),
+
+        // 용도 / 구조
         main_purps_cd_nm,
+        strct_cd_nm: parse_optional_string(item, "strctCdNm"),
+
+        // 면적 / 비율
+        plat_area: parse_optional_f64(item, "platArea"),
+        arch_area: parse_optional_f64(item, "archArea"),
+        bc_rat: parse_optional_f64(item, "bcRat"),
         tot_area,
-        use_apr_day,
+        vl_rat: parse_optional_f64(item, "vlRat"),
+
+        // 층수 / 높이
+        grnd_flr_cnt: parse_optional_u32(item, "grndFlrCnt"),
+        ugrnd_flr_cnt: parse_optional_u32(item, "ugrndFlrCnt"),
+        heit: parse_optional_f64(item, "heit"),
+
+        // 승강기
+        ride_use_elvt_cnt: parse_optional_u32(item, "rideUseElvtCnt"),
+        emgen_use_elvt_cnt: parse_optional_u32(item, "emgenUseElvtCnt"),
+
+        // 주차장
+        indr_auto_utcnt: parse_optional_u32(item, "indrAutoUtcnt"),
+        oudr_auto_utcnt: parse_optional_u32(item, "oudrAutoUtcnt"),
+
+        // 부속건축물
+        atch_bld_cnt: parse_optional_u32(item, "atchBldCnt"),
+        atch_bld_area: parse_optional_f64(item, "atchBldArea"),
+
+        // 날짜 (YYYYMMDD)
+        pms_day: parse_optional_yyyymmdd(item, "pmsDay"),
+        stcns_day: parse_optional_yyyymmdd(item, "stcnsDay"),
+        use_apr_day: parse_optional_yyyymmdd(item, "useAprDay"),
     })
 }
 
@@ -184,6 +209,63 @@ fn parse_f64_field(item: &Value, field: &str) -> Result<f64, BuildingRegisterErr
         Some(other) => Err(format!("item.{field} unexpected type: {other:?}").into()),
         None => Err(format!("item.{field} missing").into()),
     }
+}
+
+/// data.go.kr 의 string 필드 — 빈 / 공백 / null / 누락 모두 `None`.
+///
+/// 정부 API 가 빈 string 을 `" "` (단일 공백) 으로 보내는 패턴 처리.
+fn parse_optional_string(item: &Value, field: &str) -> Option<String> {
+    item.get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+}
+
+/// 옵션 f64 — number / string 둘 다 처리, 빈 / 0 / 누락 → `None`.
+///
+/// 0 은 의도적 fallthrough — `bcRat = 0` 같은 정상값이 있을 수 있으나, 산업 매물
+/// 표시 측면에서 0 은 "측정값 없음" 으로 간주 (UI 가 "—" 로 노출).
+fn parse_optional_f64(item: &Value, field: &str) -> Option<f64> {
+    match item.get(field)? {
+        Value::Number(n) => n.as_f64().filter(|v| *v > 0.0),
+        Value::String(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                t.parse::<f64>().ok().filter(|v| *v > 0.0)
+            }
+        }
+        _ => None,
+    }
+}
+
+/// 옵션 u32 — number / string 둘 다 처리, 음수 / 빈 / 누락 → `None`.
+///
+/// 0 은 *유의미한 값* 으로 보존 (예: `ugrndFlrCnt = 0` = "지하층 없음").
+fn parse_optional_u32(item: &Value, field: &str) -> Option<u32> {
+    match item.get(field)? {
+        Value::Number(n) => n.as_u64().and_then(|v| u32::try_from(v).ok()),
+        Value::String(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                t.parse::<u32>().ok()
+            }
+        }
+        _ => None,
+    }
+}
+
+/// `YYYYMMDD` 8자리 string 만 `Some`. 그 외 (`" "` / 길이 mismatch / 누락) → `None`.
+fn parse_optional_yyyymmdd(item: &Value, field: &str) -> Option<String> {
+    item.get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()))
+        .map(str::to_owned)
 }
 
 #[cfg(test)]
@@ -272,6 +354,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cognitive_complexity)] // 21 필드 필드 별 검증 — 분해 시 fixture I/O 중복.
     fn parse_items_handles_live_fixture() {
         // 2026-05-08 라이브 호출 fixture — 정부 API 가 *지금* 실제로 보내는 응답.
         // schema drift 발생 시 본 테스트가 가장 먼저 깨짐.
@@ -284,10 +367,37 @@ mod tests {
         let raw: Value = serde_json::from_str(&raw_str).expect("valid JSON");
         let items = parse_items(&raw).expect("parse live fixture");
         assert_eq!(items.len(), 1);
-        // 실 PK number → string conversion 검증.
-        assert_eq!(items[0].mgm_bldrgst_pk, "1024112777");
-        // totArea = 212615.29 (대형 건물).
-        assert!(items[0].tot_area > 200_000.0);
+        let b = &items[0];
+
+        // === 식별자 / 위치 ===
+        assert_eq!(b.mgm_bldrgst_pk, "1024112777"); // number → String
+        assert!(!b.bldg_nm.is_empty()); // 강남파이낸스센터 (한글)
+        assert!(b.plat_plc.is_some()); // platPlc 풀주소
+
+        // === 면적 / 비율 (산업 매물 핵심) ===
+        assert!(b.tot_area > 200_000.0); // 212615.29 m² (대형)
+        assert!(b.plat_area.is_some_and(|v| v > 13_000.0)); // 13156.7 m²
+        assert!(b.arch_area.is_some_and(|v| v > 5_000.0)); // 5600.51 m²
+        assert!(b.bc_rat.is_some_and(|v| v > 40.0 && v < 50.0)); // 42.5677 %
+        assert!(b.vl_rat.is_some_and(|v| v > 900.0)); // 995.1887 %
+
+        // === 층수 / 높이 ===
+        assert_eq!(b.grnd_flr_cnt, Some(45)); // 지상 45층
+        assert_eq!(b.ugrnd_flr_cnt, Some(8)); // 지하 8층
+        assert!(b.heit.is_some_and(|v| v > 200.0)); // 202.65 m
+
+        // === 승강기 ===
+        assert_eq!(b.ride_use_elvt_cnt, Some(29)); // 승용 29
+        assert_eq!(b.emgen_use_elvt_cnt, Some(2)); // 비상 2
+
+        // === 주차장 ===
+        assert_eq!(b.indr_auto_utcnt, Some(1300)); // 옥내 1300대
+        assert_eq!(b.oudr_auto_utcnt, Some(12)); // 옥외 12대
+
+        // === 날짜 ===
+        assert_eq!(b.pms_day.as_deref(), Some("19950504")); // 허가
+        assert_eq!(b.stcns_day.as_deref(), Some("19950513")); // 착공
+        assert_eq!(b.use_apr_day.as_deref(), Some("20010731")); // 사용승인
     }
 
     #[test]

@@ -44,18 +44,71 @@ pub trait BuildingRegisterReader: Send + Sync {
     >;
 }
 
-/// 좁은 building 결과 (data.go.kr `getBrTitleInfo` 의 표제부 일부).
+/// 산업 부동산 매물용 building 결과 (data.go.kr `getBrTitleInfo` 표제부 핵심 필드).
+///
+/// 전체 80+ 필드 중 *산업 매물 검토에 필요한 21개* 만 추출. 나머지 필드는
+/// `parcel_external_data.raw_response JSONB` (Bronze) 에 보존되어 미래 SQL 로
+/// 재추출 가능. 카탈로그: [docs/data-sources/data-go-kr.md](../../../../docs/data-sources/data-go-kr.md).
 #[derive(Debug, Clone)]
 pub struct BuildingItem {
-    /// 관리건축물대장 PK (`mgmBldrgstPk`).
+    // === 식별자 / 위치 ===
+    /// 관리건축물대장 PK (`mgmBldrgstPk`, 실 응답 number → String).
     pub mgm_bldrgst_pk: String,
     /// 건물명 (`bldNm`).
     pub bldg_nm: String,
-    /// 주용도코드명 (예: `"공장"`, `"창고시설"`).
+    /// 대지위치 풀주소 (`platPlc`).
+    pub plat_plc: Option<String>,
+
+    // === 용도 / 구조 ===
+    /// 주용도코드명 (`mainPurpsCdNm`, 예: `"공장"` / `"창고시설"`).
     pub main_purps_cd_nm: String,
-    /// 연면적 (`m²`).
+    /// 구조코드명 (`strctCdNm`, 예: `"철근콘크리트구조"` / `"철골구조"`).
+    pub strct_cd_nm: Option<String>,
+
+    // === 면적 / 비율 (산업 매물 핵심) ===
+    /// 대지면적 m² (`platArea`).
+    pub plat_area: Option<f64>,
+    /// 건축면적 m² (`archArea`).
+    pub arch_area: Option<f64>,
+    /// 건폐율 % (`bcRat`).
+    pub bc_rat: Option<f64>,
+    /// 연면적 m² (`totArea`).
     pub tot_area: f64,
-    /// 사용승인일 (`YYYYMMDD`).
+    /// 용적률 % (`vlRat`).
+    pub vl_rat: Option<f64>,
+
+    // === 층수 / 높이 ===
+    /// 지상층수 (`grndFlrCnt`).
+    pub grnd_flr_cnt: Option<u32>,
+    /// 지하층수 (`ugrndFlrCnt`).
+    pub ugrnd_flr_cnt: Option<u32>,
+    /// 건물 높이 m (`heit`).
+    pub heit: Option<f64>,
+
+    // === 승강기 ===
+    /// 승용 승강기수 (`rideUseElvtCnt`).
+    pub ride_use_elvt_cnt: Option<u32>,
+    /// 비상용 승강기수 (`emgenUseElvtCnt`).
+    pub emgen_use_elvt_cnt: Option<u32>,
+
+    // === 주차장 ===
+    /// 옥내 자주식 주차 대수 (`indrAutoUtcnt`).
+    pub indr_auto_utcnt: Option<u32>,
+    /// 옥외 자주식 주차 대수 (`oudrAutoUtcnt`).
+    pub oudr_auto_utcnt: Option<u32>,
+
+    // === 부속건축물 ===
+    /// 부속건축물수 (`atchBldCnt`).
+    pub atch_bld_cnt: Option<u32>,
+    /// 부속건축물 면적 m² (`atchBldArea`).
+    pub atch_bld_area: Option<f64>,
+
+    // === 날짜 (YYYYMMDD) ===
+    /// 허가일 (`pmsDay`, 8자리).
+    pub pms_day: Option<String>,
+    /// 착공일 (`stcnsDay`, 8자리).
+    pub stcns_day: Option<String>,
+    /// 사용승인일 (`useAprDay`, 8자리).
     pub use_apr_day: Option<String>,
 }
 
@@ -73,18 +126,84 @@ pub struct BuildingsQuery {
     pub parcel_pnu: String,
 }
 
-/// 건축물 응답 단건.
+/// 건축물 응답 단건. `BuildingItem` 의 wire shape (`snake_case` 도메인 ↔ `camelCase` API).
 #[derive(Debug, Serialize)]
 pub struct BuildingResponse {
+    // === 식별자 / 위치 ===
     /// 관리건축물대장 PK.
     pub id: String,
     /// 건물명.
     pub name: String,
+    /// 대지위치 풀주소.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+
+    // === 용도 / 구조 ===
     /// 주용도.
     pub purpose: String,
-    /// 연면적 (`m²`).
+    /// 구조 (예: `"철근콘크리트구조"`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structure: Option<String>,
+
+    // === 면적 / 비율 ===
+    /// 대지면적 m².
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plot_area_m2: Option<f64>,
+    /// 건축면적 m².
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_area_m2: Option<f64>,
+    /// 건폐율 %.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub building_coverage_ratio: Option<f64>,
+    /// 연면적 m².
     pub total_area_m2: f64,
-    /// 사용승인일 (`YYYYMMDD`).
+    /// 용적률 %.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub floor_area_ratio: Option<f64>,
+
+    // === 층수 / 높이 ===
+    /// 지상층수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub above_ground_floors: Option<u32>,
+    /// 지하층수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub below_ground_floors: Option<u32>,
+    /// 건물 높이 m.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_m: Option<f64>,
+
+    // === 승강기 ===
+    /// 승용 승강기수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passenger_elevators: Option<u32>,
+    /// 비상용 승강기수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub emergency_elevators: Option<u32>,
+
+    // === 주차장 ===
+    /// 옥내 자주식 주차 대수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indoor_self_parking: Option<u32>,
+    /// 옥외 자주식 주차 대수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outdoor_self_parking: Option<u32>,
+
+    // === 부속건축물 ===
+    /// 부속건축물 수.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annex_building_count: Option<u32>,
+    /// 부속건축물 면적 m².
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annex_building_area_m2: Option<f64>,
+
+    // === 날짜 (YYYYMMDD) ===
+    /// 허가일.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permitted_at: Option<String>,
+    /// 착공일.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    /// 사용승인일.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approved_at: Option<String>,
 }
@@ -132,8 +251,25 @@ pub async fn list_buildings(
             .map(|b| BuildingResponse {
                 id: b.mgm_bldrgst_pk,
                 name: b.bldg_nm,
+                address: b.plat_plc,
                 purpose: b.main_purps_cd_nm,
+                structure: b.strct_cd_nm,
+                plot_area_m2: b.plat_area,
+                building_area_m2: b.arch_area,
+                building_coverage_ratio: b.bc_rat,
                 total_area_m2: b.tot_area,
+                floor_area_ratio: b.vl_rat,
+                above_ground_floors: b.grnd_flr_cnt,
+                below_ground_floors: b.ugrnd_flr_cnt,
+                height_m: b.heit,
+                passenger_elevators: b.ride_use_elvt_cnt,
+                emergency_elevators: b.emgen_use_elvt_cnt,
+                indoor_self_parking: b.indr_auto_utcnt,
+                outdoor_self_parking: b.oudr_auto_utcnt,
+                annex_building_count: b.atch_bld_cnt,
+                annex_building_area_m2: b.atch_bld_area,
+                permitted_at: b.pms_day,
+                started_at: b.stcns_day,
                 approved_at: b.use_apr_day,
             })
             .collect(),
