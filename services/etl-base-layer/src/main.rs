@@ -55,7 +55,7 @@ use crate::gold::promote::{self, ArtifactSpec, PromoteArgs};
 use crate::gold::shp_to_geojson::{self, Ogr2OgrArgs};
 use crate::gold::spawn::Host;
 use crate::gold::tippecanoe::{check_available, LayerKind};
-use crate::gold::verify::{self, lonlat_to_tile, TileExpectation, TileSpec, VerifySpec};
+use crate::gold::verify::{self, lonlat_to_tile, TileCoordError, TileExpectation, TileSpec, VerifySpec};
 use crate::r2_upload::R2Uploader;
 
 fn main() -> ExitCode {
@@ -621,7 +621,19 @@ async fn run_verify(
     let mut tile_specs: Vec<TileSpec> = Vec::new();
     if matches!(layer, LayerKind::Parcels) {
         for landmark in sp9_base_layer_config::VERIFY_LANDMARKS {
-            let (gx, gy) = lonlat_to_tile(landmark.lon, landmark.lat, max_z);
+            let (gx, gy) = match lonlat_to_tile(landmark.lon, landmark.lat, max_z) {
+                Ok(coords) => coords,
+                Err(TileCoordError::ZoomTooLarge(z)) => {
+                    error!(zoom = z, "SSOT landmark zoom out of range — check LayerKind::zoom_range");
+                    return Err(VerifyStepError::TileCoord(
+                        TileCoordError::ZoomTooLarge(z)
+                    ));
+                }
+                Err(e) => {
+                    error!(error = %e, landmark = landmark.label, "invalid landmark coordinates");
+                    return Err(VerifyStepError::TileCoord(e));
+                }
+            };
             tile_specs.push(TileSpec {
                 z: max_z,
                 x: gx,
@@ -681,7 +693,7 @@ async fn upload_gold_to_r2(
     source_srs: &str,
 ) -> Result<(), UploadStepError> {
     let uploader = R2Uploader::new(r2_cfg.clone());
-    let key_prefix = format!("{}/{}/{}", r2_cfg.gold_prefix, version, layer.layer_name());
+    let key_prefix = r2_cfg.gold_layer_prefix(version, layer.layer_name());
     info!(version, layer = %layer.layer_name(), key_prefix = %key_prefix, "R2 batch upload start");
 
     let upload = uploader
@@ -727,12 +739,7 @@ async fn upload_gold_to_r2(
         .filter(|v| !v.trim().is_empty())
         .ok_or(UploadStepError::PublicUrlMissing)?;
     let tilejson = build_tilejson(r2_cfg, version, layer, &public_url_base);
-    let tilejson_key = format!(
-        "{}/{}/{}.json",
-        r2_cfg.gold_prefix,
-        version,
-        layer.layer_name()
-    );
+    let tilejson_key = r2_cfg.tilejson_key(version, layer.layer_name());
     uploader
         .put_object_json(&tilejson_key, &tilejson, "public, max-age=300")
         .await?;
@@ -747,16 +754,7 @@ fn build_tilejson(
     layer: LayerKind,
     public_base: &str,
 ) -> serde_json::Value {
-    let base: String = if public_base.ends_with('/') {
-        public_base.to_owned()
-    } else {
-        format!("{public_base}/")
-    };
-    let tiles_url = format!(
-        "{base}{prefix}/{version}/{layer_name}/{{z}}/{{x}}/{{y}}.pbf",
-        prefix = r2_cfg.gold_prefix,
-        layer_name = layer.layer_name(),
-    );
+    let tiles_url = r2_cfg.tiles_url_template(public_base, version, layer.layer_name());
     let (min_z, max_z) = layer.zoom_range();
     serde_json::json!({
         "tilejson": "3.0.0",

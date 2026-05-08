@@ -14,7 +14,7 @@ use crate::bronze::dtmk::DtmkError;
 use crate::gold::build::BuildError;
 use crate::gold::promote::PromoteError;
 use crate::gold::shp_to_geojson::Ogr2OgrError;
-use crate::gold::verify::VerifyError;
+use crate::gold::verify::{TileCoordError, VerifyError};
 use crate::r2_upload::UploadError;
 
 /// dtmk 준비 단계 에러 (`prepare_dtmk_inputs`).
@@ -64,6 +64,9 @@ pub enum VerifyStepError {
     /// `PMTiles` 검증 실패.
     #[error("verify: {0}")]
     Verify(#[from] VerifyError),
+    /// tile 좌표 계산 실패 (SSOT landmark 좌표 이상).
+    #[error("tile coord: {0}")]
+    TileCoord(#[from] TileCoordError),
 }
 
 /// R2 업로드 단계 에러 (`upload_gold_to_r2`).

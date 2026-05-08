@@ -303,21 +303,46 @@ pub async fn run(host: Host, spec: &VerifySpec<'_>) -> Result<VerifyResult, Veri
 ///
 /// 표준 mercator 변환식. y 는 latitude 가 고위도일수록 작은 값.
 ///
+/// # Errors
+///
+/// - `z > 31` — web mercator 실용 범위 초과 (tippecanoe maxzoom ≤ 22).
+/// - `lon` / `lat` 가 유한하지 않음 (NaN / Inf).
+///
 /// # Panics
 ///
-/// `z > 31` (실용 zoom 0-22).
-#[must_use]
+/// 없음 — 모든 에러는 `Err` 로 반환.
 // 후속 cast 들은 clamp(0, n-1) 후 = `[0, 2^31 - 1]` 보장 → u32 안전.
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub fn lonlat_to_tile(lon: f64, lat: f64, z: u8) -> (u32, u32) {
-    assert!(z <= 31, "z must be <= 31");
+pub fn lonlat_to_tile(lon: f64, lat: f64, z: u8) -> Result<(u32, u32), TileCoordError> {
+    if z > 31 {
+        return Err(TileCoordError::ZoomTooLarge(z));
+    }
+    if !lon.is_finite() || !lat.is_finite() {
+        return Err(TileCoordError::NonFiniteCoord { lon, lat });
+    }
     let n = 2_f64.powi(i32::from(z));
     let x = ((lon + 180.0) / 360.0 * n).floor();
     let lat_rad = lat.to_radians();
     let y = ((1.0 - lat_rad.tan().asinh() / std::f64::consts::PI) / 2.0 * n).floor();
     let x_clamped = x.clamp(0.0, n - 1.0) as u32;
     let y_clamped = y.clamp(0.0, n - 1.0) as u32;
-    (x_clamped, y_clamped)
+    Ok((x_clamped, y_clamped))
+}
+
+/// `lonlat_to_tile` 에러.
+#[derive(Debug, Error)]
+pub enum TileCoordError {
+    /// zoom > 31 (web mercator 실용 초과).
+    #[error("zoom {0} exceeds maximum of 31")]
+    ZoomTooLarge(u8),
+    /// NaN 또는 Inf 좌표.
+    #[error("non-finite coordinate: lon={lon}, lat={lat}")]
+    NonFiniteCoord {
+        /// 경도.
+        lon: f64,
+        /// 위도.
+        lat: f64,
+    },
 }
 
 #[cfg(test)]
@@ -356,7 +381,7 @@ mod tests {
     fn gangnam_z14_tile_coords() {
         // 강남 PNU 1168010100107370000 → 위도/경도 기준점 ~127.04, 37.51.
         // z14 tile = (13973, 6347) (web mercator).
-        let (x, y) = lonlat_to_tile(127.04, 37.51, 14);
+        let (x, y) = lonlat_to_tile(127.04, 37.51, 14).expect("valid z14");
         assert_eq!(x, 13973, "z14 x for 강남");
         assert_eq!(y, 6347, "z14 y for 강남");
     }
@@ -364,7 +389,7 @@ mod tests {
     #[test]
     fn gangnam_z17_tile_coords() {
         // z17 = z14 × 8.  강남 (127.04, 37.51) → (~111789, ~50783).
-        let (x, y) = lonlat_to_tile(127.04, 37.51, 17);
+        let (x, y) = lonlat_to_tile(127.04, 37.51, 17).expect("valid z17");
         // 정확 값 — 17 은 maxzoom 권장.
         assert_eq!(x, 111_789, "z17 x for 강남");
         assert_eq!(y, 50_783, "z17 y for 강남");
@@ -373,8 +398,20 @@ mod tests {
     #[test]
     fn lonlat_zero_is_origin() {
         // (0, 0) at z0 → (0, 0).
-        let (x, y) = lonlat_to_tile(0.0, 0.0, 0);
+        let (x, y) = lonlat_to_tile(0.0, 0.0, 0).expect("valid z0");
         assert_eq!((x, y), (0, 0));
+    }
+
+    #[test]
+    fn zoom_too_large_returns_error() {
+        let err = lonlat_to_tile(127.0, 37.0, 32).expect_err("z=32 must fail");
+        assert!(matches!(err, TileCoordError::ZoomTooLarge(32)));
+    }
+
+    #[test]
+    fn nan_lon_returns_error() {
+        let err = lonlat_to_tile(f64::NAN, 37.0, 14).expect_err("NaN must fail");
+        assert!(matches!(err, TileCoordError::NonFiniteCoord { .. }));
     }
 
     #[test]

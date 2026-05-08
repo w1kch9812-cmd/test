@@ -53,6 +53,52 @@ impl R2Config {
     pub fn endpoint_url(&self) -> String {
         format!("https://{}.r2.cloudflarestorage.com", self.account_id)
     }
+
+    /// Gold layer flat tile prefix: `<gold_prefix>/<version>/<layer>`.
+    /// **SSOT** — 모든 gold key 생성이 이 helper 를 통해야 함.
+    #[must_use]
+    pub fn gold_layer_prefix(&self, version: &str, layer_name: &str) -> String {
+        format!("{}/{}/{}", self.gold_prefix, version, layer_name)
+    }
+
+    /// Gold layer `TileJSON` key: `<gold_prefix>/<version>/<layer>.json`.
+    #[must_use]
+    pub fn tilejson_key(&self, version: &str, layer_name: &str) -> String {
+        format!("{}/{}/{}.json", self.gold_prefix, version, layer_name)
+    }
+
+    /// Gold manifest key: `<gold_prefix>/manifest.json`.
+    #[must_use]
+    pub fn manifest_key(&self) -> String {
+        format!("{}/manifest.json", self.gold_prefix)
+    }
+
+    /// Gold manifest backup key: `<gold_prefix>/manifest.<version>.json`.
+    #[must_use]
+    pub fn manifest_backup_key(&self, version: &str) -> String {
+        format!("{}/manifest.{}.json", self.gold_prefix, version)
+    }
+
+    /// Gold staging spec key: `<gold_prefix>/staging/<version>/<layer>.spec.json`.
+    #[must_use]
+    pub fn staging_spec_key(&self, version: &str, layer_name: &str) -> String {
+        format!("{}/staging/{}/{}.spec.json", self.gold_prefix, version, layer_name)
+    }
+
+    /// Tiles URL template for `TileJSON` / manifest:
+    /// `<public_base>/<gold_prefix>/<version>/<layer>/{z}/{x}/{y}.pbf`.
+    #[must_use]
+    pub fn tiles_url_template(&self, public_base: &str, version: &str, layer_name: &str) -> String {
+        let base = if public_base.ends_with('/') {
+            public_base.to_owned()
+        } else {
+            format!("{public_base}/")
+        };
+        #[allow(clippy::literal_string_with_formatting_args)]
+        {
+            format!("{base}{}/{}/{}/{{z}}/{{x}}/{{y}}.pbf", self.gold_prefix, version, layer_name)
+        }
+    }
 }
 
 /// R2 업로드 / 다운로드 에러.

@@ -92,12 +92,6 @@ pub struct ArtifactSpec {
     pub lineage: BuildLineage,
 }
 
-/// `gold/staging/<version>/<layer>.spec.json` key (lineage + meta 통합 박제).
-#[must_use]
-pub fn staging_spec_key(gold_prefix: &str, version: &str, layer_name: &str) -> String {
-    format!("{gold_prefix}/staging/{version}/{layer_name}.spec.json")
-}
-
 /// staging 에 layer 의 spec (lineage + artifact meta) PUT.
 ///
 /// gold subcommand 가 R2 batch upload 직후 본 함수를 호출 — manifest 미발행 상태에서
@@ -113,7 +107,7 @@ pub async fn write_staging_spec(
     layer: LayerKind,
     spec: &ArtifactSpec,
 ) -> Result<(), PromoteError> {
-    let key = staging_spec_key(&uploader.config().gold_prefix, version, layer.layer_name());
+    let key = uploader.config().staging_spec_key(version, layer.layer_name());
     // serde 친화적인 JSON 표현 — `ArtifactSpec` 의 필드 그대로.
     let payload = serde_json::json!({
         "key_prefix": spec.key_prefix,
@@ -139,7 +133,7 @@ async fn read_staging_artifact(
     version: &str,
     layer: LayerKind,
 ) -> Result<GoldArtifact, PromoteError> {
-    let key = staging_spec_key(&uploader.config().gold_prefix, version, layer.layer_name());
+    let key = uploader.config().staging_spec_key(version, layer.layer_name());
     // body fetch — head 보다 더 명확한 에러.
     let bytes = match uploader.get_object_bytes(&key).await {
         Ok(b) => b,
@@ -261,7 +255,7 @@ pub async fn run(
     }
 
     // 3. 이전 manifest backup (있으면).
-    let manifest_key = format!("{}/manifest.json", uploader.config().gold_prefix);
+    let manifest_key = uploader.config().manifest_key();
     let previous_version: Option<String> = match uploader.get_object_bytes(&manifest_key).await {
         Ok(prev_bytes) => {
             let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
@@ -270,7 +264,7 @@ pub async fn run(
                 .and_then(|v| v.as_str())
                 .map(str::to_owned);
             if let Some(ref pv) = prev_ver {
-                let backup_key = format!("{}/manifest.{pv}.json", uploader.config().gold_prefix);
+                let backup_key = uploader.config().manifest_backup_key(pv);
                 // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
                 let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
                 uploader
@@ -288,20 +282,14 @@ pub async fn run(
     };
 
     // 4. new manifest 빌드 + publish.
-    let base = if args.public_url_base.ends_with('/') {
-        args.public_url_base.to_owned()
-    } else {
-        format!("{}/", args.public_url_base)
-    };
-    let mut tiles_url_template = String::with_capacity(128);
-    tiles_url_template.push_str(&base);
-    tiles_url_template.push_str(&uploader.config().gold_prefix);
-    tiles_url_template.push('/');
-    tiles_url_template.push_str(args.version);
+    // P1.3: tiles_url_template — R2Config::tiles_url_template SSOT.
+    // `{layer}` 는 클라이언트가 치환할 리터럴 placeholder — 의도적 formatting arg.
     #[allow(clippy::literal_string_with_formatting_args)]
-    {
-        tiles_url_template.push_str("/{layer}/{z}/{x}/{y}.pbf");
-    }
+    let tiles_url_template = uploader.config().tiles_url_template(
+        args.public_url_base,
+        args.version,
+        "{layer}",
+    );
 
     let manifest = GoldManifest {
         current_version: args.version.to_owned(),
@@ -384,12 +372,20 @@ async fn cloudflare_purge(manifest_key: &str) -> Result<bool, PromoteError> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
-    use super::*;
 
     #[test]
     fn staging_key_format() {
+        use crate::r2_upload::R2Config;
+        let cfg = R2Config {
+            account_id: "fake".into(),
+            access_key: "fake".into(),
+            secret_key: "fake".into(),
+            bucket: "bucket".into(),
+            bronze_prefix: "bronze".into(),
+            gold_prefix: "gold".into(),
+        };
         assert_eq!(
-            staging_spec_key("gold", "v3", "parcels"),
+            cfg.staging_spec_key("v3", "parcels"),
             "gold/staging/v3/parcels.spec.json"
         );
     }
