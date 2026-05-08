@@ -50,6 +50,8 @@ mod http {
 
 mod observability;
 
+mod building_reader;
+
 mod routes {
     pub mod admin_listings;
     pub mod auth_event;
@@ -387,30 +389,46 @@ async fn main() {
             auth_layer,
         ));
 
-    // SP10 T3: building_register reader 주입 — SP4-iii-a 의 live reader 로 swap 예정.
-    // 현재는 NoOp fallback (`DATA_GO_KR_API_KEY` 미설정 시 빈 list).
-    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 (사용자한테 빈 list 노출 =
-    // silent data loss). production 은 DATA_GO_KR_API_KEY *반드시*.
+    // SP10 T3 + audit 2026-05-08 round 2 (P2): building_register reader 라이브 wire.
+    //
+    // env (`DATA_GO_KR_API_KEY` 또는 `ODP_SERVICE_KEY`) 있으면 `DataGoKrBuildingRegisterReader`
+    // (data.go.kr `getBrTitleInfo` 라이브 호출). 없으면 dev fallback NoOp + production fail-fast.
+    //
+    // 본 reader 는 *panel 응답용 좁은 subset* (BuildingItem) 만 채움. rich Building entity
+    // (V-World 폴리곤 합성) 는 FU 40 의 R2 PMTiles 에서 별도 도입.
     let building_reader: Arc<dyn routes::buildings::BuildingRegisterReader> = {
-        let has_key = std::env::var("DATA_GO_KR_API_KEY")
+        let service_key = std::env::var("DATA_GO_KR_API_KEY")
             .or_else(|_| std::env::var("ODP_SERVICE_KEY"))
             .ok()
-            .filter(|v| !v.trim().is_empty())
-            .is_some();
-        if !has_key && is_production {
-            fail_fast_production(
-                "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
-                 가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
-            );
-        }
-        // TODO(audit 2026-05-08): production 에서도 SP4-iii-a 의 live reader 가 *아직* 안
-        // 들어옴 — has_key 검증 후 NoOp 주입 = 절반 fix. live reader wire 후속 commit.
-        if !has_key {
-            tracing::warn!(
-                "building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)"
-            );
-        }
-        Arc::new(NoOpBuildingRegisterReader)
+            .filter(|v| !v.trim().is_empty());
+        service_key.map_or_else(
+            || {
+                if is_production {
+                    fail_fast_production(
+                        "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
+                         가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
+                    );
+                }
+                tracing::warn!(
+                    "building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)"
+                );
+                Arc::new(NoOpBuildingRegisterReader) as Arc<dyn routes::buildings::BuildingRegisterReader>
+            },
+            |key| {
+                tracing::info!(
+                    "building_register: data.go.kr live (getBrTitleInfo via DataGoKrBuildingRegisterReader)"
+                );
+                let base_url = std::env::var("ODP_BASE_URL")
+                    .unwrap_or_else(|_| "https://apis.data.go.kr".to_owned());
+                let client = Arc::new(data_go_kr_client::DataGoKrClient::new(
+                    data_go_kr_client::DataGoKrConfig {
+                        service_key: key,
+                        base_url,
+                    },
+                ));
+                Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(client)) as Arc<dyn routes::buildings::BuildingRegisterReader>
+            },
+        )
     };
     let buildings_state = routes::buildings::BuildingsState {
         reader: building_reader,

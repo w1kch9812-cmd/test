@@ -18,6 +18,7 @@ parcel-domain = { path = "../../crates/domain/core/parcel", version = "0.1.0" }
 parcel-lookup = { path = "../../crates/parcel-lookup", version = "0.1.0" }
 vworld-client = { path = "../../crates/data-clients/vworld", version = "0.1.0" }
 raw-capture-client = { path = "../../crates/data-clients/raw-capture", version = "0.1.0" }
+data-go-kr-client = { path = "../../crates/data-clients/data-go-kr", version = "0.1.0" }
 db = { path = "../../crates/db", version = "0.1.0" }
 axum = { workspace = true }
 deadpool-redis = { workspace = true }
