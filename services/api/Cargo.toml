@@ -32,11 +32,17 @@ tower-http = { workspace = true, features = ["trace"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 async-trait = { workspace = true }
+thiserror = { workspace = true }
 ulid = { workspace = true }
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }
 # audit 2026-05-08: /internal/auth/event 의 shared secret 검증 — constant-time 비교 (timing attack 방어).
 subtle = "2"
+# ADR 0026: Bronze API archive 를 R2 (S3-호환) 로 적재. etl-base-layer 의 R2Uploader 와 동일 버전 핀.
+aws-config = { version = "=1.8.5", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
+aws-credential-types = "=1.2.5"
+aws-sdk-s3 = { version = "=1.86.0", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
+aws-smithy-types = "=1.3.4"
 
 [lints]
 workspace = true

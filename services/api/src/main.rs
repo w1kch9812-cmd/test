@@ -27,7 +27,6 @@ use axum::routing::get;
 use axum::{middleware, Json, Router};
 use db::listing::PgListingRepository;
 use db::listing_photo::PgListingPhotoRepository;
-use db::raw_capture::PgRawCapture;
 use db::user::PgUserRepository;
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use listing_domain::repository::ListingRepository;
@@ -51,6 +50,7 @@ mod http {
 mod observability;
 
 mod building_reader;
+mod r2_raw_capture;
 
 mod routes {
     pub mod admin_listings;
@@ -207,13 +207,35 @@ async fn main() {
         Arc::new(PgListingPhotoRepository::new(pool.clone()));
 
     // SP9 T4 / ADR 0018: PNU lookup. VWORLD_API_KEY 미설정 → NoOp fallback (dev/CI).
-    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 (raw_response JSONB 미저장
-    // 위반). production 은 VWORLD_API_KEY *반드시* — startup fail-fast.
-    // audit 2026-05-08 round 2 (P1 + P2 ship-safety): PgRawCapture 인스턴스 공유 —
-    // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 capture sink 사용
-    // (parcel_external_data UPSERT 대상, 다른 source 라벨로 구분).
-    let raw_capture: Arc<dyn raw_capture_client::RawCapture> =
-        Arc::new(PgRawCapture::new(pool.clone()));
+    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 — production 은
+    // VWORLD_API_KEY *반드시* (startup fail-fast).
+    //
+    // ADR 0026: Bronze API archive = R2 (S3-호환 객체 저장소). Postgres jsonb 폐기 —
+    // cost (~7-10x) + UPSERT 시계열 손실 + connection pool 부담. R2 키 구조:
+    //   `bronze/{source}/{yyyy}/{mm}/{dd}/{pnu}_{epoch_ms}.json`
+    // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 sink 공유.
+    let raw_capture: Arc<dyn raw_capture_client::RawCapture> = match r2_raw_capture::R2RawCaptureConfig::from_env() {
+        Ok(cfg) => {
+            tracing::info!(
+                "raw_capture: R2 live (bucket={}, prefix={}) — ADR 0026",
+                cfg.bucket,
+                cfg.bronze_prefix
+            );
+            Arc::new(r2_raw_capture::R2RawCapture::new(cfg))
+        }
+        Err(e) => {
+            if is_production {
+                fail_fast_production(&format!(
+                    "R2 env (R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET) 미설정 — Bronze raw_response 보존 path 0 (ADR 0026): {e}"
+                ));
+            }
+            tracing::warn!(
+                error = %e,
+                "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
+            );
+            Arc::new(raw_capture_client::NoOpRawCapture::new())
+        }
+    };
 
     let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
         Ok(cfg) => {

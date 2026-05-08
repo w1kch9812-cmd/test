@@ -72,3 +72,4 @@
 | [0023](./0023-audit-2026-05-08-hardening.md) | Codex audit 2026-05-08 hardening — `/internal/auth/event` shared secret + production fail-fast + JTI fail-closed + structured map errors | Accepted (partial — handoff) |
 | [0024](./0024-etl-cancel-protocol-immediate-abort.md) | ETL cancel protocol — 즉시 abort + L3 staging atomicity 보호 (state machine 거부) | Accepted |
 | [0025](./0025-bronze-scraping-workflow-orchestrator-not-rust-spawn.md) | Bronze scraping orchestration — GitHub Actions workflow phase split (Rust가 Python spawn 안 함, ADR 0022 amendment) | Accepted |
+| [0026](./0026-bronze-api-archive-r2-not-postgres-jsonb.md) | Bronze API archive — R2 (S3-호환 객체 저장소) 로 이전, Postgres jsonb 폐기 (cost + UPSERT 손실 + 시계열 보존) | Accepted |

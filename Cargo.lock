@@ -127,6 +127,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "auth",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "aws-smithy-types",
  "axum",
  "bookmark-domain",
  "chrono",
@@ -147,6 +151,7 @@ dependencies = [
  "shared-kernel",
  "sqlx",
  "subtle",
+ "thiserror 1.0.69",
  "tokio",
  "tower-http",
  "tracing",
