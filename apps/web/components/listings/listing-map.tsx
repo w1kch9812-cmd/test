@@ -334,5 +334,40 @@ export function ListingMap() {
     }
   }, [mapReady, listings, selectedListingId, pushPanel]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={containerRef} className="h-full w-full" />
+      <MapAttribution />
+    </div>
+  );
+}
+
+/**
+ * 공공누리 제1유형 출처표시 — Round 5 P2 compliance 실코드.
+ *
+ * 박제 source: V-World dtmk dsId=30563 (연속지적도). ADR 0027 / runbook § 7.2 의
+ * 클라이언트 의무. Rust 측 `crates/sp9-base-layer-config::DTMK_LICENSE` /
+ * `dtmk_source_url()` 와 *내용상* 동일 SSOT — 향후 manifest lineage fetch 로 동적
+ * 렌더 가능 (별도 sprint).
+ *
+ * 위치: 지도 우하단. mapbox-gl 의 표준 attribution slot 과 시각적 분리 — Naver SDK
+ * 의 자체 attribution 과 겹침 회피.
+ */
+function MapAttribution() {
+  // `<aside>` semantic tag — 보조 정보 (지도 본체와 분리). complementary role 이라
+  // screen reader 가 자연 인지. 텍스트가 직접 출처 명시 — aria-label 별도 불필요.
+  return (
+    <aside className="pointer-events-auto absolute bottom-1 right-1 z-10 rounded bg-white/85 px-2 py-0.5 text-[10px] leading-tight text-gray-600 shadow-sm backdrop-blur-sm dark:bg-black/70 dark:text-gray-300">
+      <span>필지 polygon: </span>
+      <a
+        href="https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30563"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline hover:text-gray-900 dark:hover:text-white"
+      >
+        V-World
+      </a>
+      <span className="ml-1">(공공누리 제1유형: 출처표시)</span>
+    </aside>
+  );
 }
