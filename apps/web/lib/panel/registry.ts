@@ -18,8 +18,16 @@ export interface PanelLink<TFromData> {
 
 export interface PanelViewDefinition<K extends PanelKind, TData = unknown> {
   component: ComponentType<{ entry: Extract<PanelStackEntry, { kind: K }>; data: TData }>;
-  /** id → server fetch. Returns parsed data (zod schema 검증된 후). */
-  fetcher: (id: string) => Promise<TData>;
+  /**
+   * id → server fetch. Returns parsed data (zod schema 검증된 후).
+   *
+   * Optional `signal` 두번째 인자 (Fix #3, 2026-05-11) — TanStack Query 가 제공
+   * 하는 AbortSignal. fetcher 가 ky/fetch 에 forward 하면 panel navigation 시
+   * 이전 fetch 가 자동 cancel (stale data + network 낭비 차단).
+   *
+   * 기존 fetcher (signal 인자 안 받음) 도 정상 작동 — TS optional 인자 호환.
+   */
+  fetcher: (id: string, signal?: AbortSignal) => Promise<TData>;
   /** TanStack Query staleTime ms. spec FU2 = per-kind tune. v1 default 5min. */
   staleTime: number;
   /** child link list — registry link integrity 는 T4/T5 가 검증 */

@@ -71,9 +71,35 @@ export function usePanelStack(): UsePanelStackResult {
     [navigate, stack],
   );
 
+  /**
+   * Pop the top panel entry.
+   *
+   * Fix #1 (2026-05-11): 이전 코드는 `router.back()` 만 호출 → 패널이 *직접 URL
+   * 진입* (외부 링크 / 새 탭 / 북마크) 으로 열렸으면 brower history 에 in-app
+   * entry 가 없어 *페이지 밖으로* navigate (이전 사이트 또는 about:blank). 사용자
+   * 짜증의 주범.
+   *
+   * Fix: 현 stack 길이를 검사. depth > 0 이면 `replace` 로 stack 한 단계 잘라
+   * navigation. router.back() 은 only when history depth > 1 (in-app push 가 있을 때).
+   */
   const pop = useCallback(() => {
-    router.back();
-  }, [router]);
+    if (stack.entries.length === 0) return;
+    if (stack.entries.length === 1) {
+      // 마지막 panel — `?p=` 자체 제거. URL 직접 진입 시 안전.
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.delete("p");
+      const qs = sp.toString();
+      const url = `${pathname}${qs ? `?${qs}` : ""}`;
+      router.replace(url as never, { scroll: false });
+      return;
+    }
+    // depth > 1 — 한 단계 자르기. browser back 으로 안전하게 복귀 가능.
+    const next: PanelStack = {
+      v: 1,
+      entries: stack.entries.slice(0, -1),
+    };
+    navigate(next, "replace");
+  }, [navigate, pathname, router, searchParams, stack]);
 
   /**
    * Stack 을 명시적 길이로 자름 (breadcrumb 클릭 시 사용).

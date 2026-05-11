@@ -11,7 +11,13 @@
   },
   "panel": {
     "back": "이전",
-    "breadcrumb": "경로"
+    "breadcrumb": "경로",
+    "labels": {
+      "parcel.summary": "필지",
+      "parcel.buildings": "건축물",
+      "parcel.listings": "이 필지의 매물",
+      "listing.summary": "매물"
+    }
   },
   "map": {
     "attribution": {

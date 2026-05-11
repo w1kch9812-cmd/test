@@ -48,13 +48,14 @@ export function PanelEntryView({ entry, depth }: { entry: PanelStackEntry; depth
   const { pop } = usePanelStack();
   const [renderError, setRenderError] = useState<Error | null>(null);
 
-  // Spec rule § 9 #8 — TanStack Query 의 queryFn 이 AbortSignal 받아 fetcher 에 전달.
+  // Spec rule § 9 #8 + Fix #3 (2026-05-11) — TanStack Query 가 제공하는 signal
+  // 을 fetcher 에 forward. fetcher 가 ky/fetch 의 AbortSignal 받으면 panel
+  // navigation 시 이전 fetch 자동 cancel (stale data + network 낭비 차단).
   const query = useQuery({
     queryKey: ["panel", entry.kind, entry.view, entry.id],
     queryFn: async ({ signal }) => {
-      void signal; // fetcher 가 signal 사용은 호출자 결정 (ky 가 AbortSignal 지원)
       // biome-ignore lint/style/noNonNullAssertion: enabled gate guarantees viewDef defined
-      return viewDef!.fetcher(entry.id);
+      return viewDef!.fetcher(entry.id, signal);
     },
     staleTime: viewDef?.staleTime ?? 5 * 60_000,
     enabled: Boolean(def && viewDef),

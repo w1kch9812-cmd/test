@@ -14,6 +14,7 @@ interface BreadcrumbProps {
 
 export function Breadcrumb({ stack, greyedBeforeIndex = -1 }: BreadcrumbProps) {
   const t = useTranslations("panel");
+  const tLabels = useTranslations("panel.labels");
   const { truncate } = usePanelStack();
 
   if (stack.entries.length === 0) return null;
@@ -27,7 +28,18 @@ export function Breadcrumb({ stack, greyedBeforeIndex = -1 }: BreadcrumbProps) {
         const def = getKindDefinition(entry.kind);
         const isLast = idx === stack.entries.length - 1;
         const greyed = greyedBeforeIndex >= 0 && idx < greyedBeforeIndex;
-        const label = def ? `${entry.kind}.${entry.view}` : entry.kind;
+        // Fix #2 (2026-05-11): 'parcel.summary' 같은 기술 라벨 → 한국어 (i18n).
+        const kindStr: string = entry.kind;
+        const labelKey = `${kindStr}.${entry.view}`;
+        const fallbackLabel =
+          kindStr === "parcel" ? "필지" : kindStr === "listing" ? "매물" : kindStr;
+        let label: string;
+        try {
+          label = def ? tLabels(labelKey) : fallbackLabel;
+        } catch {
+          // i18n 키 누락 — 안전한 fallback (도메인 어휘 한국어)
+          label = fallbackLabel;
+        }
         return (
           <span key={`${entry.kind}-${entry.id}-${entry.view}`} className="flex items-center gap-1">
             {idx > 0 && <span className="text-[var(--color-muted)]">/</span>}
