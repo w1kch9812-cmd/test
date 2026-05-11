@@ -29,11 +29,11 @@
 | `services/api/src/lib.rs` | `pub fn app_router(state: AppState) -> Router` factory export (integration test 용) |
 | `services/api/src/routes/admin/mod.rs` | admin module declaration |
 | `services/api/src/routes/admin/raw_vault.rs` | `GET /api/admin/raw_vault/:source/:pnu` (ZITADEL admin + purpose + ticket_id) |
-| `migrations/30010_source_taxonomy_expansion.sql` | V-World 'vworld' → 'vworld_parcel' rename + CHECK 확장 + backfill UPDATE |
-| `migrations/30011_pii_vault.sql` | Tier 2 vault table + RLS policy + composite FK (`char(19)`/`varchar(40)`) |
-| `migrations/30012_external_data_lineage.sql` | `license`, `api_version`, `sanitizer_version`, `schema_hash` 컬럼 ADD + legacy backfill |
-| `migrations/30013_raw_vault_access_log.sql` | 7-컬럼 audit log (user_id, source, pnu, purpose, ticket_id, accessed_at, request_id) |
-| `migrations/30014_external_data_expires_constraint.sql` | `expires_at` NULL backfill → NOT NULL → CHECK > fetched_at → index |
+| `migrations/30012_source_taxonomy_expansion.sql` | V-World 'vworld' → 'vworld_parcel' rename + CHECK 확장 + backfill UPDATE |
+| `migrations/30013_pii_vault.sql` | Tier 2 vault table + RLS policy + composite FK (`char(19)`/`varchar(40)`) |
+| `migrations/30014_external_data_lineage.sql` | `license`, `api_version`, `sanitizer_version`, `schema_hash` 컬럼 ADD + legacy backfill |
+| `migrations/30015_raw_vault_access_log.sql` | 7-컬럼 audit log (user_id, source, pnu, purpose, ticket_id, accessed_at, request_id) |
+| `migrations/30016_external_data_expires_constraint.sql` | `expires_at` NULL backfill → NOT NULL → CHECK > fetched_at → index |
 | `infra/kms-key.ts` | Pulumi `aws.kms.Key` ("pii-vault-key", rotation, deletion window 30d) |
 | `services/api/tests/sp10_backend_data_correctness.rs` | PII fixture + vault RLS + audit log + health degraded 통합 테스트 |
 
