@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { shared-key: sp9-etl }

@@ -68,7 +68,7 @@ jobs:
       dtmk_license: ${{ steps.print.outputs.dtmk_license }}
       dtmk_source_url: ${{ steps.print.outputs.dtmk_source_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { shared-key: sp9-etl }
@@ -104,7 +104,7 @@ jobs:
     outputs:
       manifest_url: ${{ steps.summary.outputs.manifest_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -201,7 +201,7 @@ jobs:
         # 의 `is_active_in_etl()` 만 변경.
         layer: ${{ fromJson(needs.setup.outputs.active_layers_json) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build deps + GDAL (pinned via SSOT)
         run: |
@@ -328,7 +328,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with: { shared-key: sp9-etl }

@@ -23,7 +23,7 @@ jobs:
     name: Lint & Format (Biome + clippy + markdownlint)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
@@ -46,7 +46,7 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
@@ -60,7 +60,7 @@ jobs:
     name: cargo check + cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-features
@@ -74,7 +74,7 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -93,7 +93,7 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 0 }
       - uses: gitleaks/gitleaks-action@v2
         env:
@@ -104,7 +104,7 @@ jobs:
     name: Markdown link check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: pnpm/action-setup@v4
         with: { version: 9.12.0 }
       - uses: actions/setup-node@v4
@@ -122,7 +122,7 @@ jobs:
     name: File size limit (≤500 권장 / 1500 강제)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check file sizes
         run: |
           fail=0
