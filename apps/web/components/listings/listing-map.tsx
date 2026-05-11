@@ -1,4 +1,5 @@
 "use client";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { pinIconHtml } from "@/components/listings/listing-pin";
 import { useListingsQuery } from "@/lib/listings/use-listings-query";
@@ -354,20 +355,25 @@ export function ListingMap() {
  * 의 자체 attribution 과 겹침 회피.
  */
 function MapAttribution() {
-  // `<aside>` semantic tag — 보조 정보 (지도 본체와 분리). complementary role 이라
-  // screen reader 가 자연 인지. 텍스트가 직접 출처 명시 — aria-label 별도 불필요.
+  // Round 5 (final stop-hook): user-facing string 은 typed i18n only (AGENTS.md §10.1.5).
+  // 이전 hardcoded "필지 polygon: V-World (...)" → next-intl `map.attribution.*` namespace.
+  // 향후 lineage manifest 의 `source_license` / `source_url` 도 typed key 로 swap 가능.
+  const t = useTranslations("map.attribution");
   return (
-    <aside className="pointer-events-auto absolute bottom-1 right-1 z-10 rounded bg-white/85 px-2 py-0.5 text-[10px] leading-tight text-gray-600 shadow-sm backdrop-blur-sm dark:bg-black/70 dark:text-gray-300">
-      <span>필지 polygon: </span>
+    <aside
+      className="pointer-events-auto absolute bottom-1 right-1 z-10 rounded bg-white/85 px-2 py-0.5 text-[10px] leading-tight text-gray-600 shadow-sm backdrop-blur-sm dark:bg-black/70 dark:text-gray-300"
+      aria-label={t("ariaDataSource")}
+    >
+      <span>{t("parcelSourceLabel")}: </span>
       <a
         href="https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId=30563"
         target="_blank"
         rel="noopener noreferrer"
         className="underline hover:text-gray-900 dark:hover:text-white"
       >
-        V-World
+        {t("vWorldLink")}
       </a>
-      <span className="ml-1">(공공누리 제1유형: 출처표시)</span>
+      <span className="ml-1">{t("license")}</span>
     </aside>
   );
 }

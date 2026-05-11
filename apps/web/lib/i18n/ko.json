@@ -13,6 +13,14 @@
     "back": "이전",
     "breadcrumb": "경로"
   },
+  "map": {
+    "attribution": {
+      "parcelSourceLabel": "필지 polygon",
+      "vWorldLink": "V-World",
+      "license": "(공공누리 제1유형: 출처표시)",
+      "ariaDataSource": "데이터 출처"
+    }
+  },
   "panels": {
     "parcel": {
       "empty": "필지 정보가 없어요",
