@@ -10,6 +10,7 @@ description = "공짱 외부 API raw_response 보존 표준 trait"
 async-trait = { workspace = true }
 chrono = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
