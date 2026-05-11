@@ -48,7 +48,7 @@ use tracing::{error, info, warn};
 use tracing_subscriber::EnvFilter;
 
 use crate::bronze::dtmk::{self, DtmkFetchArgs};
-use crate::config::Config;
+use crate::config::{Config, ConfigError};
 use crate::error::{PrepareError, UploadStepError, VerifyStepError};
 use crate::gold::build::{build_layer, BuildResult};
 use crate::gold::manifest::{BronzeInput, BuildLineage};
@@ -147,7 +147,10 @@ async fn shutdown_signal() {
 // 모이는 게 자연스러움 (split 시 가독성 손해). 복잡도 lint 의도적 silence.
 #[allow(clippy::cognitive_complexity)]
 async fn run_bronze() -> ExitCode {
-    let cfg = Config::from_env();
+    let cfg = match load_config_or_exit() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
 
     if cfg.sources.is_empty() {
         error!(
@@ -388,7 +391,10 @@ async fn run_gold(args: Vec<String>) -> ExitCode {
     );
 
     // ADR 0021 § ETL pipeline — R2 가 설정되어 있으면 flat tile + manifest publish.
-    let cfg = Config::from_env();
+    let cfg = match load_config_or_exit() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
     if let Some(r2_cfg) = cfg.r2 {
         // version newtype — `cfg.gold_version` 이 이미 검증된 `Option<Version>` 라
         // unwrap-by-default 가 안전하게 dev 폴백 (`v_local`) 사용.
@@ -431,7 +437,8 @@ async fn prepare_dtmk_inputs(
     opts: &GoldOpts,
     bronze_prefix: &str,
 ) -> Result<(Vec<PathBuf>, Vec<BronzeInput>), PrepareError> {
-    let cfg = Config::from_env();
+    // ADR 0029 — `ETL_ENVIRONMENT` 명시 fail-fast (PrepareError::ConfigLoad 로 propagate).
+    let cfg = Config::from_env()?;
     let r2_cfg = cfg
         .r2
         .clone()
@@ -580,7 +587,10 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let cfg = Config::from_env();
+    let cfg = match load_config_or_exit() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
     let Some(r2_cfg) = cfg.r2 else {
         error!("R2_* env not set — promote requires R2 access");
         return ExitCode::FAILURE;
@@ -657,7 +667,10 @@ async fn run_cleanup_backups_cli(args: Vec<String>) -> ExitCode {
             }
         }
     }
-    let cfg = Config::from_env();
+    let cfg = match load_config_or_exit() {
+        Ok(c) => c,
+        Err(code) => return code,
+    };
     let Some(r2_cfg) = cfg.r2 else {
         error!("R2_* env not set — cleanup requires R2 access");
         return ExitCode::FAILURE;
@@ -869,6 +882,20 @@ fn build_tilejson(
                 }
             }
         }]
+    })
+}
+
+/// ADR 0029 — `Config::from_env` 의 fail-fast 를 `ExitCode` 로 매핑. 모든 subcommand
+/// 의 진입점에서 사용 — environment 명시 안 했으면 즉시 exit 2 + 명확한 에러.
+fn load_config_or_exit() -> Result<Config, ExitCode> {
+    Config::from_env().map_err(|e| match e {
+        ConfigError::Environment(parse_err) => {
+            error!(
+                error = %parse_err,
+                "ETL_ENVIRONMENT required (ADR 0029) — set to one of: local | staging | production"
+            );
+            ExitCode::from(2)
+        }
     })
 }
 

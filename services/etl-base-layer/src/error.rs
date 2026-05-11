@@ -53,6 +53,9 @@ pub enum PrepareError {
     /// SSOT 설정 파싱 실패 (e.g. `TARGET_SRS_WEB` 가 newtype 검증 거부).
     #[error("config: {0}")]
     Config(String),
+    /// ADR 0029 — `ETL_ENVIRONMENT` 미설정 / invalid (Round 5+ environment 분리).
+    #[error("config load: {0}")]
+    ConfigLoad(#[from] crate::config::ConfigError),
 }
 
 impl From<tokio::sync::AcquireError> for PrepareError {

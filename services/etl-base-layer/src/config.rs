@@ -1,18 +1,30 @@
-//! 환경변수 → 정적 설정 매핑.
+//! 환경변수 → 정적 설정 매핑 (Round 5+ — ADR 0029 environment 명시 분리).
 //!
 //! 모든 설정은 환경변수 driven — secret 은 GitHub Actions secrets 또는 ECS task
-//! environment 로 주입. 미설정 시 [`ConfigError::Missing`] 으로 fail-fast.
+//! environment 로 주입. **`ETL_ENVIRONMENT` 명시 필수** (미설정 시 fail-fast).
 //!
-//! 단계별 변수:
-//! - **Bronze (T3a)**: `BRONZE_DIR` / `BRONZE_BATCH_LABEL` / `BRONZE_*_URL`
-//! - **R2 업로드 (T3b.1)**: `R2_ACCOUNT_ID` / `R2_ACCESS_KEY` / `R2_SECRET_KEY` /
-//!   `R2_BUCKET` (+ optional prefix overrides)
-//! - **Gold (T3b.2)**: `GOLD_VERSION` (활성 버전 라벨)
+//! ## Environment namespace (ADR 0029)
+//!
+//! 각 env 별 R2 자격이 *별도 namespace* 통과:
+//! - `ETL_ENVIRONMENT=local`      → `R2_LOCAL_*`
+//! - `ETL_ENVIRONMENT=staging`    → `R2_STAGING_*`
+//! - `ETL_ENVIRONMENT=production` → `R2_PRODUCTION_*`
+//!
+//! 사고 예방 (Round 5 verify smoke 사고):
+//! - 이전: `R2_*` 가 4개 다 set 시 *어떤 env 든* R2 자동 활성 → local 이 prod modify
+//! - 새: `ETL_ENVIRONMENT` 명시 필요 + namespace 격리 → local 에서 `R2_PRODUCTION_*`
+//!   set 돼있어도 ETL 가 *읽지 않음* (의도 격리)
+//!
+//! ## Backward-compat (1 sprint)
+//!
+//! 기존 `R2_*` (namespace 없음) 도 *fallback* 으로 허용 — *경고 로그* 출력 후 활성.
+//! ADR 0030 (후속) 에서 완전 제거.
 
 use std::env;
 use std::path::PathBuf;
 
-use sp9_base_layer_config::Version;
+use sp9_base_layer_config::{Environment, EnvironmentParseError, Version};
+use tracing::warn;
 
 use crate::r2_upload::R2Config;
 
@@ -30,46 +42,45 @@ pub struct BronzeSource {
     pub filename: &'static str,
 }
 
-/// ETL 설정.
+/// ETL 설정 — ADR 0029 environment 명시 분리.
 #[derive(Debug, Clone)]
 pub struct Config {
+    /// 실행 환경 — `ETL_ENVIRONMENT` SSOT. local / staging / production.
+    /// 향후 namespace 가 활성 path 분기 + Sentry tag / lineage 박제에 활용.
+    #[allow(dead_code)]
+    pub environment: Environment,
     /// Bronze 산출물 저장 디렉터리 (R2 업로드 전 임시 캐시).
     /// 기본값 `./var/bronze`. Container 환경에서는 mount 된 volume.
     pub bronze_dir: PathBuf,
     /// 배치 실행 시각 라벨 (R2 prefix `<YYYY-MM>` 에 사용).
-    /// `BRONZE_BATCH_LABEL` 미설정 시 `chrono::Utc::now().format("%Y-%m")` 폴백.
     pub batch_label: String,
-    /// 다운로드할 소스들. 환경변수 미설정 시 빈 vec — 호출자가 별도 source 등록 가능.
+    /// 다운로드할 소스들. 환경변수 미설정 시 빈 vec.
     pub sources: Vec<BronzeSource>,
-    /// R2 자격 증명 + 버킷. 미설정 시 `None` — 로컬 전용 모드 (T3a 동작 유지).
+    /// R2 자격 증명 + 버킷. 미설정 시 `None` — 로컬 전용 모드.
     pub r2: Option<R2Config>,
-    /// Gold 버전 라벨 (newtype — `^v[a-z0-9_-]+$` 검증). T3b.2 에서 `PMTiles` 빌드
-    /// prefix 로 사용. 미설정 시 `None` — 호출자가 폴백 라벨 결정 (보통 `v_local`).
-    /// `GOLD_VERSION` env 가 invalid 형식이면 `from_env` 가 panic — fail-fast.
+    /// Gold 버전 라벨 (newtype — `^v[a-z0-9_-]+$` 검증).
     #[allow(dead_code)]
     pub gold_version: Option<Version>,
 }
 
+/// `Config::from_env` 의 fail-fast 에러.
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    /// `ETL_ENVIRONMENT` 미설정 / invalid (ADR 0029 fail-fast).
+    #[error("environment: {0}")]
+    Environment(#[from] EnvironmentParseError),
+}
+
 impl Config {
-    /// 환경변수에서 [`Config`] 로드.
+    /// 환경변수에서 [`Config`] 로드. `ETL_ENVIRONMENT` 명시 필수.
     ///
-    /// **R2 동작 모드**:
-    /// - `R2_ACCOUNT_ID` 가 비어있으면 → `r2 = None` (로컬 전용, T3a 호환).
-    /// - 4 개 변수 (`R2_ACCOUNT_ID`/`R2_ACCESS_KEY`/`R2_SECRET_KEY`/`R2_BUCKET`)
-    ///   가 모두 설정되어야 `Some(R2Config)`. 일부만 설정하면 *partial 위험* —
-    ///   [`Config::from_env`] 가 그래도 `None` 반환 (로컬 전용 모드 fallback).
-    ///   이 폴백은 의도적: 로컬 dev 가 실수로 `R2_BUCKET` 만 설정해도 비밀 유출 X.
+    /// # Errors
     ///
-    /// 변수:
-    /// - `BRONZE_DIR` (선택, default `./var/bronze`)
-    /// - `BRONZE_BATCH_LABEL` (선택, default 현재 UTC `%Y-%m`)
-    /// - `BRONZE_PARCEL_SHP_URL` / `BRONZE_ADMIN_SHP_URL` / `BRONZE_COMPLEX_GEOJSON_URL` (선택)
-    /// - `R2_ACCOUNT_ID` / `R2_ACCESS_KEY` / `R2_SECRET_KEY` / `R2_BUCKET` (4 개 모두 → R2 활성)
-    /// - `R2_BRONZE_PREFIX` (선택, default `bronze`)
-    /// - `R2_GOLD_PREFIX` (선택, default `gold`)
-    /// - `GOLD_VERSION` (선택)
-    #[must_use]
-    pub fn from_env() -> Self {
+    /// - `ETL_ENVIRONMENT` 미설정 / invalid → [`ConfigError::Environment`]
+    pub fn from_env() -> Result<Self, ConfigError> {
+        // ADR 0029 — environment 명시 필수.
+        let environment = Environment::from_env_required()?;
+
         let bronze_dir = env::var("BRONZE_DIR")
             .unwrap_or_else(|_| "./var/bronze".to_owned())
             .into();
@@ -105,17 +116,16 @@ impl Config {
             }
         }
 
-        let r2 = build_r2_config();
-        // GOLD_VERSION 은 newtype 검증을 거침 — invalid 라벨은 ETL 시작 직후 fail-fast.
-        // dev 폴백을 호출자가 처리하도록 본 함수는 `None` 만 반환 (raw env 미설정).
+        // ADR 0029 — environment 별 namespace 통과. namespace 누락 시 backward-compat 로
+        // 일반 `R2_*` 시도 (1 sprint 한정, warning 후 활성).
+        let r2 = build_r2_config_namespaced(environment.r2_secret_prefix())
+            .or_else(|| build_r2_config_legacy(environment));
+
         let gold_version = env::var("GOLD_VERSION")
             .ok()
             .filter(|v| !v.trim().is_empty())
             .map(|raw| {
                 Version::new(raw.clone()).unwrap_or_else(|e| {
-                    // production 에서 GOLD_VERSION 이 잘못된 채 들어오면 fail-fast.
-                    // panic 은 main.rs init 시점이라 의미가 명확 — 후속 R2 path 가
-                    // placeholder 라벨로 오염되지 않게 차단.
                     #[allow(clippy::panic)]
                     {
                         panic!("GOLD_VERSION invalid: {e} (raw={raw:?})")
@@ -123,22 +133,73 @@ impl Config {
                 })
             });
 
-        Self {
+        Ok(Self {
+            environment,
             bronze_dir,
             batch_label,
             sources,
             r2,
             gold_version,
-        }
+        })
     }
 }
 
-/// `R2_*` 환경변수 4 개가 *모두* 설정된 경우에만 `Some(R2Config)`. 부분 설정 = `None`.
-fn build_r2_config() -> Option<R2Config> {
+/// ADR 0029 namespace R2 config 로드 — `<prefix>R2_ACCOUNT_ID` 등 4개 모두 set 시만 활성.
+///
+/// 예: `prefix = "R2_PRODUCTION_"` → `R2_PRODUCTION_ACCOUNT_ID` / `R2_PRODUCTION_ACCESS_KEY`
+/// / `R2_PRODUCTION_SECRET_KEY` / `R2_PRODUCTION_BUCKET`. prefix 가 없는 일반 `R2_*` 와 격리.
+fn build_r2_config_namespaced(prefix: &str) -> Option<R2Config> {
+    let account_id = nonempty_env(&format!("{prefix}ACCOUNT_ID"))?;
+    let access_key = nonempty_env(&format!("{prefix}ACCESS_KEY"))?;
+    let secret_key = nonempty_env(&format!("{prefix}SECRET_KEY"))?;
+    let bucket = nonempty_env(&format!("{prefix}BUCKET"))?;
+    let bronze_prefix = nonempty_env(&format!("{prefix}BRONZE_PREFIX"))
+        .unwrap_or_else(|| "bronze".to_owned());
+    let gold_prefix = nonempty_env(&format!("{prefix}GOLD_PREFIX"))
+        .unwrap_or_else(|| "gold".to_owned());
+    Some(R2Config {
+        account_id,
+        access_key,
+        secret_key,
+        bucket,
+        bronze_prefix,
+        gold_prefix,
+    })
+}
+
+/// Backward-compat (ADR 0029, 1 sprint 한정) — 기존 `R2_*` (namespace 없음).
+///
+/// **Local 환경 제외**: local 에서는 본 fallback 무조건 *비활성*. 본 결정은 Round 5
+/// verify smoke 의 사고 (사용자 `.env` 박제 → local 이 prod R2 modify) 의 직접 후속.
+/// 사용자 박제 "trick 1개라도 거부" — local 에서 legacy 자동 활성 자체가 trick.
+///
+/// Staging/production 에서만 backward-compat 활성 + *경고 로그* — CI 가 새 namespace
+/// 로 secret 갱신할 시간 1 sprint 보장. ADR 0030 에서 완전 제거.
+fn build_r2_config_legacy(env: Environment) -> Option<R2Config> {
+    // SSS-grade safety — local 은 legacy fallback 절대 활성 X.
+    if matches!(env, Environment::Local) {
+        // local 에서 legacy R2_* 자격이 *존재* 하더라도 활성 X. 단 사용자 진단 위해 1회 경고.
+        if nonempty_env("R2_ACCOUNT_ID").is_some() {
+            warn!(
+                "R2_* (legacy) detected in local environment — IGNORED for safety. \
+                 Use R2_LOCAL_* namespace if you intend to smoke against R2. \
+                 ADR 0029 (Round 5 verify smoke 사고 후속)."
+            );
+        }
+        return None;
+    }
+
     let account_id = nonempty_env("R2_ACCOUNT_ID")?;
     let access_key = nonempty_env("R2_ACCESS_KEY")?;
     let secret_key = nonempty_env("R2_SECRET_KEY")?;
     let bucket = nonempty_env("R2_BUCKET")?;
+
+    warn!(
+        environment = %env,
+        "R2_* (no namespace) detected — ADR 0029 backward-compat path. Migrate to {prefix}* before ADR 0030 removes this fallback.",
+        prefix = env.r2_secret_prefix(),
+    );
+
     let bronze_prefix = nonempty_env("R2_BRONZE_PREFIX").unwrap_or_else(|| "bronze".to_owned());
     let gold_prefix = nonempty_env("R2_GOLD_PREFIX").unwrap_or_else(|| "gold".to_owned());
     Some(R2Config {
@@ -160,52 +221,153 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
+    use std::sync::Mutex;
 
-    /// `R2_*` 가 하나라도 비어있으면 `None`.
-    /// 환경변수 mutation 은 process-global → 같은 변수를 만지는 다른 테스트와
-    /// 충돌 가능. 본 ETL crate 는 R2_* 환경변수 테스트가 이 한 곳뿐이라 무관.
-    #[test]
-    fn r2_partial_env_returns_none() {
-        let saved: Vec<(&str, Option<String>)> = [
+    /// process-global env mutation 직렬화.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_all_r2_env() {
+        for k in [
             "R2_ACCOUNT_ID",
             "R2_ACCESS_KEY",
             "R2_SECRET_KEY",
             "R2_BUCKET",
             "R2_BRONZE_PREFIX",
             "R2_GOLD_PREFIX",
-        ]
-        .iter()
-        .map(|k| (*k, env::var(k).ok()))
-        .collect();
-
-        for (k, _) in &saved {
+            "R2_LOCAL_ACCOUNT_ID",
+            "R2_LOCAL_ACCESS_KEY",
+            "R2_LOCAL_SECRET_KEY",
+            "R2_LOCAL_BUCKET",
+            "R2_STAGING_ACCOUNT_ID",
+            "R2_STAGING_ACCESS_KEY",
+            "R2_STAGING_SECRET_KEY",
+            "R2_STAGING_BUCKET",
+            "R2_PRODUCTION_ACCOUNT_ID",
+            "R2_PRODUCTION_ACCESS_KEY",
+            "R2_PRODUCTION_SECRET_KEY",
+            "R2_PRODUCTION_BUCKET",
+            "ETL_ENVIRONMENT",
+        ] {
             env::remove_var(k);
         }
+    }
 
-        // 부분만 설정.
-        env::set_var("R2_ACCOUNT_ID", "x");
-        env::set_var("R2_ACCESS_KEY", "y");
+    /// ADR 0029 — `ETL_ENVIRONMENT` 미설정 시 fail-fast.
+    #[test]
+    fn fail_fast_when_environment_unset() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        let err = Config::from_env().expect_err("ETL_ENVIRONMENT unset = fail-fast");
+        assert!(matches!(
+            err,
+            ConfigError::Environment(EnvironmentParseError::Unset)
+        ));
+    }
 
+    /// ADR 0029 — `ETL_ENVIRONMENT=foo` 같이 invalid 값도 fail-fast.
+    #[test]
+    fn fail_fast_when_environment_invalid() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "qa");
+        let err = Config::from_env().expect_err("invalid env = fail-fast");
+        assert!(matches!(
+            err,
+            ConfigError::Environment(EnvironmentParseError::Invalid(_))
+        ));
+        clear_all_r2_env();
+    }
+
+    /// ADR 0029 — namespace 격리: local 에서 `R2_PRODUCTION_*` 만 set 시 R2 비활성.
+    /// 이게 본 ADR 의 *가장 중요한* 회귀 invariant — Round 5 사고 재발 방지.
+    #[test]
+    fn local_env_ignores_production_credentials() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "local");
+        // production credential 만 set — local 이 *읽으면 안 됨*.
+        env::set_var("R2_PRODUCTION_ACCOUNT_ID", "prod-account");
+        env::set_var("R2_PRODUCTION_ACCESS_KEY", "prod-key");
+        env::set_var("R2_PRODUCTION_SECRET_KEY", "prod-secret");
+        env::set_var("R2_PRODUCTION_BUCKET", "prod-bucket");
+
+        let cfg = Config::from_env().expect("load");
+        assert_eq!(cfg.environment, Environment::Local);
         assert!(
-            build_r2_config().is_none(),
-            "partial R2_* env should produce None"
+            cfg.r2.is_none(),
+            "local env must not auto-activate production R2 — namespace 격리 위반"
         );
+        clear_all_r2_env();
+    }
 
-        // 모두 설정 → Some.
-        env::set_var("R2_SECRET_KEY", "z");
-        env::set_var("R2_BUCKET", "b");
-        let cfg = build_r2_config().expect("all four set");
-        assert_eq!(cfg.account_id, "x");
-        assert_eq!(cfg.bucket, "b");
-        assert_eq!(cfg.bronze_prefix, "bronze");
-        assert_eq!(cfg.gold_prefix, "gold");
+    /// ADR 0029 — namespace 매칭: production env + `R2_PRODUCTION_*` set 시 활성.
+    #[test]
+    fn production_env_uses_production_namespace() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "production");
+        env::set_var("R2_PRODUCTION_ACCOUNT_ID", "p-a");
+        env::set_var("R2_PRODUCTION_ACCESS_KEY", "p-k");
+        env::set_var("R2_PRODUCTION_SECRET_KEY", "p-s");
+        env::set_var("R2_PRODUCTION_BUCKET", "p-b");
 
-        // 복원.
-        for (k, v) in saved {
-            match v {
-                Some(val) => env::set_var(k, val),
-                None => env::remove_var(k),
-            }
-        }
+        let cfg = Config::from_env().expect("load");
+        let r2 = cfg.r2.expect("R2 activated");
+        assert_eq!(r2.account_id, "p-a");
+        assert_eq!(r2.bucket, "p-b");
+        clear_all_r2_env();
+    }
+
+    /// ADR 0029 — backward-compat: namespace 없는 `R2_*` 도 1 sprint 한정 허용
+    /// (warning 후 활성). ADR 0030 에서 제거 예정.
+    #[test]
+    fn legacy_r2_fallback_activates_with_warning() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "staging");
+        env::set_var("R2_ACCOUNT_ID", "legacy-a");
+        env::set_var("R2_ACCESS_KEY", "legacy-k");
+        env::set_var("R2_SECRET_KEY", "legacy-s");
+        env::set_var("R2_BUCKET", "legacy-b");
+
+        let cfg = Config::from_env().expect("load");
+        let r2 = cfg.r2.expect("legacy fallback activates");
+        assert_eq!(r2.account_id, "legacy-a");
+        clear_all_r2_env();
+    }
+
+    /// ADR 0029 (Round 5 사고 후속) — local 에서 legacy `R2_*` 도 *절대* 활성 안 됨.
+    /// 사용자 `.env` 박제로 인한 사고 재발 차단. 본 invariant 가 ADR 0029 의 핵심.
+    #[test]
+    fn local_env_ignores_even_legacy_r2_credentials() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "local");
+        // legacy R2_* 4개 모두 set (사용자 `.env` 박제 시나리오).
+        env::set_var("R2_ACCOUNT_ID", "leak-account");
+        env::set_var("R2_ACCESS_KEY", "leak-key");
+        env::set_var("R2_SECRET_KEY", "leak-secret");
+        env::set_var("R2_BUCKET", "leak-bucket");
+
+        let cfg = Config::from_env().expect("load");
+        assert!(
+            cfg.r2.is_none(),
+            "local env must IGNORE legacy R2_* — Round 5 verify smoke 사고 재발 차단"
+        );
+        clear_all_r2_env();
+    }
+
+    /// ADR 0029 — partial namespace credential 도 None (4개 모두 필요).
+    #[test]
+    fn partial_namespace_returns_none() {
+        let _g = ENV_LOCK.lock().expect("lock");
+        clear_all_r2_env();
+        env::set_var("ETL_ENVIRONMENT", "staging");
+        env::set_var("R2_STAGING_ACCOUNT_ID", "x");
+        env::set_var("R2_STAGING_ACCESS_KEY", "y");
+        // SECRET_KEY / BUCKET 누락.
+        let cfg = Config::from_env().expect("load");
+        assert!(cfg.r2.is_none(), "partial namespace = None");
+        clear_all_r2_env();
     }
 }

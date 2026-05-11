@@ -29,7 +29,9 @@
 #![allow(clippy::doc_markdown)]
 
 pub mod types;
-pub use types::{R2PublicBase, Srs, TypeError, Version};
+pub use types::{
+    Environment, EnvironmentParseError, R2PublicBase, Srs, TypeError, Version,
+};
 
 use serde::{Deserialize, Serialize};
 

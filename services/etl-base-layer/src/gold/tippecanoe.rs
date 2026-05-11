@@ -269,12 +269,22 @@ pub async fn run(
         "tippecanoe starting"
     );
 
-    // --metadata-json: tippecanoe 가 빌드 메타(feature_count 포함) 를 별도 파일로 박제.
-    // 임시 파일로 받아 feature_count 추출 후 삭제. 실패해도 빌드 자체는 계속.
+    // --metadata-json: tippecanoe (felt fork) 가 빌드 메타(feature_count) 를 별도 파일
+    // 로 박제. SSOT SHA pin 의 tippecanoe 빌드만 본 flag 지원 — local dev WSL 의
+    // 공식 tippecanoe 2.80 같은 변종은 미지원 (Round 5 verify smoke 발견).
+    //
+    // Capability detection — `--help` 출력에서 `--metadata-json` 존재 검사 후 추가.
+    // 미지원 시 graceful skip — `feature_count` 가 `None` 으로 lineage 박제 (이미
+    // honest absence semantic).
     let metadata_file = args.output.with_extension("tippecanoe-meta.json");
-    spawn_args.push(Arg::Lit("--metadata-json"));
-    // metadata_file_str 은 String 이라 Arg::Lit lifetime 불일치 — Arg::Path 사용.
-    spawn_args.push(Arg::Path(&metadata_file));
+    let supports_metadata_json = check_supports_flag(host, "--metadata-json").await;
+    if supports_metadata_json {
+        spawn_args.push(Arg::Lit("--metadata-json"));
+        // metadata_file_str 은 String 이라 Arg::Lit lifetime 불일치 — Arg::Path 사용.
+        spawn_args.push(Arg::Path(&metadata_file));
+    } else {
+        info!("tippecanoe missing --metadata-json (likely upstream build, not felt fork) — feature_count will be None");
+    }
 
     let mut cmd = build_command(host, "tippecanoe", &spawn_args)?;
     let output = cmd.output().await?;
@@ -302,13 +312,39 @@ pub async fn run(
             })?;
     let output_bytes = meta.len();
 
-    // --metadata-json 에서 feature_count 추출 (실패해도 빌드 성공 — best-effort).
-    let feature_count = extract_feature_count(&metadata_file).await;
+    // --metadata-json 에서 feature_count 추출. capability detection 결과 false 면
+    // metadata file 자체가 안 생성됨 → `extract_feature_count` 가 `None` 반환 (정상).
+    let feature_count = if supports_metadata_json {
+        extract_feature_count(&metadata_file).await
+    } else {
+        None
+    };
     // 임시 메타파일 정리 — 실패해도 무시 (best-effort cleanup).
     let _ = tokio::fs::remove_file(&metadata_file).await;
 
     info!(bytes = output_bytes, ?feature_count, "tippecanoe complete");
     Ok(TippecanoeResult { output_bytes, feature_count })
+}
+
+/// tippecanoe 가 특정 flag 를 지원하는지 검사. `--help` 출력에서 flag 문자열 grep.
+///
+/// Round 5 verify smoke 발견: SSOT SHA pin (felt fork) 의 tippecanoe 빌드는
+/// `--metadata-json` 지원, local dev 환경의 official tippecanoe 2.80 은 미지원.
+/// 본 helper 는 capability detection — production CI 에서는 항상 `true` (SSOT 빌드).
+async fn check_supports_flag(host: Host, flag: &str) -> bool {
+    let Ok(mut cmd) = build_command(host, "tippecanoe", &[Arg::Lit("--help")]) else {
+        return false;
+    };
+    let Ok(output) = cmd.output().await else {
+        return false;
+    };
+    // tippecanoe 의 --help 는 stderr 로 나가는 빌드도 있고 stdout 으로 나가는 빌드도 있음.
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
+    combined.contains(flag)
 }
 
 /// `--metadata-json` 파일에서 feature count 를 읽어 반환.

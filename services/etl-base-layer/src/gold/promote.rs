@@ -29,7 +29,7 @@ use std::collections::BTreeMap;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sp9_base_layer_config::{R2PublicBase, Version};
+use sp9_base_layer_config::{Environment, R2PublicBase, Version};
 use thiserror::Error;
 use tracing::{info, instrument, warn};
 
@@ -516,11 +516,9 @@ pub struct CleanupResult {
 /// 본 check 는 `cloudflare_purge` 의 분기와 *동일 로직* 으로 wired — drift 차단.
 /// dev/staging 에서는 silent OK (`SkippedDevMode` 가 step 5 에서 자연 발생).
 fn preflight_cdn_config() -> Result<(), PromoteError> {
-    let is_production = std::env::var("ETL_BUILD_ENV")
-        .ok()
-        .as_deref()
-        .is_some_and(|v| v.eq_ignore_ascii_case("production"));
-    if !is_production {
+    // ADR 0029 — `Environment::is_production_from_env()` SSOT (ETL_ENVIRONMENT 또는
+    // backward-compat ETL_BUILD_ENV). 본 검사 1곳 SSOT — drift 차단.
+    if !Environment::is_production_from_env() {
         return Ok(());
     }
     let missing: Vec<&str> = [
@@ -575,11 +573,8 @@ async fn cloudflare_purge(manifest_key: &str) -> Result<CdnPurgeOutcome, Promote
             .iter()
             .filter_map(|(name, present)| if *present { None } else { Some(*name) })
             .collect();
-            let is_production = std::env::var("ETL_BUILD_ENV")
-                .ok()
-                .as_deref()
-                .is_some_and(|v| v.eq_ignore_ascii_case("production"));
-            if is_production {
+            // ADR 0029 — preflight 와 동일 SSOT 검사.
+            if Environment::is_production_from_env() {
                 return Err(PromoteError::CdnPurgeMissingConfig {
                     missing: missing.join(", "),
                 });
@@ -644,6 +639,7 @@ mod tests {
             "CLOUDFLARE_ZONE_ID",
             "R2_PUBLIC_URL_BASE",
             "ETL_BUILD_ENV",
+            "ETL_ENVIRONMENT",
         ] {
             std::env::remove_var(k);
         }
