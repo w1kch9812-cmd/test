@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 # 정확한 핀 (`==`) 사용: Round 3 P0 가 `>=` range 의 *공급망 drift* 를 trick 으로 박제.
 # 갱신 시 `pip-audit` 출력 후 PR 단위 검토.
 dependencies = [
-    "scrapling==0.4.7",
+    "scrapling==0.4.8",
     "curl_cffi==0.15.0",
     "boto3==1.43.0",
     # Round 3 P0 — V-World HTTP 호출에 retry / circuit-breaker 격 wrap.
