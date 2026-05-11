@@ -229,26 +229,35 @@ pub struct PromoteResult {
 /// new manifest publish + CDN purge.
 ///
 /// SSS-grade atomicity steps:
+/// 0. **Pre-flight** — production env 에서 CDN config 사전 검증 (manifest 만지기 전 fail-fast)
 /// 1. 모든 layer staging spec 검증 + 모음.
 /// 2. **모든 layer 의 flat tile 실재 검증** — `gold/<version>/<layer>/` list_objects
 ///    head check (silent R2 drop / partial PUT 차단).
 /// 3. **현재 manifest 백업** — `gold/manifest.json` → `gold/manifest.<prev_ver>.json`
 ///    (없으면 first-publish, 처음에는 prev=None). 즉시 rollback 가능.
 /// 4. new manifest 빌드 (`previous_version=<old.current_version>`) + atomic PUT.
-/// 5. CDN purge (optional).
+/// 5. CDN purge (optional in dev, mandatory in production — step 0 에서 사전 검증).
 ///
 /// # Errors
 ///
+/// - production env 에서 CDN config 누락 → 즉시 abort (manifest 변경 0).
 /// - staging spec 누락 (한 layer 라도 미박제) → degrade gracefully (manifest 변경 0).
 /// - flat tile 미존재 → degrade (silent drop 잡음).
 /// - manifest publish 실패 → degrade (백업 단계 후 publish 전 실패면 backup 만 있음).
-/// - CDN purge 실패는 warn (manifest no-cache header fallback).
+/// - CDN purge 실패는 warn (manifest no-cache header fallback) — 단 production 의
+///   missing-config 은 step 0 에서 이미 차단됨.
 #[allow(clippy::too_many_lines)]
 #[instrument(skip(uploader, args), fields(version = %args.version))]
 pub async fn run(
     uploader: &R2Uploader,
     args: &PromoteArgs<'_>,
 ) -> Result<PromoteResult, PromoteError> {
+    // 0. Pre-flight — Round 5 P0 fix (Codex audit "CDN purge 실패가 publish *후* warn"):
+    //    production env 에서 CDN config 누락이면 manifest 만지기 전 즉시 abort.
+    //    이전 path: step 4 publish 후 step 5 purge 시점에 검출 → manifest 가 stale
+    //    CDN 으로 publish 되는 silent partial. 새 path: 0 단계에서 검증.
+    preflight_cdn_config()?;
+
     // 1. 모든 layer 의 staging spec 검증 + 모음.
     let mut artifacts: BTreeMap<String, GoldArtifact> = BTreeMap::new();
     for &layer in args.layers {
@@ -363,6 +372,41 @@ pub async fn run(
         manifest_key,
         cdn_purge,
     })
+}
+
+/// Round 5 P0 — promote 의 step 0 pre-flight. production env 에서 CDN config
+/// 누락이면 manifest 만지기 전 즉시 abort.
+///
+/// 본 check 는 `cloudflare_purge` 의 분기와 *동일 로직* 으로 wired — drift 차단.
+/// dev/staging 에서는 silent OK (`SkippedDevMode` 가 step 5 에서 자연 발생).
+fn preflight_cdn_config() -> Result<(), PromoteError> {
+    let is_production = std::env::var("ETL_BUILD_ENV")
+        .ok()
+        .as_deref()
+        .is_some_and(|v| v.eq_ignore_ascii_case("production"));
+    if !is_production {
+        return Ok(());
+    }
+    let missing: Vec<&str> = [
+        ("CLOUDFLARE_API_TOKEN", env_nonempty("CLOUDFLARE_API_TOKEN")),
+        ("CLOUDFLARE_ZONE_ID", env_nonempty("CLOUDFLARE_ZONE_ID")),
+        ("R2_PUBLIC_URL_BASE", env_nonempty("R2_PUBLIC_URL_BASE")),
+    ]
+    .iter()
+    .filter_map(|(name, present)| if *present { None } else { Some(*name) })
+    .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(PromoteError::CdnPurgeMissingConfig {
+        missing: missing.join(", "),
+    })
+}
+
+fn env_nonempty(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .is_some_and(|v| !v.trim().is_empty())
 }
 
 /// Cloudflare CDN purge — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` + `R2_PUBLIC_URL_BASE`
@@ -502,6 +546,50 @@ mod tests {
             }
             other => panic!("expected CdnPurgeMissingConfig, got: {other:?}"),
         }
+        clear_cdn_env();
+    }
+
+    /// Round 5 P0 — promote 의 pre-flight 가 production env 에서 CDN config 누락을
+    /// *manifest 만지기 전* 차단. 이전 path 는 publish 후 step 5 에서 검출했음.
+    #[test]
+    fn preflight_blocks_promotion_in_production_when_cdn_missing() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "production");
+        let err = super::preflight_cdn_config()
+            .expect_err("production + missing CDN config = pre-flight abort");
+        match err {
+            PromoteError::CdnPurgeMissingConfig { missing } => {
+                assert!(missing.contains("CLOUDFLARE_API_TOKEN"), "{missing}");
+                assert!(missing.contains("CLOUDFLARE_ZONE_ID"), "{missing}");
+                assert!(missing.contains("R2_PUBLIC_URL_BASE"), "{missing}");
+            }
+            other => panic!("expected CdnPurgeMissingConfig, got {other:?}"),
+        }
+        clear_cdn_env();
+    }
+
+    /// Round 5 P0 — dev/staging env 에서는 pre-flight 가 silent OK (config 누락 허용,
+    /// step 5 의 `SkippedDevMode` 가 자연 path).
+    #[test]
+    fn preflight_passes_in_dev_mode_even_when_cdn_missing() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "dev");
+        super::preflight_cdn_config().expect("dev mode pre-flight = silent OK");
+        clear_cdn_env();
+    }
+
+    /// Round 5 P0 — production env 에 모든 config 가 set 되면 pre-flight 통과.
+    #[test]
+    fn preflight_passes_in_production_when_cdn_config_complete() {
+        let _guard = ENV_LOCK.lock().expect("env mutex");
+        clear_cdn_env();
+        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("CLOUDFLARE_API_TOKEN", "fake-token");
+        std::env::set_var("CLOUDFLARE_ZONE_ID", "fake-zone");
+        std::env::set_var("R2_PUBLIC_URL_BASE", "https://r2.example.com");
+        super::preflight_cdn_config().expect("complete config = pre-flight OK");
         clear_cdn_env();
     }
 

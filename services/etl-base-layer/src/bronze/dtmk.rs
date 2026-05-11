@@ -320,13 +320,25 @@ async fn compute_file_sha256(path: &Path) -> Result<String, DtmkError> {
 }
 
 /// 디렉터리 walk 에서 첫 번째 `.shp` 절대 경로 반환. 디렉터리 없으면 `Ok(None)`.
+///
+/// Round 5 P0 (Codex audit): `WalkDir` traversal 에러 silent drop 제거. 이전엔
+/// `into_iter().flatten()` 으로 권한/symlink 실패가 *조용히 사라져* `.shp` 가
+/// 있어도 못 찾는 경우 진단 불가능 (e.g. 권한 부족 디렉터리). 새 path: 첫 에러에서
+/// fail-fast — Sentry 가 어떤 entry 가 traversal 실패했는지 정확히 박제.
 async fn find_shp_in_dir(dir: &Path) -> Result<Option<PathBuf>, DtmkError> {
     let dir = dir.to_path_buf();
     let res = tokio::task::spawn_blocking(move || -> Result<Option<PathBuf>, std::io::Error> {
         if !dir.exists() {
             return Ok(None);
         }
-        for entry in walkdir::WalkDir::new(&dir).into_iter().flatten() {
+        for entry_result in walkdir::WalkDir::new(&dir) {
+            let entry = entry_result.map_err(|e| {
+                std::io::Error::other(format!(
+                    "WalkDir failed at {root}: {detail}",
+                    root = dir.display(),
+                    detail = e
+                ))
+            })?;
             if entry.file_type().is_file()
                 && entry
                     .path()

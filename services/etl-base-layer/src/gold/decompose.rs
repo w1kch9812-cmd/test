@@ -142,10 +142,22 @@ pub async fn run(host: Host, args: &DecomposeArgs<'_>) -> Result<DecomposeResult
 }
 
 /// `<root>/{z}/{x}/{y}.pbf` 재귀 walk → (count, total_bytes).
+///
+/// Round 5 P0 (Codex audit): WalkDir traversal 에러는 silent drop 0 — 권한 / broken
+/// symlink / readdir fail 모두 첫 에러에서 즉시 `std::io::Error` 로 fail-fast. tile
+/// count 가 *체계적으로* underreport 되는 경우 (예: 일부 디렉터리 권한 부족) 가
+/// 진단 불가능한 silent drift 였음.
 fn count_pbf_files(root: &Path) -> std::io::Result<(u64, u64)> {
     let mut count: u64 = 0;
     let mut bytes: u64 = 0;
-    for entry in WalkDir::new(root).into_iter().filter_map(Result::ok) {
+    for entry_result in WalkDir::new(root) {
+        let entry = entry_result.map_err(|e| {
+            std::io::Error::other(format!(
+                "WalkDir failed at {root}: {detail}",
+                root = root.display(),
+                detail = e
+            ))
+        })?;
         if !entry.file_type().is_file() {
             continue;
         }
