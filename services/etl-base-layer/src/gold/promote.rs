@@ -88,7 +88,7 @@ pub enum PromoteError {
     /// `CLOUDFLARE_ZONE_ID` / `R2_PUBLIC_URL_BASE`) 가 누락. dev / staging 은 silent
     /// skip 허용, production 은 fail-fast (manifest 가 stale CDN 으로 publish 되는
     /// silent partial 차단).
-    #[error("CDN purge config missing in production: {missing} (set CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID / R2_PUBLIC_URL_BASE or override ETL_BUILD_ENV)")]
+    #[error("CDN purge config missing in production: {missing} (set CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID / R2_PUBLIC_URL_BASE or override ETL_ENVIRONMENT)")]
     CdnPurgeMissingConfig {
         /// 어느 env 가 누락됐는지.
         missing: String,
@@ -217,7 +217,7 @@ pub struct PromoteArgs<'a> {
 pub enum CdnPurgeOutcome {
     /// Cloudflare API 200 OK — manifest URL purge 완료.
     Purged,
-    /// dev / staging env (`ETL_BUILD_ENV != "production"`) 에서 CDN config 누락 시
+    /// dev / staging env (`ETL_ENVIRONMENT != "production"`) 에서 CDN config 누락 시
     /// silent skip — manifest 의 `Cache-Control: no-cache` 가 fallback.
     SkippedDevMode,
     /// CDN config 누락. production 에서는 본 variant 가 `PromoteError::CdnPurgeMissingConfig`
@@ -517,7 +517,7 @@ pub struct CleanupResult {
 /// dev/staging 에서는 silent OK (`SkippedDevMode` 가 step 5 에서 자연 발생).
 fn preflight_cdn_config() -> Result<(), PromoteError> {
     // ADR 0029 — `Environment::is_production_from_env()` SSOT (ETL_ENVIRONMENT 또는
-    // backward-compat ETL_BUILD_ENV). 본 검사 1곳 SSOT — drift 차단.
+    // ADR 0030 — `ETL_ENVIRONMENT` SSOT only.
     if !Environment::is_production_from_env() {
         return Ok(());
     }
@@ -633,7 +633,6 @@ mod tests {
             "CLOUDFLARE_API_TOKEN",
             "CLOUDFLARE_ZONE_ID",
             "R2_PUBLIC_URL_BASE",
-            "ETL_BUILD_ENV",
             "ETL_ENVIRONMENT",
         ] {
             std::env::remove_var(k);
@@ -645,7 +644,7 @@ mod tests {
     async fn cloudflare_purge_skips_silently_in_dev_mode() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "dev");
+        std::env::set_var("ETL_ENVIRONMENT", "local");
         let outcome = cloudflare_purge("gold/manifest.json")
             .await
             .expect("dev mode skip");
@@ -658,7 +657,7 @@ mod tests {
     async fn cloudflare_purge_fails_fast_in_production_when_config_missing() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("ETL_ENVIRONMENT", "production");
         let err = cloudflare_purge("gold/manifest.json")
             .await
             .expect_err("production mode missing-config = fail-fast");
@@ -714,7 +713,7 @@ mod tests {
     fn preflight_blocks_promotion_in_production_when_cdn_missing() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("ETL_ENVIRONMENT", "production");
         let err = super::preflight_cdn_config()
             .expect_err("production + missing CDN config = pre-flight abort");
         match err {
@@ -734,7 +733,7 @@ mod tests {
     fn preflight_passes_in_dev_mode_even_when_cdn_missing() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "dev");
+        std::env::set_var("ETL_ENVIRONMENT", "local");
         super::preflight_cdn_config().expect("dev mode pre-flight = silent OK");
         clear_cdn_env();
     }
@@ -744,7 +743,7 @@ mod tests {
     fn preflight_passes_in_production_when_cdn_config_complete() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("ETL_ENVIRONMENT", "production");
         std::env::set_var("CLOUDFLARE_API_TOKEN", "fake-token");
         std::env::set_var("CLOUDFLARE_ZONE_ID", "fake-zone");
         std::env::set_var("R2_PUBLIC_URL_BASE", "https://r2.example.com");
@@ -757,7 +756,7 @@ mod tests {
     async fn cloudflare_purge_fails_fast_in_production_when_partial_config() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
         clear_cdn_env();
-        std::env::set_var("ETL_BUILD_ENV", "production");
+        std::env::set_var("ETL_ENVIRONMENT", "production");
         std::env::set_var("CLOUDFLARE_API_TOKEN", "fake-token");
         std::env::set_var("CLOUDFLARE_ZONE_ID", "fake-zone");
         // R2_PUBLIC_URL_BASE 만 누락.

@@ -824,9 +824,8 @@ async fn upload_gold_to_r2(
         bronze_inputs,
         source_srs: source_srs.as_str().to_owned(),
         layer_name: layer.layer_name().to_owned(),
-        // ADR 0029 — `ETL_ENVIRONMENT` 우선, fallback `ETL_BUILD_ENV` (backward-compat).
+        // ADR 0030 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
         build_environment: std::env::var("ETL_ENVIRONMENT")
-            .or_else(|_| std::env::var("ETL_BUILD_ENV"))
             .unwrap_or_else(|_| "dev".to_owned()),
         source_license: nonempty_env_var("ETL_SOURCE_LICENSE"),
         source_url: nonempty_env_var("ETL_SOURCE_URL"),
@@ -890,17 +889,34 @@ fn build_tilejson(
     })
 }
 
-/// ADR 0029 — `Config::from_env` 의 fail-fast 를 `ExitCode` 로 매핑. 모든 subcommand
-/// 의 진입점에서 사용 — environment 명시 안 했으면 즉시 exit 2 + 명확한 에러.
+/// ADR 0029 + 0030 — `Config::from_env` 의 fail-fast 를 `ExitCode` 로 매핑. 모든
+/// subcommand 의 진입점에서 사용 — typed `ConfigError` 들이 명시적 stderr + exit 2.
 fn load_config_or_exit() -> Result<Config, ExitCode> {
-    Config::from_env().map_err(|e| match e {
-        ConfigError::Environment(parse_err) => {
-            error!(
-                error = %parse_err,
-                "ETL_ENVIRONMENT required (ADR 0029) — set to one of: local | staging | production"
-            );
-            ExitCode::from(2)
+    Config::from_env().map_err(|e| {
+        match &e {
+            ConfigError::Environment(parse_err) => {
+                error!(
+                    error = %parse_err,
+                    "ETL_ENVIRONMENT required (ADR 0029) — set to one of: local | staging | production"
+                );
+            }
+            ConfigError::InvalidGoldVersion { raw, detail } => {
+                error!(
+                    raw = %raw,
+                    detail = %detail,
+                    "GOLD_VERSION invalid (ADR 0030 typed err) — must match ^v[a-z0-9_-]+$"
+                );
+            }
+            ConfigError::PartialR2Namespace { prefix, present, missing } => {
+                error!(
+                    prefix = %prefix,
+                    present = ?present,
+                    missing = ?missing,
+                    "R2 namespace credentials partial (ADR 0030) — atomic 4-of-4 required (credential mix 차단)"
+                );
+            }
         }
+        ExitCode::from(2)
     })
 }
 
@@ -959,9 +975,8 @@ fn init_sentry() -> Option<sentry::ClientInitGuard> {
         .ok()
         .filter(|v| !v.trim().is_empty())?;
     let release = std::env::var("GIT_SHA").ok().map(Into::into);
-    // ADR 0029 — `ETL_ENVIRONMENT` 우선, fallback `ETL_BUILD_ENV` (backward-compat).
+    // ADR 0030 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
     let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_ENVIRONMENT")
-        .or_else(|_| std::env::var("ETL_BUILD_ENV"))
         .unwrap_or_else(|_| "dev".to_owned())
         .into();
     // Round 3 P1 — traces_sample_rate env-driven (이전에 0.0 hardcode → SLO 측정 불가).

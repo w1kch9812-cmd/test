@@ -359,21 +359,16 @@ def test_load_r2_credentials_full_namespace(monkeypatch: pytest.MonkeyPatch) -> 
 def test_load_r2_credentials_partial_namespace_fails_fast(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """ADR 0029 핵심 — 부분 namespace = credential mix 차단 fail-fast.
+    """ADR 0030 핵심 — 부분 namespace = credential mix 차단 fail-fast.
 
-    Stop-hook 발견 시나리오: ACCOUNT_ID 는 namespace, ACCESS_KEY 는 legacy.
-    이전 path 는 suffix 별 fallback 으로 cross-source mix 가능했음.
+    이전 Codex stop-hook 발견 시나리오 회귀.
     """
     _clear_r2_env(monkeypatch)
     monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "production")
-    # ACCOUNT_ID 만 namespace set.
+    # ACCOUNT_ID 만 namespace set, 나머지 3개 unset.
     monkeypatch.setitem(
         dtmk_vworld.ENV, "R2_PRODUCTION_ACCOUNT_ID", "prod-acct"
     )
-    # 나머지 3개는 legacy set (cross-source mix 시나리오).
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "legacy-key")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "legacy-secret")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "legacy-bucket")
 
     with pytest.raises(SystemExit) as exc_info:
         dtmk_vworld.load_r2_credentials()
@@ -383,42 +378,14 @@ def test_load_r2_credentials_partial_namespace_fails_fast(
     assert "ACCESS_KEY" in err  # 누락 항목 박제
 
 
-def test_load_r2_credentials_partial_legacy_fails_fast(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """ADR 0029 — legacy 도 부분 set = fail-fast (namespace 와 동일 정책)."""
-    _clear_r2_env(monkeypatch)
-    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "staging")
-    # legacy 2개만 set.
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "x")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "y")
-    with pytest.raises(SystemExit) as exc_info:
-        dtmk_vworld.load_r2_credentials()
-    assert exc_info.value.code == 2
-    err = capsys.readouterr().err
-    assert "partial legacy" in err.lower()
-
-
-def test_load_r2_credentials_local_ignores_legacy(
+def test_load_r2_credentials_legacy_completely_ignored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR 0029 핵심 — local 은 legacy 4개 모두 set 돼있어도 활성 X."""
-    _clear_r2_env(monkeypatch)
-    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "local")
-    # legacy 4개 모두 set (사용자 `.env` 박제 시나리오).
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-a")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "leak-k")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "leak-s")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "leak-b")
-    with pytest.raises(SystemExit) as exc_info:
-        dtmk_vworld.load_r2_credentials()
-    assert exc_info.value.code == 2
+    """ADR 0030 — legacy `R2_*` (namespace 없음) **완전 제거**. 어떤 env 에서도 활성 X.
 
-
-def test_load_r2_credentials_staging_legacy_with_warning(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """staging + legacy 4개 모두 set = atomic 활성 + warning."""
+    staging + legacy 4개 모두 set 돼있어도 namespace 0 = `None` (R2 비활성).
+    이전 (ADR 0029 1-sprint backward-compat) 자체가 trick — 본 test 가 그 회귀 invariant.
+    """
     _clear_r2_env(monkeypatch)
     monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "staging")
     monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leg-acct")
@@ -426,11 +393,20 @@ def test_load_r2_credentials_staging_legacy_with_warning(
     monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "leg-secret")
     monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "leg-bucket")
     creds = dtmk_vworld.load_r2_credentials()
-    assert creds["ACCOUNT_ID"] == "leg-acct"
-    assert creds["BUCKET"] == "leg-bucket"
-    warn = capsys.readouterr().err
-    assert "WARN" in warn
-    assert "backward-compat" in warn
+    assert creds is None, "ADR 0030: legacy R2_* must NOT activate anywhere"
+
+
+def test_load_r2_credentials_local_namespace_zero_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0030 — local + namespace 4개 모두 unset = None (R2 비활성, local-only mode).
+
+    이전 (ADR 0029) 의 fail-fast 정책 변경 — local-only mode 가 정상 path.
+    """
+    _clear_r2_env(monkeypatch)
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "local")
+    # legacy 도 0, namespace 도 0.
+    assert dtmk_vworld.load_r2_credentials() is None
 
 
 def test_load_r2_credentials_fail_fast_when_environment_unset(

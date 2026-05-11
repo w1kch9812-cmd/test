@@ -114,28 +114,19 @@ _R2_REQUIRED_SUFFIXES: tuple[str, ...] = (
 )
 
 
-def load_r2_credentials() -> dict[str, str]:
-    """ADR 0029 namespace 준수 R2 자격을 *원자적* 로드.
+def load_r2_credentials() -> dict[str, str] | None:
+    """ADR 0030 — namespace 준수 R2 자격 *원자적* 로드. legacy fallback 완전 제거.
 
     **핵심 invariant**: 4개 자격 (ACCOUNT_ID / ACCESS_KEY / SECRET_KEY / BUCKET) 이
-    *모두 같은 source* (namespace 또는 legacy) 에서 박제. suffix 단위 fallback 으로
-    인한 credential mixing 차단.
-
-    예시 — 이전 path 의 사고 시나리오:
-    - `R2_PRODUCTION_ACCOUNT_ID=prod-acct` (set)
-    - `R2_PRODUCTION_ACCESS_KEY=""` (unset)
-    - `R2_ACCESS_KEY=legacy-key` (legacy set)
-    이전: suffix 별 fallback → ACCOUNT_ID 는 prod, ACCESS_KEY 는 legacy. **credential
-    cross-mix** = R2 auth 실패 또는 *잘못된 account 의 bucket modify*.
-    현재: 부분 namespace 박제 = `MissingNamespacedKey` fail-fast (mix 0).
+    *모두 같은 namespace* 에서 박제. partial = fail-fast (credential mix 차단).
 
     분기:
-    1. namespace 4개 *모두* set → namespace 사용
-    2. namespace *부분* set → fail-fast (mix 차단)
-    3. namespace 0개 set + `env=local` → fail-fast (local legacy 0)
-    4. namespace 0개 set + non-local + legacy 4개 *모두* set → legacy + warning
-    5. namespace 0개 set + non-local + legacy 부분 set → fail-fast (mix 차단)
-    6. 그 외 → fail-fast (자격 부재)
+    1. namespace 4개 *모두* set → 자격 dict 반환
+    2. namespace *부분* set → fail-fast (mix 차단, 누락 항목 박제)
+    3. namespace 4개 모두 unset → `None` 반환 (R2 비활성, local-only mode)
+
+    legacy `R2_*` (namespace 없음) **완전 제거** (ADR 0030). 이전 1-sprint backward-compat
+    자체가 trick — credential mix 위험 path. operator 가 `R2_<ENV>_*` 명시 set 필수.
     """
     env = _etl_environment()
     prefix = _R2_NAMESPACE_PREFIX[env]
@@ -146,53 +137,19 @@ def load_r2_credentials() -> dict[str, str]:
     if len(namespaced_set) == len(_R2_REQUIRED_SUFFIXES):
         return namespaced
 
-    # 분기 2: 부분 namespace = fail-fast (credential mix 차단, ADR 0029 핵심 invariant).
+    # 분기 2: 부분 namespace = fail-fast (credential mix 차단).
     if namespaced_set:
         missing = [s for s in _R2_REQUIRED_SUFFIXES if s not in namespaced_set]
         sys.stderr.write(
             f"ERROR: partial {prefix}* credentials — "
             f"set: {sorted(namespaced_set.keys())}, missing: {missing}. "
-            "ADR 0029: 부분 namespace = credential mix 차단 fail-fast. "
-            "4개 모두 set 또는 모두 unset (legacy fallback) 필요.\n"
+            "ADR 0030: 부분 namespace = credential mix 차단 fail-fast. "
+            "4개 모두 set 또는 모두 unset (R2 비활성, local-only) 필요.\n"
         )
         sys.exit(2)
 
-    # 분기 3: local + namespace 0 + legacy 무시 → fail-fast (사고 재발 차단).
-    if env == "local":
-        sys.stderr.write(
-            f"ERROR: {prefix}* 미설정 (ADR 0029). local 은 legacy R2_* fallback 0 — "
-            "실수 사용 방지. R2_LOCAL_ACCOUNT_ID / R2_LOCAL_ACCESS_KEY / "
-            "R2_LOCAL_SECRET_KEY / R2_LOCAL_BUCKET 모두 set 또는 R2 비활성 (smoke).\n"
-        )
-        sys.exit(2)
-
-    # 분기 4 / 5: staging/production 의 legacy fallback. atomic 검사.
-    legacy = {s: ENV.get(f"R2_{s}", "").strip() for s in _R2_REQUIRED_SUFFIXES}
-    legacy_set = {s: v for s, v in legacy.items() if v}
-
-    if not legacy_set:
-        # 분기 6: 자격 부재.
-        sys.stderr.write(
-            f"ERROR: R2 자격 자체 부재 — {prefix}* 또는 legacy R2_* 4개 set 필요.\n"
-        )
-        sys.exit(2)
-
-    if len(legacy_set) != len(_R2_REQUIRED_SUFFIXES):
-        # 분기 5: 부분 legacy = fail-fast (namespace 와 동일 정책).
-        missing = [s for s in _R2_REQUIRED_SUFFIXES if s not in legacy_set]
-        sys.stderr.write(
-            f"ERROR: partial legacy R2_* credentials — "
-            f"set: {sorted(legacy_set.keys())}, missing: {missing}. "
-            "ADR 0029: 부분 legacy 도 credential mix 차단 fail-fast.\n"
-        )
-        sys.exit(2)
-
-    # 분기 4: legacy 4개 모두 set → backward-compat 활성 + warning.
-    sys.stderr.write(
-        f"WARN: R2_* (legacy, namespace 없음) detected in {env} env — "
-        f"ADR 0029 backward-compat path. migrate to {prefix}* before ADR 0030.\n"
-    )
-    return legacy
+    # 분기 3: namespace 4개 모두 unset → R2 비활성 (local-only mode).
+    return None
 
 
 # ===== V-World 사이트 client =====
@@ -483,10 +440,19 @@ def sigungu_from_filename(name: str) -> str:
 # ===== R2 client =====
 def make_r2(creds: dict[str, str] | None = None) -> Any:
     # boto3.client 는 stubs 가 없어 Any return 이 자연. 격리 service 의 표준 pattern.
-    # ADR 0029 — credentials 는 *원자적* 로드 (`load_r2_credentials`). 호출자가 직접
-    # 제공 가능 (test) 또는 None 시 본 함수가 로드.
+    # ADR 0030 — credentials 는 *원자적* 로드 (`load_r2_credentials`). 호출자가 직접
+    # 제공 가능 (test) 또는 None 시 본 함수가 로드 — load_r2_credentials 가 None
+    # 반환하면 본 함수가 SystemExit (R2 client 가 필요한 path 에서는 자격 필수).
     if creds is None:
-        creds = load_r2_credentials()
+        loaded = load_r2_credentials()
+        if loaded is None:
+            env_lower = _etl_environment()
+            sys.stderr.write(
+                f"ERROR: make_r2 자격 부재 — "
+                f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 set 필요 (ADR 0030).\n"
+            )
+            sys.exit(2)
+        creds = loaded
     cfg = Config(
         signature_version="s3v4",
         retries={"max_attempts": 5, "mode": "standard"},
@@ -538,16 +504,22 @@ def main() -> int:
             "key dtmk_ds_id 출력을 정확히 inject하는지 확인.\n"
         )
         return 2
-    # ADR 0029 — R2 자격을 *원자적* 로드 (4개 같은 source). 부분 namespace + 부분 legacy
-    # 의 credential mix 시나리오 차단. 본 dict 가 main 에서 R2 client 와 bucket 양쪽 source.
+    # ADR 0030 — R2 자격을 *원자적* 로드 (4개 같은 namespace). partial = fail-fast.
+    # 본 script 는 R2 PUT 이 핵심 작업이라 자격 없으면 의미 0 — None 도 fail-fast.
     r2_creds = load_r2_credentials()
+    if r2_creds is None:
+        env_lower = _etl_environment()
+        sys.stderr.write(
+            f"ERROR: R2 자격 부재 — dtmk_vworld 는 R2 PUT 이 핵심. "
+            f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 모두 set 필요 (ADR 0030).\n"
+        )
+        return 2
     bucket = r2_creds["BUCKET"]
     # bronze_prefix 는 namespace 안 적용 — env 의 *bucket key prefix* 라 R2 자격과 무관.
-    # `R2_<env>_BRONZE_PREFIX` 또는 legacy `R2_BRONZE_PREFIX` 둘 다 허용 (default `bronze`).
+    # `R2_<env>_BRONZE_PREFIX` (env-specific) 또는 default `bronze`.
     env_lower = _etl_environment()
     bronze_prefix = ENV.get(
-        f"{_R2_NAMESPACE_PREFIX[env_lower]}BRONZE_PREFIX",
-        ENV.get("R2_BRONZE_PREFIX", "bronze"),
+        f"{_R2_NAMESPACE_PREFIX[env_lower]}BRONZE_PREFIX", "bronze"
     ).rstrip("/")
     # batch label = YYYY-MM (월 1 archive). 매일 incremental 시는 같은 batch 안에서 file 변경.
     batch = time.strftime("%Y-%m")

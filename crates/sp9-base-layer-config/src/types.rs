@@ -352,24 +352,17 @@ impl Environment {
     /// 호출 가능한 callsite (e.g. `preflight_cdn_config` 같은 free function, Sentry
     /// init 시점) 가 본 helper 통과.
     ///
-    /// **Backward-compat (1 sprint, ADR 0030 에서 제거)**: `ETL_ENVIRONMENT` 미설정 시
-    /// 기존 `ETL_BUILD_ENV` env 도 검사 — 점진 migration 허용.
+    /// **ADR 0030**: `ETL_BUILD_ENV` backward-compat 완전 제거 — `ETL_ENVIRONMENT` 만 SSOT.
+    /// env 미설정 = 명시 의도 부재 = false (production 으로 추측 0).
     #[must_use]
     pub fn is_production_from_env() -> bool {
-        // primary path — ADR 0029 SSOT.
-        if let Ok(v) = std::env::var("ETL_ENVIRONMENT") {
-            if v.trim().eq_ignore_ascii_case("production") || v.trim().eq_ignore_ascii_case("prod") {
-                return true;
-            }
-            // ETL_ENVIRONMENT 가 *명시 set* 됐으면 그것만 신뢰 — fallback 안 함.
-            return false;
-        }
-        // backward-compat — `ETL_BUILD_ENV` 가 set 됐고 production 인 경우.
-        // ADR 0030 에서 본 fallback 제거.
-        std::env::var("ETL_BUILD_ENV")
+        std::env::var("ETL_ENVIRONMENT")
             .ok()
             .as_deref()
-            .is_some_and(|v| v.eq_ignore_ascii_case("production"))
+            .map(str::trim)
+            .is_some_and(|v| {
+                v.eq_ignore_ascii_case("production") || v.eq_ignore_ascii_case("prod")
+            })
     }
 
     /// 사람-가독 이름.
