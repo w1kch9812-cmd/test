@@ -83,7 +83,7 @@ jobs:
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
         run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-lcov
