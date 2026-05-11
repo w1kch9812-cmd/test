@@ -15,9 +15,9 @@
 
 version: 2
 updates:
-  # GitHub Actions — supply-chain 의 가장 큰 risk. major action (`actions/*`) 은 SHA
-  # pin 권장이지만 dependabot 가 tag 갱신만 자동. 본 config 은 *tag 갱신* 자동 + ADR
-  # 0028 의 manual SHA pin 절차와 짝.
+  # GitHub Actions — supply-chain 의 가장 큰 risk. 모든 workflow yml 의 actions 는
+  # *SHA pin* (Round 5, ADR 0028). dependabot 가 새 release 의 SHA + tag 주석 자동
+  # PR 제안 — 운영자 weekly review 에서 검토 후 merge. tag pin 으로 회귀 0 보장.
   - package-ecosystem: github-actions
     directory: /
     schedule:

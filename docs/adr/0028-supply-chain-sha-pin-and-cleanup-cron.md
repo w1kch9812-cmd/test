@@ -18,15 +18,28 @@ force-push 가능 → supply-chain attack vector (NIST SSDF 의 PO.5 / OWASP sup
 best practice 의 *Pin to immutable identifier*).
 
 ```yaml
-# 권장 (SHA pin + tag 주석):
+# 권장 (SHA pin + release tag 주석):
 - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
 # 금지 (tag pin):
 - uses: actions/checkout@v4
 ```
 
+**예외 — `dtolnay/rust-toolchain`**: 본 action 은 *release tag* 가 없음
+(`@stable` / `@nightly` / `@1.88` 가 *channel* 형식 — 의도된 floating ref).
+SHA pin + `# @<channel>` 주석 형식 허용 (e.g. `@21dc36...  # @stable`):
+
+```yaml
+# 허용 (channel-based action 의 SHA pin + channel 주석):
+- uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable
+```
+
+본 예외는 *action 의 release model 자체* 가 channel-based 라 적용. 다른 모든 action
+은 `# vX.Y.Z` 패턴 강제.
+
 **자동 갱신**: `.github/dependabot.yml` 의 `package-ecosystem: github-actions` 가
-주간으로 새 release SHA PR 자동 생성. 운영자는 weekly review 에서 검토 후 merge.
+주간으로 새 SHA PR 자동 생성 (tag pin 회귀 0 보장). 운영자는 weekly review 에서
+검토 후 merge.
 
 ### 2. Manifest backup cleanup cron
 

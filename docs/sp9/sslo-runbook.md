@@ -205,7 +205,7 @@ which secret) 박제. PIPC 감사 대비.
 |---|---|
 | 보존 개수 | **최근 12개 manifest** (1년치, 매월 1회 cron 기준) |
 | 보존 mechanism | R2 immutable URL — flat tile 은 자동 보존, manifest backup 은 명시 PUT |
-| 청소 정책 | manifest 13개 째 부터 oldest 자동 삭제 (별도 cron, 미구현 — TODO ADR 0028) |
+| 청소 정책 | manifest 13개 째 부터 oldest 자동 삭제 — [sp9-manifest-backup-cleanup.yml](../../.github/workflows/sp9-manifest-backup-cleanup.yml) (매월 2일 04:00 UTC, ADR 0028) |
 | 복구 절차 | § 2.4 — workflow_dispatch `target_version=<old>` |
 
 **RPO** (Recovery Point Objective): **0 분** — manifest atomic flip 직전 상태 = R2 의
