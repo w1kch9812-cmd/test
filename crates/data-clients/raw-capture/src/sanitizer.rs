@@ -179,16 +179,23 @@ fn path_allowed_or_has_descendant(path: &str, allowlist: &[String]) -> bool {
 }
 
 /// pattern 과 path 가 *segment-wise* 매칭. wildcard `*` 는 임의 segment 매칭.
-/// path 가 pattern 보다 짧으면 (path 가 ancestor) → true.
-/// path 가 pattern 보다 길거나 같으면 모든 segment 가 일치해야 true.
+///
+/// 매칭 규칙:
+/// - path 가 비어있으면 (root) → true (모든 패턴이 root descendant)
+/// - path 가 pattern 보다 *깊으면* → **false** (leaf 자식은 폐기 — PIPA 핵심)
+/// - path 가 pattern 보다 짧거나 같으면 segment-wise 매칭 (ancestor 또는 exact)
 fn pattern_matches_or_prefix(pattern: &str, path: &str) -> bool {
     let p_segs: Vec<&str> = pattern.trim_start_matches('/').split('/').collect();
     let t_segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
     if path.is_empty() {
         return true;
     }
-    let min = p_segs.len().min(t_segs.len());
-    for i in 0..min {
+    // path 가 pattern 보다 깊으면 leaf 자식 — 폐기 (Stop-hook 발견 PIPA 핵심 fix)
+    if t_segs.len() > p_segs.len() {
+        return false;
+    }
+    // 길이가 같거나 path 가 더 짧음 (ancestor) — 모든 segment 매칭 확인.
+    for i in 0..t_segs.len() {
         if p_segs[i] != "*" && p_segs[i] != t_segs[i] {
             return false;
         }
@@ -330,5 +337,70 @@ mod tests {
         assert!(r.value["response"]["header"].get("resultMsg").is_none());
         assert!(r.value["response"].get("body").is_none());
         assert!(r.dropped_count >= 2);
+    }
+
+    /// Stop-hook (2026-05-11) 발견 — leaf 패턴의 자식이 누출되면 안 됨.
+    /// allowlist `/response/header/resultCode` 가 leaf 일 때, 그 *자식 노드* 는
+    /// PIPA 최소수집 원칙상 자동 폐기되어야 한다.
+    #[test]
+    fn sanitize_drops_descendants_of_allowed_leaf() {
+        let san = AllowlistSanitizer::new(
+            "test".to_string(),
+            vec!["/response/header/resultCode".to_string()],
+            1,
+        );
+        // provider 가 resultCode 를 nested object 로 보내는 hypothetical case
+        // — PII 가 leaf 자식으로 leak 되면 안 됨.
+        let raw = serde_json::json!({
+            "response": {
+                "header": {
+                    "resultCode": {
+                        "value": "00",
+                        "ownerNm_leak": "PII MUST DROP"
+                    }
+                }
+            }
+        });
+        let r = san.sanitize(&raw);
+        // resultCode 본체는 보존되되, 그 자식 (value / ownerNm_leak) 은 모두 폐기.
+        // resultCode 가 object 인데 children 이 모두 비허용이면 빈 object 가 됨 (또는 본 노드도 폐기).
+        let serialized = r.value.to_string();
+        assert!(
+            !serialized.contains("ownerNm_leak"),
+            "PII descendant of allowed leaf must NOT be retained: {serialized}"
+        );
+        assert!(
+            !serialized.contains("PII MUST DROP"),
+            "PII payload of leaf descendant must NOT leak: {serialized}"
+        );
+        // dropped_count 가 leak 자식 수 반영
+        assert!(r.dropped_count >= 2, "value + ownerNm_leak 폐기 카운트");
+    }
+
+    /// Wildcard pattern 도 leaf 자식 폐기 — `/items/*/id` 가 leaf 인데
+    /// id 가 nested object 면 그 자식은 폐기.
+    #[test]
+    fn sanitize_wildcard_drops_descendants() {
+        let san = AllowlistSanitizer::new(
+            "test".to_string(),
+            vec!["/items/*/id".to_string()],
+            1,
+        );
+        let raw = serde_json::json!({
+            "items": [
+                {
+                    "id": {
+                        "primary": "a",
+                        "secret_pii": "drop me"
+                    }
+                }
+            ]
+        });
+        let r = san.sanitize(&raw);
+        let serialized = r.value.to_string();
+        assert!(
+            !serialized.contains("secret_pii"),
+            "PII descendant of wildcard leaf must NOT be retained: {serialized}"
+        );
     }
 }
