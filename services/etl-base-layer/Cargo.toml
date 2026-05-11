@@ -21,7 +21,7 @@ chrono = { workspace = true }
 reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "io-util", "process", "signal", "sync"] }
