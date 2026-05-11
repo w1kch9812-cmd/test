@@ -64,13 +64,13 @@ impl RawSanitizer for AllowlistSanitizer { /* ... */ }
 
 ### 3.3 SanitizingRawCapture
 
-기존 `RawCapture` trait 시그니처([crates/data-clients/raw-capture/src/lib.rs:46-52](../../../crates/data-clients/raw-capture/src/lib.rs#L46-L52)) 와 *완전히 일치* 하는 impl 을 채택. 인자 순서 `(pnu, source, raw: &Value, fetched_at: DateTime<Utc>)` 와 `Result<(), RawCaptureError>` 반환을 그대로 따른다.
+기존 `RawCapture` trait 시그니처([crates/data-clients/raw-capture/src/lib.rs:84-97](../../../crates/data-clients/raw-capture/src/lib.rs#L84-L97)) 와 *완전히 일치* 하는 impl 을 채택. 인자 순서 `(pnu, source, raw: &Value, fetched_at: DateTime<Utc>)` 와 `Result<RawCaptureReceipt, RawCaptureError>` 반환 (v5 patch — receipt 도입).
 
 ```rust
 // crates/data-clients/raw-capture/src/capture.rs (신규)
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use raw_capture_client::{RawCapture, RawCaptureError};
+use raw_capture_client::{RawCapture, RawCaptureError, RawCaptureReceipt};
 use std::sync::Arc;
 
 pub struct SanitizingRawCapture<C: RawCapture> {
@@ -86,7 +86,7 @@ impl<C: RawCapture + Send + Sync> RawCapture for SanitizingRawCapture<C> {
         source: &str,
         raw: &serde_json::Value,
         fetched_at: DateTime<Utc>,
-    ) -> Result<(), RawCaptureError> {
+    ) -> Result<RawCaptureReceipt, RawCaptureError> {
         let sanitized = self.sanitizer.sanitize(raw);
         if sanitized.dropped_count > 0 {
             tracing::warn!(
@@ -128,7 +128,7 @@ Tier 2 (vault) 를 먼저 호출하여 fail-fast 를 보장한다.
 // crates/data-clients/raw-capture/src/capture.rs
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use raw_capture_client::{RawCapture, RawCaptureError};
+use raw_capture_client::{RawCapture, RawCaptureError, RawCaptureReceipt};
 
 /// Tier 1 (sanitized) + Tier 2 (vault) fan-out. Tier 2 먼저 호출 → fail-fast 보장.
 pub struct DualTierCapture<S, V> {
@@ -148,10 +148,10 @@ where
         source: &str,
         raw: &serde_json::Value,
         fetched_at: DateTime<Utc>,
-    ) -> Result<(), RawCaptureError> {
+    ) -> Result<RawCaptureReceipt, RawCaptureError> {
         // Tier 2 먼저: vault INSERT 실패 → 전체 fail-fast, Tier 1 기록 차단.
         self.vault.capture(pnu, source, raw, fetched_at).await?;
-        // Tier 1: sanitized 경로 (raw 는 inner sanitizer 가 폐기/정제).
+        // Tier 1 (sanitized) — Tier 2 성공 후만 실행. caller 가 보는 receipt 는 Tier 1.
         self.sanitized.capture(pnu, source, raw, fetched_at).await
     }
 }
@@ -264,7 +264,7 @@ schema_hash 는 parcel_external_data.schema_hash 컬럼에 저장되어 schema d
 ### 6.1 Tier 1 테이블 (기존 + 컬럼 추가)
 
 ```sql
--- migrations/30012_external_data_lineage.sql
+-- migrations/30014_external_data_lineage.sql
 ALTER TABLE parcel_external_data
   ADD COLUMN license           TEXT,
   ADD COLUMN api_version       TEXT,
@@ -283,7 +283,7 @@ UPDATE parcel_external_data
 ### 6.2 Tier 2 테이블 (신규)
 
 ```sql
--- migrations/30011_pii_vault.sql
+-- migrations/30013_pii_vault.sql
 -- ADR 근거: parcel_external_data PK 가 (pnu, source) composite 이고 컬럼 타입이
 -- char(19) / varchar(40) 이므로 vault 테이블도 *완전히 동일 타입* 사용 (PostgreSQL FK 는
 -- referencing/referenced 컬럼 타입이 정확히 일치해야 함). source CHECK 도 fail-safe 로
@@ -292,7 +292,7 @@ CREATE TABLE parcel_external_data_pii_vault (
   id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   pnu              char(19)    NOT NULL,
   source           varchar(40) NOT NULL CHECK (source IN (
-      'vworld',                          -- legacy alias (30010 backfill 이전 row 호환용)
+      'vworld',                          -- legacy alias (30012 backfill 이전 row 호환용)
       'vworld_parcel',                   -- 지적 폴리곤 endpoint
       'data_go_kr_building',
       'data_go_kr_land',
@@ -313,10 +313,10 @@ CREATE POLICY vault_admin_only ON parcel_external_data_pii_vault
   USING (current_setting('app.role', true) = 'admin');
 ```
 
-**source taxonomy 확장 (선행 마이그레이션 30010)** — V-World 다중 endpoint 대비. 기존 `parcel_external_data` CHECK 제약([migrations/30006_parcel_external_data.sql:13-19](../../../migrations/30006_parcel_external_data.sql#L13-L19)) 은 `vworld` 만 허용 → §5.3 의 `vworld_parcel` 사용 위해 30010 이 30011 (vault) 보다 먼저 적용. **번호 배정 근거**: 기존 migrations/ 에 30007 (api_health_check), 30008 (user_ci_external_account), 30009 (listing_polygon_denormalize) 가 이미 점유되어 충돌 회피 필요 → SP10.5-B 신규 마이그는 30010~30014 로 일괄 배정.
+**source taxonomy 확장 (선행 마이그레이션 30012)** — V-World 다중 endpoint 대비. 기존 `parcel_external_data` CHECK 제약([migrations/30006_parcel_external_data.sql:13-19](../../../migrations/30006_parcel_external_data.sql#L13-L19)) 은 `vworld` 만 허용 → §5.3 의 `vworld_parcel` 사용 위해 30012 가 30013 (vault) 보다 먼저 적용. **번호 배정 근거 (v5 patch)**: 기존 migrations/ 에 30007 (api_health_check), 30008 (user_ci_external_account), 30009 (listing_polygon_denormalize), 30010 (parcel_external_data_r2_pointer), 30011 (parcel_external_data_r2_key_idx) 가 이미 점유되어 SP10.5-B 신규 마이그는 30012~30016 로 일괄 재배정.
 
 ```sql
--- migrations/30010_source_taxonomy_expansion.sql
+-- migrations/30012_source_taxonomy_expansion.sql
 -- V003_07a: source taxonomy expansion — V-World 다중 endpoint 대비.
 -- 'vworld' 는 legacy alias 로 유지하되, 신규 INSERT 는 구체 endpoint name 사용.
 ALTER TABLE parcel_external_data DROP CONSTRAINT parcel_external_data_source_check;
@@ -394,7 +394,7 @@ Query: purpose=incident_investigation|drift_diagnosis|customer_request
 ### 7.2 NOT NULL CHECK 제약 (ADR 0026)
 
 ```sql
--- migrations/30014_external_data_expires_constraint.sql
+-- migrations/30016_external_data_expires_constraint.sql
 -- 기존 NULL 레코드 backfill 선행 (NOT NULL 제약 추가 전)
 UPDATE parcel_external_data
    SET expires_at = fetched_at + INTERVAL '90 days'  -- 가장 긴 TTL 기준 보수적 backfill
@@ -477,7 +477,7 @@ AGENTS.md §10 SSS 15 Axes 기준 enforce 메커니즘:
 | 8. PII 차단 | Allowlist + KMS vault | integration: PII fixture 폐기 확인 |
 | 9. 최소 수집 | 7-path allowlist | unit test: allowlist_retains_permitted |
 | 10. 목적 한정 | purpose_code per source + RBAC endpoint | integration: purpose 누락 → 400 |
-| 11. 보유 기간 | expires_at NOT NULL CHECK | migration 30010 constraint |
+| 11. 보유 기간 | expires_at NOT NULL CHECK | migration 30016 constraint |
 | 12. 파기 | Tokio cleanup task + audit log | integration: cleanup task |
 | 13. 접근 제어 | ZITADEL admin role + PostgreSQL RLS | integration: non-admin → 403 |
 | 14. 감사 | raw_vault_access_log INSERT | integration: log 레코드 확인 |
@@ -553,12 +553,12 @@ GET /healthz/ready -> 200
 
 | 파일 | 라인 | 변경 내용 |
 |---|---|---|
-| crates/data-clients/raw-capture/src/lib.rs | 40-89 | RawCapture trait 시그니처 *유지* (`pnu, source, raw: &Value, fetched_at` / `Result<(), RawCaptureError>`). 신규 `SanitizingRawCapture` + `DualTierCapture` 를 동일 모듈 또는 `capture.rs` 신규 파일로 추가 후 `pub use` re-export |
+| crates/data-clients/raw-capture/src/lib.rs | 80-97 | RawCapture trait 시그니처 *유지* (`pnu, source, raw: &Value, fetched_at` / `Result<RawCaptureReceipt, RawCaptureError>`). 신규 `SanitizingRawCapture` + `DualTierCapture` 를 동일 모듈 또는 `capture.rs` 신규 파일로 추가 후 `pub use` re-export |
 | crates/db/src/raw_capture.rs | 14-56 | 기존 `PgRawCapture::insert` 4-인자 유지. 신규 메서드 또는 wrapper 로 `(pnu, source, raw, fetched_at, sanitizer_version, schema_hash, license, api_version)` 8-인자 INSERT path 추가 (T3 — lineage 컬럼 30008 대응) |
 | crates/data-clients/data-go-kr/src/building_register/reader.rs | 117-128 | 변경 없음 (wrapper transparent — 기존 `raw_capture.capture(pnu, source, &raw, now)` 호출이 이미 신규 trait 시그니처 일치) |
 | crates/data-clients/data-go-kr/src/building_register/reader.rs | 37 | `RAW_CAPTURE_SOURCE = "data_go_kr_building"` 유지 |
 | crates/data-clients/vworld/src/reader.rs | 35-96 | `VWorldParcelReader::new(client, raw_capture)` 시그니처 *유지*. 단 호출자가 주입하는 `Arc<dyn RawCapture>` 가 `DualTierCapture` 합성체로 교체됨 |
-| crates/data-clients/vworld/src/reader.rs | **71** | `.capture(pnu.as_str(), "vworld", &raw, now)` 의 source string literal `"vworld"` → `"vworld_parcel"` 변경 필수. 30010 taxonomy 마이그레이션과 동시 적용 (마이그레이션은 backfill, 코드 변경은 신규 INSERT 가 정확한 enum 사용). 권장: `pub const RAW_CAPTURE_SOURCE: &str = "vworld_parcel";` 신규 const 도입 후 참조 (data-go-kr building reader 의 `RAW_CAPTURE_SOURCE` 패턴 따라) |
+| crates/data-clients/vworld/src/reader.rs | **71** | `.capture(pnu.as_str(), "vworld", &raw, now)` 의 source string literal `"vworld"` → `"vworld_parcel"` 변경 필수. 30012 taxonomy 마이그레이션과 동시 적용 (마이그레이션은 backfill, 코드 변경은 신규 INSERT 가 정확한 enum 사용). 권장: `pub const RAW_CAPTURE_SOURCE: &str = "vworld_parcel";` 신규 const 도입 후 참조 (data-go-kr building reader 의 `RAW_CAPTURE_SOURCE` 패턴 따라) |
 | crates/data-clients/raw-capture/src/lib.rs | 7-18 | doc comment 의 예시 `capture.capture("...", "vworld", ...)` 를 `"vworld_parcel"` 로 업데이트 (legacy alias 명시) |
 | services/api/src/main.rs | 210-221 | V-World capture wire 가 현재 `Arc::new(PgRawCapture::new(pool.clone()))` 직접 주입 (b784e76) → `DualTierCapture { sanitized: SanitizingRawCapture::new(PgRawCapture, AllowlistSanitizer::for_source("vworld_parcel")), vault: PgPiiVaultCapture::new(pool, kms) }` 합성체로 교체 |
 | services/api/src/main.rs | 331-335 | `/healthz/ready` 라우트의 핸들러를 신규 `ReadinessResponse` 반환형으로 교체. AppState 에 `building_reader_status` / `vault_kms_status` 핸들 추가 |
@@ -566,7 +566,7 @@ GET /healthz/ready -> 200
 | services/api/src/routes/health.rs | 45-125 | 기존 `HealthResponse { status: String }` 유지 (liveness 용). 신규 `ReadinessResponse { status: String, checks: ReadinessChecks }` + `ReadinessChecks { db, redis, building_reader, vault_kms: String }` 정의. readiness 핸들러를 새 응답형으로 교체 |
 | services/api/src/main.rs | (신규 위치) | services/api 가 현재 `app_builder(state) -> Router` 같은 factory 를 *export 하지 않음*. T7 에서 `services/api/src/lib.rs` (또는 `state.rs`) 에 `pub fn app_router(state: AppState) -> Router` 또는 `pub fn build_app(state) -> Router` 추가 — 실 통합 테스트가 main.rs 의 wiring 을 그대로 호출 가능하도록 |
 | services/api/tests/sp10_panel_endpoints.rs | 29-36, 148-250 | 현재 `spawn_test_app()` 로컬 헬퍼 (핸들러 부분 재구현) → `app_router(test_state)` 직접 호출 + `axum_test::TestServer::new(app_router(...))` 패턴으로 재작성 |
-| migrations/30006_parcel_external_data.sql | (선행 마이그레이션) | 30010 이 이 테이블의 source CHECK 를 확장 (변경 없음 — 30006 자체는 그대로) |
+| migrations/30006_parcel_external_data.sql | (선행 마이그레이션) | 30012 가 이 테이블의 source CHECK 를 확장 (변경 없음 — 30006 자체는 그대로) |
 
 ---
 
@@ -592,11 +592,11 @@ services/api/src/
     raw_vault.rs
 
 migrations/
-  30010_source_taxonomy_expansion.sql   (vworld → vworld_parcel rename, CHECK 확장)
-  30011_pii_vault.sql                    (Tier 2 vault + RLS + composite FK)
-  30012_external_data_lineage.sql        (license, api_version, sanitizer_version, schema_hash)
-  30013_raw_vault_access_log.sql         (admin 조회 audit log)
-  30014_external_data_expires_constraint.sql  (expires_at NOT NULL + CHECK + index)
+  30012_source_taxonomy_expansion.sql   (vworld → vworld_parcel rename, CHECK 확장)
+  30013_pii_vault.sql                    (Tier 2 vault + RLS + composite FK)
+  30014_external_data_lineage.sql        (license, api_version, sanitizer_version, schema_hash)
+  30015_raw_vault_access_log.sql         (admin 조회 audit log)
+  30016_external_data_expires_constraint.sql  (expires_at NOT NULL + CHECK + index)
 
 infra/
   kms-key.ts                             (Pulumi PII vault CMK; AGENTS.md §1 — 인프라는 코드만)
@@ -626,7 +626,7 @@ services/api/tests/
 
 ### T2: Allowlist 정의 + source taxonomy 확장
 
-- migrations/30010_source_taxonomy_expansion.sql: `parcel_external_data` CHECK 확장 (`vworld_parcel` 추가) + 기존 `vworld` row 를 `vworld_parcel` 로 backfill UPDATE
+- migrations/30012_source_taxonomy_expansion.sql: `parcel_external_data` CHECK 확장 (`vworld_parcel` 추가) + 기존 `vworld` row 를 `vworld_parcel` 로 backfill UPDATE
 - **crates/data-clients/vworld/src/reader.rs:71**: source literal `"vworld"` → `"vworld_parcel"` 변경 (또는 신규 `pub const RAW_CAPTURE_SOURCE: &str = "vworld_parcel"` 도입 후 참조). data.go.kr building reader 패턴 따라 const SSOT 화 권장. **마이그레이션과 코드 변경이 동일 PR 에 묶여야 함** — 마이그만 적용되고 코드가 'vworld' 그대로 INSERT 시 backfill 직후 다시 'vworld' row 가 생김
 - crates/data-clients/raw-capture/src/lib.rs:7-18 doc comment 예시 업데이트 (`vworld` → `vworld_parcel`)
 - sources/data_go_kr_building.rs: 7-path allowlist const 정의
@@ -635,8 +635,8 @@ services/api/tests/
 
 ### T3: Two-tier Vault 마이그레이션 + PgPiiVaultCapture + Lineage 컬럼
 
-- migrations/30011_pii_vault.sql: vault table + RLS + composite FK (pnu char(19), source varchar(40))
-- migrations/30012_external_data_lineage.sql: `license`, `api_version`, `sanitizer_version`, `schema_hash` 컬럼 추가 + legacy backfill (`schema_hash = 'legacy:' || md5(...)`, `sanitizer_version = 0`)
+- migrations/30013_pii_vault.sql: vault table + RLS + composite FK (pnu char(19), source varchar(40))
+- migrations/30014_external_data_lineage.sql: `license`, `api_version`, `sanitizer_version`, `schema_hash` 컬럼 추가 + legacy backfill (`schema_hash = 'legacy:' || md5(...)`, `sanitizer_version = 0`)
 - crates/db/src/raw_capture.rs: `PgRawCapture` 에 lineage-aware 신규 메서드 또는 wrapper struct (8-인자 INSERT)
 - crates/db/src/pii_vault.rs: PgPiiVaultCapture (`aws-sdk-kms` GenerateDataKey → AES-256-GCM encrypt full raw → ciphertext_blob INSERT). `RawCapture` trait impl 시그니처는 `(pnu, source, &Value, fetched_at)` 그대로
 - infra/kms-key.ts: Pulumi `aws.kms.Key` ("pii-vault-key", `enableKeyRotation: true`, `deletionWindowInDays: 30`)
@@ -644,7 +644,7 @@ services/api/tests/
 
 ### T4: expires_at NOT NULL + Cleanup Task
 
-- migrations/30014_external_data_expires_constraint.sql: NOT NULL CHECK + index
+- migrations/30016_external_data_expires_constraint.sql: NOT NULL CHECK + index
 - services/api/src/cleanup.rs: Tokio interval task
 - services/api/src/main.rs: tokio::spawn(run_cleanup_task(...)) 등록
 
@@ -655,7 +655,7 @@ services/api/tests/
 
 ### T6: Vault Access RBAC Admin Endpoint + Audit Log
 
-- migrations/30013_raw_vault_access_log.sql: audit log table
+- migrations/30015_raw_vault_access_log.sql: audit log table
 - crates/db/src/access_log.rs: PgVaultAccessLog
 - services/api/src/routes/admin/raw_vault.rs: endpoint (ZITADEL role check → vault SELECT → KMS Decrypt → audit INSERT → response)
 - services/api/src/main.rs:331-335: admin route 등록
@@ -708,7 +708,7 @@ services/api/tests/
 | PII 차단 | Allowlist + KMS vault | integration: PII fixture 폐기 확인 |
 | 최소 수집 | 7-path allowlist | unit test: allowlist_retains_permitted |
 | 목적 한정 | purpose_code + RBAC endpoint | integration: purpose 누락 → 400 |
-| 보유 기간 | expires_at NOT NULL CHECK | migration 30010 |
+| 보유 기간 | expires_at NOT NULL CHECK | migration 30016 |
 | 파기 | Tokio cleanup task + audit | integration: cleanup task 호출 |
 | 접근 제어 | ZITADEL admin role + RLS | integration: non-admin → 403 |
 | 감사 | raw_vault_access_log INSERT | integration: log 레코드 확인 |
