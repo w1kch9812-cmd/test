@@ -106,42 +106,93 @@ def _etl_environment() -> str:
     return raw
 
 
-def r2_required(name_suffix: str) -> str:
-    """ADR 0029 namespace 준수 R2 env loader.
+_R2_REQUIRED_SUFFIXES: tuple[str, ...] = (
+    "ACCOUNT_ID",
+    "ACCESS_KEY",
+    "SECRET_KEY",
+    "BUCKET",
+)
 
-    `name_suffix` 는 `ACCOUNT_ID` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET` 등.
-    `ETL_ENVIRONMENT=production` 시 `R2_PRODUCTION_<suffix>` 읽음. backward-compat (1
-    sprint) — namespace 변수 미설정 시 *non-local* env 에서만 legacy `R2_<suffix>`
-    fallback + warning. local 은 fallback 0 (사고 재발 차단, Rust 와 동일).
+
+def load_r2_credentials() -> dict[str, str]:
+    """ADR 0029 namespace 준수 R2 자격을 *원자적* 로드.
+
+    **핵심 invariant**: 4개 자격 (ACCOUNT_ID / ACCESS_KEY / SECRET_KEY / BUCKET) 이
+    *모두 같은 source* (namespace 또는 legacy) 에서 박제. suffix 단위 fallback 으로
+    인한 credential mixing 차단.
+
+    예시 — 이전 path 의 사고 시나리오:
+    - `R2_PRODUCTION_ACCOUNT_ID=prod-acct` (set)
+    - `R2_PRODUCTION_ACCESS_KEY=""` (unset)
+    - `R2_ACCESS_KEY=legacy-key` (legacy set)
+    이전: suffix 별 fallback → ACCOUNT_ID 는 prod, ACCESS_KEY 는 legacy. **credential
+    cross-mix** = R2 auth 실패 또는 *잘못된 account 의 bucket modify*.
+    현재: 부분 namespace 박제 = `MissingNamespacedKey` fail-fast (mix 0).
+
+    분기:
+    1. namespace 4개 *모두* set → namespace 사용
+    2. namespace *부분* set → fail-fast (mix 차단)
+    3. namespace 0개 set + `env=local` → fail-fast (local legacy 0)
+    4. namespace 0개 set + non-local + legacy 4개 *모두* set → legacy + warning
+    5. namespace 0개 set + non-local + legacy 부분 set → fail-fast (mix 차단)
+    6. 그 외 → fail-fast (자격 부재)
     """
     env = _etl_environment()
     prefix = _R2_NAMESPACE_PREFIX[env]
-    namespaced = ENV.get(f"{prefix}{name_suffix}", "").strip()
-    if namespaced:
+    namespaced = {s: ENV.get(f"{prefix}{s}", "").strip() for s in _R2_REQUIRED_SUFFIXES}
+    namespaced_set = {s: v for s, v in namespaced.items() if v}
+
+    # 분기 1: namespace 4개 모두 set → 정상 path.
+    if len(namespaced_set) == len(_R2_REQUIRED_SUFFIXES):
         return namespaced
 
-    # local 은 legacy fallback *절대* 활성 X (Rust 와 동일 정책, ADR 0029).
-    if env == "local":
+    # 분기 2: 부분 namespace = fail-fast (credential mix 차단, ADR 0029 핵심 invariant).
+    if namespaced_set:
+        missing = [s for s in _R2_REQUIRED_SUFFIXES if s not in namespaced_set]
         sys.stderr.write(
-            f"ERROR: {prefix}{name_suffix} unset (ADR 0029). local 은 legacy R2_* fallback 0 — "
-            f"실수 사용 방지. R2_LOCAL_{name_suffix} 명시 set 필요.\n"
+            f"ERROR: partial {prefix}* credentials — "
+            f"set: {sorted(namespaced_set.keys())}, missing: {missing}. "
+            "ADR 0029: 부분 namespace = credential mix 차단 fail-fast. "
+            "4개 모두 set 또는 모두 unset (legacy fallback) 필요.\n"
         )
         sys.exit(2)
 
-    # staging / production 만 backward-compat — warning + 활성 (ADR 0030 에서 제거).
-    legacy = ENV.get(f"R2_{name_suffix}", "").strip()
-    if legacy:
+    # 분기 3: local + namespace 0 + legacy 무시 → fail-fast (사고 재발 차단).
+    if env == "local":
         sys.stderr.write(
-            f"WARN: R2_{name_suffix} (legacy, namespace 없음) detected in {env} env — "
-            f"ADR 0029 backward-compat path. migrate to {prefix}{name_suffix} before ADR 0030.\n"
+            f"ERROR: {prefix}* 미설정 (ADR 0029). local 은 legacy R2_* fallback 0 — "
+            "실수 사용 방지. R2_LOCAL_ACCOUNT_ID / R2_LOCAL_ACCESS_KEY / "
+            "R2_LOCAL_SECRET_KEY / R2_LOCAL_BUCKET 모두 set 또는 R2 비활성 (smoke).\n"
         )
-        return legacy
+        sys.exit(2)
 
+    # 분기 4 / 5: staging/production 의 legacy fallback. atomic 검사.
+    legacy = {s: ENV.get(f"R2_{s}", "").strip() for s in _R2_REQUIRED_SUFFIXES}
+    legacy_set = {s: v for s, v in legacy.items() if v}
+
+    if not legacy_set:
+        # 분기 6: 자격 부재.
+        sys.stderr.write(
+            f"ERROR: R2 자격 자체 부재 — {prefix}* 또는 legacy R2_* 4개 set 필요.\n"
+        )
+        sys.exit(2)
+
+    if len(legacy_set) != len(_R2_REQUIRED_SUFFIXES):
+        # 분기 5: 부분 legacy = fail-fast (namespace 와 동일 정책).
+        missing = [s for s in _R2_REQUIRED_SUFFIXES if s not in legacy_set]
+        sys.stderr.write(
+            f"ERROR: partial legacy R2_* credentials — "
+            f"set: {sorted(legacy_set.keys())}, missing: {missing}. "
+            "ADR 0029: 부분 legacy 도 credential mix 차단 fail-fast.\n"
+        )
+        sys.exit(2)
+
+    # 분기 4: legacy 4개 모두 set → backward-compat 활성 + warning.
     sys.stderr.write(
-        f"ERROR: {prefix}{name_suffix} 미설정 (ADR 0029 namespace). "
-        f"legacy R2_{name_suffix} 도 없음.\n"
+        f"WARN: R2_* (legacy, namespace 없음) detected in {env} env — "
+        f"ADR 0029 backward-compat path. migrate to {prefix}* before ADR 0030.\n"
     )
-    sys.exit(2)
+    return legacy
 
 
 # ===== V-World 사이트 client =====
@@ -430,8 +481,12 @@ def sigungu_from_filename(name: str) -> str:
 
 
 # ===== R2 client =====
-def make_r2() -> Any:
+def make_r2(creds: dict[str, str] | None = None) -> Any:
     # boto3.client 는 stubs 가 없어 Any return 이 자연. 격리 service 의 표준 pattern.
+    # ADR 0029 — credentials 는 *원자적* 로드 (`load_r2_credentials`). 호출자가 직접
+    # 제공 가능 (test) 또는 None 시 본 함수가 로드.
+    if creds is None:
+        creds = load_r2_credentials()
     cfg = Config(
         signature_version="s3v4",
         retries={"max_attempts": 5, "mode": "standard"},
@@ -439,9 +494,9 @@ def make_r2() -> Any:
     )
     return boto3.client(
         "s3",
-        endpoint_url=f"https://{r2_required('ACCOUNT_ID')}.r2.cloudflarestorage.com",
-        aws_access_key_id=r2_required("ACCESS_KEY"),
-        aws_secret_access_key=r2_required("SECRET_KEY"),
+        endpoint_url=f"https://{creds['ACCOUNT_ID']}.r2.cloudflarestorage.com",
+        aws_access_key_id=creds["ACCESS_KEY"],
+        aws_secret_access_key=creds["SECRET_KEY"],
         region_name="auto",
         config=cfg,
     )
@@ -483,7 +538,10 @@ def main() -> int:
             "key dtmk_ds_id 출력을 정확히 inject하는지 확인.\n"
         )
         return 2
-    bucket = r2_required("BUCKET")
+    # ADR 0029 — R2 자격을 *원자적* 로드 (4개 같은 source). 부분 namespace + 부분 legacy
+    # 의 credential mix 시나리오 차단. 본 dict 가 main 에서 R2 client 와 bucket 양쪽 source.
+    r2_creds = load_r2_credentials()
+    bucket = r2_creds["BUCKET"]
     # bronze_prefix 는 namespace 안 적용 — env 의 *bucket key prefix* 라 R2 자격과 무관.
     # `R2_<env>_BRONZE_PREFIX` 또는 legacy `R2_BRONZE_PREFIX` 둘 다 허용 (default `bronze`).
     env_lower = _etl_environment()
@@ -512,7 +570,8 @@ def main() -> int:
         flush=True,
     )
 
-    r2 = make_r2()
+    # ADR 0029 — atomic credentials dict 그대로 inject (suffix mix 차단).
+    r2 = make_r2(r2_creds)
 
     # Round 3 (Codex stop-time review): audit trail 은 *guarantee* — best-effort 0.
     # 페이지 변경 / regex miss 시 raw HTML 이 R2 에 박제 되어야 사후 진단 가능.

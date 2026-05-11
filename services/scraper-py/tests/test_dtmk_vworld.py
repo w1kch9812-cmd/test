@@ -317,60 +317,127 @@ def test_is_transient_unknown_exception_returns_false() -> None:
 # Round 5+ — ADR 0029 namespace 회귀 test.
 
 
-def test_r2_required_production_uses_production_namespace(
-    monkeypatch: pytest.MonkeyPatch,
+def _clear_r2_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """모든 R2 관련 env 를 dict 에서 제거 (test 격리)."""
+    keys_to_clear = [
+        "ETL_ENVIRONMENT",
+        "R2_ACCOUNT_ID",
+        "R2_ACCESS_KEY",
+        "R2_SECRET_KEY",
+        "R2_BUCKET",
+    ]
+    for env in ("LOCAL", "STAGING", "PRODUCTION"):
+        for suffix in ("ACCOUNT_ID", "ACCESS_KEY", "SECRET_KEY", "BUCKET"):
+            keys_to_clear.append(f"R2_{env}_{suffix}")
+    for k in keys_to_clear:
+        monkeypatch.delitem(dtmk_vworld.ENV, k, raising=False)
+
+
+def _set_full_namespace(
+    monkeypatch: pytest.MonkeyPatch, env: str, marker: str
 ) -> None:
-    """production env 시 `R2_PRODUCTION_*` 만 읽음."""
+    """4 suffix 모두 set — atomic loader 의 정상 path 시나리오."""
+    prefix = f"R2_{env.upper()}_"
+    for s in ("ACCOUNT_ID", "ACCESS_KEY", "SECRET_KEY", "BUCKET"):
+        monkeypatch.setitem(dtmk_vworld.ENV, f"{prefix}{s}", f"{marker}-{s.lower()}")
+
+
+def test_load_r2_credentials_full_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """production + 4 suffix 모두 set → atomic 통과, 모두 production 자격."""
+    _clear_r2_env(monkeypatch)
     monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "production")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_PRODUCTION_ACCOUNT_ID", "prod-account")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-legacy")  # 안 읽혀야 함
-    assert dtmk_vworld.r2_required("ACCOUNT_ID") == "prod-account"
+    _set_full_namespace(monkeypatch, "PRODUCTION", "prod")
+    # legacy 도 set 했지만 namespace 우선 (mix 0).
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-legacy")
+    creds = dtmk_vworld.load_r2_credentials()
+    assert creds["ACCOUNT_ID"] == "prod-account_id"
+    assert creds["ACCESS_KEY"] == "prod-access_key"
+    assert creds["SECRET_KEY"] == "prod-secret_key"
+    assert creds["BUCKET"] == "prod-bucket"
 
 
-def test_r2_required_local_ignores_legacy(
+def test_load_r2_credentials_partial_namespace_fails_fast(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """ADR 0029 핵심 invariant — local 은 legacy `R2_*` 절대 활성 X.
+    """ADR 0029 핵심 — 부분 namespace = credential mix 차단 fail-fast.
 
-    Rust 측 `local_env_ignores_even_legacy_r2_credentials` 와 *동일* 회귀 시나리오.
+    Stop-hook 발견 시나리오: ACCOUNT_ID 는 namespace, ACCESS_KEY 는 legacy.
+    이전 path 는 suffix 별 fallback 으로 cross-source mix 가능했음.
     """
-    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "local")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-attempt")
-    # `R2_LOCAL_*` 미설정 → fail-fast (legacy fallback 차단).
+    _clear_r2_env(monkeypatch)
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "production")
+    # ACCOUNT_ID 만 namespace set.
+    monkeypatch.setitem(
+        dtmk_vworld.ENV, "R2_PRODUCTION_ACCOUNT_ID", "prod-acct"
+    )
+    # 나머지 3개는 legacy set (cross-source mix 시나리오).
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "legacy-key")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "legacy-secret")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "legacy-bucket")
+
     with pytest.raises(SystemExit) as exc_info:
-        dtmk_vworld.r2_required("ACCOUNT_ID")
+        dtmk_vworld.load_r2_credentials()
     assert exc_info.value.code == 2
     err = capsys.readouterr().err
-    assert "R2_LOCAL_ACCOUNT_ID" in err
+    assert "partial" in err.lower()
+    assert "ACCESS_KEY" in err  # 누락 항목 박제
 
 
-def test_r2_required_staging_uses_legacy_fallback_with_warning(
+def test_load_r2_credentials_partial_legacy_fails_fast(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """staging / production 만 legacy fallback 허용 (1 sprint, warning)."""
+    """ADR 0029 — legacy 도 부분 set = fail-fast (namespace 와 동일 정책)."""
+    _clear_r2_env(monkeypatch)
     monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "staging")
-    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "legacy-staging")
-    # `R2_STAGING_ACCOUNT_ID` 미설정 → legacy `R2_ACCOUNT_ID` 사용.
-    assert dtmk_vworld.r2_required("ACCOUNT_ID") == "legacy-staging"
+    # legacy 2개만 set.
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "x")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "y")
+    with pytest.raises(SystemExit) as exc_info:
+        dtmk_vworld.load_r2_credentials()
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "partial legacy" in err.lower()
+
+
+def test_load_r2_credentials_local_ignores_legacy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0029 핵심 — local 은 legacy 4개 모두 set 돼있어도 활성 X."""
+    _clear_r2_env(monkeypatch)
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "local")
+    # legacy 4개 모두 set (사용자 `.env` 박제 시나리오).
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-a")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "leak-k")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "leak-s")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "leak-b")
+    with pytest.raises(SystemExit) as exc_info:
+        dtmk_vworld.load_r2_credentials()
+    assert exc_info.value.code == 2
+
+
+def test_load_r2_credentials_staging_legacy_with_warning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """staging + legacy 4개 모두 set = atomic 활성 + warning."""
+    _clear_r2_env(monkeypatch)
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "staging")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leg-acct")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCESS_KEY", "leg-key")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "leg-secret")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "leg-bucket")
+    creds = dtmk_vworld.load_r2_credentials()
+    assert creds["ACCOUNT_ID"] == "leg-acct"
+    assert creds["BUCKET"] == "leg-bucket"
     warn = capsys.readouterr().err
     assert "WARN" in warn
     assert "backward-compat" in warn
 
 
-def test_r2_required_fail_fast_when_environment_unset(
+def test_load_r2_credentials_fail_fast_when_environment_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR 0029 — `ETL_ENVIRONMENT` 미설정 시 fail-fast (Rust 와 동일)."""
-    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "")
+    """ADR 0029 — `ETL_ENVIRONMENT` 미설정 시 fail-fast."""
+    _clear_r2_env(monkeypatch)
     with pytest.raises(SystemExit) as exc_info:
-        dtmk_vworld.r2_required("ACCOUNT_ID")
+        dtmk_vworld.load_r2_credentials()
     assert exc_info.value.code == 2
-
-
-def test_r2_required_fail_fast_on_invalid_environment(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """알 수 없는 `ETL_ENVIRONMENT` 도 fail-fast."""
-    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "qa")
-    with pytest.raises(SystemExit):
-        dtmk_vworld.r2_required("ACCOUNT_ID")
