@@ -22,8 +22,10 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::doc_markdown)]
 
+pub mod capture;
 pub mod sanitizer;
-pub use sanitizer::{RawSanitizer, SanitizedRaw};
+pub use capture::SanitizingRawCapture;
+pub use sanitizer::{AllowlistSanitizer, RawSanitizer, SanitizedRaw, compute_schema_hash};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

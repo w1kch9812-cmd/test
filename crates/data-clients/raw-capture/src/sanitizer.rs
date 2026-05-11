@@ -213,6 +213,8 @@ fn is_exact_match(path: &str, allowlist: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+
     use super::*;
 
     #[test]
