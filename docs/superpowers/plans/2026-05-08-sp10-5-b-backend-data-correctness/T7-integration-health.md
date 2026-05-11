@@ -91,7 +91,7 @@ impl AppState {
             kms_key_id,
             access_log: PgVaultAccessLog::new(pool),
             building_reader_status,
-            vault_kms_status: "ok", // TODO(post-MVP): KMS healthcheck
+            vault_kms_status: "ok", // 본 plan 범위 외 — KMS healthcheck 는 FU (ADR-driven)
         })
     }
 }
@@ -214,7 +214,7 @@ pub async fn readiness_handler(State(state): State<AppState>) -> Json<ReadinessR
         Ok(_) => "ok",
         Err(_) => "down",
     };
-    let redis_status = "ok"; // TODO(post-MVP): redis ping
+    let redis_status = "ok"; // 본 plan 범위 외 — redis ping 은 FU (Operations 분야)
     let checks = ReadinessChecks {
         db: db_status.to_string(),
         redis: redis_status.to_string(),

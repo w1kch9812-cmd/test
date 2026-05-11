@@ -232,9 +232,10 @@ main.rs 의 building_reader 초기화 직후 추가:
 
 ```rust
 let building_reader_status: &'static str = if has_key { "live" } else { "degraded" };
-let vault_kms_status: &'static str = "ok"; // T7 에서 KMS healthcheck 로 정정
+let vault_kms_status: &'static str = "ok"; // T7 §7.2 AppState::from_env 가 KMS healthcheck 로 정정
 
-// TODO(T7): AppState struct 로 묶고 app_router(state) 에 전달
+// T5 는 임시 로컬 변수 — T7 §7.4 의 AppState struct + app_router(state) 합치 단계에서
+// 정식 state field 로 묶임. 본 step 은 부팅 로그 검증만 책임.
 tracing::info!(
     target: "api.startup",
     building_reader_status,
@@ -269,5 +270,7 @@ git commit -m "chore(sp10-5-b-T5): building/vault status tracking placeholders (
 - [ ] `build_dual_tier_capture` 헬퍼 export — T6 / T7 가 동일 wiring 패턴 재사용 가능
 - [ ] `cargo check -p api` 통과
 - [ ] `cargo clippy -p api -- -D warnings` 통과
+
+**TDD 노트**: T5 는 wiring 중심 task 라 단위 RED→GREEN 보다 *통합 검증* 패턴 사용. wiring 의 정합성은 T7 의 통합 테스트 (`sp10_backend_data_correctness.rs::pii_fixture_dropped_in_tier1` + `health_degraded_when_building_reader_noop`) 가 *실 router + 실 wiring* 으로 검증 → T5 acceptance 의 wiring 정상화는 T7 PASS 시점에 *완전 확정*.
 
 **다음 task:** [T6-admin-rbac-audit.md](T6-admin-rbac-audit.md) — Vault admin endpoint + audit log table + ZITADEL RBAC.

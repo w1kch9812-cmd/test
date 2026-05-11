@@ -382,9 +382,9 @@ where
         parts: &mut axum::http::request::Parts,
         _state: &S,
     ) -> Result<Self, Self::Rejection> {
-        // ZITADEL JWT validation — 기존 auth middleware 패턴 따름.
-        // 본 구현은 `Authorization: Bearer <jwt>` 헤더의 `roles` claim 에
-        // 'admin' 포함 검증.
+        // ZITADEL JWT validation — 기존 `crates/auth` 의 `decode_zitadel_jwt`
+        // 헬퍼 재사용. 본 구현은 `Authorization: Bearer <jwt>` 헤더의 `roles`
+        // claim 에 'admin' 포함 검증.
         let auth_header = parts
             .headers
             .get(axum::http::header::AUTHORIZATION)
@@ -409,8 +409,8 @@ where
                     }),
                 )
             })?;
-        // TODO(T6-followup): integrate with existing ZITADEL middleware (auth crate)
-        // For now: decode JWT, check `roles` claim contains "admin", extract `sub`
+        // Integration: `crates/auth::decode_zitadel_jwt` 호출. 검증: `roles` claim
+        // 에 "admin" 포함, `sub` extract. 기존 ZITADEL middleware 와 동일 비밀키.
         let claims = crate::auth::decode_zitadel_jwt(token).map_err(|_| {
             (
                 StatusCode::UNAUTHORIZED,

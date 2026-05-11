@@ -719,11 +719,11 @@ git commit -m "test(sp10-5-b-T1): SanitizingRawCapture drift warn metric verific
 
 ## Step 1.8: Module re-exports + final verification
 
-**Note**: `lib.rs` doc comment 의 `"vworld"` → `"vworld_parcel"` rename 은 **T2 scope** (migration 30010 과 동일 PR). T1 에서는 module export 만 정리.
+**Note**: `lib.rs` doc comment 의 `"vworld"` → `"vworld_parcel"` rename 은 **T2 scope** (migration 30012 과 동일 PR). T1 에서는 module export 만 정리.
 
 - [ ] **Step 1.8.1: Verify `crates/data-clients/raw-capture/src/lib.rs` exports**
 
-기존 doc example (`"vworld"`) 은 *변경하지 않음* — T2 의 30010 마이그레이션 작업과 함께 변경. T1 의 의무는 module re-export 정리만:
+기존 doc example (`"vworld"`) 은 *변경하지 않음* — T2 의 30012 마이그레이션 작업과 함께 변경. T1 의 의무는 module re-export 정리만:
 
 ```rust
 // 상단 module declarations:
@@ -764,4 +764,4 @@ git commit -m "docs(sp10-5-b-T1): re-export sanitizer + capture modules"
 - [ ] 신규 dep: sha2 (runtime), tracing-test (dev)
 - [ ] T2 에서 사용할 인터페이스 모두 export: `RawSanitizer`, `SanitizedRaw`, `AllowlistSanitizer::new`, `compute_schema_hash`, `SanitizingRawCapture::new`
 
-**다음 task:** [T2-allowlists-migration.md](T2-allowlists-migration.md) — allowlist 상수 정의 + V-World source rename + migration 30010.
+**다음 task:** [T2-allowlists-migration.md](T2-allowlists-migration.md) — allowlist 상수 정의 + V-World source rename + migration 30012.
