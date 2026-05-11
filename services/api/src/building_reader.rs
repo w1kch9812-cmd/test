@@ -151,18 +151,47 @@ mod tests {
         assert_eq!(b.main_purpose_code, BuildingPurposeCode::Office); // mainPurpsCd "14000"
         assert_eq!(b.structure_code, BuildingStructureCode::SteelReinforcedConcrete); // strctCd "42"
 
-        // 면적 / 비율 — Building Silver 는 panel 추가 필드 None (rich parser 가 아직 채움 안 함, FU 41+)
-        // 단 totArea 는 필수 → AreaM2 invariant 검증.
+        // 면적 / 비율 — Codex round 8 fix: parser 가 모든 panel 필드 채움
         assert!(b.total_floor_area_m2.as_f64() > 200_000.0); // 212615.29
         assert!(b.total_floor_area_m2 == AreaM2::try_new(212_615.29).unwrap());
+        assert!(b.plat_area_m2.is_some_and(|a| a.as_f64() > 13_000.0)); // platArea 13156.7
+        assert!(b.arch_area_m2.is_some_and(|a| a.as_f64() > 5_000.0)); // archArea 5600.51
+        assert!(b
+            .building_coverage_ratio
+            .is_some_and(|v| (40.0..50.0).contains(&v))); // bcRat 42.5677%
+        assert!(b.floor_area_ratio.is_some_and(|v| v > 900.0)); // vlRat 995.1887%
 
         // 층/높이
         assert_eq!(b.ground_floors, 45);
         assert_eq!(b.underground_floors, 8);
         assert!(b.height_m.is_some_and(|v| v > 200.0));
 
-        // 사용승인일
-        assert!(b.use_approval_date.is_some());
+        // 승강기
+        assert_eq!(b.passenger_elevators, Some(29)); // rideUseElvtCnt
+        assert_eq!(b.emergency_elevators, Some(2)); // emgenUseElvtCnt
+
+        // 주차장 (산업/물류 매물 critical)
+        assert_eq!(b.indoor_self_parking, Some(1300)); // indrAutoUtcnt
+        assert_eq!(b.outdoor_self_parking, Some(12)); // oudrAutoUtcnt
+
+        // 부속건축물
+        assert_eq!(b.annex_building_count, Some(0));
+
+        // 날짜
+        assert_eq!(
+            b.permit_date.map(|d| d.format("%Y-%m-%d").to_string()),
+            Some("1995-05-04".to_owned())
+        );
+        assert_eq!(
+            b.construction_start_date
+                .map(|d| d.format("%Y-%m-%d").to_string()),
+            Some("1995-05-13".to_owned())
+        );
+        assert_eq!(
+            b.use_approval_date
+                .map(|d| d.format("%Y-%m-%d").to_string()),
+            Some("2001-07-31".to_owned())
+        );
 
         // panel-only path 라 geom None
         assert!(b.geom.is_none());

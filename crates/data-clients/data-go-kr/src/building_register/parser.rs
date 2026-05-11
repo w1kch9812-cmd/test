@@ -135,30 +135,31 @@ fn parse_single(
 
     Ok(Building {
         pnu: pnu.clone(),
-        // Building 엔티티 SSOT 확장 (2026-05-08): rich reader 는 panel 추가 필드 None 으로 둠.
-        // 신규 필드 채우기는 SP4 후속 (FU 41+ — Cd primary mapping).
-        // mgmBldrgstPk: 실 응답이 JSON number — string 변환 필요 (panel reader 의 검증된 패턴).
+        // Building 엔티티 SSOT — 23 필드 *모두* 채움 (panel + rich 합치 후, Codex
+        // round 8 catch: "API building response loses parsed panel data" → 단일 parser
+        // 가 모든 필드 수집).
+        // mgmBldrgstPk: 실 응답이 JSON number — string 변환 (Codex round 7 fixture).
         mgm_bldrgst_pk: parse_id_as_string(item, "mgmBldrgstPk"),
         plat_plc: parse_optional_string(item, "platPlc"),
         building_name,
         main_purpose_code,
         structure_code,
-        plat_area_m2: None,
-        arch_area_m2: None,
-        building_coverage_ratio: None,
+        plat_area_m2: parse_optional_area_m2(item, "platArea"),
+        arch_area_m2: parse_optional_area_m2(item, "archArea"),
+        building_coverage_ratio: parse_optional_positive_f64(item, "bcRat"),
         total_floor_area_m2,
-        floor_area_ratio: None,
+        floor_area_ratio: parse_optional_positive_f64(item, "vlRat"),
         ground_floors,
         underground_floors,
         height_m,
-        passenger_elevators: None,
-        emergency_elevators: None,
-        indoor_self_parking: None,
-        outdoor_self_parking: None,
-        annex_building_count: None,
-        annex_building_area_m2: None,
-        permit_date: None,
-        construction_start_date: None,
+        passenger_elevators: parse_optional_u32(item, "rideUseElvtCnt"),
+        emergency_elevators: parse_optional_u32(item, "emgenUseElvtCnt"),
+        indoor_self_parking: parse_optional_u32(item, "indrAutoUtcnt"),
+        outdoor_self_parking: parse_optional_u32(item, "oudrAutoUtcnt"),
+        annex_building_count: parse_optional_u32(item, "atchBldCnt"),
+        annex_building_area_m2: parse_optional_area_m2(item, "atchBldArea"),
+        permit_date: parse_optional_yyyymmdd_date(item, "pmsDay"),
+        construction_start_date: parse_optional_yyyymmdd_date(item, "stcnsDay"),
         use_approval_date,
         geom: Some(polygon.clone()),
         fetched_at,
@@ -182,6 +183,52 @@ fn parse_id_as_string(item: &Value, field: &str) -> String {
         Some(Value::Number(n)) => n.to_string(),
         _ => String::new(),
     }
+}
+
+/// `Option<AreaM2>` — number / string 둘 다 처리, 0 이하 / NaN / 누락 → `None`.
+/// `bcRat = 0` 같은 산업 매물 측면 "측정값 없음" 도 None 으로 정규화.
+fn parse_optional_area_m2(item: &Value, field: &str) -> Option<AreaM2> {
+    let value = read_f64_field(item, field).ok().flatten()?;
+    if value <= 0.0 || !value.is_finite() {
+        return None;
+    }
+    AreaM2::try_new(value).ok()
+}
+
+/// `Option<f64>` — 양수 + 유한 만 통과. 0 / 음수 / NaN / 빈 / 누락 → `None`.
+fn parse_optional_positive_f64(item: &Value, field: &str) -> Option<f64> {
+    let value = read_f64_field(item, field).ok().flatten()?;
+    if value > 0.0 && value.is_finite() {
+        Some(value)
+    } else {
+        None
+    }
+}
+
+/// `Option<u32>` — number / string 둘 다 처리. 0 도 *유의미한 값* 으로 보존
+/// (예: `atchBldCnt = 0` = "부속건축물 없음"). 음수 / 비숫자 / 빈 / 누락 → `None`.
+fn parse_optional_u32(item: &Value, field: &str) -> Option<u32> {
+    match item.get(field)? {
+        Value::Number(n) => n.as_u64().and_then(|v| u32::try_from(v).ok()),
+        Value::String(s) => {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                t.parse::<u32>().ok()
+            }
+        }
+        _ => None,
+    }
+}
+
+/// `YYYYMMDD` 8자리 → `NaiveDate`. 빈 / 길이 mismatch / invalid date → `None`.
+fn parse_optional_yyyymmdd_date(item: &Value, field: &str) -> Option<NaiveDate> {
+    let raw = item.get(field).and_then(Value::as_str)?.trim();
+    if raw.len() != 8 || !raw.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    NaiveDate::parse_from_str(raw, "%Y%m%d").ok()
 }
 
 /// data.go.kr 응답 → 도메인 `BuildingPurposeCode`.
