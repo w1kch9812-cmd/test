@@ -548,6 +548,37 @@ impl R2Uploader {
         })
     }
 
+    /// `DeleteObject` — Round 5 P1 (ADR 0028 + runbook § 6).
+    ///
+    /// `manifest_backup_cleanup` 이 호출. breaker wrap 통과. idempotent —
+    /// 같은 key 가 이미 없어도 `DeleteObject` 는 200 OK (S3 spec).
+    ///
+    /// # Errors
+    ///
+    /// `DeleteObject` API 실패 / circuit open / timeout.
+    #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
+    pub async fn delete_object(&self, key: &str) -> Result<(), UploadError> {
+        breaker_execute(&self.breaker, &self.policy, "r2.delete_object", || async {
+            self.client
+                .delete_object()
+                .bucket(&self.config.bucket)
+                .key(key)
+                .send()
+                .await
+                .map_err(|e| UploadError::PutObject {
+                    key: key.to_owned(),
+                    detail: format!(
+                        "delete_object: {}",
+                        aws_sdk_s3::error::DisplayErrorContext(&e)
+                    ),
+                })?;
+            Ok::<(), UploadError>(())
+        })
+        .await
+        .map_err(|e| breaker_to_upload("r2.delete_object", e))?;
+        Ok(())
+    }
+
     /// `ListObjectsV2` paginated — `prefix` 하위 모든 객체 메타 반환.
     ///
     /// R2 의 `ListObjectsV2` 는 default 1000 객체/page → continuation token 으로 loop.

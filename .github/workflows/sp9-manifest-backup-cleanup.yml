@@ -1,0 +1,74 @@
+name: SP9 Manifest Backup Cleanup
+
+# Round 5 P1 — ADR 0028 + runbook § 6. manifest backup chain 의 최근 12 개만 보존.
+# 매월 1일 04:00 UTC (= 13:00 KST), sp9-base-layer-etl.yml 의 promote job 완료 직후.
+
+on:
+  schedule:
+    # cron 은 UTC. ETL etl.yml 의 cron 은 매월 1일 18:00 UTC. 본 cleanup 은 다음 날
+    # 04:00 UTC (= 13:00 KST) — promote 직후 충분 buffer.
+    - cron: "0 4 2 * *"
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "보존할 backup 개수 (default 12 = 1년치 monthly cron)"
+        required: false
+        default: "12"
+
+concurrency:
+  # 같은 ref 의 두 번째 cleanup 차단.
+  group: sp9-manifest-backup-cleanup-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Cleanup old manifest backups
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { shared-key: sp9-etl }
+
+      - name: Build etl-base-layer (release)
+        run: cargo build -p etl-base-layer --release --frozen
+
+      - name: Run cleanup
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # Sentry 통합 — error / partial cleanup 자동 alert.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          ETL_BUILD_ENV: "production"
+          GIT_SHA: ${{ github.sha }}
+          CORRELATION_ID: ${{ github.run_id }}
+        run: |
+          KEEP="${{ inputs.keep || '12' }}"
+          ./target/release/etl-base-layer cleanup-manifest-backups --keep "${KEEP}"
+
+  notify-failure:
+    name: Notify cleanup failure
+    needs: [cleanup]
+    if: ${{ always() && needs.cleanup.result == 'failure' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Sentry CLI alert
+        env:
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+        run: |
+          if [ -z "${SENTRY_DSN:-}" ]; then
+            echo "::warning::SENTRY_DSN not set — skipping alert"
+            exit 0
+          fi
+          curl -sL https://sentry.io/get-cli/ | bash
+          sentry-cli send-event \
+            --message "SP9 manifest backup cleanup failed (run ${{ github.run_id }})" \
+            --level error \
+            --tag "workflow:sp9-manifest-backup-cleanup" \
+            --tag "sha:${{ github.sha }}"

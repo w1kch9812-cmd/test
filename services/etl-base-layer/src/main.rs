@@ -94,8 +94,14 @@ async fn async_main() -> ExitCode {
         "bronze" | "" => tokio::spawn(run_bronze()),
         "gold" => tokio::spawn(run_gold(args[1..].to_vec())),
         "promote" => tokio::spawn(run_promote_cli(args[1..].to_vec())),
+        "cleanup-manifest-backups" => {
+            tokio::spawn(run_cleanup_backups_cli(args[1..].to_vec()))
+        }
         other => {
-            error!(subcommand = %other, "unknown subcommand — use `bronze` | `gold` | `promote`");
+            error!(
+                subcommand = %other,
+                "unknown subcommand — use `bronze` | `gold` | `promote` | `cleanup-manifest-backups`"
+            );
             return ExitCode::from(2);
         }
     };
@@ -618,6 +624,58 @@ async fn run_promote_cli(args: Vec<String>) -> ExitCode {
         }
         Err(e) => {
             error!(error = %e, "promote failed — prod manifest unchanged (degrade gracefully)");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Round 5 P1 — manifest backup cleanup subcommand (ADR 0028 + runbook § 6).
+///
+/// CLI: `etl-base-layer cleanup-manifest-backups [--keep N]` (default `--keep 12`).
+/// monthly cron 으로 실행 — `gold/manifest.<old_version>.json` chain 의 최근 N 개만 보존.
+async fn run_cleanup_backups_cli(args: Vec<String>) -> ExitCode {
+    let mut keep: usize = 12; // ADR 0028 + runbook § 6 default — 1년치 monthly cron.
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--keep" => {
+                let Some(v) = iter.next() else {
+                    error!("--keep needs a value");
+                    return ExitCode::from(2);
+                };
+                match v.parse::<usize>() {
+                    Ok(n) => keep = n,
+                    Err(e) => {
+                        error!(error = %e, "--keep parse");
+                        return ExitCode::from(2);
+                    }
+                }
+            }
+            other => {
+                error!(arg = %other, "unknown cleanup arg");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let cfg = Config::from_env();
+    let Some(r2_cfg) = cfg.r2 else {
+        error!("R2_* env not set — cleanup requires R2 access");
+        return ExitCode::FAILURE;
+    };
+    let uploader = R2Uploader::new(r2_cfg);
+    info!(keep, "manifest backup cleanup start");
+    match promote::cleanup_manifest_backups(&uploader, keep).await {
+        Ok(result) => {
+            info!(
+                total_found = result.total_found,
+                kept = result.kept,
+                deleted = result.deleted,
+                "cleanup complete"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            error!(error = %e, "cleanup failed");
             ExitCode::FAILURE
         }
     }

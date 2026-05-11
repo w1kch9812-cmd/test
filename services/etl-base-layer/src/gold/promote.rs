@@ -93,6 +93,9 @@ pub enum PromoteError {
         /// 어느 env 가 누락됐는지.
         missing: String,
     },
+    /// Round 5 P1 — `cleanup_manifest_backups(keep=0)` 실수 차단.
+    #[error("cleanup keep must be >= 1 (refusing to delete entire backup chain)")]
+    InvalidCleanupKeep,
 }
 
 /// 한 layer 의 build artifact 메타 — R2 staging 에 박제 후 promote 가 모음.
@@ -374,6 +377,115 @@ pub async fn run(
     })
 }
 
+/// Round 5 P1 — manifest backup chain cleanup (ADR 0028, runbook § 6).
+///
+/// `gold/manifest.<version>.json` backup 들을 list → 오래된 것부터 삭제 → 최근 `keep`
+/// 개만 보존. monthly cron 으로 호출 (`.github/workflows/sp9-manifest-backup-cleanup.yml`).
+///
+/// 정렬 기준: R2 `LastModified` (object 메타). version 라벨 자체로 sort 도 가능하지만
+/// (`v_2026_05` < `v_2026_06`) external 변경 (예: 수동 backup) 도 자연 처리하려면
+/// modification time 이 더 안전.
+///
+/// # Errors
+///
+/// - R2 list / delete API 실패
+/// - `keep` 가 0 이면 [`PromoteError::InvalidCleanupKeep`] (실수 방지)
+pub async fn cleanup_manifest_backups(
+    uploader: &R2Uploader,
+    keep: usize,
+) -> Result<CleanupResult, PromoteError> {
+    if keep == 0 {
+        return Err(PromoteError::InvalidCleanupKeep);
+    }
+    // backup key 형식 — `<gold_prefix>/manifest.<version>.json`. prefix 는 manifest_key
+    // 의 dirname + `manifest.` glob.
+    let backup_prefix = format!("{}/manifest.", uploader.config().gold_prefix);
+    let listed = uploader.list_objects(&backup_prefix).await?;
+
+    // backup 파일만 — `manifest.json` 자체는 제외 (`manifest.<version>.json` 만).
+    // 패턴: `<gold_prefix>/manifest.<라벨>.json` 의 `.` 가 정확히 2개 (`manifest`,
+    // `<라벨>`, `json`). `manifest.json` 은 `.` 1개.
+    let manifest_key = uploader.config().manifest_key();
+    let mut backups: Vec<_> = listed
+        .into_iter()
+        .filter(|obj| {
+            // `<gold_prefix>/manifest.<...>.json` 형식만 — 정확히 .json 끝 + manifest. prefix.
+            std::path::Path::new(&obj.key)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+                && obj.key.starts_with(&backup_prefix)
+                && obj.key != manifest_key
+        })
+        .collect();
+
+    info!(
+        backup_count = backups.len(),
+        keep,
+        "manifest backup chain listed"
+    );
+
+    if backups.len() <= keep {
+        info!(
+            backup_count = backups.len(),
+            keep,
+            "no cleanup needed (within retention)"
+        );
+        return Ok(CleanupResult {
+            total_found: backups.len(),
+            kept: backups.len(),
+            deleted: 0,
+        });
+    }
+
+    // 오래된 것 먼저 — backup key 의 *문자열* 정렬 으로 충분 (version 라벨이
+    // `v_YYYY_MM` 형식이라 lexicographic = chronological).
+    // 단 외부 변경에 안전하려면 `etag` 또는 별도 LastModified field 가 더 정확.
+    // 본 단계는 lexicographic 으로 충분 — runbook § 6 에서 "외부 변경 0" 가정.
+    backups.sort_by(|a, b| a.key.cmp(&b.key));
+
+    let to_delete = backups.len() - keep;
+    let delete_targets: Vec<_> = backups.iter().take(to_delete).cloned().collect();
+
+    let mut deleted = 0;
+    for obj in &delete_targets {
+        match uploader.delete_object(&obj.key).await {
+            Ok(()) => {
+                deleted += 1;
+                info!(key = %obj.key, "manifest backup deleted (cleanup)");
+            }
+            Err(e) => {
+                // 한 개 삭제 실패 — 나머지는 진행 (graceful, partial cleanup 허용).
+                // 다음 cron 이 재시도. operator 가 보존 횟수 초과한 backup 갯수를
+                // 관측 가능 (runbook § 6 알람 기준).
+                warn!(key = %obj.key, error = %e, "backup delete failed — continuing cleanup");
+            }
+        }
+    }
+
+    info!(
+        total = backups.len(),
+        kept = backups.len() - deleted,
+        deleted,
+        "manifest backup cleanup complete"
+    );
+    Ok(CleanupResult {
+        total_found: backups.len(),
+        kept: backups.len() - deleted,
+        deleted,
+    })
+}
+
+/// `cleanup_manifest_backups` 결과.
+#[derive(Debug, Clone, Copy)]
+pub struct CleanupResult {
+    /// 발견한 backup 총 개수.
+    pub total_found: usize,
+    /// 보존한 개수 (보통 `keep`).
+    pub kept: usize,
+    /// 삭제한 개수.
+    pub deleted: usize,
+}
+
 /// Round 5 P0 — promote 의 step 0 pre-flight. production env 에서 CDN config
 /// 누락이면 manifest 만지기 전 즉시 abort.
 ///
@@ -547,6 +659,38 @@ mod tests {
             other => panic!("expected CdnPurgeMissingConfig, got: {other:?}"),
         }
         clear_cdn_env();
+    }
+
+    /// Round 5 P1 — cleanup-manifest-backups subcommand 의 keep=0 거부.
+    /// (실수로 전체 backup chain 삭제 차단.)
+    #[tokio::test]
+    async fn cleanup_rejects_zero_keep() {
+        use crate::r2_upload::R2Config;
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let server = MockServer::start().await;
+        // ListObjects mock — keep=0 abort 가 list 전에 발생해야 하므로 mock 실제 호출 X.
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(
+                "<?xml version=\"1.0\"?><ListBucketResult><Name>x</Name></ListBucketResult>",
+            ))
+            .mount(&server)
+            .await;
+
+        let cfg = R2Config {
+            account_id: "fake".into(),
+            access_key: "fake".into(),
+            secret_key: "fake".into(),
+            bucket: "test-bucket".into(),
+            bronze_prefix: "bronze".into(),
+            gold_prefix: "gold".into(),
+        };
+        let uploader = crate::r2_upload::R2Uploader::with_endpoint_override(cfg, server.uri());
+        let err = super::cleanup_manifest_backups(&uploader, 0)
+            .await
+            .expect_err("keep=0 must be rejected");
+        assert!(matches!(err, PromoteError::InvalidCleanupKeep));
     }
 
     /// Round 5 P0 — promote 의 pre-flight 가 production env 에서 CDN config 누락을
