@@ -1,17 +1,18 @@
-//! `PgRawCapture` — `RawCapture` trait 의 `Postgres` 구현체.
+//! `PgRawCapture` — `RawCapture` trait 의 `Postgres` 구현체. **DEPRECATED**.
 //!
-//! `parcel_external_data` 테이블 (마이그 `V003_05`) 에 UPSERT. 같은
-//! `(pnu, source)` 재호출 시 `raw_response` + `fetched_at` 갱신.
+//! ADR 0026 채택 후 dead code — production wire 는 `services/api/src/r2_raw_capture.rs`
+//! 의 `R2RawCapture` (Bronze = R2). 본 모듈은 *기존 integration test 호환* 유지를
+//! 위해 trait 만 만족시킴 (receipt 반환). 별도 cleanup PR 에서 본 파일 + 테스트 삭제 예정.
 
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use raw_capture_client::{RawCapture, RawCaptureError};
+use raw_capture_client::{RawCapture, RawCaptureError, RawCaptureKind, RawCaptureReceipt};
 use sqlx::PgPool;
 use tracing::instrument;
 
-/// `RawCapture` 의 `Postgres` 구현체.
+/// `RawCapture` 의 `Postgres` 구현체. **DEPRECATED — ADR 0026 superseded by `R2RawCapture`**.
 #[derive(Debug, Clone)]
 pub struct PgRawCapture {
     pool: PgPool,
@@ -34,7 +35,9 @@ impl RawCapture for PgRawCapture {
         source: &str,
         raw: &serde_json::Value,
         fetched_at: DateTime<Utc>,
-    ) -> Result<(), RawCaptureError> {
+    ) -> Result<RawCaptureReceipt, RawCaptureError> {
+        let raw_str = raw.to_string();
+        let byte_size = i64::try_from(raw_str.len()).unwrap_or(i64::MAX);
         sqlx::query(
             r"
             insert into parcel_external_data (pnu, source, raw_response, fetched_at, expires_at)
@@ -51,6 +54,13 @@ impl RawCapture for PgRawCapture {
         .execute(&self.pool)
         .await
         .map_err(|e| RawCaptureError::Sink(e.to_string()))?;
-        Ok(())
+        // DEPRECATED path — receipt 의 object_key 는 "pg::{source}/{pnu}" placeholder.
+        // 실제 활성 wire (R2RawCapture) 의 receipt 와 구분 가능.
+        Ok(RawCaptureReceipt {
+            object_key: format!("pg::{source}/{pnu}"),
+            byte_size,
+            kind: RawCaptureKind::NoOp,
+            stored_at: fetched_at,
+        })
     }
 }

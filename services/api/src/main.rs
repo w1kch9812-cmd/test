@@ -51,6 +51,7 @@ mod observability;
 
 mod building_reader;
 mod r2_raw_capture;
+mod raw_capture_metadata;
 
 mod routes {
     pub mod admin_listings;
@@ -247,6 +248,7 @@ async fn main() {
                 cfg.fallback_dir,
             );
             Arc::new(r2_raw_capture::R2RawCapture::new(cfg))
+                as Arc<dyn raw_capture_client::RawCapture>
         }
         Err(e) => {
             if is_production {
@@ -259,8 +261,16 @@ async fn main() {
                 "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
             );
             Arc::new(raw_capture_client::NoOpRawCapture::new())
+                as Arc<dyn raw_capture_client::RawCapture>
         }
     };
+
+    // Codex round 7 fix (ADR 0026 dead schema 갭 close): inner sink (R2/NoOp) 위에
+    // `TrackedRawCapture` decorator wrap → 적재 후 `parcel_external_data` 메타 UPSERT
+    // (`r2_object_key` + `raw_byte_size`). migration 30010 컬럼이 *처음으로* 채워짐.
+    let raw_capture: Arc<dyn raw_capture_client::RawCapture> = Arc::new(
+        raw_capture_metadata::TrackedRawCapture::new(raw_capture, pool.clone()),
+    );
 
     let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
         Ok(cfg) => {

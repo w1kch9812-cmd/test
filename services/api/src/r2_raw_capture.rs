@@ -41,7 +41,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::Client as S3Client;
 use chrono::{DateTime, Datelike, Utc};
 use circuit_breaker::{execute, Breaker, BreakerError, Policy};
-use raw_capture_client::{RawCapture, RawCaptureError};
+use raw_capture_client::{RawCapture, RawCaptureError, RawCaptureKind, RawCaptureReceipt};
 use thiserror::Error;
 use tracing::{instrument, warn};
 
@@ -253,11 +253,12 @@ impl RawCapture for R2RawCapture {
         source: &str,
         raw: &serde_json::Value,
         fetched_at: DateTime<Utc>,
-    ) -> Result<(), RawCaptureError> {
+    ) -> Result<RawCaptureReceipt, RawCaptureError> {
         let key = self.build_key(pnu, source, fetched_at);
         let body = serde_json::to_vec(raw)
             .map_err(|e| RawCaptureError::Sink(format!("json serialize: {e}")))?;
         let bytes_len = body.len();
+        let byte_size = i64::try_from(bytes_len).unwrap_or(i64::MAX);
 
         match self.put_object(&key, body.clone()).await {
             Ok(()) => {
@@ -267,21 +268,34 @@ impl RawCapture for R2RawCapture {
                     bytes = bytes_len,
                     "Bronze R2 PUT 성공"
                 );
-                Ok(())
+                Ok(RawCaptureReceipt {
+                    object_key: key,
+                    byte_size,
+                    kind: RawCaptureKind::R2,
+                    stored_at: fetched_at,
+                })
             }
             Err(r2_err) => {
                 // R2 최종 실패 → 로컬 fallback 시도 (raw 손실 차단).
                 match self.write_fallback(&key, &body) {
                     Ok(path) => {
+                        let path_str = path.display().to_string();
                         warn!(
                             event = "raw_capture.r2.fallback_disk",
                             key = %key,
-                            fallback_path = %path.display(),
+                            fallback_path = %path_str,
                             bytes = bytes_len,
                             r2_error = %r2_err,
                             "R2 PUT 실패 → 로컬 디스크 fallback 저장 (운영팀 사후 sync 필요)"
                         );
-                        Ok(())
+                        // object_key prefix `fallback::` — 호출자가 R2 vs fallback 구분 가능.
+                        // 추후 sync worker 가 본 prefix 로 pending 작업 식별.
+                        Ok(RawCaptureReceipt {
+                            object_key: format!("fallback::{path_str}"),
+                            byte_size,
+                            kind: RawCaptureKind::Fallback,
+                            stored_at: fetched_at,
+                        })
                     }
                     Err(disk_err) => {
                         // R2 + 디스크 둘 다 죽음 — 진짜 raw 손실.
