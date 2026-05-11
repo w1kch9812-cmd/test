@@ -312,3 +312,65 @@ def test_is_transient_unknown_exception_returns_false() -> None:
     """예상 못 한 exception (programming error) — retry 안 함."""
     assert not dtmk_vworld.is_transient_for_retry(ValueError("unexpected"))
     assert not dtmk_vworld.is_transient_for_retry(KeyError("missing"))
+
+
+# Round 5+ — ADR 0029 namespace 회귀 test.
+
+
+def test_r2_required_production_uses_production_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """production env 시 `R2_PRODUCTION_*` 만 읽음."""
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "production")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_PRODUCTION_ACCOUNT_ID", "prod-account")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-legacy")  # 안 읽혀야 함
+    assert dtmk_vworld.r2_required("ACCOUNT_ID") == "prod-account"
+
+
+def test_r2_required_local_ignores_legacy(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """ADR 0029 핵심 invariant — local 은 legacy `R2_*` 절대 활성 X.
+
+    Rust 측 `local_env_ignores_even_legacy_r2_credentials` 와 *동일* 회귀 시나리오.
+    """
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "local")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "leak-attempt")
+    # `R2_LOCAL_*` 미설정 → fail-fast (legacy fallback 차단).
+    with pytest.raises(SystemExit) as exc_info:
+        dtmk_vworld.r2_required("ACCOUNT_ID")
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "R2_LOCAL_ACCOUNT_ID" in err
+
+
+def test_r2_required_staging_uses_legacy_fallback_with_warning(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """staging / production 만 legacy fallback 허용 (1 sprint, warning)."""
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "staging")
+    monkeypatch.setitem(dtmk_vworld.ENV, "R2_ACCOUNT_ID", "legacy-staging")
+    # `R2_STAGING_ACCOUNT_ID` 미설정 → legacy `R2_ACCOUNT_ID` 사용.
+    assert dtmk_vworld.r2_required("ACCOUNT_ID") == "legacy-staging"
+    warn = capsys.readouterr().err
+    assert "WARN" in warn
+    assert "backward-compat" in warn
+
+
+def test_r2_required_fail_fast_when_environment_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ADR 0029 — `ETL_ENVIRONMENT` 미설정 시 fail-fast (Rust 와 동일)."""
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "")
+    with pytest.raises(SystemExit) as exc_info:
+        dtmk_vworld.r2_required("ACCOUNT_ID")
+    assert exc_info.value.code == 2
+
+
+def test_r2_required_fail_fast_on_invalid_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """알 수 없는 `ETL_ENVIRONMENT` 도 fail-fast."""
+    monkeypatch.setitem(dtmk_vworld.ENV, "ETL_ENVIRONMENT", "qa")
+    with pytest.raises(SystemExit):
+        dtmk_vworld.r2_required("ACCOUNT_ID")

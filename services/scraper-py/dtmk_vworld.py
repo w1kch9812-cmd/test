@@ -73,6 +73,77 @@ def required(name: str) -> str:
     return v
 
 
+# ADR 0029 — Environment 명시 분리 + R2 secret namespace 격리.
+# Rust `crates/sp9-base-layer-config::Environment` 와 *동일 SSOT* (Python port).
+# 단, Python 은 *Phase 1 격리 service* (ADR 0022) — Rust 의 enum 을 직접 import 불가.
+# 변환표는 본 모듈에서 박제 + Rust 측 변경 시 *함께* 갱신 의무 (코드 검토 시).
+_R2_NAMESPACE_PREFIX = {
+    "local": "R2_LOCAL_",
+    "staging": "R2_STAGING_",
+    "production": "R2_PRODUCTION_",
+    "prod": "R2_PRODUCTION_",  # production alias.
+}
+
+
+def _etl_environment() -> str:
+    """`ETL_ENVIRONMENT` 명시 fail-fast (Rust 와 동일 SSOT).
+
+    ADR 0029 — operator 가 의도 박제 안 했으면 즉시 abort.
+    """
+    raw = ENV.get("ETL_ENVIRONMENT", "").strip().lower()
+    if not raw:
+        sys.stderr.write(
+            "ERROR: ETL_ENVIRONMENT env required (ADR 0029) — must be one of: "
+            "local / staging / production. set in .env or workflow yml.\n"
+        )
+        sys.exit(2)
+    if raw not in _R2_NAMESPACE_PREFIX:
+        sys.stderr.write(
+            f"ERROR: ETL_ENVIRONMENT={raw!r} not recognized — "
+            "expected: local, staging, production\n"
+        )
+        sys.exit(2)
+    return raw
+
+
+def r2_required(name_suffix: str) -> str:
+    """ADR 0029 namespace 준수 R2 env loader.
+
+    `name_suffix` 는 `ACCOUNT_ID` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET` 등.
+    `ETL_ENVIRONMENT=production` 시 `R2_PRODUCTION_<suffix>` 읽음. backward-compat (1
+    sprint) — namespace 변수 미설정 시 *non-local* env 에서만 legacy `R2_<suffix>`
+    fallback + warning. local 은 fallback 0 (사고 재발 차단, Rust 와 동일).
+    """
+    env = _etl_environment()
+    prefix = _R2_NAMESPACE_PREFIX[env]
+    namespaced = ENV.get(f"{prefix}{name_suffix}", "").strip()
+    if namespaced:
+        return namespaced
+
+    # local 은 legacy fallback *절대* 활성 X (Rust 와 동일 정책, ADR 0029).
+    if env == "local":
+        sys.stderr.write(
+            f"ERROR: {prefix}{name_suffix} unset (ADR 0029). local 은 legacy R2_* fallback 0 — "
+            f"실수 사용 방지. R2_LOCAL_{name_suffix} 명시 set 필요.\n"
+        )
+        sys.exit(2)
+
+    # staging / production 만 backward-compat — warning + 활성 (ADR 0030 에서 제거).
+    legacy = ENV.get(f"R2_{name_suffix}", "").strip()
+    if legacy:
+        sys.stderr.write(
+            f"WARN: R2_{name_suffix} (legacy, namespace 없음) detected in {env} env — "
+            f"ADR 0029 backward-compat path. migrate to {prefix}{name_suffix} before ADR 0030.\n"
+        )
+        return legacy
+
+    sys.stderr.write(
+        f"ERROR: {prefix}{name_suffix} 미설정 (ADR 0029 namespace). "
+        f"legacy R2_{name_suffix} 도 없음.\n"
+    )
+    sys.exit(2)
+
+
 # ===== V-World 사이트 client =====
 LOGIN_URL = "https://www.vworld.kr/v4po_usrlogin_a004.do"
 DTMK_URL = "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}&datPageSize=1000"
@@ -368,9 +439,9 @@ def make_r2() -> Any:
     )
     return boto3.client(
         "s3",
-        endpoint_url=f"https://{required('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com",
-        aws_access_key_id=required("R2_ACCESS_KEY"),
-        aws_secret_access_key=required("R2_SECRET_KEY"),
+        endpoint_url=f"https://{r2_required('ACCOUNT_ID')}.r2.cloudflarestorage.com",
+        aws_access_key_id=r2_required("ACCESS_KEY"),
+        aws_secret_access_key=r2_required("SECRET_KEY"),
         region_name="auto",
         config=cfg,
     )
@@ -412,8 +483,14 @@ def main() -> int:
             "key dtmk_ds_id 출력을 정확히 inject하는지 확인.\n"
         )
         return 2
-    bucket = required("R2_BUCKET")
-    bronze_prefix = ENV.get("R2_BRONZE_PREFIX", "bronze").rstrip("/")
+    bucket = r2_required("BUCKET")
+    # bronze_prefix 는 namespace 안 적용 — env 의 *bucket key prefix* 라 R2 자격과 무관.
+    # `R2_<env>_BRONZE_PREFIX` 또는 legacy `R2_BRONZE_PREFIX` 둘 다 허용 (default `bronze`).
+    env_lower = _etl_environment()
+    bronze_prefix = ENV.get(
+        f"{_R2_NAMESPACE_PREFIX[env_lower]}BRONZE_PREFIX",
+        ENV.get("R2_BRONZE_PREFIX", "bronze"),
+    ).rstrip("/")
     # batch label = YYYY-MM (월 1 archive). 매일 incremental 시는 같은 batch 안에서 file 변경.
     batch = time.strftime("%Y-%m")
     parallel = int(ENV.get("DTMK_PARALLEL", "3"))  # V-World 서버 부담 고려 default 3.
