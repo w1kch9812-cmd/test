@@ -15,6 +15,8 @@ listing-photo-domain = { path = "../../crates/domain/core/listing-photo", versio
 bookmark-domain = { path = "../../crates/domain/insights/bookmark", version = "0.1.0" }
 notification-domain = { path = "../../crates/domain/insights/notification", version = "0.1.0" }
 parcel-domain = { path = "../../crates/domain/core/parcel", version = "0.1.0" }
+building-domain = { path = "../../crates/domain/core/building", version = "0.1.0" }
+geo-types = { workspace = true }
 parcel-lookup = { path = "../../crates/parcel-lookup", version = "0.1.0" }
 vworld-client = { path = "../../crates/data-clients/vworld", version = "0.1.0" }
 raw-capture-client = { path = "../../crates/data-clients/raw-capture", version = "0.1.0" }

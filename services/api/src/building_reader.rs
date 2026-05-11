@@ -1,32 +1,38 @@
 //! `DataGoKrBuildingRegisterReader` — `routes::buildings::BuildingRegisterReader` 의
 //! data.go.kr 라이브 구현체.
 //!
-//! `getBrTitleInfo` JSON 응답 → `Vec<BuildingItem>` (api 로컬 좁은 shape).
+//! `getBrTitleInfo` JSON 응답을 `data_go_kr_client::building_register::parser` 에
+//! delegate → `building_domain::Building` Silver entity. panel-only 호출이라 V-World
+//! 폴리곤 합성 안 함 → `geom = None`.
 //!
-//! `crates/data-clients/data-go-kr` 의 `DataGoKrBuildingReader` 와 다름 — 그쪽은
-//! `building_domain::reader::BuildingReader` (rich `Building` entity + V-World 폴리곤
-//! 합성) 을 구현하지만, 본 reader 는 *panel 응답용 좁은 subset* 만 채움. 라이브 시
-//! `building_domain` 풀체인 (FU 40 `R2` `PMTiles`) 은 별도 도입.
+//! # SSOT (2026-05-08 unification)
+//!
+//! 이전 panel-only `BuildingItem` (21 필드) 폐기. 이제 `Building` 엔티티 단일 source.
+//! enum mapping (purpose/structure Cd primary + label fallback) 도 data-go-kr 의
+//! `parse_building_title` SSOT 재사용 — 본 파일은 *delegate + geom 비활성화* 만.
 
 use std::sync::Arc;
 
+use building_domain::entity::Building;
 use chrono::Utc;
-use data_go_kr_client::{building_register::BuildingRegisterClient, pnu_split, DataGoKrClient};
+use data_go_kr_client::building_register::{parser::parse_building_title, BuildingRegisterClient};
+use data_go_kr_client::{pnu_split, DataGoKrClient};
+use geo_types::{Coord, LineString, Polygon as GeoPolygon};
 use raw_capture_client::RawCapture;
-use serde_json::Value;
+use shared_kernel::geometry::PolygonSrid;
 use shared_kernel::pnu::Pnu;
 use tracing::warn;
 
-use crate::routes::buildings::{BuildingItem, BuildingRegisterError, BuildingRegisterReader};
+use crate::routes::buildings::{BuildingRegisterError, BuildingRegisterReader};
 
-/// `parcel_external_data.source` CHECK 의 라벨. `migrations/30006_parcel_external_data.sql:13-19`
-/// 의 enum-like 제약 (`data_go_kr_building`) 과 정확히 일치.
+/// `parcel_external_data.source` CHECK 라벨.
 const RAW_CAPTURE_SOURCE: &str = "data_go_kr_building";
 
 /// `BuildingRegisterReader` 의 data.go.kr 라이브 구현체.
 ///
-/// `getBrTitleInfo` raw JSON 을 `RawCapture` 로 best-effort 보존 — `parcel_external_data`
-/// (pnu, `data_go_kr_building`) UPSERT. 보존 실패는 warn 로그 + 응답 정상 진행 (SSOT 보호).
+/// `getBrTitleInfo` raw JSON 을 `RawCapture` (R2 Bronze) 에 best-effort 보존 → 모든 시점
+/// 영구 archive. 보존 실패는 warn 로그 + 응답 정상 진행 (raw 손실은 R2 + 디스크 둘 다
+/// 죽어야 발생, ADR 0026).
 pub struct DataGoKrBuildingRegisterReader {
     client: Arc<DataGoKrClient>,
     raw_capture: Arc<dyn RawCapture>,
@@ -49,7 +55,7 @@ impl BuildingRegisterReader for DataGoKrBuildingRegisterReader {
         pnu: &'a Pnu,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<Output = Result<Vec<BuildingItem>, BuildingRegisterError>>
+            dyn std::future::Future<Output = Result<Vec<Building>, BuildingRegisterError>>
                 + Send
                 + 'a,
         >,
@@ -62,11 +68,11 @@ impl BuildingRegisterReader for DataGoKrBuildingRegisterReader {
                 .await
                 .map_err(|e| Box::new(e) as BuildingRegisterError)?;
 
-            // raw_capture best-effort — 보존 실패는 warn 후 정상 진행 (응답 자체는 OK).
-            // AGENTS.md § 3 "raw 응답 보존" + audit 2026-05-08 round 2 (P2 ship-safety fix).
+            // raw_capture best-effort — R2 Bronze 영구 archive (ADR 0026). 실패는 warn 만.
+            let now = Utc::now();
             if let Err(capture_err) = self
                 .raw_capture
-                .capture(pnu.as_str(), RAW_CAPTURE_SOURCE, &raw, Utc::now())
+                .capture(pnu.as_str(), RAW_CAPTURE_SOURCE, &raw, now)
                 .await
             {
                 warn!(
@@ -77,195 +83,31 @@ impl BuildingRegisterReader for DataGoKrBuildingRegisterReader {
                 );
             }
 
-            parse_items(&raw)
+            // SSOT delegate: data-go-kr 의 parser 가 enum mapping (Cd primary + label
+            // fallback) + 모든 수치 필드 처리. dummy polygon 은 parse 시그니처 만족용,
+            // 결과에서 geom = None 으로 mutate (panel reader 는 V-World 폴리곤 합성 X).
+            let mut buildings = parse_building_title(&raw, pnu, &dummy_polygon(), now)
+                .map_err(|e| Box::new(e) as BuildingRegisterError)?;
+            for b in &mut buildings {
+                b.geom = None;
+            }
+            Ok(buildings)
         })
     }
 }
 
-fn parse_items(raw: &Value) -> Result<Vec<BuildingItem>, BuildingRegisterError> {
-    // header.resultCode 검증 — "00" 외 모두 ApiError.
-    let result_code = raw
-        .pointer("/response/header/resultCode")
-        .and_then(Value::as_str)
-        .ok_or("missing /response/header/resultCode")?;
-    if result_code != "00" {
-        let msg = raw
-            .pointer("/response/header/resultMsg")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        return Err(format!("data.go.kr resultCode={result_code} resultMsg={msg}").into());
-    }
-
-    // body.items: data.go.kr 가 결과 0 일 때 빈 문자열 / null / 누락 다양 — 모두 빈 vec.
-    let items_node = raw.pointer("/response/body/items");
-    let item_node = match items_node {
-        Some(Value::String(s)) if s.is_empty() => return Ok(vec![]),
-        None | Some(Value::Null) => return Ok(vec![]),
-        Some(items) => items.get("item"),
-    };
-
-    // body.items.item: 단일 객체 / 배열 / 빈 / 누락 다형 처리.
-    let raw_items: Vec<&Value> = match item_node {
-        Some(Value::Array(arr)) => arr.iter().collect(),
-        Some(obj @ Value::Object(_)) => vec![obj],
-        Some(Value::Null) | None => return Ok(vec![]),
-        Some(other) => {
-            return Err(format!("body.items.item unexpected type: {other:?}").into());
-        }
-    };
-
-    raw_items.iter().copied().map(parse_single_item).collect()
-}
-
-fn parse_single_item(item: &Value) -> Result<BuildingItem, BuildingRegisterError> {
-    // mgmBldrgstPk: 실 응답은 JSON number (예: 1024112777), docs 의 "String 으로 받아라"
-    // 가이드와 다름. fixture (`tests/fixtures/live_*.json`) 검증. number / string 모두 처리.
-    let mgm_bldrgst_pk = parse_id_as_string(item, "mgmBldrgstPk")?;
-    let bldg_nm = item
-        .get("bldNm")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .unwrap_or_default();
-    let main_purps_cd_nm = item
-        .get("mainPurpsCdNm")
-        .and_then(Value::as_str)
-        .ok_or("item.mainPurpsCdNm missing")?
-        .to_owned();
-    // totArea: 실 응답은 JSON number (예: 212615.29), 일부 endpoint 는 string 으로 wrap.
-    // 둘 다 처리 — 라이브 fixture (`live_2026-05-08_*.json`) 검증.
-    let tot_area = parse_f64_field(item, "totArea")?;
-
-    Ok(BuildingItem {
-        // 식별자 / 위치
-        mgm_bldrgst_pk,
-        bldg_nm,
-        plat_plc: parse_optional_string(item, "platPlc"),
-
-        // 용도 / 구조
-        main_purps_cd_nm,
-        strct_cd_nm: parse_optional_string(item, "strctCdNm"),
-
-        // 면적 / 비율
-        plat_area: parse_optional_f64(item, "platArea"),
-        arch_area: parse_optional_f64(item, "archArea"),
-        bc_rat: parse_optional_f64(item, "bcRat"),
-        tot_area,
-        vl_rat: parse_optional_f64(item, "vlRat"),
-
-        // 층수 / 높이
-        grnd_flr_cnt: parse_optional_u32(item, "grndFlrCnt"),
-        ugrnd_flr_cnt: parse_optional_u32(item, "ugrndFlrCnt"),
-        heit: parse_optional_f64(item, "heit"),
-
-        // 승강기
-        ride_use_elvt_cnt: parse_optional_u32(item, "rideUseElvtCnt"),
-        emgen_use_elvt_cnt: parse_optional_u32(item, "emgenUseElvtCnt"),
-
-        // 주차장
-        indr_auto_utcnt: parse_optional_u32(item, "indrAutoUtcnt"),
-        oudr_auto_utcnt: parse_optional_u32(item, "oudrAutoUtcnt"),
-
-        // 부속건축물
-        atch_bld_cnt: parse_optional_u32(item, "atchBldCnt"),
-        atch_bld_area: parse_optional_f64(item, "atchBldArea"),
-
-        // 날짜 (YYYYMMDD)
-        pms_day: parse_optional_yyyymmdd(item, "pmsDay"),
-        stcns_day: parse_optional_yyyymmdd(item, "stcnsDay"),
-        use_apr_day: parse_optional_yyyymmdd(item, "useAprDay"),
-    })
-}
-
-/// 정부 API 가 ID 필드를 number 또는 string 둘 다 보내는 케이스 처리.
-///
-/// data.go.kr 의 `mgmBldrgstPk` 가 실 응답에서 JSON number (예: `1024112777`) 로 오는데
-/// docs 가이드는 "String 으로 저장" 이라 두 형식 모두 수용. boolean / null / array 는 거부.
-fn parse_id_as_string(item: &Value, field: &str) -> Result<String, BuildingRegisterError> {
-    match item.get(field) {
-        Some(Value::String(s)) => Ok(s.trim().to_owned()),
-        Some(Value::Number(n)) => Ok(n.to_string()),
-        Some(other) => Err(format!("item.{field} unexpected type: {other:?}").into()),
-        None => Err(format!("item.{field} missing").into()),
-    }
-}
-
-/// 정부 API 가 숫자 필드를 number 또는 string 둘 다 보내는 케이스 처리.
-///
-/// data.go.kr 의 `totArea`/`platArea`/`bcRat`/`vlRat`/`heit` 등 모든 수치 필드는
-/// 응답마다 number / string 변동. 빈 문자열 → "missing".
-fn parse_f64_field(item: &Value, field: &str) -> Result<f64, BuildingRegisterError> {
-    match item.get(field) {
-        Some(Value::Number(n)) => n
-            .as_f64()
-            .ok_or_else(|| format!("item.{field} not f64-representable").into()),
-        Some(Value::String(s)) => {
-            let t = s.trim();
-            if t.is_empty() {
-                return Err(format!("item.{field} missing (empty string)").into());
-            }
-            t.parse::<f64>()
-                .map_err(|e| format!("item.{field} parse: {e}").into())
-        }
-        Some(other) => Err(format!("item.{field} unexpected type: {other:?}").into()),
-        None => Err(format!("item.{field} missing").into()),
-    }
-}
-
-/// data.go.kr 의 string 필드 — 빈 / 공백 / null / 누락 모두 `None`.
-///
-/// 정부 API 가 빈 string 을 `" "` (단일 공백) 으로 보내는 패턴 처리.
-fn parse_optional_string(item: &Value, field: &str) -> Option<String> {
-    item.get(field)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_owned)
-}
-
-/// 옵션 f64 — number / string 둘 다 처리, 빈 / 0 / 누락 → `None`.
-///
-/// 0 은 의도적 fallthrough — `bcRat = 0` 같은 정상값이 있을 수 있으나, 산업 매물
-/// 표시 측면에서 0 은 "측정값 없음" 으로 간주 (UI 가 "—" 로 노출).
-fn parse_optional_f64(item: &Value, field: &str) -> Option<f64> {
-    match item.get(field)? {
-        Value::Number(n) => n.as_f64().filter(|v| *v > 0.0),
-        Value::String(s) => {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                t.parse::<f64>().ok().filter(|v| *v > 0.0)
-            }
-        }
-        _ => None,
-    }
-}
-
-/// 옵션 u32 — number / string 둘 다 처리, 음수 / 빈 / 누락 → `None`.
-///
-/// 0 은 *유의미한 값* 으로 보존 (예: `ugrndFlrCnt = 0` = "지하층 없음").
-fn parse_optional_u32(item: &Value, field: &str) -> Option<u32> {
-    match item.get(field)? {
-        Value::Number(n) => n.as_u64().and_then(|v| u32::try_from(v).ok()),
-        Value::String(s) => {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                t.parse::<u32>().ok()
-            }
-        }
-        _ => None,
-    }
-}
-
-/// `YYYYMMDD` 8자리 string 만 `Some`. 그 외 (`" "` / 길이 mismatch / 누락) → `None`.
-fn parse_optional_yyyymmdd(item: &Value, field: &str) -> Option<String> {
-    item.get(field)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| s.len() == 8 && s.chars().all(|c| c.is_ascii_digit()))
-        .map(str::to_owned)
+/// parse 시그니처 만족용 dummy polygon — 결과에서 geom = None 으로 mutate 되므로
+/// 실제 사용 안 됨. unwrap 안전 (constant WGS84 polygon).
+fn dummy_polygon() -> PolygonSrid {
+    let exterior = LineString(vec![
+        Coord { x: 126.0, y: 37.0 },
+        Coord { x: 127.0, y: 37.0 },
+        Coord { x: 127.0, y: 38.0 },
+        Coord { x: 126.0, y: 38.0 },
+        Coord { x: 126.0, y: 37.0 },
+    ]);
+    PolygonSrid::try_new_wgs84(GeoPolygon::new(exterior, vec![]))
+        .unwrap_or_else(|_| unreachable!("constant polygon always valid WGS84"))
 }
 
 #[cfg(test)]
@@ -273,91 +115,15 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
     use super::*;
+    use building_domain::purpose_code::BuildingPurposeCode;
+    use building_domain::structure_code::BuildingStructureCode;
+    use serde_json::Value;
+    use shared_kernel::area::AreaM2;
 
-    fn ok_response(item: &Value) -> Value {
-        serde_json::json!({
-            "response": {
-                "header": { "resultCode": "00", "resultMsg": "NORMAL SERVICE." },
-                "body": { "items": { "item": item.clone() } }
-            }
-        })
-    }
-
+    /// data-go-kr parser 가 Building Silver 로 매핑되는지 (delegate path 검증) — 실 fixture.
     #[test]
-    fn parse_items_handles_single_object() {
-        let raw = ok_response(&serde_json::json!({
-            "mgmBldrgstPk": "12345678901234567",
-            "bldNm": "공장1동",
-            "mainPurpsCdNm": "공장",
-            "totArea": "1500.50",
-            "useAprDay": "20100315"
-        }));
-        let items = parse_items(&raw).expect("parse ok");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].mgm_bldrgst_pk, "12345678901234567");
-        assert_eq!(items[0].bldg_nm, "공장1동");
-        assert_eq!(items[0].main_purps_cd_nm, "공장");
-        assert!((items[0].tot_area - 1500.50).abs() < f64::EPSILON);
-        assert_eq!(items[0].use_apr_day.as_deref(), Some("20100315"));
-    }
-
-    #[test]
-    fn parse_items_handles_array() {
-        let raw = ok_response(&serde_json::json!([
-            {
-                "mgmBldrgstPk": "A",
-                "bldNm": "공장1동",
-                "mainPurpsCdNm": "공장",
-                "totArea": "100.0",
-                "useAprDay": "20100315"
-            },
-            {
-                "mgmBldrgstPk": "B",
-                "bldNm": "창고2동",
-                "mainPurpsCdNm": "창고",
-                "totArea": "200.0",
-                "useAprDay": ""
-            }
-        ]));
-        let items = parse_items(&raw).expect("parse ok");
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[1].use_apr_day, None); // 빈 문자열 → None
-    }
-
-    #[test]
-    fn parse_items_empty_string_returns_empty() {
-        let raw = serde_json::json!({
-            "response": {
-                "header": { "resultCode": "00", "resultMsg": "NORMAL SERVICE." },
-                "body": { "items": "" }
-            }
-        });
-        let items = parse_items(&raw).expect("parse ok");
-        assert!(items.is_empty());
-    }
-
-    #[test]
-    fn parse_items_handles_number_mgm_bldrgst_pk() {
-        // 실 API 응답 검증 (2026-05-08 강남구 역삼동 737 호출 결과).
-        // mgmBldrgstPk 가 JSON number 로 옴 — `Value::as_str` 만 쓰면 None 으로 떨어져 502 발생.
-        let raw = ok_response(&serde_json::json!({
-            "mgmBldrgstPk": 1_024_112_777_i64,
-            "bldNm": "강남파이낸스센터",
-            "mainPurpsCdNm": "업무시설",
-            "totArea": 212_615.29,
-            "useAprDay": "20010731"
-        }));
-        let items = parse_items(&raw).expect("parse ok");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].mgm_bldrgst_pk, "1024112777");
-        assert!((items[0].tot_area - 212_615.29).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    #[allow(clippy::cognitive_complexity)] // 21 필드 필드 별 검증 — 분해 시 fixture I/O 중복.
-    fn parse_items_handles_live_fixture() {
-        // 2026-05-08 라이브 호출 fixture — 정부 API 가 *지금* 실제로 보내는 응답.
-        // schema drift 발생 시 본 테스트가 가장 먼저 깨짐.
+    #[allow(clippy::cognitive_complexity)] // fixture 의 다수 필드 검증 — 분해 시 fixture I/O 중복.
+    fn parses_live_fixture_to_building_silver() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
@@ -365,59 +131,40 @@ mod tests {
         let raw_str = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read fixture {}: {}", path.display(), e));
         let raw: Value = serde_json::from_str(&raw_str).expect("valid JSON");
-        let items = parse_items(&raw).expect("parse live fixture");
-        assert_eq!(items.len(), 1);
-        let b = &items[0];
+        let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
 
-        // === 식별자 / 위치 ===
-        assert_eq!(b.mgm_bldrgst_pk, "1024112777"); // number → String
-        assert!(!b.bldg_nm.is_empty()); // 강남파이낸스센터 (한글)
-        assert!(b.plat_plc.is_some()); // platPlc 풀주소
+        let mut buildings = parse_building_title(&raw, &pnu, &dummy_polygon(), Utc::now())
+            .expect("parse ok");
+        for b in &mut buildings {
+            b.geom = None;
+        }
 
-        // === 면적 / 비율 (산업 매물 핵심) ===
-        assert!(b.tot_area > 200_000.0); // 212615.29 m² (대형)
-        assert!(b.plat_area.is_some_and(|v| v > 13_000.0)); // 13156.7 m²
-        assert!(b.arch_area.is_some_and(|v| v > 5_000.0)); // 5600.51 m²
-        assert!(b.bc_rat.is_some_and(|v| v > 40.0 && v < 50.0)); // 42.5677 %
-        assert!(b.vl_rat.is_some_and(|v| v > 900.0)); // 995.1887 %
+        assert_eq!(buildings.len(), 1);
+        let b = &buildings[0];
 
-        // === 층수 / 높이 ===
-        assert_eq!(b.grnd_flr_cnt, Some(45)); // 지상 45층
-        assert_eq!(b.ugrnd_flr_cnt, Some(8)); // 지하 8층
-        assert!(b.heit.is_some_and(|v| v > 200.0)); // 202.65 m
+        // 식별자
+        assert_eq!(b.mgm_bldrgst_pk, "1024112777");
+        assert_eq!(b.building_name.as_deref(), Some("강남파이낸스센터"));
+        assert!(b.plat_plc.is_some());
 
-        // === 승강기 ===
-        assert_eq!(b.ride_use_elvt_cnt, Some(29)); // 승용 29
-        assert_eq!(b.emgen_use_elvt_cnt, Some(2)); // 비상 2
+        // enum mapping (Cd primary + label fallback)
+        assert_eq!(b.main_purpose_code, BuildingPurposeCode::Office); // mainPurpsCd "14000"
+        assert_eq!(b.structure_code, BuildingStructureCode::SteelReinforcedConcrete); // strctCd "42"
 
-        // === 주차장 ===
-        assert_eq!(b.indr_auto_utcnt, Some(1300)); // 옥내 1300대
-        assert_eq!(b.oudr_auto_utcnt, Some(12)); // 옥외 12대
+        // 면적 / 비율 — Building Silver 는 panel 추가 필드 None (rich parser 가 아직 채움 안 함, FU 41+)
+        // 단 totArea 는 필수 → AreaM2 invariant 검증.
+        assert!(b.total_floor_area_m2.as_f64() > 200_000.0); // 212615.29
+        assert!(b.total_floor_area_m2 == AreaM2::try_new(212_615.29).unwrap());
 
-        // === 날짜 ===
-        assert_eq!(b.pms_day.as_deref(), Some("19950504")); // 허가
-        assert_eq!(b.stcns_day.as_deref(), Some("19950513")); // 착공
-        assert_eq!(b.use_apr_day.as_deref(), Some("20010731")); // 사용승인
-    }
+        // 층/높이
+        assert_eq!(b.ground_floors, 45);
+        assert_eq!(b.underground_floors, 8);
+        assert!(b.height_m.is_some_and(|v| v > 200.0));
 
-    #[test]
-    fn parse_id_as_string_rejects_invalid_types() {
-        let item = serde_json::json!({"a": true, "b": null, "c": []});
-        assert!(parse_id_as_string(&item, "a").is_err());
-        assert!(parse_id_as_string(&item, "b").is_err());
-        assert!(parse_id_as_string(&item, "c").is_err());
-        assert!(parse_id_as_string(&item, "missing").is_err());
-    }
+        // 사용승인일
+        assert!(b.use_approval_date.is_some());
 
-    #[test]
-    fn parse_items_api_error_returns_err() {
-        let raw = serde_json::json!({
-            "response": {
-                "header": { "resultCode": "30", "resultMsg": "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" }
-            }
-        });
-        let err = parse_items(&raw).expect_err("api error");
-        let msg = err.to_string();
-        assert!(msg.contains("resultCode=30"));
+        // panel-only path 라 geom None
+        assert!(b.geom.is_none());
     }
 }

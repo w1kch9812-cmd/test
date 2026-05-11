@@ -76,7 +76,7 @@ impl routes::buildings::BuildingRegisterReader for NoOpBuildingRegisterReader {
         Box<
             dyn std::future::Future<
                     Output = Result<
-                        Vec<routes::buildings::BuildingItem>,
+                        Vec<building_domain::entity::Building>,
                         routes::buildings::BuildingRegisterError,
                     >,
                 > + Send

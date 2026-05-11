@@ -135,15 +135,32 @@ fn parse_single(
 
     Ok(Building {
         pnu: pnu.clone(),
+        // Building 엔티티 SSOT 확장 (2026-05-08): rich reader 는 panel 추가 필드 None 으로 둠.
+        // 신규 필드 채우기는 SP4 후속 (FU 41+ — Cd primary mapping).
+        // mgmBldrgstPk: 실 응답이 JSON number — string 변환 필요 (panel reader 의 검증된 패턴).
+        mgm_bldrgst_pk: parse_id_as_string(item, "mgmBldrgstPk"),
+        plat_plc: parse_optional_string(item, "platPlc"),
         building_name,
         main_purpose_code,
         structure_code,
+        plat_area_m2: None,
+        arch_area_m2: None,
+        building_coverage_ratio: None,
         total_floor_area_m2,
+        floor_area_ratio: None,
         ground_floors,
         underground_floors,
         height_m,
+        passenger_elevators: None,
+        emergency_elevators: None,
+        indoor_self_parking: None,
+        outdoor_self_parking: None,
+        annex_building_count: None,
+        annex_building_area_m2: None,
+        permit_date: None,
+        construction_start_date: None,
         use_approval_date,
-        geom: polygon.clone(),
+        geom: Some(polygon.clone()),
         fetched_at,
     })
 }
@@ -154,6 +171,17 @@ fn parse_optional_string(item: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(ToOwned::to_owned)
+}
+
+/// ID 필드 (mgmBldrgstPk 등) — JSON number 또는 string 모두 String 으로 변환.
+/// 실 응답이 number 형식 (예: `1024112777`) → docs 가이드와 다름. 둘 다 처리.
+/// 빈/null/누락 → 빈 문자열 (caller 가 unwrap_or_default 패턴 가정).
+fn parse_id_as_string(item: &Value, field: &str) -> String {
+    match item.get(field) {
+        Some(Value::String(s)) => s.trim().to_owned(),
+        Some(Value::Number(n)) => n.to_string(),
+        _ => String::new(),
+    }
 }
 
 /// data.go.kr 응답 → 도메인 `BuildingPurposeCode`.
