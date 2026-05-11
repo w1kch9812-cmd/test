@@ -33,7 +33,7 @@ walkdir = "2"
 # tokio::task::spawn_blocking 으로 thread-pool 에 offload (OOM 안전).
 # `default-features = false` + `deflate` only — 우리 V-World zip 의 압축 방식이
 # DEFLATE 라 그것만 활성. bzip2/lzma/zstd/aes 등 외부 deps 회피.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # dev convenience — `.env` 자동 로드 (production 은 ECS task environment 가 직접 inject).
 dotenvy = "0.15"
 tracing = { workspace = true }
