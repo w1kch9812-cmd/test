@@ -34,17 +34,20 @@ best practice 의 *Pin to immutable identifier*).
 정책을 *실제 강제* 하는 cron. 이전엔 runbook 박제만 + 실코드 0.
 
 ```yaml
-# .github/workflows/sp9-manifest-backup-cleanup.yml (별도 sprint)
+# .github/workflows/sp9-manifest-backup-cleanup.yml (실 구현됨 — efa1af4)
 on:
   schedule:
-    - cron: "0 4 1 * *"  # 매월 1일 04:00 UTC (= 13:00 KST), ETL cron 직후
+    # ETL etl.yml 이 매월 1일 18:00 UTC. cleanup 은 다음 날 04:00 UTC (= 13:00 KST) —
+    # promote 직후 충분 buffer.
+    - cron: "0 4 2 * *"
 jobs:
   cleanup:
     steps:
       - run: ./target/release/etl-base-layer cleanup-manifest-backups --keep 12
 ```
 
-본 ADR 은 정책 박제 — 구현 (별도 subcommand `cleanup-manifest-backups`) 은 후속 sprint.
+본 ADR 은 정책 박제. 실 구현 — commit `efa1af4` 의 `cleanup_manifest_backups` Rust
+함수 + `.github/workflows/sp9-manifest-backup-cleanup.yml`.
 
 ## 컨텍스트 — Codex Round 5 audit
 

@@ -96,6 +96,18 @@ pub enum PromoteError {
     /// Round 5 P1 — `cleanup_manifest_backups(keep=0)` 실수 차단.
     #[error("cleanup keep must be >= 1 (refusing to delete entire backup chain)")]
     InvalidCleanupKeep,
+    /// Round 5 (final) — cleanup 중 일부 backup delete 실패. 이전엔 warn 후 `Ok(())` →
+    /// silent partial. 새 path: 진행은 계속 (다른 backup 도 시도) 후 typed Err 박제.
+    /// workflow 가 본 에러로 exit 1 + Sentry alert.
+    #[error("partial cleanup: {deleted}/{attempted} succeeded, {} failed: {failures:?}", failures.len())]
+    PartialCleanup {
+        /// 삭제 시도한 총 개수.
+        attempted: usize,
+        /// 성공 개수.
+        deleted: usize,
+        /// 실패한 (key, error 메시지) 쌍.
+        failures: Vec<(String, String)>,
+    },
 }
 
 /// 한 layer 의 build artifact 메타 — R2 staging 에 박제 후 promote 가 모음.
@@ -447,6 +459,7 @@ pub async fn cleanup_manifest_backups(
     let delete_targets: Vec<_> = backups.iter().take(to_delete).cloned().collect();
 
     let mut deleted = 0;
+    let mut failures: Vec<(String, String)> = Vec::new();
     for obj in &delete_targets {
         match uploader.delete_object(&obj.key).await {
             Ok(()) => {
@@ -454,10 +467,11 @@ pub async fn cleanup_manifest_backups(
                 info!(key = %obj.key, "manifest backup deleted (cleanup)");
             }
             Err(e) => {
-                // 한 개 삭제 실패 — 나머지는 진행 (graceful, partial cleanup 허용).
-                // 다음 cron 이 재시도. operator 가 보존 횟수 초과한 backup 갯수를
-                // 관측 가능 (runbook § 6 알람 기준).
-                warn!(key = %obj.key, error = %e, "backup delete failed — continuing cleanup");
+                // Round 5 (final stop-hook) — partial cleanup 실패는 typed `Err` 로
+                // 전파. 이전엔 warn 후 `Ok(())` 반환 — silent partial = SSS 위반.
+                // 진행은 계속 (다른 backup 도 시도) — 모든 실패 모은 후 `Err` 박제.
+                warn!(key = %obj.key, error = %e, "backup delete failed — collecting for typed Err");
+                failures.push((obj.key.clone(), e.to_string()));
             }
         }
     }
@@ -466,8 +480,18 @@ pub async fn cleanup_manifest_backups(
         total = backups.len(),
         kept = backups.len() - deleted,
         deleted,
-        "manifest backup cleanup complete"
+        failures = failures.len(),
+        "manifest backup cleanup attempted"
     );
+
+    if !failures.is_empty() {
+        return Err(PromoteError::PartialCleanup {
+            attempted: delete_targets.len(),
+            deleted,
+            failures,
+        });
+    }
+
     Ok(CleanupResult {
         total_found: backups.len(),
         kept: backups.len() - deleted,

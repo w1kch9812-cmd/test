@@ -43,11 +43,11 @@ jobs:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with:
           shared-key: sqlx-cli
 

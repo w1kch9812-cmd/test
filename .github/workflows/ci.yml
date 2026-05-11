@@ -23,10 +23,10 @@ jobs:
     name: Lint & Format (Biome + clippy + markdownlint)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
           node-version: 20.18
           cache: pnpm
@@ -35,7 +35,7 @@ jobs:
         run: pnpm biome check .
       - name: markdownlint
         run: pnpm markdownlint-cli2 "**/*.md" "#**/node_modules/**" "#**/_archive/**" "#**/reference/**" "#**/target/**" "#**/.next/**" "#**/.turbo/**"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { components: "rustfmt, clippy" }
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -46,10 +46,10 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
           node-version: 20.18
           cache: pnpm
@@ -60,11 +60,11 @@ jobs:
     name: cargo check + cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
       - run: cargo check --workspace --all-features
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1  # v2.0.6 (Round 5 SHA pin, ADR 0028)
         with: { command: check }
 
   coverage:
@@ -74,16 +74,16 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with:
           shared-key: tarpaulin
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
         run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         if: always()
         with:
           name: coverage-lcov
@@ -93,9 +93,9 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.7 (Round 5 SHA pin, ADR 0028)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
@@ -104,10 +104,10 @@ jobs:
     name: Markdown link check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
           node-version: 20.18
           cache: pnpm
@@ -122,7 +122,7 @@ jobs:
     name: File size limit (≤500 권장 / 1500 강제)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - name: Check file sizes
         run: |
           fail=0
