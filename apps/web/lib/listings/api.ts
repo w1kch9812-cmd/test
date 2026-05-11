@@ -48,7 +48,10 @@ export interface FetchListingsInput {
   size?: number;
 }
 
-export async function fetchListings(input: FetchListingsInput): Promise<ListingsResponse> {
+export async function fetchListings(
+  input: FetchListingsInput,
+  signal?: AbortSignal,
+): Promise<ListingsResponse> {
   const sp = toSearchParams(input.filters);
   if (input.bounds) {
     const { south, west, north, east } = input.bounds;
@@ -58,7 +61,7 @@ export async function fetchListings(input: FetchListingsInput): Promise<Listings
   if (input.page !== undefined) sp.set("page", String(input.page));
   if (input.size !== undefined) sp.set("size", String(input.size));
 
-  const json = await api.get(`listings?${sp.toString()}`).json<unknown>();
+  const json = await api.get(`listings?${sp.toString()}`, { signal }).json<unknown>();
   return ListingsResponseSchema.parse(json);
 }
 
@@ -103,7 +106,7 @@ export type ListingDetail = z.infer<typeof ListingDetailSchema>;
  * `GET /listings/:id` — 매물 상세 fetch.
  * 404 (매물 미존재 또는 RBAC 차단) → ky `HTTPError` throw.
  */
-export async function fetchListingDetail(id: string): Promise<ListingDetail> {
-  const json = await api.get(`listings/${id}`).json<unknown>();
+export async function fetchListingDetail(id: string, signal?: AbortSignal): Promise<ListingDetail> {
+  const json = await api.get(`listings/${id}`, { signal }).json<unknown>();
   return ListingDetailSchema.parse(json);
 }

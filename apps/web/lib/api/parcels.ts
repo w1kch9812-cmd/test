@@ -18,7 +18,7 @@ export const ParcelInfoSchema = z.object({
 
 export type ParcelInfo = z.infer<typeof ParcelInfoSchema>;
 
-export async function fetchParcel(pnu: string): Promise<ParcelInfo> {
-  const json = await api.get(`api/parcels/${pnu}`).json<unknown>();
+export async function fetchParcel(pnu: string, signal?: AbortSignal): Promise<ParcelInfo> {
+  const json = await api.get(`api/parcels/${pnu}`, { signal }).json<unknown>();
   return ParcelInfoSchema.parse(json);
 }

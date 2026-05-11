@@ -17,33 +17,36 @@ defineKind({
   views: {
     summary: defineView<"parcel", ParcelInfo>({
       component: ParcelSummaryCard,
-      fetcher: (id) => fetchParcel(id),
+      fetcher: (id, signal) => fetchParcel(id, signal),
       staleTime: 5 * 60_000,
       links: [],
     }),
     buildings: defineView<"parcel", BuildingsResponse>({
       component: ParcelBuildingsCard,
-      fetcher: (id) => fetchBuildings(id),
+      fetcher: (id, signal) => fetchBuildings(id, signal),
       staleTime: 5 * 60_000,
       links: [],
     }),
     listings: defineView<"parcel", ListingsResponse>({
       component: ParcelListingsCard,
-      fetcher: (id) =>
-        fetchListings({
-          filters: {
-            types: [],
-            transactions: [],
-            minAreaM2: undefined,
-            maxAreaM2: undefined,
-            minPriceKrw: undefined,
-            maxPriceKrw: undefined,
-            sort: "created_at_desc",
-            adminCode: undefined,
-            landUseType: undefined,
+      fetcher: (id, signal) =>
+        fetchListings(
+          {
+            filters: {
+              types: [],
+              transactions: [],
+              minAreaM2: undefined,
+              maxAreaM2: undefined,
+              minPriceKrw: undefined,
+              maxPriceKrw: undefined,
+              sort: "created_at_desc",
+              adminCode: undefined,
+              landUseType: undefined,
+            },
+            pnu: id,
           },
-          pnu: id,
-        }),
+          signal,
+        ),
       staleTime: 60_000,
       links: [],
     }),

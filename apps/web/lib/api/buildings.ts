@@ -18,9 +18,12 @@ export const BuildingsResponseSchema = z.object({
 
 export type BuildingsResponse = z.infer<typeof BuildingsResponseSchema>;
 
-export async function fetchBuildings(parcelPnu: string): Promise<BuildingsResponse> {
+export async function fetchBuildings(
+  parcelPnu: string,
+  signal?: AbortSignal,
+): Promise<BuildingsResponse> {
   const json = await api
-    .get(`api/buildings?parcel_pnu=${encodeURIComponent(parcelPnu)}`)
+    .get(`api/buildings?parcel_pnu=${encodeURIComponent(parcelPnu)}`, { signal })
     .json<unknown>();
   return BuildingsResponseSchema.parse(json);
 }

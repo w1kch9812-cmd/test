@@ -13,7 +13,7 @@ defineKind({
   views: {
     summary: defineView<"listing", ListingDetail>({
       component: ListingSummaryCard,
-      fetcher: (id) => fetchListingDetail(id),
+      fetcher: (id, signal) => fetchListingDetail(id, signal),
       staleTime: 60_000,
       links: [],
     }),
