@@ -74,3 +74,4 @@
 | [0025](./0025-bronze-scraping-workflow-orchestrator-not-rust-spawn.md) | Bronze scraping orchestration — GitHub Actions workflow phase split (Rust가 Python spawn 안 함, ADR 0022 amendment) | Accepted |
 | [0026](./0026-bronze-api-archive-r2-not-postgres-jsonb.md) | Bronze API archive — R2 (S3-호환 객체 저장소) 로 이전, Postgres jsonb 폐기 (cost + UPSERT 손실 + 시계열 보존) | Accepted |
 | [0027](./0027-admin-complex-layer-source-deferred.md) | admin/complex layer ETL source 결정 보류 + `Layer::is_active_in_etl` SSOT gate (parcel prefix 임시 재사용 차단) | Accepted |
+| [0028](./0028-supply-chain-sha-pin-and-cleanup-cron.md) | Supply-chain SHA pin (dependabot 자동 갱신) + manifest backup cleanup cron policy | Accepted |

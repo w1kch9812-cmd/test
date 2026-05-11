@@ -1,0 +1,90 @@
+# Dependabot — 자동 의존성 갱신 (Round 5 P1, ADR 0028).
+#
+# **목적** (SSS supply-chain):
+# - GitHub Actions 의 SHA pin 자동 갱신 — workflow yml 의 `@v4` tag 가 force-push
+#   가능한 supply-chain 위험을 완화 (NIST SSDF / OWASP supply-chain best practice).
+# - Cargo / pip / npm 의 known CVE 자동 PR — pip-audit / cargo-deny 와 보완.
+# - 의존성 drift 를 *human-readable PR* 로 변환 — silent upgrade 0.
+#
+# **운영 정책**:
+# - PR open 시 lefthook + CI gate 그대로 통과해야 merge.
+# - 주간 회의에서 dependabot PR 리뷰 (별도 oncall 책임 없이 platform team).
+# - critical CVE 발견 시 dependabot 가 자동 PR — 24시간 내 응답 의무.
+#
+# 참고: NIST SSP 800-218 (SSDF), https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # GitHub Actions — supply-chain 의 가장 큰 risk. major action (`actions/*`) 은 SHA
+  # pin 권장이지만 dependabot 가 tag 갱신만 자동. 본 config 은 *tag 갱신* 자동 + ADR
+  # 0028 의 manual SHA pin 절차와 짝.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "supply-chain"
+    commit-message:
+      prefix: "chore(actions)"
+      include: scope
+
+  # Cargo workspace — cargo-deny 와 짝. dependabot 가 *minor / patch* PR 자동,
+  # major 는 manual 검토 (breaking change risk).
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(cargo)"
+      include: scope
+    # workspace 안 모든 crate 가 단일 PR — Cargo.lock 일관성 보장.
+    groups:
+      rust-minor-and-patch:
+        update-types:
+          - minor
+          - patch
+
+  # Python scraper-py — pip-audit 와 짝. pinned (`==`) deps 라 dependabot 가
+  # 새 CVE 발견 시 PR 자동.
+  - package-ecosystem: pip
+    directory: /services/scraper-py
+    schedule:
+      interval: weekly
+      day: wednesday
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "chore(scraper-py)"
+      include: scope
+
+  # apps/web (Next.js) — pnpm catalog 사용 시 별도 검토 필요.
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+      day: thursday
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(web)"
+      include: scope
+    ignore:
+      # Next.js / React major 는 별도 sprint 검토 (breaking change).
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
