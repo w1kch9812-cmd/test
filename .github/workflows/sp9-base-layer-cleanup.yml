@@ -48,18 +48,24 @@ jobs:
 
       - name: List + (optional) delete old versions
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # ADR 0029 — Environment 명시 분리 + production namespace 격리.
+          # bash 가 직접 R2 access 하므로 R2_PRODUCTION_* 도 export (Rust ETL 같은 SSOT).
+          ETL_ENVIRONMENT: production
+          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
           RETENTION: ${{ inputs.retention_count || '3' }}
           CONFIRM: ${{ inputs.confirm_delete || 'false' }}
         run: |
           set -euo pipefail
-          export AWS_ACCESS_KEY_ID="${R2_ACCESS_KEY}"
-          export AWS_SECRET_ACCESS_KEY="${R2_SECRET_KEY}"
+          # ADR 0029 — namespace 박제. 본 bash 가 production env 임을 명시.
+          export AWS_ACCESS_KEY_ID="${R2_PRODUCTION_ACCESS_KEY}"
+          export AWS_SECRET_ACCESS_KEY="${R2_PRODUCTION_SECRET_KEY}"
           export AWS_DEFAULT_REGION=auto
-          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          ENDPOINT="https://${R2_PRODUCTION_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          # backward-compat — 본 step 내부 alias (이전 변수명 참조 코드 유지).
+          R2_BUCKET="${R2_PRODUCTION_BUCKET}"
 
           # 현재 manifest 의 current_version (절대 삭제 금지).
           current=$(aws --endpoint-url "$ENDPOINT" s3 cp "s3://${R2_BUCKET}/gold/manifest.json" - \

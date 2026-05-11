@@ -625,13 +625,8 @@ mod tests {
         clippy::await_holding_lock,  // env-mutating tests 는 process-global 이라 lock-held await 필요
     )]
 
-    use std::sync::Mutex;
-
     use super::{cloudflare_purge, ArtifactSpec, CdnPurgeOutcome, PromoteError};
-
-    /// process-global env mutation 직렬화. 모든 cloudflare_purge 테스트가 본 mutex 통과.
-    /// `cargo test` 의 thread parallelism 과 env race 차단.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::test_support::GLOBAL_ENV_LOCK as ENV_LOCK;
 
     fn clear_cdn_env() {
         for k in [

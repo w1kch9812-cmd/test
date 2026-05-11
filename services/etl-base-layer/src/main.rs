@@ -38,6 +38,8 @@ mod error;
 mod gold;
 mod manifest;
 mod r2_upload;
+#[cfg(test)]
+mod test_support;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -822,7 +824,10 @@ async fn upload_gold_to_r2(
         bronze_inputs,
         source_srs: source_srs.as_str().to_owned(),
         layer_name: layer.layer_name().to_owned(),
-        build_environment: std::env::var("ETL_BUILD_ENV").unwrap_or_else(|_| "dev".to_owned()),
+        // ADR 0029 — `ETL_ENVIRONMENT` 우선, fallback `ETL_BUILD_ENV` (backward-compat).
+        build_environment: std::env::var("ETL_ENVIRONMENT")
+            .or_else(|_| std::env::var("ETL_BUILD_ENV"))
+            .unwrap_or_else(|_| "dev".to_owned()),
         source_license: nonempty_env_var("ETL_SOURCE_LICENSE"),
         source_url: nonempty_env_var("ETL_SOURCE_URL"),
         correlation_id: nonempty_env_var("CORRELATION_ID")
@@ -954,7 +959,9 @@ fn init_sentry() -> Option<sentry::ClientInitGuard> {
         .ok()
         .filter(|v| !v.trim().is_empty())?;
     let release = std::env::var("GIT_SHA").ok().map(Into::into);
-    let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_BUILD_ENV")
+    // ADR 0029 — `ETL_ENVIRONMENT` 우선, fallback `ETL_BUILD_ENV` (backward-compat).
+    let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_ENVIRONMENT")
+        .or_else(|_| std::env::var("ETL_BUILD_ENV"))
         .unwrap_or_else(|_| "dev".to_owned())
         .into();
     // Round 3 P1 — traces_sample_rate env-driven (이전에 0.0 hardcode → SLO 측정 불가).

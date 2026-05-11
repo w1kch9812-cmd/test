@@ -39,13 +39,14 @@ jobs:
 
       - name: Run cleanup
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # ADR 0029 — Environment 명시 분리 + production namespace 격리.
+          ETL_ENVIRONMENT: production
+          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
+          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
+          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
           # Sentry 통합 — error / partial cleanup 자동 alert.
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          ETL_BUILD_ENV: "production"
           GIT_SHA: ${{ github.sha }}
           CORRELATION_ID: ${{ github.run_id }}
         run: |

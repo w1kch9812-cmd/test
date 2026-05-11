@@ -221,10 +221,7 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used)]
 
     use super::*;
-    use std::sync::Mutex;
-
-    /// process-global env mutation 직렬화.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    use crate::test_support::GLOBAL_ENV_LOCK as ENV_LOCK;
 
     fn clear_all_r2_env() {
         for k in [
