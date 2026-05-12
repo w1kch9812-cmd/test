@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
+import { tStatic } from "@/lib/i18n/static";
 import { checkRate } from "@/lib/ratelimit";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
@@ -61,9 +62,9 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
     if (!r.allowed) {
       return problem({
         type: "auth/too-many-requests",
-        title: "요청이 너무 많아요",
+        title: tStatic("server.proxy.rateLimitedTitle"),
         status: 429,
-        detail: "잠시 후 다시 시도해 주세요.",
+        detail: tStatic("server.proxy.retryLaterDetail"),
         instance: req.url,
       }).toResponse() as unknown as NextResponse;
     }
@@ -72,7 +73,7 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
     if (!r.allowed) {
       return problem({
         type: "auth/too-many-requests",
-        title: "요청이 너무 많아요",
+        title: tStatic("server.proxy.rateLimitedTitle"),
         status: 429,
         instance: req.url,
       }).toResponse() as unknown as NextResponse;
@@ -83,7 +84,7 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
     if (!r.allowed) {
       return problem({
         type: "auth/too-many-requests",
-        title: "요청이 너무 많아요",
+        title: tStatic("server.proxy.rateLimitedTitle"),
         status: 429,
         instance: req.url,
       }).toResponse() as unknown as NextResponse;

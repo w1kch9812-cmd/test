@@ -1,11 +1,13 @@
 import type { Options as KyOptions } from "ky";
 import { type NextRequest, NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
 import { createServerApi } from "@/lib/api";
 import { problem } from "@/lib/http/problem";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession } from "@/lib/session/store";
 
 async function forward(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
+  const t = await getTranslations("server.proxy");
   const path = params.path.join("/");
   const url = new URL(req.url);
   const search = url.search;
@@ -68,9 +70,9 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
     // 진짜 네트워크/연결 실패만 여기로. 4xx/5xx 는 throwHttpErrors=false 로 위에서 처리.
     return problem({
       type: "proxy/upstream-unavailable",
-      title: "백엔드 서버에 연결할 수 없어요",
+      title: t("backendUnavailableTitle"),
       status: 502,
-      detail: "잠시 후 다시 시도해 주세요.",
+      detail: t("retryLaterDetail"),
       instance: req.url,
     }).toResponse() as unknown as NextResponse;
   }

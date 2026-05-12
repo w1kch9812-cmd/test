@@ -79,6 +79,23 @@
     "title": "공짱 — 산업용 부동산 정보",
     "description": "산업용 부동산 정보 플랫폼"
   },
+  "server": {
+    "auth": {
+      "callback": {
+        "verifyFailedTitle": "로그인 검증에 실패했어요",
+        "verifyFailedDetail": "보안을 위해 다시 로그인해 주세요.",
+        "idpUnavailableTitle": "로그인 서버에 연결할 수 없어요"
+      },
+      "refresh": {
+        "expiredTitle": "로그인 세션이 만료되었어요"
+      }
+    },
+    "proxy": {
+      "backendUnavailableTitle": "백엔드 서버에 연결할 수 없어요",
+      "retryLaterDetail": "잠시 후 다시 시도해 주세요.",
+      "rateLimitedTitle": "요청이 너무 많아요"
+    }
+  },
   "notifications": {
     "fallbackListingTitle": "매물",
     "fallbackBookmarker": "한 사용자",

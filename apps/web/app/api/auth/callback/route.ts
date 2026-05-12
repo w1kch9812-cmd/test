@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
 import { emitAuthEvent } from "@/lib/auth/internal-event";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
@@ -14,6 +15,7 @@ import { createSession, REFRESH_TTL_SEC } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
 
 export async function GET(req: NextRequest) {
+  const t = await getTranslations("server.auth.callback");
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -22,9 +24,9 @@ export async function GET(req: NextRequest) {
   if (!code || !state || !tmpCookie) {
     return problem({
       type: "auth/state-mismatch",
-      title: "로그인 검증에 실패했어요",
+      title: t("verifyFailedTitle"),
       status: 401,
-      detail: "보안을 위해 다시 로그인해 주세요.",
+      detail: t("verifyFailedDetail"),
       instance: req.url,
     }).toResponse();
   }
@@ -34,7 +36,7 @@ export async function GET(req: NextRequest) {
   if (!rawPayload) {
     return problem({
       type: "auth/state-mismatch",
-      title: "로그인 검증에 실패했어요",
+      title: t("verifyFailedTitle"),
       status: 401,
       instance: req.url,
     }).toResponse();
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
   } catch {
     return problem({
       type: "auth/state-mismatch",
-      title: "로그인 검증에 실패했어요",
+      title: t("verifyFailedTitle"),
       status: 401,
       instance: req.url,
     }).toResponse();
@@ -63,7 +65,7 @@ export async function GET(req: NextRequest) {
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return problem({
       type: "auth/state-mismatch",
-      title: "로그인 검증에 실패했어요",
+      title: t("verifyFailedTitle"),
       // M6: detail 제거 — type 이 식별자 역할 (RFC 7807 SSOT)
       status: 401,
       instance: req.url,
@@ -88,7 +90,7 @@ export async function GET(req: NextRequest) {
     const isDev = process.env.NODE_ENV !== "production";
     return problem({
       type: "auth/idp-unavailable",
-      title: "로그인 서버에 연결할 수 없어요",
+      title: t("idpUnavailableTitle"),
       status: 503,
       detail: isDev ? (err instanceof Error ? err.message : String(err)) : undefined,
       instance: req.url,

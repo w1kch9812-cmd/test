@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
 import { emitAuthEvent } from "@/lib/auth/internal-event";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
@@ -9,11 +10,12 @@ import { withLock } from "@/lib/session/single-flight";
 import { deleteSession, getSession, REFRESH_TTL_SEC, refreshSession } from "@/lib/session/store";
 
 export async function POST(req: NextRequest) {
+  const t = await getTranslations("server.auth.refresh");
   const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
   if (!sid) {
     return problem({
       type: "auth/session-expired",
-      title: "로그인 세션이 만료되었어요",
+      title: t("expiredTitle"),
       status: 401,
       instance: req.url,
     }).toResponse();
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
       if (!current) {
         return problem({
           type: "auth/session-expired",
-          title: "로그인 세션이 만료되었어요",
+          title: t("expiredTitle"),
           status: 401,
           instance: req.url,
         }).toResponse();
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
         await deleteSession(sid);
         return problem({
           type: "auth/session-expired",
-          title: "로그인 세션이 만료되었어요",
+          title: t("expiredTitle"),
           status: 401,
           instance: req.url,
         }).toResponse();
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
         // 여전히 stale — refresh fail 처리
         return problem({
           type: "auth/session-expired",
-          title: "로그인 세션이 만료되었어요",
+          title: t("expiredTitle"),
           status: 401,
           instance: req.url,
         }).toResponse();
