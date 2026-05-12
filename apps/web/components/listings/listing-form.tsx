@@ -17,6 +17,7 @@ import { useMutation } from "@tanstack/react-query";
 import { isHTTPError } from "ky";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -29,29 +30,32 @@ import {
   TRANSACTION_TYPES,
 } from "@/lib/listings/schema";
 
-const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number], string> = {
-  factory: "공장",
-  warehouse: "창고",
-  office: "업무시설",
-  knowledge_industry_center: "지식산업센터",
-  industrial_land: "산업용지",
-  logistics_center: "물류시설",
-};
-
-const TRANSACTION_TYPE_LABELS: Record<(typeof TRANSACTION_TYPES)[number], string> = {
-  sale: "매매",
-  monthly_rent: "월세",
-  jeonse: "전세",
-};
-
-const CONTACT_VISIBILITY_LABELS: Record<(typeof CONTACT_VISIBILITIES)[number], string> = {
-  public: "전체 공개",
-  login_required: "로그인 시 공개",
-  verified_only: "인증 사용자만",
-};
-
 export function ListingForm(): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations("listingForm");
+  const tListingType = useTranslations("panels.listing.summary.type");
+  const tTx = useTranslations("panels.listing.summary.transaction");
+  const tVis = useTranslations("listingForm.contactVisibility");
+
+  const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number], string> = {
+    factory: tListingType("factory"),
+    warehouse: tListingType("warehouse"),
+    office: tListingType("office"),
+    knowledge_industry_center: tListingType("knowledge_industry_center"),
+    industrial_land: tListingType("industrial_land"),
+    logistics_center: tListingType("logistics_center"),
+  };
+  const TRANSACTION_TYPE_LABELS: Record<(typeof TRANSACTION_TYPES)[number], string> = {
+    sale: tTx("sale"),
+    monthly_rent: tTx("monthly_rent"),
+    jeonse: tTx("jeonse"),
+  };
+  const CONTACT_VISIBILITY_LABELS: Record<(typeof CONTACT_VISIBILITIES)[number], string> = {
+    public: tVis("public"),
+    login_required: tVis("login_required"),
+    verified_only: tVis("verified_only"),
+  };
+
   const {
     register,
     handleSubmit,
@@ -75,12 +79,12 @@ export function ListingForm(): React.ReactElement {
   const mutation = useMutation({
     mutationFn: createListing,
     onSuccess(data) {
-      toast.success(`매물이 등록되었어요 (${data.id})`);
+      toast.success(t("submitSuccess", { id: data.id }));
       router.push("/listings" as Route);
     },
     onError(error) {
       // RFC 7807 ProblemDetails 매핑 — server 가 client 검증 통과 후 거부 시.
-      const fallback = "등록 중 오류가 발생했어요";
+      const fallback = t("submitErrorFallback");
       if (isHTTPError(error)) {
         // detail 표시 — production 에서는 generic, dev 에서는 raw.
         void error.response

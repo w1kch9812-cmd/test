@@ -10,6 +10,7 @@
 import { Button } from "@gongzzang/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Heart } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { addBookmark, removeBookmark } from "@/lib/listings/mutations";
@@ -26,6 +27,7 @@ export function BookmarkButton({
   bookmarkCount,
 }: BookmarkButtonProps): React.ReactElement {
   const qc = useQueryClient();
+  const t = useTranslations("bookmark");
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -39,10 +41,10 @@ export function BookmarkButton({
       // detail / list 캐시 invalidate -> 다음 fetch 가 정확한 count 반영.
       void qc.invalidateQueries({ queryKey: ["listing-detail", listingId] });
       void qc.invalidateQueries({ queryKey: ["listings"] });
-      toast.success(isBookmarked ? "즐겨찾기 해제했어요" : "즐겨찾기 추가했어요");
+      toast.success(t(isBookmarked ? "removed" : "added"));
     },
     onError() {
-      toast.error("즐겨찾기 처리 중 오류가 발생했어요");
+      toast.error(t("error"));
     },
   });
 
@@ -52,7 +54,7 @@ export function BookmarkButton({
       variant={isBookmarked ? "primary" : "ghost"}
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
-      aria-label={isBookmarked ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+      aria-label={t(isBookmarked ? "ariaRemove" : "ariaAdd")}
       aria-pressed={isBookmarked}
     >
       <Heart className={`mr-2 h-4 w-4 ${isBookmarked ? "fill-current" : ""}`} aria-hidden="true" />

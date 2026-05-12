@@ -27,6 +27,22 @@
       "ariaDataSource": "데이터 출처"
     }
   },
+  "listingForm": {
+    "submitSuccess": "매물이 등록되었어요 ({id})",
+    "submitErrorFallback": "등록 중 오류가 발생했어요",
+    "contactVisibility": {
+      "public": "전체 공개",
+      "login_required": "로그인 시 공개",
+      "verified_only": "인증 사용자만"
+    }
+  },
+  "bookmark": {
+    "added": "즐겨찾기 추가했어요",
+    "removed": "즐겨찾기 해제했어요",
+    "error": "즐겨찾기 처리 중 오류가 발생했어요",
+    "ariaAdd": "즐겨찾기 추가",
+    "ariaRemove": "즐겨찾기 해제"
+  },
   "panels": {
     "parcel": {
       "empty": "필지 정보가 없어요",
