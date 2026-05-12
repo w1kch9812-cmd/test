@@ -1,14 +1,15 @@
-export const LISTING_TYPE_COLORS = {
-  factory: "#dc2626", // red-600 (공장)
-  warehouse: "#2563eb", // blue-600 (창고)
-  office: "#059669", // emerald-600 (사무실)
-  knowledge_industry_center: "#7c3aed", // violet-600 (지식산업센터)
-  industrial_land: "#ea580c", // orange-600 (산업단지/토지)
-  logistics_center: "#0891b2", // cyan-600 (물류센터)
-} as const;
+/**
+ * Listing pin color resolver. 색상 SSOT 는 @gongzzang/ui/tokens.js.
+ */
+import {
+  LISTING_TYPE_COLOR_FALLBACK,
+  LISTING_TYPE_COLORS,
+  type ListingTypeKey,
+} from "@gongzzang/ui/tokens.js";
 
-export type ListingTypeKey = keyof typeof LISTING_TYPE_COLORS;
+// re-export for backwards compat
+export { LISTING_TYPE_COLORS, type ListingTypeKey };
 
 export function getPinColor(listingType: string): string {
-  return LISTING_TYPE_COLORS[listingType as ListingTypeKey] ?? "#6b7280"; // gray-500 fallback
+  return LISTING_TYPE_COLORS[listingType as ListingTypeKey] ?? LISTING_TYPE_COLOR_FALLBACK;
 }

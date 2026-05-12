@@ -1,4 +1,5 @@
 "use client";
+import { MAP_LAYER_COLORS } from "@gongzzang/ui/tokens.js";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { pinIconHtml } from "@/components/listings/listing-pin";
@@ -107,9 +108,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
         "source-layer": "parcels",
         minzoom: 14,
         paint: {
-          "fill-color": "#10B981",
+          "fill-color": MAP_LAYER_COLORS.parcel.fill,
           "fill-opacity": 0.1,
-          "fill-outline-color": "#059669",
+          "fill-outline-color": MAP_LAYER_COLORS.parcel.outline,
         },
       });
       if (typeof mb.on === "function") {
@@ -140,9 +141,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
         "source-layer": "admin",
         maxzoom: 14, // 시군구 zoom 14 미만에서만 보임 (필지가 zoom 14+ 에서 바로 이어짐)
         paint: {
-          "fill-color": "#9CA3AF",
+          "fill-color": MAP_LAYER_COLORS.admin.fill,
           "fill-opacity": 0.05,
-          "fill-outline-color": "#6B7280",
+          "fill-outline-color": MAP_LAYER_COLORS.admin.outline,
         },
       });
     }
@@ -164,9 +165,9 @@ function setupPolygonLayers(mb: MapboxGLLike, onParcelClick: (pnu: string) => vo
         minzoom: 10,
         maxzoom: 16,
         paint: {
-          "fill-color": "#3B82F6",
+          "fill-color": MAP_LAYER_COLORS.complex.fill,
           "fill-opacity": 0.15,
-          "fill-outline-color": "#1D4ED8",
+          "fill-outline-color": MAP_LAYER_COLORS.complex.outline,
         },
       });
     }

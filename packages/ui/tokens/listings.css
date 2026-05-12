@@ -1,0 +1,36 @@
+/*
+ * Listing domain colors — pin / map polygon SSOT.
+ *
+ * 매물 타입별 색상 + 지도 polygon layer 색상. packages/ui/tokens.ts 의
+ * LISTING_TYPE_COLORS / MAP_LAYER_COLORS 와 *동기화* (변경 시 양쪽 모두 update).
+ *
+ * 도메인 어휘: docs/glossary.md
+ *   factory=공장 / warehouse=창고 / office=사무실 / knowledge_industry_center=
+ *   지식산업센터 / industrial_land=산업용지 / logistics_center=물류센터
+ */
+:root {
+  /* ── Listing type pin colors (Tailwind 600 hue scale) ──────────────────── */
+  --color-listing-factory: #dc2626; /* red-600 */
+  --color-listing-warehouse: #2563eb; /* blue-600 */
+  --color-listing-office: #059669; /* emerald-600 */
+  --color-listing-knowledge-industry-center: #7c3aed; /* violet-600 */
+  --color-listing-industrial-land: #ea580c; /* orange-600 */
+  --color-listing-logistics-center: #0891b2; /* cyan-600 */
+  --color-listing-fallback: #6b7280; /* gray-500 */
+
+  /* ── Map polygon layer colors ──────────────────────────────────────────── */
+  /* parcels (core layer) — emerald hue family */
+  --color-map-parcel-fill: #10b981; /* emerald-500 */
+  --color-map-parcel-outline: #059669; /* emerald-600 */
+  /* admin (optional layer) — gray family */
+  --color-map-admin-fill: #9ca3af; /* gray-400 */
+  --color-map-admin-outline: #6b7280; /* gray-500 */
+  /* complex / industrial complex (optional layer) — blue family */
+  --color-map-complex-fill: #3b82f6; /* blue-500 */
+  --color-map-complex-outline: #1d4ed8; /* blue-700 */
+
+  /* ── Pin stroke colors ─────────────────────────────────────────────────── */
+  --color-pin-stroke-selected: #ffffff;
+  --color-pin-stroke-idle: #1f2937; /* gray-800 */
+  --color-pin-inner: #ffffff;
+}
