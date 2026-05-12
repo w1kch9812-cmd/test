@@ -68,7 +68,7 @@ jobs:
       dtmk_license: ${{ steps.print.outputs.dtmk_license }}
       dtmk_source_url: ${{ steps.print.outputs.dtmk_source_url }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with: { shared-key: sp9-etl }
@@ -104,7 +104,7 @@ jobs:
     outputs:
       manifest_url: ${{ steps.summary.outputs.manifest_url }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0 (Round 5 SHA pin, ADR 0028)
         with:
           python-version: "3.11"
@@ -209,7 +209,7 @@ jobs:
         # 의 `is_active_in_etl()` 만 변경.
         layer: ${{ fromJson(needs.setup.outputs.active_layers_json) }}
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4.2.2 (Round 5 SHA pin, ADR 0028)
 
       - name: Install build deps + GDAL (pinned via SSOT)
         run: |
@@ -338,7 +338,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with: { shared-key: sp9-etl }
