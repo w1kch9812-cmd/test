@@ -38,10 +38,17 @@ pre-commit:
       # SP10 spec § 5.4: zustand store 가 panelStack 보유 금지 — URL 이 SSOT.
       glob: "apps/web/stores/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-state-without-router.sh
+    catalog-m1-boundary:
+      run: bash scripts/lefthook/catalog-m1-boundary.sh
 
 pre-push:
   parallel: false
   commands:
+    catalog-m1-boundary:
+      run: bash scripts/lefthook/catalog-m1-boundary.sh
+      skip:
+        - merge
+        - rebase
     typecheck:
       # SSS § 2 자동강제: node_modules 누락 / lockfile drift 시 자가복구.
       # `pnpm install --frozen-lockfile` 은 idempotent — sync 상태면 no-op (수 초),

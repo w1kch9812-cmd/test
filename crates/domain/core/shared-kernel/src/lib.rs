@@ -12,6 +12,7 @@ pub mod area;
 pub mod bounding_box;
 pub mod broker_license;
 pub mod business_number;
+pub mod catalog_event;
 pub mod contact_visibility;
 pub mod description;
 pub mod domain_event;
