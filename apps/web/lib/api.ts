@@ -28,8 +28,10 @@ function generateRequestId(): string {
  * SP-Obs T2 가 추가:
  *   - 모든 요청에 `X-Request-Id: req_<26 alphanumeric>` 자동 부여
  */
+import { API } from "@/lib/routes";
+
 export const api = ky.create({
-  prefix: "/api/proxy",
+  prefix: API.proxy.base,
   retry: {
     limit: 1,
     methods: ["get"],

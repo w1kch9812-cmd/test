@@ -1,6 +1,7 @@
 import { Button } from "@gongzzang/ui";
 import { cookies } from "next/headers";
 import { getTranslations } from "next-intl/server";
+import { API } from "@/lib/routes";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession } from "@/lib/session/store";
 
@@ -25,7 +26,7 @@ export default async function ProfilePage() {
         <dd>{session.role}</dd>
       </dl>
 
-      <form action="/api/auth/logout" method="POST">
+      <form action={API.auth.logout} method="POST">
         <Button type="submit" variant="secondary">
           {t("logoutButton")}
         </Button>

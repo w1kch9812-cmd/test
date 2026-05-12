@@ -1,5 +1,6 @@
 import { Button } from "@gongzzang/ui";
 import { getTranslations } from "next-intl/server";
+import { API, ROUTES } from "@/lib/routes";
 
 export default async function LoginPage({
   searchParams,
@@ -8,7 +9,7 @@ export default async function LoginPage({
 }) {
   const t = await getTranslations("auth.login");
   const params = await searchParams;
-  const returnTo = params.returnTo ?? "/profile";
+  const returnTo = params.returnTo ?? ROUTES.me.profile;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-8">
@@ -19,7 +20,7 @@ export default async function LoginPage({
         {t("description")}
       </p>
 
-      <form action="/api/auth/login" method="POST" className="w-full">
+      <form action={API.auth.login} method="POST" className="w-full">
         <input type="hidden" name="returnTo" value={returnTo} />
         <Button type="submit" size="lg" className="w-full">
           {t("loginButton")}

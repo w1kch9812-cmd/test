@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import { useUnreadCount } from "@/lib/notifications/use-unread-count";
+import { ROUTES } from "@/lib/routes";
 
 export function NotificationBell(): React.ReactElement {
   const t = useTranslations("notifications.bell");
@@ -22,7 +23,7 @@ export function NotificationBell(): React.ReactElement {
 
   return (
     <Link
-      href={"/me/notifications" as Route}
+      href={ROUTES.me.notifications as Route}
       aria-label={count > 0 ? t("ariaWithUnread", { count }) : t("ariaIdle")}
       className="relative inline-flex items-center justify-center rounded-md p-2 hover:bg-[var(--color-surface-cream-strong)]"
     >

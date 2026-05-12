@@ -1,0 +1,45 @@
+// apps/web/lib/routes.ts
+//
+// Internal app routes / API paths SSOT. 모든 router push / form action / fetch
+// 가 본 const 를 참조하여 *문자열 hardcode 0*.
+//
+// 사용처:
+// - <Link href={ROUTES.notifications}>
+// - <form action={API.auth.login}>
+// - ky.create({ prefixUrl: API.proxy.base })
+// - router.push(ROUTES.listings.detail(id))
+//
+// 외부 URL (Naver Maps SDK / V-World source link 등) 은 본 파일 *외부* 에 별도
+// 정의 (도메인 의존).
+
+/** Internal page routes (사용자 navigate target). */
+export const ROUTES = {
+  home: "/",
+  login: "/login",
+  listings: {
+    index: "/listings",
+    new: "/listings/new",
+    detail: (id: string) => `/listings/${id}` as const,
+    edit: (id: string) => `/listings/${id}/edit` as const,
+  },
+  me: {
+    notifications: "/me/notifications",
+    profile: "/me/profile",
+  },
+} as const;
+
+/** Internal API routes (fetch target). */
+export const API = {
+  auth: {
+    login: "/api/auth/login",
+    logout: "/api/auth/logout",
+    callback: "/api/auth/callback",
+    refresh: "/api/auth/refresh",
+  },
+  proxy: {
+    base: "/api/proxy",
+  },
+} as const;
+
+/** Auth prefix — proxy.ts 의 internal-only path 분류용. */
+export const AUTH_PATH_PREFIX = "/api/auth";
