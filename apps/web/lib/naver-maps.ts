@@ -17,23 +17,26 @@ export function loadNaverMaps(): Promise<typeof naver> {
       resolve(naver);
       return;
     }
+    // Naver Maps SDK polling tuning constants — 로컬 SSOT.
+    const POLL_INTERVAL_MS = 100;
+    const POLL_TIMEOUT_MS = 10_000;
+    const MAX_ATTEMPTS = POLL_TIMEOUT_MS / POLL_INTERVAL_MS;
     let attempts = 0;
-    const max = 100; // 100 * 100ms = 10s
     const tick = () => {
       attempts += 1;
       if (typeof naver !== "undefined" && naver.maps) {
         resolve(naver);
         return;
       }
-      if (attempts >= max) {
+      if (attempts >= MAX_ATTEMPTS) {
         reject(
           new Error(
-            "Naver Maps SDK 로드 타임아웃 (10초). app/layout.tsx 의 <head> script 확인 필요.",
+            `Naver Maps SDK 로드 타임아웃 (${POLL_TIMEOUT_MS / 1000}s). app/layout.tsx 의 <head> script 확인 필요.`,
           ),
         );
         return;
       }
-      setTimeout(tick, 100);
+      setTimeout(tick, POLL_INTERVAL_MS);
     };
     tick();
   });

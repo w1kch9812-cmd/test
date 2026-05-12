@@ -23,13 +23,18 @@ type MapboxGLLike = {
 };
 
 /** Naver Map 의 내부 mapbox 인스턴스 polling — load 직후 ~수십 ms 미존재 가능. */
+// Polling tuning constants — 로컬 SSOT (naver-maps.ts 의 SDK polling 과 *독립*).
+const MAPBOX_POLL_INTERVAL_MS = 100;
+const MAPBOX_POLL_TIMEOUT_MS = 6_000;
+const MAPBOX_MAX_ATTEMPTS = MAPBOX_POLL_TIMEOUT_MS / MAPBOX_POLL_INTERVAL_MS;
+
 async function waitForMapbox(naverMap: naver.maps.Map): Promise<MapboxGLLike> {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < MAPBOX_MAX_ATTEMPTS; i++) {
     const mb = (naverMap as unknown as { _mapbox?: MapboxGLLike })._mapbox;
     if (mb && typeof mb.addSource === "function") return mb;
-    await new Promise((r) => setTimeout(r, 100));
+    await new Promise((r) => setTimeout(r, MAPBOX_POLL_INTERVAL_MS));
   }
-  throw new Error("mapbox-gl 인스턴스 polling timeout (6s)");
+  throw new Error(`mapbox-gl 인스턴스 polling timeout (${MAPBOX_POLL_TIMEOUT_MS / 1000}s)`);
 }
 
 /**
@@ -279,8 +284,9 @@ export function ListingMap() {
           }
           // addSource 는 style.load 후에만 작동. polling — `once("style.load")` 는
           // 이벤트가 이미 fire 됐으면 callback 안 호출 (Naver fork edge case).
-          for (let i = 0; i < 60 && !mb.isStyleLoaded?.(); i++) {
-            await new Promise((r) => setTimeout(r, 100));
+          // Style polling 도 mapbox polling 과 동일 6s tuning.
+          for (let i = 0; i < MAPBOX_MAX_ATTEMPTS && !mb.isStyleLoaded?.(); i++) {
+            await new Promise((r) => setTimeout(r, MAPBOX_POLL_INTERVAL_MS));
             if (cancelled) return;
           }
           if (cancelled) return;

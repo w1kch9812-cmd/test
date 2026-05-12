@@ -33,4 +33,8 @@
   --color-pin-stroke-selected: #ffffff;
   --color-pin-stroke-idle: #1f2937; /* gray-800 */
   --color-pin-inner: #ffffff;
+
+  /* ── Panel layout ──────────────────────────────────────────────────────── */
+  /* Side-by-side stack 의 *기본* width — xl breakpoint 이상에서 우측 overlay */
+  --panel-side-by-side-width: 840px;
 }

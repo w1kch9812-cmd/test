@@ -72,3 +72,11 @@ export const PIN_COLORS = {
   strokeIdle: "#1f2937", // gray-800
   inner: "#ffffff",
 } as const;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Panel layout
+// CSS variable 동기화: packages/ui/tokens/listings.css
+// ────────────────────────────────────────────────────────────────────────────
+
+/** Side-by-side panel stack 의 *기본* width (px). xl breakpoint 이상에서 우측 overlay. */
+export const PANEL_SIDE_BY_SIDE_WIDTH_PX = 840;
