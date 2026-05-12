@@ -107,19 +107,16 @@ for root in "${scan_roots[@]}"; do
 
         # Whitelist: every method-router call inside the block must be get()
         # or head(). post / put / patch / delete / on / any / etc. = mutation.
-        my @plain = ($block =~ /(?:^|[^\w:])(\w+)\s*\(/g);
-        my @qualified = ($block =~ /\baxum::routing::(\w+)\b/g);
-        my %seen;
-        for my $m (@plain, @qualified) {
-          next if $seen{$m}++;
-          next unless $m =~ /^(get|head|post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)$/i;
-          if ($m !~ /^(get|head)$/i) {
-            print "  $path -> handler uses \"$m\" (M1 allows only get/head)\n";
-            last;
-          }
+        # Direct word-boundary match catches all module-qualified forms:
+        # `post(`, `routing::post(`, `axum::routing::post(`, etc.
+        # `\b` excludes `post_user(` (continues as word char).
+        while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)\s*\(/gi) {
+          my $m = $1;
+          print "  $path -> handler uses \"$m\" (M1 allows only get/head)\n";
+          last;
         }
         # `MethodFilter::POST` / `Method::POST` constants used with `on()`.
-        if ($block =~ /\bMethod(?:Filter)?::(POST|PUT|PATCH|DELETE|TRACE|CONNECT|OPTIONS)\b/i) {
+        if ($block =~ /\bMethod(?:Filter)?::(POST|PUT|PATCH|DELETE|TRACE|CONNECT|OPTIONS)\b/) {
           print "  $path -> Method::$1 constant in handler (M1 read-only)\n";
         }
       }
@@ -178,18 +175,12 @@ for root in "${scan_roots[@]}"; do
           pos($_) = $resume_pos;
           next if $depth != 0;
           my $block = substr($_, $tail_start, $pos - $tail_start);
-          my @plain = ($block =~ /(?:^|[^\w:])(\w+)\s*\(/g);
-          my @qualified = ($block =~ /\baxum::routing::(\w+)\b/g);
-          my %seen;
-          for my $m (@plain, @qualified) {
-            next if $seen{$m}++;
-            next unless $m =~ /^(get|head|post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)$/i;
-            if ($m !~ /^(get|head)$/i) {
-              print "  $name (=\"$val\") .route -> handler uses \"$m\" (M1 allows only get/head)\n";
-              last;
-            }
+          while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)\s*\(/gi) {
+            my $m = $1;
+            print "  $name (=\"$val\") .route -> handler uses \"$m\" (M1 allows only get/head)\n";
+            last;
           }
-          if ($block =~ /\bMethod(?:Filter)?::(POST|PUT|PATCH|DELETE|TRACE|CONNECT|OPTIONS)\b/i) {
+          if ($block =~ /\bMethod(?:Filter)?::(POST|PUT|PATCH|DELETE|TRACE|CONNECT|OPTIONS)\b/) {
             print "  $name (=\"$val\") .route -> Method::$1 constant (M1 read-only)\n";
           }
         }
