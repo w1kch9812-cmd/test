@@ -145,7 +145,7 @@ jobs:
         working-directory: services/scraper-py
         run: |
           python -m cyclonedx_py requirements -i requirements.txt -o python-sbom.json --output-format JSON
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         with:
           name: scraper-py-sbom
           path: services/scraper-py/python-sbom.json
@@ -256,7 +256,7 @@ jobs:
         run: |
           cargo install --locked cargo-cyclonedx --version 0.5.7
           cargo cyclonedx -p etl-base-layer --format json -f rust-etl-sbom.json
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         with:
           name: etl-base-layer-sbom-${{ matrix.layer }}
           path: rust-etl-sbom.json
@@ -320,7 +320,7 @@ jobs:
 
       - name: Upload PMTiles artifact (debug)
         if: failure() || inputs.target_version != ''
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         with:
           name: pmtiles-${{ matrix.layer }}-${{ steps.ver.outputs.version }}
           path: ./var/gold/${{ steps.ver.outputs.version }}/${{ matrix.layer }}.pmtiles
