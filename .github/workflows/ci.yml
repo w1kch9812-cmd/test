@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
@@ -47,7 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
