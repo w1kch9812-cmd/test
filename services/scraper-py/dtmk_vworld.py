@@ -115,7 +115,7 @@ _R2_REQUIRED_SUFFIXES: tuple[str, ...] = (
 
 
 def load_r2_credentials() -> dict[str, str] | None:
-    """ADR 0030 — namespace 준수 R2 자격 *원자적* 로드. legacy fallback 완전 제거.
+    """ADR 0035 — namespace 준수 R2 자격 *원자적* 로드. legacy fallback 완전 제거.
 
     **핵심 invariant**: 4개 자격 (ACCOUNT_ID / ACCESS_KEY / SECRET_KEY / BUCKET) 이
     *모두 같은 namespace* 에서 박제. partial = fail-fast (credential mix 차단).
@@ -125,7 +125,7 @@ def load_r2_credentials() -> dict[str, str] | None:
     2. namespace *부분* set → fail-fast (mix 차단, 누락 항목 박제)
     3. namespace 4개 모두 unset → `None` 반환 (R2 비활성, local-only mode)
 
-    legacy `R2_*` (namespace 없음) **완전 제거** (ADR 0030). 이전 1-sprint backward-compat
+    legacy `R2_*` (namespace 없음) **완전 제거** (ADR 0035). 이전 1-sprint backward-compat
     자체가 trick — credential mix 위험 path. operator 가 `R2_<ENV>_*` 명시 set 필수.
     """
     env = _etl_environment()
@@ -143,7 +143,7 @@ def load_r2_credentials() -> dict[str, str] | None:
         sys.stderr.write(
             f"ERROR: partial {prefix}* credentials — "
             f"set: {sorted(namespaced_set.keys())}, missing: {missing}. "
-            "ADR 0030: 부분 namespace = credential mix 차단 fail-fast. "
+            "ADR 0035: 부분 namespace = credential mix 차단 fail-fast. "
             "4개 모두 set 또는 모두 unset (R2 비활성, local-only) 필요.\n"
         )
         sys.exit(2)
@@ -440,7 +440,7 @@ def sigungu_from_filename(name: str) -> str:
 # ===== R2 client =====
 def make_r2(creds: dict[str, str] | None = None) -> Any:
     # boto3.client 는 stubs 가 없어 Any return 이 자연. 격리 service 의 표준 pattern.
-    # ADR 0030 — credentials 는 *원자적* 로드 (`load_r2_credentials`). 호출자가 직접
+    # ADR 0035 — credentials 는 *원자적* 로드 (`load_r2_credentials`). 호출자가 직접
     # 제공 가능 (test) 또는 None 시 본 함수가 로드 — load_r2_credentials 가 None
     # 반환하면 본 함수가 SystemExit (R2 client 가 필요한 path 에서는 자격 필수).
     if creds is None:
@@ -449,7 +449,7 @@ def make_r2(creds: dict[str, str] | None = None) -> Any:
             env_lower = _etl_environment()
             sys.stderr.write(
                 f"ERROR: make_r2 자격 부재 — "
-                f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 set 필요 (ADR 0030).\n"
+                f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 set 필요 (ADR 0035).\n"
             )
             sys.exit(2)
         creds = loaded
@@ -504,14 +504,14 @@ def main() -> int:
             "key dtmk_ds_id 출력을 정확히 inject하는지 확인.\n"
         )
         return 2
-    # ADR 0030 — R2 자격을 *원자적* 로드 (4개 같은 namespace). partial = fail-fast.
+    # ADR 0035 — R2 자격을 *원자적* 로드 (4개 같은 namespace). partial = fail-fast.
     # 본 script 는 R2 PUT 이 핵심 작업이라 자격 없으면 의미 0 — None 도 fail-fast.
     r2_creds = load_r2_credentials()
     if r2_creds is None:
         env_lower = _etl_environment()
         sys.stderr.write(
             f"ERROR: R2 자격 부재 — dtmk_vworld 는 R2 PUT 이 핵심. "
-            f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 모두 set 필요 (ADR 0030).\n"
+            f"{_R2_NAMESPACE_PREFIX[env_lower]}* 4개 모두 set 필요 (ADR 0035).\n"
         )
         return 2
     bucket = r2_creds["BUCKET"]

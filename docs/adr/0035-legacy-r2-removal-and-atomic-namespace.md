@@ -1,4 +1,4 @@
-# ADR 0030 — Legacy `R2_*` 완전 제거 + atomic namespace 강제
+# ADR 0035 — Legacy `R2_*` 완전 제거 + atomic namespace 강제
 
 | | |
 |---|---|
@@ -6,6 +6,7 @@
 | 상태 | Accepted |
 | Supersedes | [ADR 0029](./0029-explicit-environment-separation.md) § "Backward-compat (1 sprint)" 의 backward-compat path 만 |
 | 선행 | [ADR 0029](./0029-explicit-environment-separation.md) (Environment 명시 분리) |
+| 번호 정정 | 본 ADR 은 최초 0030 으로 신설됐으나, ADR 0030 (γ' Three-Service Architecture) 과 번호 충돌 발견 후 0035 로 재할당. cross-repo 영향이 큰 three-service 가 0030 유지, 본 R2 cleanup ADR 양보. |
 
 ## 결정
 
@@ -74,7 +75,7 @@ backward-compat 자체가 *표면 합의*. 진짜 SSS = 즉시 제거 + 회귀 i
 
 ## 변경 매트릭스
 
-| 위치 | 이전 (ADR 0029) | 현재 (ADR 0030) |
+| 위치 | 이전 (ADR 0029) | 현재 (ADR 0035) |
 |---|---|---|
 | `Environment::is_production_from_env` | `ETL_ENVIRONMENT` 우선 + `ETL_BUILD_ENV` fallback | `ETL_ENVIRONMENT` only |
 | `Config::from_env` R2 path | `build_r2_config_namespaced().or_else(legacy)` | `build_r2_config_strict()?` |
@@ -85,7 +86,7 @@ backward-compat 자체가 *표면 합의*. 진짜 SSS = 즉시 제거 + 회귀 i
 
 ## SSS 7기둥 매핑
 
-| 기둥 | 이전 (ADR 0029 backward-compat) | 본 결정 (ADR 0030 strict) |
+| 기둥 | 이전 (ADR 0029 backward-compat) | 본 결정 (ADR 0035 strict) |
 |---|---|---|
 | 일관성 | △ — 두 path 양립 | ✅ — 단일 path |
 | 자동강제 | △ — backward-compat warning 만 | ✅ — typed err fail-fast |
@@ -111,7 +112,7 @@ Python `services/scraper-py/tests/test_dtmk_vworld.py`:
 ## 영향
 
 ### 신규
-- `docs/adr/0030-legacy-r2-removal-and-atomic-namespace.md` (본 파일)
+- `docs/adr/0035-legacy-r2-removal-and-atomic-namespace.md` (본 파일)
 - `ConfigError::InvalidGoldVersion` variant
 - `ConfigError::PartialR2Namespace` variant
 - `build_r2_config_strict()` (replaces `build_r2_config_namespaced` + `build_r2_config_legacy`)

@@ -824,7 +824,7 @@ async fn upload_gold_to_r2(
         bronze_inputs,
         source_srs: source_srs.as_str().to_owned(),
         layer_name: layer.layer_name().to_owned(),
-        // ADR 0030 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
+        // ADR 0035 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
         build_environment: std::env::var("ETL_ENVIRONMENT")
             .unwrap_or_else(|_| "dev".to_owned()),
         source_license: nonempty_env_var("ETL_SOURCE_LICENSE"),
@@ -904,7 +904,7 @@ fn load_config_or_exit() -> Result<Config, ExitCode> {
                 error!(
                     raw = %raw,
                     detail = %detail,
-                    "GOLD_VERSION invalid (ADR 0030 typed err) — must match ^v[a-z0-9_-]+$"
+                    "GOLD_VERSION invalid (ADR 0035 typed err) — must match ^v[a-z0-9_-]+$"
                 );
             }
             ConfigError::PartialR2Namespace { prefix, present, missing } => {
@@ -912,7 +912,7 @@ fn load_config_or_exit() -> Result<Config, ExitCode> {
                     prefix = %prefix,
                     present = ?present,
                     missing = ?missing,
-                    "R2 namespace credentials partial (ADR 0030) — atomic 4-of-4 required (credential mix 차단)"
+                    "R2 namespace credentials partial (ADR 0035) — atomic 4-of-4 required (credential mix 차단)"
                 );
             }
         }
@@ -975,7 +975,7 @@ fn init_sentry() -> Option<sentry::ClientInitGuard> {
         .ok()
         .filter(|v| !v.trim().is_empty())?;
     let release = std::env::var("GIT_SHA").ok().map(Into::into);
-    // ADR 0030 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
+    // ADR 0035 — `ETL_ENVIRONMENT` SSOT only. backward-compat `ETL_BUILD_ENV` 제거.
     let environment: std::borrow::Cow<'static, str> = std::env::var("ETL_ENVIRONMENT")
         .unwrap_or_else(|_| "dev".to_owned())
         .into();

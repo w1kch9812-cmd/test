@@ -75,5 +75,10 @@
 | [0026](./0026-bronze-api-archive-r2-not-postgres-jsonb.md) | Bronze API archive — R2 (S3-호환 객체 저장소) 로 이전, Postgres jsonb 폐기 (cost + UPSERT 손실 + 시계열 보존) | Accepted |
 | [0027](./0027-admin-complex-layer-source-deferred.md) | admin/complex layer ETL source 결정 보류 + `Layer::is_active_in_etl` SSOT gate (parcel prefix 임시 재사용 차단) | Accepted |
 | [0028](./0028-supply-chain-sha-pin-and-cleanup-cron.md) | Supply-chain SHA pin (dependabot 자동 갱신) + manifest backup cleanup cron policy | Accepted |
-| [0029](./0029-explicit-environment-separation.md) | `ETL_ENVIRONMENT` 명시 분리 + secret namespace 격리 (verify smoke 사고 후속) | Accepted (Superseded in part by 0030) |
-| [0030](./0030-legacy-r2-removal-and-atomic-namespace.md) | Legacy `R2_*` + `ETL_BUILD_ENV` 완전 제거 + atomic namespace 강제 (ADR 0029 backward-compat 제거) | Accepted |
+| [0029](./0029-explicit-environment-separation.md) | `ETL_ENVIRONMENT` 명시 분리 + secret namespace 격리 (verify smoke 사고 후속) | Accepted (Superseded in part by 0035) |
+| [0030](./0030-three-service-architecture.md) | γ' Three-Service Architecture 채택 (gongzzang3 / platform-core / seanal-sms) | Accepted |
+| [0031](./0031-platform-core-bounded-contexts.md) | platform-core Bounded Contexts — Catalog / Workforce 경계 | Accepted |
+| [0032](./0032-eventual-consistency-strategy.md) | Cross-service Eventual Consistency 전략 | Accepted |
+| [0033](./0033-seven-guardrails-enforcement.md) | 7 Guardrails — cross-service 코드 리뷰 자동 강제 | Accepted |
+| [0034](./0034-catalog-ownership-handover-to-platform-core.md) | Catalog 자산 platform-core 로 이양 (M3.2 cutover) | Accepted |
+| [0035](./0035-legacy-r2-removal-and-atomic-namespace.md) | Legacy `R2_*` + `ETL_BUILD_ENV` 완전 제거 + atomic namespace 강제 (ADR 0029 backward-compat 제거) | Accepted |

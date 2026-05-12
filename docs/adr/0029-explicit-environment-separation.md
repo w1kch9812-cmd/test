@@ -27,7 +27,7 @@ production: R2_PRODUCTION_ACCOUNT_ID / R2_PRODUCTION_ACCESS_KEY / ...
 ```
 
 backward-compat: `R2_ACCOUNT_ID` (namespace 없음) 도 *일시* 허용 — single `legacy` warning
-log 출력 + ADR 0030 에서 완전 제거 (다음 sprint).
+log 출력 + ADR 0035 에서 완전 제거 (다음 sprint).
 
 ## 컨텍스트 — Round 5 verify smoke 의 사고
 
@@ -62,7 +62,7 @@ AGENTS.md § 6 *사용자 확인 필요한 작업* 모두 침해.
 ### C — AWS Secrets Manager / Doppler 같은 외부 vault
 - 장점: 가장 강한 격리
 - 거부: scope creep — 본 incident 해결에 외부 dependency 추가 부담 과대.
-  *향후 ADR 0030 후속* 검토 가능. 본 ADR 은 *Rust 코드 측 fail-fast* 만.
+  *향후 ADR 0035 후속* 검토 가능. 본 ADR 은 *Rust 코드 측 fail-fast* 만.
 
 ## 채택 (B)
 
@@ -141,15 +141,15 @@ R2_PRODUCTION_ACCOUNT_ID=... # production 자격 박제됨
 - `.github/workflows/sp9-base-layer-rollback.yml` — 동일
 - ADR 0024 / 0025 / 0027 / 0028 의 env 언급 갱신 (linkbacks)
 
-### 후속 (ADR 0030 박제 예정)
-- `R2_*` (no namespace) backward-compat 완전 제거
-- 외부 vault (AWS Secrets Manager / Doppler) 통합 검토
+### 후속 (ADR 0035 박제 — Accepted 2026-05-12)
+- `R2_*` (no namespace) backward-compat 완전 제거 — **완료** (ADR 0035)
+- 외부 vault (AWS Secrets Manager / Doppler) 통합 검토 — pending
 
 ## 재검토 트리거
 
 - Round 5 smoke 같은 사고 *재발* 시 — 본 ADR 의 backward-compat 일찍 제거
 - 새 환경 (e.g. canary / qa) 추가 — `Environment` enum 확장
-- 외부 vault 도입 결정 — ADR 0030 신설 + 본 ADR 의 fallback path 폐기
+- 외부 vault 도입 결정 — 신규 ADR + 본 ADR 의 fallback path 폐기 (ADR 0035 가 이미 fallback path 제거 완료)
 
 ## 참고
 

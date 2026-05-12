@@ -352,7 +352,7 @@ impl Environment {
     /// 호출 가능한 callsite (e.g. `preflight_cdn_config` 같은 free function, Sentry
     /// init 시점) 가 본 helper 통과.
     ///
-    /// **ADR 0030**: `ETL_BUILD_ENV` backward-compat 완전 제거 — `ETL_ENVIRONMENT` 만 SSOT.
+    /// **ADR 0035**: `ETL_BUILD_ENV` backward-compat 완전 제거 — `ETL_ENVIRONMENT` 만 SSOT.
     /// env 미설정 = 명시 의도 부재 = false (production 으로 추측 0).
     #[must_use]
     pub fn is_production_from_env() -> bool {

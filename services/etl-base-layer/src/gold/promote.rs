@@ -517,7 +517,7 @@ pub struct CleanupResult {
 /// dev/staging 에서는 silent OK (`SkippedDevMode` 가 step 5 에서 자연 발생).
 fn preflight_cdn_config() -> Result<(), PromoteError> {
     // ADR 0029 — `Environment::is_production_from_env()` SSOT (ETL_ENVIRONMENT 또는
-    // ADR 0030 — `ETL_ENVIRONMENT` SSOT only.
+    // ADR 0035 — `ETL_ENVIRONMENT` SSOT only.
     if !Environment::is_production_from_env() {
         return Ok(());
     }

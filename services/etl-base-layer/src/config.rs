@@ -18,7 +18,7 @@
 //! ## Backward-compat (1 sprint)
 //!
 //! 기존 `R2_*` (namespace 없음) 도 *fallback* 으로 허용 — *경고 로그* 출력 후 활성.
-//! ADR 0030 (후속) 에서 완전 제거.
+//! ADR 0035 (후속) 에서 완전 제거.
 
 use std::env;
 use std::path::PathBuf;
@@ -68,7 +68,7 @@ pub enum ConfigError {
     /// `ETL_ENVIRONMENT` 미설정 / invalid (ADR 0029 fail-fast).
     #[error("environment: {0}")]
     Environment(#[from] EnvironmentParseError),
-    /// `GOLD_VERSION` env 가 invalid 형식 — ADR 0030 (이전 panic path 제거).
+    /// `GOLD_VERSION` env 가 invalid 형식 — ADR 0035 (이전 panic path 제거).
     #[error("GOLD_VERSION invalid: {detail} (raw={raw:?})")]
     InvalidGoldVersion {
         /// 원본 env 값.
@@ -76,11 +76,11 @@ pub enum ConfigError {
         /// newtype 검증 에러 메시지.
         detail: String,
     },
-    /// 부분 R2 namespace credential — ADR 0030 (credential mix 차단 fail-fast).
+    /// 부분 R2 namespace credential — ADR 0035 (credential mix 차단 fail-fast).
     /// 4개 (`ACCOUNT_ID` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET`) 중 일부만 set.
     #[error(
         "partial R2 namespace credentials at prefix {prefix:?} — set: {present:?}, missing: {missing:?}. \
-         ADR 0030: namespace credential 은 atomic (4개 모두 set 또는 0개) — partial = credential mix 위험."
+         ADR 0035: namespace credential 은 atomic (4개 모두 set 또는 0개) — partial = credential mix 위험."
     )]
     PartialR2Namespace {
         /// 사용한 prefix (e.g. `R2_PRODUCTION_`).
@@ -137,7 +137,7 @@ impl Config {
             }
         }
 
-        // ADR 0030 — environment 별 namespace 통과. legacy `R2_*` fallback *완전 제거*
+        // ADR 0035 — environment 별 namespace 통과. legacy `R2_*` fallback *완전 제거*
         // (ADR 0029 의 1-sprint backward-compat 자체가 trick — credential mix 위험).
         // partial namespace = typed fail-fast (Python atomic loader 와 동일 정책).
         let r2 = build_r2_config_strict(environment.r2_secret_prefix())?;
@@ -150,7 +150,7 @@ impl Config {
             Some(raw) => match Version::new(raw.clone()) {
                 Ok(v) => Some(v),
                 Err(e) => {
-                    // ADR 0030 — panic 제거. typed ConfigError 로 호출자에게 전파.
+                    // ADR 0035 — panic 제거. typed ConfigError 로 호출자에게 전파.
                     return Err(ConfigError::InvalidGoldVersion {
                         raw,
                         detail: e.to_string(),
@@ -170,11 +170,11 @@ impl Config {
     }
 }
 
-/// ADR 0030 — namespace R2 config strict atomic loader.
+/// ADR 0035 — namespace R2 config strict atomic loader.
 ///
 /// 4개 자격 (`ACCOUNT_ID` / `ACCESS_KEY` / `SECRET_KEY` / `BUCKET`) 이 *모두 같은
 /// source* (namespace) 에서 박제. partial namespace = `PartialR2Namespace` fail-fast
-/// (credential mix 차단). legacy `R2_*` fallback **완전 제거** — ADR 0030.
+/// (credential mix 차단). legacy `R2_*` fallback **완전 제거** — ADR 0035.
 ///
 /// 반환:
 /// - namespace 4개 모두 set → `Ok(Some(R2Config))`
@@ -354,7 +354,7 @@ mod tests {
         clear_all_r2_env();
     }
 
-    /// ADR 0030 — legacy `R2_*` fallback **완전 제거**. 어떤 env 에서도 활성 X.
+    /// ADR 0035 — legacy `R2_*` fallback **완전 제거**. 어떤 env 에서도 활성 X.
     /// 이전 (ADR 0029 1-sprint backward-compat) path 가 *근본이 아닌 표면 합의* 였음.
     #[test]
     fn legacy_r2_no_longer_activates_anywhere() {
@@ -368,12 +368,12 @@ mod tests {
         let cfg = Config::from_env().expect("load");
         assert!(
             cfg.r2.is_none(),
-            "legacy R2_* must NOT activate (ADR 0030 strict path)"
+            "legacy R2_* must NOT activate (ADR 0035 strict path)"
         );
         clear_all_r2_env();
     }
 
-    /// ADR 0030 — local 도 legacy 도 namespace 도 unset = 정상 path (local-only mode).
+    /// ADR 0035 — local 도 legacy 도 namespace 도 unset = 정상 path (local-only mode).
     #[test]
     fn local_env_with_no_r2_credentials_is_local_only_mode() {
         let _g = ENV_LOCK.lock().expect("lock");
@@ -384,7 +384,7 @@ mod tests {
         clear_all_r2_env();
     }
 
-    /// ADR 0030 — partial namespace credential = typed `PartialR2Namespace` fail-fast.
+    /// ADR 0035 — partial namespace credential = typed `PartialR2Namespace` fail-fast.
     /// 이전 (ADR 0029) 의 partial → None 자체가 trick — credential mix 위험 path.
     #[test]
     fn partial_namespace_fails_fast() {
@@ -395,7 +395,7 @@ mod tests {
         env::set_var("R2_STAGING_ACCESS_KEY", "y");
         // SECRET_KEY / BUCKET 누락.
         let err = Config::from_env()
-            .expect_err("partial namespace must fail-fast (ADR 0030)");
+            .expect_err("partial namespace must fail-fast (ADR 0035)");
         match err {
             ConfigError::PartialR2Namespace { prefix, present, missing } => {
                 assert_eq!(prefix, "R2_STAGING_");
@@ -408,7 +408,7 @@ mod tests {
         clear_all_r2_env();
     }
 
-    /// ADR 0030 — invalid `GOLD_VERSION` 가 panic 안 함 (typed err 로 propagate).
+    /// ADR 0035 — invalid `GOLD_VERSION` 가 panic 안 함 (typed err 로 propagate).
     #[test]
     fn invalid_gold_version_returns_typed_error() {
         let _g = ENV_LOCK.lock().expect("lock");

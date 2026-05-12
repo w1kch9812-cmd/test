@@ -359,7 +359,7 @@ def test_load_r2_credentials_full_namespace(monkeypatch: pytest.MonkeyPatch) -> 
 def test_load_r2_credentials_partial_namespace_fails_fast(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """ADR 0030 핵심 — 부분 namespace = credential mix 차단 fail-fast.
+    """ADR 0035 핵심 — 부분 namespace = credential mix 차단 fail-fast.
 
     이전 Codex stop-hook 발견 시나리오 회귀.
     """
@@ -381,7 +381,7 @@ def test_load_r2_credentials_partial_namespace_fails_fast(
 def test_load_r2_credentials_legacy_completely_ignored(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR 0030 — legacy `R2_*` (namespace 없음) **완전 제거**. 어떤 env 에서도 활성 X.
+    """ADR 0035 — legacy `R2_*` (namespace 없음) **완전 제거**. 어떤 env 에서도 활성 X.
 
     staging + legacy 4개 모두 set 돼있어도 namespace 0 = `None` (R2 비활성).
     이전 (ADR 0029 1-sprint backward-compat) 자체가 trick — 본 test 가 그 회귀 invariant.
@@ -393,13 +393,13 @@ def test_load_r2_credentials_legacy_completely_ignored(
     monkeypatch.setitem(dtmk_vworld.ENV, "R2_SECRET_KEY", "leg-secret")
     monkeypatch.setitem(dtmk_vworld.ENV, "R2_BUCKET", "leg-bucket")
     creds = dtmk_vworld.load_r2_credentials()
-    assert creds is None, "ADR 0030: legacy R2_* must NOT activate anywhere"
+    assert creds is None, "ADR 0035: legacy R2_* must NOT activate anywhere"
 
 
 def test_load_r2_credentials_local_namespace_zero_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """ADR 0030 — local + namespace 4개 모두 unset = None (R2 비활성, local-only mode).
+    """ADR 0035 — local + namespace 4개 모두 unset = None (R2 비활성, local-only mode).
 
     이전 (ADR 0029) 의 fail-fast 정책 변경 — local-only mode 가 정상 path.
     """
