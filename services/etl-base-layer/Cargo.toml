@@ -48,9 +48,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json"
 # pre-MSRV-bump 버전으로 고정. workspace MSRV 가 1.91 로 올라갈 때 모두 latest 로 풀어도 됨.
 # (Cargo.lock 의 `aws-smithy-async = "=1.2.10"` 도 같은 이유로 함께 핀)
 aws-config = { version = "=1.8.5", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-sdk-s3 = { version = "=1.86.0", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-credential-types = "=1.2.5"
-aws-smithy-types = "=1.3.4"
+aws-sdk-s3 = { version = "=1.106.0", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
+aws-credential-types = "=1.2.10"
+aws-smithy-types = "=1.4.7"
 
 [dev-dependencies]
 wiremock = { workspace = true }
