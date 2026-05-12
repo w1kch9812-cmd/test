@@ -123,7 +123,13 @@ def load_r2_credentials() -> dict[str, str] | None:
     분기:
     1. namespace 4개 *모두* set → 자격 dict 반환
     2. namespace *부분* set → fail-fast (mix 차단, 누락 항목 박제)
-    3. namespace 4개 모두 unset → `None` 반환 (R2 비활성, local-only mode)
+    3. namespace 4개 모두 unset → `None` 반환 (module API 차원의 local-only mode)
+
+    **caller 책임**: 본 함수는 자격 *해석* 만 담당. None 을 "정상 / 에러" 판단은 caller.
+    - `make_r2()` / scraper `main()` 처럼 R2 PUT 이 필수인 path = None → `sys.exit(2)`
+    - test / module import 처럼 R2 client 없이도 동작 = None → skip 가능
+    "비활성" 은 단순히 "client 미생성" 을 가리키며, scraper main path 에서 자동
+    fail-fast 가 함께 박제됨 (Codex Round 6 finding #8 정리).
 
     legacy `R2_*` (namespace 없음) **완전 제거** (ADR 0035). 이전 1-sprint backward-compat
     자체가 trick — credential mix 위험 path. operator 가 `R2_<ENV>_*` 명시 set 필수.

@@ -932,13 +932,24 @@ fn nonempty_env_var(name: &str) -> Option<String> {
 /// `R2_PUBLIC_URL_BASE` env → [`R2PublicBase`] 검증된 newtype.
 ///
 /// 미설정 / 빈 문자열 / scheme 위반 / host 부재 모두 fail-fast — placeholder URL 발행 0.
+/// Codex Round 6 finding #7 — production 환경에서는 `http://` 거부 (TLS 강제).
+/// dev / staging 은 localhost 등 http 허용.
 fn read_r2_public_base() -> Result<R2PublicBase, String> {
     let raw = std::env::var("R2_PUBLIC_URL_BASE")
         .map_err(|_| "R2_PUBLIC_URL_BASE env is not set".to_owned())?;
     if raw.trim().is_empty() {
         return Err("R2_PUBLIC_URL_BASE is empty".to_owned());
     }
-    R2PublicBase::new(raw).map_err(|e| e.to_string())
+    let base = R2PublicBase::new(raw).map_err(|e| e.to_string())?;
+    if sp9_base_layer_config::Environment::is_production_from_env()
+        && base.as_str().to_ascii_lowercase().starts_with("http://")
+    {
+        return Err(
+            "R2_PUBLIC_URL_BASE must use https:// in production (ADR 0035 + finding #7)"
+                .to_owned(),
+        );
+    }
+    Ok(base)
 }
 
 fn init_tracing() {

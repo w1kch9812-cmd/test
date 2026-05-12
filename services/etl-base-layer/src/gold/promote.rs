@@ -639,7 +639,7 @@ mod tests {
         }
     }
 
-    /// Round 4 #5 — CDN config 누락 + ETL_BUILD_ENV != production = `SkippedDevMode`.
+    /// Round 4 #5 — CDN config 누락 + ETL_ENVIRONMENT != production = `SkippedDevMode`.
     #[tokio::test]
     async fn cloudflare_purge_skips_silently_in_dev_mode() {
         let _guard = ENV_LOCK.lock().expect("env mutex");
@@ -652,7 +652,7 @@ mod tests {
         clear_cdn_env();
     }
 
-    /// Round 4 #5 — CDN config 누락 + ETL_BUILD_ENV=production = fail-fast (silent path 0).
+    /// Round 4 #5 — CDN config 누락 + ETL_ENVIRONMENT=production = fail-fast (silent path 0).
     #[tokio::test]
     async fn cloudflare_purge_fails_fast_in_production_when_config_missing() {
         let _guard = ENV_LOCK.lock().expect("env mutex");

@@ -298,7 +298,7 @@ jobs:
           # MIN_BYTES override — SSOT 의 NATIONWIDE_PMTILES_MIN_BYTES 와 동일 값.
           VERIFY_MIN_BYTES: ${{ needs.setup.outputs.nationwide_pmtiles_min_bytes }}
           # Round 3 P1 — Sentry traces sampling 활성 + correlation_id (workflow run_id).
-          # ADR 0029 — `ETL_BUILD_ENV` 잔존 제거. `ETL_ENVIRONMENT` 가 SSOT (위 line 164/285).
+          # ADR 0035 — `ETL_BUILD_ENV` 완전 제거. `ETL_ENVIRONMENT` 가 SSOT (위 line 164/285).
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_TRACES_SAMPLE_RATE: "1.0"
           GIT_SHA: ${{ github.sha }}
