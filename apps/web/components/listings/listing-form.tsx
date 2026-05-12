@@ -141,7 +141,7 @@ export function ListingForm(): React.ReactElement {
       noValidate
     >
       <div className="space-y-2">
-        <Label htmlFor="parcel_pnu">PNU (필지 번호, 19자리)</Label>
+        <Label htmlFor="parcel_pnu">{t("labels.pnu")}</Label>
         <Input
           id="parcel_pnu"
           inputMode="numeric"
@@ -156,13 +156,13 @@ export function ListingForm(): React.ReactElement {
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="listing_type">매물 유형</Label>
+          <Label htmlFor="listing_type">{t("labels.listingType")}</Label>
           <select
             id="listing_type"
             className="flex h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-3.5"
             {...register("listing_type")}
           >
-            <option value="">선택해 주세요</option>
+            <option value="">{t("labels.selectPlaceholder")}</option>
             {LISTING_TYPES.map((t) => (
               <option key={t} value={t}>
                 {LISTING_TYPE_LABELS[t]}
@@ -175,13 +175,13 @@ export function ListingForm(): React.ReactElement {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="transaction_type">거래 유형</Label>
+          <Label htmlFor="transaction_type">{t("labels.transactionType")}</Label>
           <select
             id="transaction_type"
             className="flex h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-3.5"
             {...register("transaction_type")}
           >
-            <option value="">선택해 주세요</option>
+            <option value="">{t("labels.selectPlaceholder")}</option>
             {TRANSACTION_TYPES.map((t) => (
               <option key={t} value={t}>
                 {TRANSACTION_TYPE_LABELS[t]}
@@ -196,7 +196,7 @@ export function ListingForm(): React.ReactElement {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="price_krw">가격 (원)</Label>
+          <Label htmlFor="price_krw">{t("labels.price")}</Label>
           <Input
             id="price_krw"
             type="number"
@@ -210,7 +210,7 @@ export function ListingForm(): React.ReactElement {
 
         {showDeposit ? (
           <div className="space-y-2">
-            <Label htmlFor="deposit_krw">보증금 (원)</Label>
+            <Label htmlFor="deposit_krw">{t("labels.deposit")}</Label>
             <Input
               id="deposit_krw"
               type="number"
@@ -228,7 +228,7 @@ export function ListingForm(): React.ReactElement {
 
         {showMonthlyRent ? (
           <div className="space-y-2">
-            <Label htmlFor="monthly_rent_krw">월세 (원)</Label>
+            <Label htmlFor="monthly_rent_krw">{t("labels.monthlyRent")}</Label>
             <Input
               id="monthly_rent_krw"
               type="number"
@@ -246,7 +246,7 @@ export function ListingForm(): React.ReactElement {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="area_m2">면적 (㎡)</Label>
+        <Label htmlFor="area_m2">{t("labels.area")}</Label>
         <Input
           id="area_m2"
           type="number"
@@ -259,7 +259,7 @@ export function ListingForm(): React.ReactElement {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="title">제목 (≤200자)</Label>
+        <Label htmlFor="title">{t("labels.title")}</Label>
         <Input id="title" maxLength={200} {...register("title")} />
         {errors.title ? (
           <p className="text-sm text-red-600">{tErr(errors.title?.message)}</p>
@@ -267,7 +267,7 @@ export function ListingForm(): React.ReactElement {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="description">설명 (≤5000자)</Label>
+        <Label htmlFor="description">{t("labels.description")}</Label>
         <textarea
           id="description"
           rows={6}
@@ -281,7 +281,7 @@ export function ListingForm(): React.ReactElement {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="contact_visibility">연락처 공개 범위</Label>
+        <Label htmlFor="contact_visibility">{t("labels.contactVisibilityLabel")}</Label>
         <select
           id="contact_visibility"
           className="flex h-10 w-full rounded-[var(--radius-md)] border border-[var(--color-hairline)] bg-[var(--color-canvas)] px-3.5"
@@ -295,12 +295,10 @@ export function ListingForm(): React.ReactElement {
         </select>
       </div>
 
-      <p className="text-sm text-[var(--color-muted)]">
-        사진 업로드는 준비 중이에요 (SP4-iii-e 의 R2 통합 후 활성화 — FU 56).
-      </p>
+      <p className="text-sm text-[var(--color-muted)]">{t("photoNotice")}</p>
 
       <Button type="submit" disabled={isSubmitting || mutation.isPending}>
-        {isSubmitting || mutation.isPending ? "등록 중..." : "매물 등록"}
+        {isSubmitting || mutation.isPending ? t("submit.pending") : t("submit.idle")}
       </Button>
     </form>
   );

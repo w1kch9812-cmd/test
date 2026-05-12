@@ -48,7 +48,25 @@
       "jeonseMonthlyRentForbidden": "전세는 월세가 없어야 해요",
       "monthlyRentDepositRequired": "월세는 보증금이 필요해요",
       "monthlyRentMonthlyRequired": "월세는 월세 금액이 필요해요"
-    }
+    },
+    "labels": {
+      "pnu": "PNU (필지 번호, 19자리)",
+      "listingType": "매물 유형",
+      "transactionType": "거래 유형",
+      "price": "가격 (원)",
+      "deposit": "보증금 (원)",
+      "monthlyRent": "월세 (원)",
+      "area": "면적 (㎡)",
+      "title": "제목 (≤200자)",
+      "description": "설명 (≤5000자)",
+      "contactVisibilityLabel": "연락처 공개 범위",
+      "selectPlaceholder": "선택해 주세요"
+    },
+    "submit": {
+      "idle": "매물 등록",
+      "pending": "등록 중..."
+    },
+    "photoNotice": "사진 업로드는 준비 중이에요 (SP4-iii-e 의 R2 통합 후 활성화 — FU 56)."
   },
   "bookmark": {
     "added": "즐겨찾기 추가했어요",
