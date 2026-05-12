@@ -1,5 +1,6 @@
 "use client";
 import { Badge, Card } from "@gongzzang/ui";
+import { MEDIA_QUERIES_MAX } from "@gongzzang/ui/tokens.js";
 import { Heart } from "lucide-react";
 import type { Route } from "next";
 import Image from "next/image";
@@ -55,7 +56,7 @@ export function ListingCard({ data }: ListingCardProps) {
               alt={data.title}
               fill
               className="object-cover"
-              sizes="(max-width: 768px) 100vw, 420px"
+              sizes={`${MEDIA_QUERIES_MAX.md} 100vw, 420px`}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-[length:var(--text-caption)] text-[var(--color-muted)]">

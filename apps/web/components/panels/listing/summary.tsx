@@ -1,5 +1,6 @@
 "use client";
 import { Badge } from "@gongzzang/ui";
+import { MEDIA_QUERIES_MAX } from "@gongzzang/ui/tokens.js";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -27,7 +28,7 @@ export function ListingSummaryCard({
             alt={data.title}
             fill
             className="object-cover"
-            sizes="(max-width: 1280px) 100vw, 600px"
+            sizes={`${MEDIA_QUERIES_MAX.xl} 100vw, 600px`}
             onError={() => setImageBroken(true)}
           />
         </div>

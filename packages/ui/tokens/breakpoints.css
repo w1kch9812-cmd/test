@@ -1,0 +1,21 @@
+/*
+ * Breakpoint tokens — viewport size SSOT.
+ *
+ * 본 파일은 *CSS variable 정의 SSOT*. JS 측 동일 SSOT 는
+ * packages/ui/tokens.ts 의 `BREAKPOINTS_PX` (반드시 동기화 — typecheck 가
+ * 추후 build-time enforce 검토).
+ *
+ * Tailwind v4 의 `@theme` 가 본 파일을 import 하여 `md:` `xl:` 등 utility 자동
+ * 생성. JS 코드 (예: useMediaQuery / Next.js Image sizes) 는 packages/ui 의
+ * `BREAKPOINTS_PX` 또는 `MEDIA_QUERY` 를 import 사용.
+ *
+ * 값 근거: Tailwind v3/v4 default scale. 변경 시 packages/ui/tokens.ts +
+ * 본 파일 *동시* 변경 필수.
+ */
+:root {
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
