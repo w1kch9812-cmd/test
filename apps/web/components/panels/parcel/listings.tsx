@@ -2,6 +2,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import type { ListingsResponse } from "@/lib/listings/api";
+import { UNITS } from "@/lib/listings/format";
 import type { PanelStackEntry } from "@/lib/panel/types";
 import { usePanelStack } from "@/lib/panel/use-panel-stack";
 
@@ -34,7 +35,8 @@ export function ParcelListingsCard({
             >
               <div className="font-semibold text-[var(--color-ink)]">{l.title}</div>
               <div className="text-[length:var(--text-caption)] text-[var(--color-muted)]">
-                {l.price_krw.toLocaleString("ko-KR")} 원 · {l.area_m2.toLocaleString("ko-KR")} ㎡
+                {l.price_krw.toLocaleString("ko-KR")} {UNITS.krw} ·{" "}
+                {l.area_m2.toLocaleString("ko-KR")} {UNITS.m2}
               </div>
             </button>
           </li>
