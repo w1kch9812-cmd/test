@@ -241,7 +241,7 @@ jobs:
 
       # Round 3 P0 supply-chain gates (Rust 측). Bronze 측은 phase1 에서 이미 적용.
       - name: cargo-deny (license + advisories + duplicates)
-        uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1  # v2.0.6 (Round 5 SHA pin, ADR 0028)
+        uses: EmbarkStudios/cargo-deny-action@6c8f9facfa5047ec02d8485b6bf52b587b7777d1  # v2.0.6 (Round 5 SHA pin, ADR 0028)
         with:
           command: check
       - name: gitleaks (secret scan)
