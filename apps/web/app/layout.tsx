@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
+import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import "./globals.css";
 import { Toaster } from "@gongzzang/ui";
 import { env } from "@/lib/env";
@@ -11,10 +11,13 @@ import { QueryProvider } from "@/lib/query";
 // 렌더된 글자에 해당하는 subset 만 자동 다운로드 (한국어 페이지 보통 150-300 KB).
 // 4 weight 통째 self-host (3 MB+) → variable axis 1 file × subset = 95% 절감.
 
-export const metadata: Metadata = {
-  title: "공짱 — 산업용 부동산 정보",
-  description: "산업용 부동산 정보 플랫폼",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getTranslations("meta");
+  return {
+    title: t("title"),
+    description: t("description"),
+  };
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();

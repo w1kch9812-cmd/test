@@ -43,6 +43,10 @@
     "ariaAdd": "즐겨찾기 추가",
     "ariaRemove": "즐겨찾기 해제"
   },
+  "meta": {
+    "title": "공짱 — 산업용 부동산 정보",
+    "description": "산업용 부동산 정보 플랫폼"
+  },
   "notifications": {
     "fallbackListingTitle": "매물",
     "fallbackBookmarker": "한 사용자",
