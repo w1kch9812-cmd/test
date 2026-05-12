@@ -62,13 +62,21 @@ jobs:
       - name: Sentry CLI alert
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # ADR 0028 — sentry-cli version pin. Round 6 finding #14 fix.
+          SENTRY_CLI_VERSION: "2.41.1"
         run: |
+          set -euo pipefail
+          # manifest cleanup 실패는 silent 가 위험 — DSN 필수 (finding #18 fix).
           if [ -z "${SENTRY_DSN:-}" ]; then
-            echo "::warning::SENTRY_DSN not set — skipping alert"
-            exit 0
+            echo "::error::SENTRY_DSN secret is required for backup-cleanup audit alerting (ADR 0028)."
+            exit 1
           fi
-          curl -sL https://sentry.io/get-cli/ | bash
-          sentry-cli send-event \
+          install_dir="${RUNNER_TEMP:-/tmp}/sentry-cli"
+          mkdir -p "${install_dir}"
+          curl -sSfL --proto '=https' --tlsv1.2 -o "${install_dir}/sentry-cli" \
+            "https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}/sentry-cli-Linux-x86_64"
+          chmod +x "${install_dir}/sentry-cli"
+          "${install_dir}/sentry-cli" send-event \
             --message "SP9 manifest backup cleanup failed (run ${{ github.run_id }})" \
             --level error \
             --tag "workflow:sp9-manifest-backup-cleanup" \

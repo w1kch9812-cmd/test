@@ -116,10 +116,16 @@ jobs:
       - name: pip install
         working-directory: services/scraper-py
         run: |
-          pip install --upgrade pip
+          # ADR 0028 — pip 자체도 reproducible pin (`==`) 사용. 자동 upgrade 회피.
+          # 모든 supply-chain tool pinned — Codex Round 6 finding #11 fix.
+          python -m pip install 'pip==24.3.1'
           pip install -r requirements.txt
-          # Round 3 P0 supply-chain gate — pip-audit / cyclonedx (SBOM).
-          pip install pip-audit==2.7.3 cyclonedx-bom==4.7.0 ruff mypy pytest
+          pip install \
+            'pip-audit==2.7.3' \
+            'cyclonedx-bom==4.7.0' \
+            'ruff==0.7.4' \
+            'mypy==1.13.0' \
+            'pytest==9.0.2'
       - name: Lint (ruff strict)
         working-directory: services/scraper-py
         run: python -m ruff check .
@@ -353,7 +359,10 @@ jobs:
           R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
           R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
-          # CDN purge — secrets 미설정 시 promote 가 warn skip (manifest no-cache 가 fallback).
+          # CDN purge — `ETL_ENVIRONMENT=production` 에서는 양쪽 필수 (Rust `cloudflare_purge`
+          # 가 `CdnPurgeConfigMissing` 으로 fail-fast). dev/staging 에서만 silent skip.
+          # Codex Round 6 finding #12 — 표면적 "warn skip" 표현은 production fail-fast 와 모순,
+          # production-only workflow 본 yml 에서는 secret 필수임을 명시.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         run: |
@@ -375,15 +384,24 @@ jobs:
       - name: Sentry CLI alert (proper envelope endpoint)
         env:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # ADR 0028 — sentry-cli version pin. Round 6 finding #14 fix.
+          # `curl | bash` 의 remote-script-execution 제거 → GitHub Releases 에서 정적 binary 직접 download.
+          SENTRY_CLI_VERSION: "2.41.1"
         run: |
+          set -euo pipefail
+          # Codex Round 6 finding #13 — production alert path 는 SENTRY_DSN 필수. silent skip 제거.
           if [ -z "${SENTRY_DSN:-}" ]; then
-            echo "::warning::SENTRY_DSN not set — skipping workflow-level alert"
-            exit 0
+            echo "::error::SENTRY_DSN secret is required for SP9 production alerting (ADR 0028). Set repo secret."
+            exit 1
           fi
-          # sentry-cli 설치 (공식, GitHub Releases 에서 정적 binary).
-          curl -sL https://sentry.io/get-cli/ | bash
+          # sentry-cli (정적 binary, GitHub Releases) — HTTPS + version pin → curl | bash 대체.
+          install_dir="${RUNNER_TEMP:-/tmp}/sentry-cli"
+          mkdir -p "${install_dir}"
+          curl -sSfL --proto '=https' --tlsv1.2 -o "${install_dir}/sentry-cli" \
+            "https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}/sentry-cli-Linux-x86_64"
+          chmod +x "${install_dir}/sentry-cli"
           # send-event = 모던 envelope endpoint 사용 (legacy /store/ 와 다름).
-          sentry-cli send-event \
+          "${install_dir}/sentry-cli" send-event \
             --message "SP9 Base Layer ETL failed (run ${{ github.run_id }})" \
             --level error \
             --tag "workflow:sp9-base-layer-etl" \

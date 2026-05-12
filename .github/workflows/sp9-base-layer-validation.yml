@@ -222,16 +222,15 @@ jobs:
       - name: pip install
         working-directory: services/scraper-py
         run: |
-          pip install --upgrade pip
+          # ADR 0028 — pip / ruff 모두 reproducible pin. Codex Round 6 finding #11 + #15 fix.
+          # `pip install --upgrade pip` 의 floating upgrade 제거.
+          python -m pip install 'pip==24.3.1'
           pip install -r requirements.txt
-      - name: ruff check (있으면)
+          pip install 'ruff==0.7.4'
+      - name: ruff check (mandatory)
         working-directory: services/scraper-py
-        run: |
-          if pip show ruff >/dev/null 2>&1; then
-            ruff check .
-          else
-            echo "ruff not in requirements — skipping"
-          fi
+        # Codex Round 6 finding #15 — "있으면" optional skip 제거. validation 단계의 lint 는 항상 강제.
+        run: python -m ruff check .
       - name: import smoke (script not actually executed)
         working-directory: services/scraper-py
         run: python -c "import dtmk_vworld; print('import OK')"
