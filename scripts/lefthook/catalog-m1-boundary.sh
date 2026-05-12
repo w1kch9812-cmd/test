@@ -121,12 +121,16 @@ for root in "${scan_roots[@]}"; do
         }
       }
 
-      # ── 3b) `.nest("path", sub)` — sub-router may live elsewhere ─────────
-      while (m{\.nest(?:_service)?\s*\(\s*"([^"]*)"\s*,}sg) {
-        my $path = $1;
+      # ── 3b) `.nest("path", sub)` / `.route_service("path", svc)` ────────
+      # Both register opaque routing surface (sub-router or arbitrary
+      # `Service<Request>`) at the catalog path — service can handle any
+      # method including mutations. Forbid for catalog paths entirely.
+      while (m{\.(nest(?:_service)?|route_service)\s*\(\s*"([^"]*)"\s*,}sg) {
+        my $kind = $1;
+        my $path = $2;
         my $resume_pos = pos();
         if ($path =~ m{/$path_re(/|$|\?)}) {
-          print "  $path -> .nest(\"$path\", ...) sub-router (M1 forbids catalog mutation surface)\n";
+          print "  $path -> .$kind(\"$path\", ...) opaque routing surface (M1 forbids catalog mutation surface)\n";
         }
         pos($_) = $resume_pos;
       }
@@ -184,9 +188,10 @@ for root in "${scan_roots[@]}"; do
             print "  $name (=\"$val\") .route -> Method::$1 constant (M1 read-only)\n";
           }
         }
-        # nest(IDENT, ...) — sub-router opacity = forbid.
-        while (m{\.nest(?:_service)?\s*\(\s*\Q$name\E\s*,}sg) {
-          print "  $name (=\"$val\") .nest sub-router (M1 forbids catalog mutation surface)\n";
+        # nest(IDENT, ...) / route_service(IDENT, ...) — opaque routing = forbid.
+        while (m{\.(nest(?:_service)?|route_service)\s*\(\s*\Q$name\E\s*,}sg) {
+          my $kind = $1;
+          print "  $name (=\"$val\") .$kind opaque routing surface (M1 forbids catalog mutation surface)\n";
         }
       }
     ' "$file")
