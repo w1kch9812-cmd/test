@@ -33,9 +33,21 @@ import {
 export function ListingForm(): React.ReactElement {
   const router = useRouter();
   const t = useTranslations("listingForm");
+  const tRoot = useTranslations();
   const tListingType = useTranslations("panels.listing.summary.type");
   const tTx = useTranslations("panels.listing.summary.transaction");
   const tVis = useTranslations("listingForm.contactVisibility");
+
+  // zod schema 의 message 는 i18n key (예: 'listingForm.errors.pnuFormat').
+  // 표시 시점에 root translator 로 변환. 키 누락 시 raw key 그대로 표시 (개발자에게 신호).
+  const tErr = (msg: string | undefined): string | undefined => {
+    if (!msg) return undefined;
+    try {
+      return tRoot(msg);
+    } catch {
+      return msg;
+    }
+  };
 
   const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number], string> = {
     factory: tListingType("factory"),
@@ -138,7 +150,7 @@ export function ListingForm(): React.ReactElement {
           {...register("parcel_pnu")}
         />
         {errors.parcel_pnu ? (
-          <p className="text-sm text-red-600">{errors.parcel_pnu.message}</p>
+          <p className="text-sm text-red-600">{tErr(errors.parcel_pnu?.message)}</p>
         ) : null}
       </div>
 
@@ -158,7 +170,7 @@ export function ListingForm(): React.ReactElement {
             ))}
           </select>
           {errors.listing_type ? (
-            <p className="text-sm text-red-600">{errors.listing_type.message}</p>
+            <p className="text-sm text-red-600">{tErr(errors.listing_type?.message)}</p>
           ) : null}
         </div>
 
@@ -177,7 +189,7 @@ export function ListingForm(): React.ReactElement {
             ))}
           </select>
           {errors.transaction_type ? (
-            <p className="text-sm text-red-600">{errors.transaction_type.message}</p>
+            <p className="text-sm text-red-600">{tErr(errors.transaction_type?.message)}</p>
           ) : null}
         </div>
       </div>
@@ -192,7 +204,7 @@ export function ListingForm(): React.ReactElement {
             {...register("price_krw", { valueAsNumber: true })}
           />
           {errors.price_krw ? (
-            <p className="text-sm text-red-600">{errors.price_krw.message}</p>
+            <p className="text-sm text-red-600">{tErr(errors.price_krw?.message)}</p>
           ) : null}
         </div>
 
@@ -209,7 +221,7 @@ export function ListingForm(): React.ReactElement {
               })}
             />
             {errors.deposit_krw ? (
-              <p className="text-sm text-red-600">{errors.deposit_krw.message}</p>
+              <p className="text-sm text-red-600">{tErr(errors.deposit_krw?.message)}</p>
             ) : null}
           </div>
         ) : null}
@@ -227,7 +239,7 @@ export function ListingForm(): React.ReactElement {
               })}
             />
             {errors.monthly_rent_krw ? (
-              <p className="text-sm text-red-600">{errors.monthly_rent_krw.message}</p>
+              <p className="text-sm text-red-600">{tErr(errors.monthly_rent_krw?.message)}</p>
             ) : null}
           </div>
         ) : null}
@@ -241,13 +253,17 @@ export function ListingForm(): React.ReactElement {
           step="0.01"
           {...register("area_m2", { valueAsNumber: true })}
         />
-        {errors.area_m2 ? <p className="text-sm text-red-600">{errors.area_m2.message}</p> : null}
+        {errors.area_m2 ? (
+          <p className="text-sm text-red-600">{tErr(errors.area_m2?.message)}</p>
+        ) : null}
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="title">제목 (≤200자)</Label>
         <Input id="title" maxLength={200} {...register("title")} />
-        {errors.title ? <p className="text-sm text-red-600">{errors.title.message}</p> : null}
+        {errors.title ? (
+          <p className="text-sm text-red-600">{tErr(errors.title?.message)}</p>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -260,7 +276,7 @@ export function ListingForm(): React.ReactElement {
           {...register("description")}
         />
         {errors.description ? (
-          <p className="text-sm text-red-600">{errors.description.message}</p>
+          <p className="text-sm text-red-600">{tErr(errors.description?.message)}</p>
         ) : null}
       </div>
 

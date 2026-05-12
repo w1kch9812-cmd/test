@@ -33,16 +33,23 @@ const PNU_REGEX = /^\d{19}$/;
 
 // zod 4: errorMap → `error` callback, invalid_type_error 제거 (메시지는 fallback
 // custom validator 또는 issue.message 처리). enum 메시지는 default 가 충분.
+//
+// i18n SSOT: message 는 *i18n key* (예: 'listingForm.errors.pnuFormat'). caller
+// (form component) 가 `errors.[field].message` 표시 시 `useTranslations` 로
+// translate. apps/web/lib/i18n/ko.json 의 listingForm.errors.* 와 동기화.
 const baseListingFields = z.object({
-  parcel_pnu: z.string().regex(PNU_REGEX, "PNU 는 19자리 숫자여야 해요"),
+  parcel_pnu: z.string().regex(PNU_REGEX, "listingForm.errors.pnuFormat"),
   listing_type: z.enum(LISTING_TYPES),
   transaction_type: z.enum(TRANSACTION_TYPES),
-  price_krw: z.number().int().positive("가격은 0 보다 커야 해요"),
+  price_krw: z.number().int().positive("listingForm.errors.priceMin"),
   deposit_krw: z.number().int().positive().nullable(),
   monthly_rent_krw: z.number().int().positive().nullable(),
-  area_m2: z.number().positive("면적은 0 보다 커야 해요"),
-  title: z.string().min(1, "제목을 입력해 주세요").max(200, "제목은 200자 이하여야 해요"),
-  description: z.string().max(5000, "설명은 5000자 이하여야 해요"),
+  area_m2: z.number().positive("listingForm.errors.areaMin"),
+  title: z
+    .string()
+    .min(1, "listingForm.errors.titleRequired")
+    .max(200, "listingForm.errors.titleMax"),
+  description: z.string().max(5000, "listingForm.errors.descriptionMax"),
   // 폼 default 는 react-hook-form 의 defaultValues 가 셋팅 — schema 의 default
   // 는 input/output type 불일치 (zod 4) 로 react-hook-form Resolver 와 충돌.
   contact_visibility: z.enum(CONTACT_VISIBILITIES),
@@ -69,14 +76,14 @@ function refineTransactionFields(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["deposit_krw"],
-        message: "매매 거래는 보증금이 없어야 해요",
+        message: "listingForm.errors.saleDepositForbidden",
       });
     }
     if (monthly_rent_krw !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["monthly_rent_krw"],
-        message: "매매 거래는 월세가 없어야 해요",
+        message: "listingForm.errors.saleMonthlyRentForbidden",
       });
     }
   } else if (transaction_type === "jeonse") {
@@ -84,14 +91,14 @@ function refineTransactionFields(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["deposit_krw"],
-        message: "전세는 보증금이 필요해요",
+        message: "listingForm.errors.jeonseDepositRequired",
       });
     }
     if (monthly_rent_krw !== null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["monthly_rent_krw"],
-        message: "전세는 월세가 없어야 해요",
+        message: "listingForm.errors.jeonseMonthlyRentForbidden",
       });
     }
   } else if (transaction_type === "monthly_rent") {
@@ -99,14 +106,14 @@ function refineTransactionFields(
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["deposit_krw"],
-        message: "월세는 보증금이 필요해요",
+        message: "listingForm.errors.monthlyRentDepositRequired",
       });
     }
     if (monthly_rent_krw === null) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["monthly_rent_krw"],
-        message: "월세는 월세 금액이 필요해요",
+        message: "listingForm.errors.monthlyRentMonthlyRequired",
       });
     }
   }

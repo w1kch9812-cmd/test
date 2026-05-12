@@ -34,6 +34,20 @@
       "public": "전체 공개",
       "login_required": "로그인 시 공개",
       "verified_only": "인증 사용자만"
+    },
+    "errors": {
+      "pnuFormat": "PNU 는 19자리 숫자여야 해요",
+      "priceMin": "가격은 0 보다 커야 해요",
+      "areaMin": "면적은 0 보다 커야 해요",
+      "titleRequired": "제목을 입력해 주세요",
+      "titleMax": "제목은 200자 이하여야 해요",
+      "descriptionMax": "설명은 5000자 이하여야 해요",
+      "saleDepositForbidden": "매매 거래는 보증금이 없어야 해요",
+      "saleMonthlyRentForbidden": "매매 거래는 월세가 없어야 해요",
+      "jeonseDepositRequired": "전세는 보증금이 필요해요",
+      "jeonseMonthlyRentForbidden": "전세는 월세가 없어야 해요",
+      "monthlyRentDepositRequired": "월세는 보증금이 필요해요",
+      "monthlyRentMonthlyRequired": "월세는 월세 금액이 필요해요"
     }
   },
   "bookmark": {
