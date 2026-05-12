@@ -43,6 +43,42 @@
     "ariaAdd": "즐겨찾기 추가",
     "ariaRemove": "즐겨찾기 해제"
   },
+  "notifications": {
+    "fallbackListingTitle": "매물",
+    "fallbackBookmarker": "한 사용자",
+    "default": "알림이 도착했어요",
+    "approved": {
+      "title": "매물 \"{title}\" 이(가) 승인됐어요",
+      "description": "이제 다른 사용자에게 공개돼요."
+    },
+    "rejected": {
+      "title": "매물 \"{title}\" 이(가) 반려됐어요",
+      "reasonPrefix": "사유: {reason}",
+      "descriptionFallback": "사유는 매물 상세에서 확인해 주세요."
+    },
+    "bookmarked": {
+      "title": "{bookmarker} 님이 \"{title}\" 를 즐겨찾기 했어요"
+    },
+    "bell": {
+      "ariaWithUnread": "미읽음 알림 {count}건",
+      "ariaIdle": "알림"
+    },
+    "list": {
+      "markReadError": "읽음 처리 중 오류가 발생했어요",
+      "markReadSuccess": "{count}건 읽음 처리 ({label})",
+      "markAll": "모두 읽음",
+      "loading": "불러오는 중...",
+      "loadError": "알림을 불러오지 못했어요.",
+      "empty": "알림이 없어요.",
+      "groupHeader": "{label} ({count})",
+      "kind": {
+        "listing_approved": "매물 승인",
+        "listing_rejected": "매물 반려",
+        "listing_bookmarked": "즐겨찾기",
+        "other": "기타"
+      }
+    }
+  },
   "panels": {
     "parcel": {
       "empty": "필지 정보가 없어요",

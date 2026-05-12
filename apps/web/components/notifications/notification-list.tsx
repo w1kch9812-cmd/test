@@ -9,6 +9,7 @@
 
 import { Button } from "@gongzzang/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { NotificationCard } from "@/components/notifications/notification-card";
@@ -21,6 +22,19 @@ import {
 
 export function NotificationList(): React.ReactElement {
   const qc = useQueryClient();
+  const t = useTranslations("notifications.list");
+  const tKind = useTranslations("notifications.list.kind");
+
+  const labelForKind = (kind: NotificationKind | string): string => {
+    switch (kind) {
+      case "listing_approved":
+      case "listing_rejected":
+      case "listing_bookmarked":
+        return tKind(kind);
+      default:
+        return tKind("other");
+    }
+  };
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["notifications", "list"],
@@ -30,24 +44,24 @@ export function NotificationList(): React.ReactElement {
   const markAll = useMutation({
     mutationFn: (kind: NotificationKind) => markAllNotificationsRead(kind),
     onSuccess(count, kind) {
-      toast.success(`${count}건 읽음 처리 (${labelForKind(kind)})`);
+      toast.success(t("markReadSuccess", { count, label: labelForKind(kind) }));
       void qc.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError() {
-      toast.error("읽음 처리 중 오류가 발생했어요");
+      toast.error(t("markReadError"));
     },
   });
 
   if (isLoading) {
-    return <p className="text-sm text-[var(--color-muted)]">불러오는 중...</p>;
+    return <p className="text-sm text-[var(--color-muted)]">{t("loading")}</p>;
   }
 
   if (isError || !data) {
-    return <p className="text-sm text-red-600">알림을 불러오지 못했어요.</p>;
+    return <p className="text-sm text-red-600">{t("loadError")}</p>;
   }
 
   if (data.length === 0) {
-    return <p className="text-sm text-[var(--color-muted)]">알림이 없어요.</p>;
+    return <p className="text-sm text-[var(--color-muted)]">{t("empty")}</p>;
   }
 
   const grouped = groupByKind(data);
@@ -58,7 +72,10 @@ export function NotificationList(): React.ReactElement {
         <section key={kind} aria-labelledby={`heading-${kind}`} className="space-y-3">
           <header className="flex items-center justify-between">
             <h2 id={`heading-${kind}`} className="text-sm font-medium text-[var(--color-ink)]">
-              {labelForKind(kind as NotificationKind)} ({items.length})
+              {t("groupHeader", {
+                label: labelForKind(kind as NotificationKind),
+                count: items.length,
+              })}
             </h2>
             {items.some((n) => n.read_at == null) && (
               <Button
@@ -67,7 +84,7 @@ export function NotificationList(): React.ReactElement {
                 onClick={() => markAll.mutate(kind as NotificationKind)}
                 disabled={markAll.isPending}
               >
-                모두 읽음
+                {t("markAll")}
               </Button>
             )}
           </header>
@@ -90,17 +107,4 @@ function groupByKind(notifications: Notification[]): Record<string, Notification
     groups[n.kind] = bucket;
   }
   return groups;
-}
-
-function labelForKind(kind: NotificationKind | string): string {
-  switch (kind) {
-    case "listing_approved":
-      return "매물 승인";
-    case "listing_rejected":
-      return "매물 반려";
-    case "listing_bookmarked":
-      return "즐겨찾기";
-    default:
-      return "기타";
-  }
 }

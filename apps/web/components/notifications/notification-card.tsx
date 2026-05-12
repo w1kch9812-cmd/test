@@ -11,6 +11,7 @@ import { Card, CardContent } from "@gongzzang/ui";
 import { Heart, ListChecks, type LucideIcon, XCircle } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import type { Notification } from "@/lib/notifications/api";
 
@@ -19,7 +20,8 @@ interface NotificationCardProps {
 }
 
 export function NotificationCard({ notification }: NotificationCardProps): React.ReactElement {
-  const { title, description, href, Icon } = renderByKind(notification);
+  const t = useTranslations("notifications");
+  const { title, description, href, Icon } = renderByKind(notification, t);
   const isRead = notification.read_at != null;
 
   const inner = (
@@ -55,41 +57,46 @@ interface RenderResult {
   Icon: LucideIcon;
 }
 
-function renderByKind(n: Notification): RenderResult {
+type TFn = (key: string, values?: Record<string, string | number>) => string;
+
+function renderByKind(n: Notification, t: TFn): RenderResult {
   const payload = n.payload as Record<string, unknown>;
   const listingId = typeof payload.listing_id === "string" ? payload.listing_id : null;
-  const listingTitle = typeof payload.title === "string" ? payload.title : "매물";
+  const listingTitle =
+    typeof payload.title === "string" ? payload.title : t("fallbackListingTitle");
 
   switch (n.kind) {
     case "listing_approved":
       return {
-        title: `매물 "${listingTitle}" 이(가) 승인됐어요`,
-        description: "이제 다른 사용자에게 공개돼요.",
+        title: t("approved.title", { title: listingTitle }),
+        description: t("approved.description"),
         href: listingId ? `/listings/${listingId}` : undefined,
         Icon: ListChecks,
       };
     case "listing_rejected":
       return {
-        title: `매물 "${listingTitle}" 이(가) 반려됐어요`,
+        title: t("rejected.title", { title: listingTitle }),
         description:
           typeof payload.reason === "string"
-            ? `사유: ${payload.reason}`
-            : "사유는 매물 상세에서 확인해 주세요.",
+            ? t("rejected.reasonPrefix", { reason: payload.reason })
+            : t("rejected.descriptionFallback"),
         href: listingId ? `/listings/${listingId}` : undefined,
         Icon: XCircle,
       };
     case "listing_bookmarked": {
       const bookmarker =
-        typeof payload.bookmarker_name === "string" ? payload.bookmarker_name : "한 사용자";
+        typeof payload.bookmarker_name === "string"
+          ? payload.bookmarker_name
+          : t("fallbackBookmarker");
       return {
-        title: `${bookmarker} 님이 "${listingTitle}" 를 즐겨찾기 했어요`,
+        title: t("bookmarked.title", { bookmarker, title: listingTitle }),
         href: listingId ? `/listings/${listingId}` : undefined,
         Icon: Heart,
       };
     }
     default:
       return {
-        title: "알림이 도착했어요",
+        title: t("default"),
         Icon: ListChecks,
       };
   }

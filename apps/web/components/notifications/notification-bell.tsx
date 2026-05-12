@@ -11,17 +11,19 @@ import { Badge } from "@gongzzang/ui";
 import { Bell } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 
 import { useUnreadCount } from "@/lib/notifications/use-unread-count";
 
 export function NotificationBell(): React.ReactElement {
+  const t = useTranslations("notifications.bell");
   const { count } = useUnreadCount();
   const display = count > 99 ? "99+" : String(count);
 
   return (
     <Link
       href={"/me/notifications" as Route}
-      aria-label={count > 0 ? `미읽음 알림 ${count}건` : "알림"}
+      aria-label={count > 0 ? t("ariaWithUnread", { count }) : t("ariaIdle")}
       className="relative inline-flex items-center justify-center rounded-md p-2 hover:bg-[var(--color-surface-cream-strong)]"
     >
       <Bell className="h-5 w-5" aria-hidden="true" />
