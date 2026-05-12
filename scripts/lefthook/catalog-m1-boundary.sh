@@ -110,7 +110,7 @@ for root in "${scan_roots[@]}"; do
         # Direct word-boundary match catches all module-qualified forms:
         # `post(`, `routing::post(`, `axum::routing::post(`, etc.
         # `\b` excludes `post_user(` (continues as word char).
-        while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)\s*\(/gi) {
+        while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_method|method_router|fallback)(?:_service)?\s*\(/gi) {
           my $m = $1;
           print "  $path -> handler uses \"$m\" (M1 allows only get/head)\n";
           last;
@@ -175,7 +175,7 @@ for root in "${scan_roots[@]}"; do
           pos($_) = $resume_pos;
           next if $depth != 0;
           my $block = substr($_, $tail_start, $pos - $tail_start);
-          while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_service|on_method|method_router|fallback)\s*\(/gi) {
+          while ($block =~ /\b(post|put|patch|delete|options|trace|connect|any|on|on_method|method_router|fallback)(?:_service)?\s*\(/gi) {
             my $m = $1;
             print "  $name (=\"$val\") .route -> handler uses \"$m\" (M1 allows only get/head)\n";
             last;
