@@ -204,7 +204,11 @@ impl R2RawCapture {
     }
 
     /// R2 PUT — circuit breaker 통과. body 는 한 번만 owned, retry 시 재생성 필요해 호출자가 owned 전달.
-    async fn put_object(&self, key: &str, body: Vec<u8>) -> Result<(), BreakerError<RawCaptureError>> {
+    async fn put_object(
+        &self,
+        key: &str,
+        body: Vec<u8>,
+    ) -> Result<(), BreakerError<RawCaptureError>> {
         let body_arc = Arc::new(body);
         execute(
             &self.breaker,
@@ -330,10 +334,7 @@ mod tests {
 
     #[test]
     fn endpoint_url_format() {
-        assert_eq!(
-            cfg().endpoint_url(),
-            "https://acc.r2.cloudflarestorage.com"
-        );
+        assert_eq!(cfg().endpoint_url(), "https://acc.r2.cloudflarestorage.com");
     }
 
     #[test]

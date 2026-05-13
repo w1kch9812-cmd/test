@@ -133,8 +133,8 @@ mod tests {
         let raw: Value = serde_json::from_str(&raw_str).expect("valid JSON");
         let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
 
-        let mut buildings = parse_building_title(&raw, &pnu, &dummy_polygon(), Utc::now())
-            .expect("parse ok");
+        let mut buildings =
+            parse_building_title(&raw, &pnu, &dummy_polygon(), Utc::now()).expect("parse ok");
         for b in &mut buildings {
             b.geom = None;
         }
@@ -149,7 +149,10 @@ mod tests {
 
         // enum mapping (Cd primary + label fallback)
         assert_eq!(b.main_purpose_code, BuildingPurposeCode::Office); // mainPurpsCd "14000"
-        assert_eq!(b.structure_code, BuildingStructureCode::SteelReinforcedConcrete); // strctCd "42"
+        assert_eq!(
+            b.structure_code,
+            BuildingStructureCode::SteelReinforcedConcrete
+        ); // strctCd "42"
 
         // 면적 / 비율 — Codex round 8 fix: parser 가 모든 panel 필드 채움
         assert!(b.total_floor_area_m2.as_f64() > 200_000.0); // 212615.29

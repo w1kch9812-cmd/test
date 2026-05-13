@@ -10,12 +10,11 @@
 //! `POST /users` 는 제거 — first-sign-in 자동 생성으로 대체.
 
 #![forbid(unsafe_code)]
-// `main.rs`: init failure panic은 정답이라 expect/unwrap 허용해요.
-#![allow(clippy::expect_used, clippy::unwrap_used)]
 // FU 26 — JWKS reqwest::Client 초기화는 legitimate (auth crate 가 wrapper).
 #![allow(clippy::disallowed_types)]
 
 use std::env;
+use std::process::ExitCode;
 use std::sync::Arc;
 
 use auth::jwks_cache::JwksCache;
@@ -33,6 +32,7 @@ use listing_domain::repository::ListingRepository;
 use listing_photo_domain::repository::ListingPhotoRepository;
 use parcel_domain::reader::ParcelReader;
 use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup, VWorldParcelInfoLookup};
+use raw_capture_client::RawCapture;
 use serde::Serialize;
 use shared_kernel::id::{Id, UserMarker};
 use sqlx::postgres::PgPoolOptions;
@@ -163,40 +163,324 @@ async fn get_user(
     Ok(Json(user.into()))
 }
 
-/// audit 2026-05-08 — production 환경에서 critical config 미설정 시 fail-fast.
-/// `tracing::error!` 로 구조화 emit (Sentry tracing layer 가 자동 capture) 후 즉시 종료.
-fn fail_fast_production(reason: &str) -> ! {
-    tracing::error!(event = "startup_fail_fast", reason = %reason, "production 차단");
-    // process::exit 는 Drop 미실행 — `_sentry_guard` flush 안 됨. 향후 SIGTERM 으로 graceful.
-    std::process::exit(1);
+#[derive(Debug, thiserror::Error)]
+enum StartupError {
+    #[error("{name} must be set")]
+    MissingEnv { name: &'static str },
+    #[error("{name} must not be empty")]
+    EmptyEnv { name: &'static str },
+    #[error("connect to Postgres: {source}")]
+    PostgresConnect {
+        #[source]
+        source: Box<sqlx::Error>,
+    },
+    #[error("build JWKS HTTP client: {source}")]
+    JwksHttpClient {
+        #[source]
+        source: Box<reqwest::Error>,
+    },
+    #[error("create Redis pool: {detail}")]
+    RedisPool { detail: String },
+    #[error("bind API listener {addr}: {source}")]
+    Bind {
+        addr: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("serve API: {source}")]
+    Serve {
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("production startup config invalid: {reason}")]
+    ProductionConfig { reason: String },
 }
 
-#[allow(clippy::too_many_lines)] // env 로딩 + state 조립 + router 7 endpoint — 분해 시 중복.
+fn required_env(name: &'static str) -> Result<String, StartupError> {
+    let value = env::var(name).map_err(|_| StartupError::MissingEnv { name })?;
+    let value = value.trim().to_owned();
+    if value.is_empty() {
+        return Err(StartupError::EmptyEnv { name });
+    }
+    Ok(value)
+}
+
+fn optional_env(name: &'static str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+fn production_config_error(reason: impl Into<String>) -> StartupError {
+    StartupError::ProductionConfig {
+        reason: reason.into(),
+    }
+}
+
+fn create_redis_pool(url: String) -> Result<Arc<deadpool_redis::Pool>, StartupError> {
+    let pool = RedisCfg::from_url(url)
+        .create_pool(Some(RedisRt::Tokio1))
+        .map_err(|source| StartupError::RedisPool {
+            detail: source.to_string(),
+        })?;
+    Ok(Arc::new(pool))
+}
+
+fn init_tracing() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+}
+
+async fn connect_postgres(database_url: &str) -> Result<sqlx::PgPool, StartupError> {
+    PgPoolOptions::new()
+        .max_connections(5)
+        .connect(database_url)
+        .await
+        .map_err(|source| StartupError::PostgresConnect {
+            source: Box::new(source),
+        })
+}
+
+fn is_production_env() -> bool {
+    std::env::var("APP_ENV").as_deref() == Ok("production")
+        || std::env::var("NODE_ENV").as_deref() == Ok("production")
+}
+
+fn build_raw_capture(
+    is_production: bool,
+    pool: sqlx::PgPool,
+) -> Result<Arc<dyn RawCapture>, StartupError> {
+    let inner = match r2_raw_capture::R2RawCaptureConfig::from_env() {
+        Ok(cfg) => build_r2_raw_capture(cfg, is_production)?,
+        Err(error) => build_noop_raw_capture(&error, is_production)?,
+    };
+    Ok(Arc::new(raw_capture_metadata::TrackedRawCapture::new(
+        inner, pool,
+    )))
+}
+
+fn build_r2_raw_capture(
+    cfg: r2_raw_capture::R2RawCaptureConfig,
+    is_production: bool,
+) -> Result<Arc<dyn RawCapture>, StartupError> {
+    if is_production && cfg.fallback_dir.is_none() {
+        return Err(production_config_error(
+            "BRONZE_FALLBACK_DIR 미설정 — R2 PUT 실패 시 raw 영구 손실. \
+             production 은 ADR 0026 의 디스크 fallback 필수 \
+             (예: /var/lib/gongzzang/bronze-fallback)",
+        ));
+    }
+    if let Err(error) = cfg.ensure_fallback_writable() {
+        handle_unwritable_raw_capture_fallback(&cfg, is_production, &error)?;
+    }
+    tracing::info!(
+        "raw_capture: R2 live (bucket={}, prefix={}, fallback={:?}) — ADR 0026",
+        cfg.bucket,
+        cfg.bronze_prefix,
+        cfg.fallback_dir,
+    );
+    Ok(Arc::new(r2_raw_capture::R2RawCapture::new(cfg)))
+}
+
+fn handle_unwritable_raw_capture_fallback(
+    cfg: &r2_raw_capture::R2RawCaptureConfig,
+    is_production: bool,
+    error: &std::io::Error,
+) -> Result<(), StartupError> {
+    if is_production {
+        return Err(production_config_error(format!(
+            "BRONZE_FALLBACK_DIR ({:?}) mkdir/write probe 실패 — production 차단: {error}",
+            cfg.fallback_dir
+        )));
+    }
+    tracing::warn!(
+        error = %error,
+        fallback_dir = ?cfg.fallback_dir,
+        "BRONZE_FALLBACK_DIR not writable (dev only — production 은 fail-fast)"
+    );
+    Ok(())
+}
+
+fn build_noop_raw_capture(
+    error: &r2_raw_capture::R2ConfigError,
+    is_production: bool,
+) -> Result<Arc<dyn RawCapture>, StartupError> {
+    if is_production {
+        return Err(production_config_error(format!(
+            "R2 env (R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET) 미설정 — Bronze raw_response 보존 path 0 (ADR 0026): {error}"
+        )));
+    }
+    tracing::warn!(
+        error = %error,
+        "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
+    );
+    Ok(Arc::new(raw_capture_client::NoOpRawCapture::new()))
+}
+
+fn build_parcel_lookup(
+    is_production: bool,
+    raw_capture: &Arc<dyn RawCapture>,
+) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
+    match VWorldConfig::from_env() {
+        Ok(cfg) => Ok(build_vworld_parcel_lookup(cfg, raw_capture)),
+        Err(error) => build_noop_parcel_lookup(&error, is_production),
+    }
+}
+
+fn build_vworld_parcel_lookup(
+    cfg: VWorldConfig,
+    raw_capture: &Arc<dyn RawCapture>,
+) -> Arc<dyn ParcelInfoLookup> {
+    tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
+    let client = Arc::new(VWorldClient::new(cfg));
+    let reader: Arc<dyn ParcelReader> =
+        Arc::new(VWorldParcelReader::new(client, Arc::clone(raw_capture)));
+    Arc::new(VWorldParcelInfoLookup::new(reader))
+}
+
+fn build_noop_parcel_lookup(
+    error: &vworld_client::ConfigError,
+    is_production: bool,
+) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
+    if is_production {
+        return Err(production_config_error(format!(
+            "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {error}"
+        )));
+    }
+    tracing::warn!(
+        error = %error,
+        "parcel_lookup: VWORLD env missing → NoOp fallback (dev only; production 은 fail-fast)"
+    );
+    Ok(Arc::new(NoOpParcelInfoLookup::new()))
+}
+
+fn build_verifier(dev_mode: bool) -> Result<Arc<Verifier>, StartupError> {
+    if dev_mode {
+        tracing::warn!(
+            "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
+        );
+        return Ok(Arc::new(Verifier::Dev));
+    }
+    let issuer = required_env("ZITADEL_ISSUER")?;
+    let audience = required_env("ZITADEL_AUDIENCE")?;
+    let jwks_url = format!("{issuer}/oauth/v2/keys");
+    let http = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|source| StartupError::JwksHttpClient {
+            source: Box::new(source),
+        })?;
+    let jwks = Arc::new(JwksCache::new(jwks_url, http));
+    Ok(Arc::new(Verifier::Real(JwtVerifier::new(
+        issuer, audience, jwks,
+    ))))
+}
+
+fn build_redis_pool_shared(
+    is_production: bool,
+) -> Result<Option<Arc<deadpool_redis::Pool>>, StartupError> {
+    let pool = optional_env("REDIS_URL")
+        .map(create_redis_pool)
+        .transpose()?;
+    if pool.is_none() {
+        if is_production {
+            return Err(production_config_error(
+                "REDIS_URL 미설정 — JTI denylist None = revoked token 통과 (fail-open). production 은 Redis 필수.",
+            ));
+        }
+        tracing::warn!(
+            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (dev fail-open). production 은 fail-fast 차단됨."
+        );
+    }
+    Ok(pool)
+}
+
+fn build_internal_auth_secret(is_production: bool) -> Result<Arc<str>, StartupError> {
+    if let Some(secret) = optional_env("INTERNAL_AUTH_SECRET") {
+        return Ok(Arc::<str>::from(secret));
+    }
+    if is_production {
+        return Err(production_config_error(
+            "INTERNAL_AUTH_SECRET 미설정 — /internal/auth/event 무인증 차단 위해 필수",
+        ));
+    }
+    tracing::warn!(
+        "INTERNAL_AUTH_SECRET 미설정 (dev) — random fallback 사용. Next.js \
+         측 동일 값 설정 필요 (apps/web/.env.local)."
+    );
+    Ok(Arc::<str>::from(format!(
+        "dev-random-{}",
+        ulid::Ulid::new()
+    )))
+}
+
+fn build_building_reader(
+    is_production: bool,
+    raw_capture: &Arc<dyn RawCapture>,
+) -> Result<Arc<dyn routes::buildings::BuildingRegisterReader>, StartupError> {
+    if let Some(key) =
+        optional_env("DATA_GO_KR_API_KEY").or_else(|| optional_env("ODP_SERVICE_KEY"))
+    {
+        return Ok(build_data_go_kr_building_reader(key, raw_capture));
+    }
+    if is_production {
+        return Err(production_config_error(
+            "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
+             가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
+        ));
+    }
+    tracing::warn!("building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)");
+    Ok(Arc::new(NoOpBuildingRegisterReader))
+}
+
+fn build_data_go_kr_building_reader(
+    service_key: String,
+    raw_capture: &Arc<dyn RawCapture>,
+) -> Arc<dyn routes::buildings::BuildingRegisterReader> {
+    tracing::info!(
+        "building_register: data.go.kr live (getBrTitleInfo via DataGoKrBuildingRegisterReader)"
+    );
+    let base_url =
+        std::env::var("ODP_BASE_URL").unwrap_or_else(|_| "https://apis.data.go.kr".to_owned());
+    let client = Arc::new(data_go_kr_client::DataGoKrClient::new(
+        data_go_kr_client::DataGoKrConfig {
+            service_key,
+            base_url,
+        },
+    ));
+    Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(
+        client,
+        Arc::clone(raw_capture),
+    ))
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> ExitCode {
     // SP-Obs T5: Sentry init -- 가장 먼저 (panic hook 등록 우선). DSN 미설정 시 None.
     // _sentry_guard 가 main lifetime 동안 유지 — drop 시 flush.
     let _sentry_guard = observability::init_sentry();
+    init_tracing();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    match async_main().await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            tracing::error!(event = "startup_failed", error = %error, "api startup failed");
+            ExitCode::FAILURE
+        }
+    }
+}
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+#[allow(clippy::too_many_lines)] // env 로딩 + state 조립 + router 7 endpoint — 분해 시 중복.
+async fn async_main() -> Result<(), StartupError> {
+    let database_url = required_env("DATABASE_URL")?;
     let dev_mode = env::var("AUTH_DEV_MODE").unwrap_or_default() == "true";
     // audit 2026-05-08 round 2: production 모드 SSOT. NoOp wire / Redis 부재 / secret 누락
-    // 등 모든 fail_fast_production 분기가 본 변수 공유 (중복 재계산 제거).
-    let is_production = std::env::var("APP_ENV").as_deref() == Ok("production")
-        || std::env::var("NODE_ENV").as_deref() == Ok("production");
+    // 등 모든 production guard 분기가 본 변수 공유 (중복 재계산 제거).
+    let is_production = is_production_env();
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await
-        .expect("connect to Postgres");
+    let pool = connect_postgres(&database_url).await?;
 
     let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
     let app_state = AppState {
@@ -215,89 +499,9 @@ async fn main() {
     // cost (~7-10x) + UPSERT 시계열 손실 + connection pool 부담. R2 키 구조:
     //   `bronze/{source}/{yyyy}/{mm}/{dd}/{pnu}_{epoch_ms}.json`
     // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 sink 공유.
-    let raw_capture: Arc<dyn raw_capture_client::RawCapture> = match r2_raw_capture::R2RawCaptureConfig::from_env() {
-        Ok(cfg) => {
-            // audit 2026-05-08 round 3 (Codex): production 에서 BRONZE_FALLBACK_DIR
-            // 미설정 = R2 PUT 실패 시 raw 영구 손실 차단 path 0. production 은 *반드시*.
-            if is_production && cfg.fallback_dir.is_none() {
-                fail_fast_production(
-                    "BRONZE_FALLBACK_DIR 미설정 — R2 PUT 실패 시 raw 영구 손실. \
-                     production 은 ADR 0026 의 디스크 fallback 필수 \
-                     (예: /var/lib/gongzzang/bronze-fallback)",
-                );
-            }
-            // audit 2026-05-08 round 4 (Codex): env 존재만 검사하면 잘못된 경로 / 권한
-            // / 디스크 풀 케이스 잡지 못함. mkdir + write probe 로 *진짜* writable 확정.
-            if let Err(e) = cfg.ensure_fallback_writable() {
-                if is_production {
-                    fail_fast_production(&format!(
-                        "BRONZE_FALLBACK_DIR ({:?}) mkdir/write probe 실패 — production 차단: {e}",
-                        cfg.fallback_dir
-                    ));
-                }
-                tracing::warn!(
-                    error = %e,
-                    fallback_dir = ?cfg.fallback_dir,
-                    "BRONZE_FALLBACK_DIR not writable (dev only — production 은 fail-fast)"
-                );
-            }
-            tracing::info!(
-                "raw_capture: R2 live (bucket={}, prefix={}, fallback={:?}) — ADR 0026",
-                cfg.bucket,
-                cfg.bronze_prefix,
-                cfg.fallback_dir,
-            );
-            Arc::new(r2_raw_capture::R2RawCapture::new(cfg))
-                as Arc<dyn raw_capture_client::RawCapture>
-        }
-        Err(e) => {
-            if is_production {
-                fail_fast_production(&format!(
-                    "R2 env (R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET) 미설정 — Bronze raw_response 보존 path 0 (ADR 0026): {e}"
-                ));
-            }
-            tracing::warn!(
-                error = %e,
-                "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
-            );
-            Arc::new(raw_capture_client::NoOpRawCapture::new())
-                as Arc<dyn raw_capture_client::RawCapture>
-        }
-    };
+    let raw_capture = build_raw_capture(is_production, pool.clone())?;
 
-    // Codex round 7 fix (ADR 0026 dead schema 갭 close): inner sink (R2/NoOp) 위에
-    // `TrackedRawCapture` decorator wrap → 적재 후 `parcel_external_data` 메타 UPSERT
-    // (`r2_object_key` + `raw_byte_size`). migration 30010 컬럼이 *처음으로* 채워짐.
-    let raw_capture: Arc<dyn raw_capture_client::RawCapture> = Arc::new(
-        raw_capture_metadata::TrackedRawCapture::new(raw_capture, pool.clone()),
-    );
-
-    let parcel_lookup: Arc<dyn ParcelInfoLookup> = match VWorldConfig::from_env() {
-        Ok(cfg) => {
-            tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
-            let client = Arc::new(VWorldClient::new(cfg));
-            // audit 2026-05-08 round 2 (P1 — Codex 발견): NoOpRawCapture → PgRawCapture.
-            // raw_response JSONB 영구 저장 (parcel_external_data, source='vworld').
-            // CHECK (source in ('vworld', ...)) 정합 검증 — migrations/30006_parcel_external_data.sql:13-19.
-            let reader: Arc<dyn ParcelReader> = Arc::new(VWorldParcelReader::new(
-                client,
-                Arc::clone(&raw_capture),
-            ));
-            Arc::new(VWorldParcelInfoLookup::new(reader))
-        }
-        Err(e) => {
-            if is_production {
-                fail_fast_production(&format!(
-                    "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {e}"
-                ));
-            }
-            tracing::warn!(
-                error = %e,
-                "parcel_lookup: VWORLD env missing → NoOp fallback (dev only; production 은 fail-fast)"
-            );
-            Arc::new(NoOpParcelInfoLookup::new())
-        }
-    };
+    let parcel_lookup = build_parcel_lookup(is_production, &raw_capture)?;
 
     let listings_state = routes::listings::ListingsState {
         listing_repo,
@@ -305,22 +509,7 @@ async fn main() {
         parcel_lookup,
     };
 
-    let verifier = if dev_mode {
-        tracing::warn!(
-            "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
-        );
-        Arc::new(Verifier::Dev)
-    } else {
-        let issuer = env::var("ZITADEL_ISSUER").expect("ZITADEL_ISSUER must be set");
-        let audience = env::var("ZITADEL_AUDIENCE").expect("ZITADEL_AUDIENCE must be set");
-        let jwks_url = format!("{issuer}/oauth/v2/keys");
-        let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(5))
-            .build()
-            .expect("reqwest");
-        let jwks = Arc::new(JwksCache::new(jwks_url, http));
-        Arc::new(Verifier::Real(JwtVerifier::new(issuer, audience, jwks)))
-    };
+    let verifier = build_verifier(dev_mode)?;
     // SP-Obs T7: Redis pool 을 jti_denylist + health check 양쪽이 공유.
     // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open). production 은 fail-fast.
     //
@@ -328,23 +517,7 @@ async fn main() {
     // middleware 가 `if let Some(dl)` 로 검사 자체 skip = revoked JTI 통과 (fail-open).
     // `fail_closed_on_denylist_error` 는 *Redis error* 만 잡지 *Redis 부재* 는 못 잡음.
     // 따라서 production 에서는 Redis 자체가 없으면 startup 차단.
-    let redis_pool_shared: Option<Arc<deadpool_redis::Pool>> =
-        env::var("REDIS_URL").ok().map(|url| {
-            let pool = RedisCfg::from_url(url)
-                .create_pool(Some(RedisRt::Tokio1))
-                .expect("redis pool");
-            Arc::new(pool)
-        });
-    if redis_pool_shared.is_none() {
-        if is_production {
-            fail_fast_production(
-                "REDIS_URL 미설정 — JTI denylist None = revoked token 통과 (fail-open). production 은 Redis 필수.",
-            );
-        }
-        tracing::warn!(
-            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (dev fail-open). production 은 fail-fast 차단됨."
-        );
-    }
+    let redis_pool_shared = build_redis_pool_shared(is_production)?;
 
     let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> =
         redis_pool_shared.as_ref().map(|pool| {
@@ -363,23 +536,7 @@ async fn main() {
 
     // audit 2026-05-08 fix: /internal/auth/event 가 무인증 → shared secret 헤더 검증 추가.
     // production 에서 INTERNAL_AUTH_SECRET 미설정 시 fail-fast (init 단계 panic 차단).
-    let internal_auth_secret = match std::env::var("INTERNAL_AUTH_SECRET") {
-        Ok(s) if !s.trim().is_empty() => Arc::<str>::from(s),
-        _ => {
-            if is_production {
-                fail_fast_production(
-                    "INTERNAL_AUTH_SECRET 미설정 — /internal/auth/event 무인증 차단 위해 필수",
-                );
-            }
-            // dev 안전 fallback — 시작 시 1회 random 발급. Next.js 측이 같은 값 사용 못
-            // 하면 401 리턴 → audit 못 박힘 (서비스 자체 OK). dev 검증 시 환경변수 명시.
-            tracing::warn!(
-                "INTERNAL_AUTH_SECRET 미설정 (dev) — random fallback 사용. Next.js \
-                 측 동일 값 설정 필요 (apps/web/.env.local)."
-            );
-            Arc::<str>::from(format!("dev-random-{}", ulid::Ulid::new()))
-        }
-    };
+    let internal_auth_secret = build_internal_auth_secret(is_production)?;
     let auth_event_state = routes::auth_event::AuthEventState {
         pool,
         internal_auth_secret,
@@ -459,45 +616,7 @@ async fn main() {
     //
     // 본 reader 는 *panel 응답용 좁은 subset* (BuildingItem) 만 채움. rich Building entity
     // (V-World 폴리곤 합성) 는 FU 40 의 R2 PMTiles 에서 별도 도입.
-    let building_reader: Arc<dyn routes::buildings::BuildingRegisterReader> = {
-        let service_key = std::env::var("DATA_GO_KR_API_KEY")
-            .or_else(|_| std::env::var("ODP_SERVICE_KEY"))
-            .ok()
-            .filter(|v| !v.trim().is_empty());
-        service_key.map_or_else(
-            || {
-                if is_production {
-                    fail_fast_production(
-                        "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
-                         가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
-                    );
-                }
-                tracing::warn!(
-                    "building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)"
-                );
-                Arc::new(NoOpBuildingRegisterReader) as Arc<dyn routes::buildings::BuildingRegisterReader>
-            },
-            |key| {
-                tracing::info!(
-                    "building_register: data.go.kr live (getBrTitleInfo via DataGoKrBuildingRegisterReader)"
-                );
-                let base_url = std::env::var("ODP_BASE_URL")
-                    .unwrap_or_else(|_| "https://apis.data.go.kr".to_owned());
-                let client = Arc::new(data_go_kr_client::DataGoKrClient::new(
-                    data_go_kr_client::DataGoKrConfig {
-                        service_key: key,
-                        base_url,
-                    },
-                ));
-                // audit 2026-05-08 round 2 (P2 ship-safety fix): raw_capture 공유 →
-                // parcel_external_data (pnu, 'data_go_kr_building') UPSERT.
-                Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(
-                    client,
-                    Arc::clone(&raw_capture),
-                )) as Arc<dyn routes::buildings::BuildingRegisterReader>
-            },
-        )
-    };
+    let building_reader = build_building_reader(is_production, &raw_capture)?;
     let buildings_state = routes::buildings::BuildingsState {
         reader: building_reader,
     };
@@ -612,6 +731,28 @@ async fn main() {
     // production 은 Pulumi / ECS task 가 PORT env 주입 표준, default 는 dev 호환 유지.
     let addr = std::env::var("API_LISTEN_ADDR").unwrap_or_else(|_| "0.0.0.0:8080".to_owned());
     tracing::info!("api listening on {addr}");
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr)
+        .await
+        .map_err(|source| StartupError::Bind {
+            addr: addr.clone(),
+            source,
+        })?;
+    axum::serve(listener, app)
+        .await
+        .map_err(|source| StartupError::Serve { source })
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::{required_env, StartupError};
+
+    #[test]
+    fn required_env_returns_typed_error_when_missing() {
+        const NAME: &str = "GONGZZANG_TEST_REQUIRED_ENV";
+        std::env::remove_var(NAME);
+
+        let result = required_env(NAME);
+
+        assert!(matches!(result, Err(StartupError::MissingEnv { name }) if name == NAME));
+    }
 }

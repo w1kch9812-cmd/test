@@ -25,7 +25,7 @@
 pub mod capture;
 pub mod sanitizer;
 pub use capture::SanitizingRawCapture;
-pub use sanitizer::{AllowlistSanitizer, RawSanitizer, SanitizedRaw, compute_schema_hash};
+pub use sanitizer::{compute_schema_hash, AllowlistSanitizer, RawSanitizer, SanitizedRaw};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

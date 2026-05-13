@@ -17,7 +17,6 @@
 //! - 2 = 일부 처리 실패 (다음 사이클 재시도 가능)
 
 #![forbid(unsafe_code)]
-#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::env;
 use std::path::PathBuf;
@@ -56,13 +55,7 @@ impl Config {
         let bucket = require_env("R2_BUCKET")?;
         let fallback_dir = require_env("BRONZE_FALLBACK_DIR").map(PathBuf::from)?;
 
-        let creds = Credentials::new(
-            &access_key,
-            &secret_key,
-            None,
-            None,
-            "raw-capture-sync",
-        );
+        let creds = Credentials::new(&access_key, &secret_key, None, None, "raw-capture-sync");
         let endpoint = format!("https://{account_id}.r2.cloudflarestorage.com");
         let s3_config = S3ConfigBuilder::default()
             .behavior_version(BehaviorVersion::latest())
@@ -281,8 +274,7 @@ mod tests {
         // env 변경 없이 검증 — Rust 1.80+ 의 unsafe set_var 회피 (forbid(unsafe_code)).
         // 채워진 값 path 는 실 운영 환경 (binary 진입점) 에서 자동 검증.
         let result = require_env("__GONGZZANG_SYNC_TEST_NEVER_SET_DEFINITELY__");
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("missing or empty"));
+        assert!(matches!(result, Err(error) if error.contains("missing or empty")));
     }
 
     #[test]
@@ -292,8 +284,8 @@ mod tests {
         let marker = format!("{FALLBACK_PREFIX}/var/lib/gongzzang/bronze/x.json");
         assert!(marker.starts_with(FALLBACK_PREFIX));
         assert_eq!(
-            marker.strip_prefix(FALLBACK_PREFIX).unwrap(),
-            "/var/lib/gongzzang/bronze/x.json"
+            marker.strip_prefix(FALLBACK_PREFIX),
+            Some("/var/lib/gongzzang/bronze/x.json")
         );
     }
 }

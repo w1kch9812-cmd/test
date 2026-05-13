@@ -130,8 +130,7 @@ fn sanitize_value(
                 let child_path = format!("{current_path}/{key}");
                 if path_allowed_or_has_descendant(&child_path, allowlist) {
                     let sanitized_child = sanitize_value(child, &child_path, allowlist, dropped);
-                    if is_empty_branch(&sanitized_child)
-                        && !is_exact_match(&child_path, allowlist)
+                    if is_empty_branch(&sanitized_child) && !is_exact_match(&child_path, allowlist)
                     {
                         // 자식이 모두 폐기되어 빈 가지가 됐고, 현재 노드 자체가 exact
                         // allowlist 매칭이 아니면 노드도 폐기 (counted via children).
@@ -298,11 +297,7 @@ mod tests {
 
     #[test]
     fn sanitize_supports_wildcard_path() {
-        let san = AllowlistSanitizer::new(
-            "test".to_string(),
-            vec!["/items/*/id".to_string()],
-            1,
-        );
+        let san = AllowlistSanitizer::new("test".to_string(), vec!["/items/*/id".to_string()], 1);
         let raw = serde_json::json!({
             "items": [
                 {"id": "a", "secret": "drop"},
@@ -381,11 +376,7 @@ mod tests {
     /// id 가 nested object 면 그 자식은 폐기.
     #[test]
     fn sanitize_wildcard_drops_descendants() {
-        let san = AllowlistSanitizer::new(
-            "test".to_string(),
-            vec!["/items/*/id".to_string()],
-            1,
-        );
+        let san = AllowlistSanitizer::new("test".to_string(), vec!["/items/*/id".to_string()], 1);
         let raw = serde_json::json!({
             "items": [
                 {

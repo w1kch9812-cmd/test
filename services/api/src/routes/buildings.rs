@@ -160,7 +160,9 @@ impl From<Building> for BuildingResponse {
             indoor_self_parking: b.indoor_self_parking,
             outdoor_self_parking: b.outdoor_self_parking,
             annex_building_count: b.annex_building_count,
-            annex_building_area_m2: b.annex_building_area_m2.map(shared_kernel::area::AreaM2::as_f64),
+            annex_building_area_m2: b
+                .annex_building_area_m2
+                .map(shared_kernel::area::AreaM2::as_f64),
             permitted_at: b.permit_date.map(|d| d.format("%Y-%m-%d").to_string()),
             started_at: b
                 .construction_start_date
