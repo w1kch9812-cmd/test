@@ -20,8 +20,8 @@ use std::path::Path;
 use thiserror::Error;
 use tracing::{info, instrument};
 
-use sp9_base_layer_config::Layer as Sp9Layer;
 use super::spawn::{build_command, Arg, Host, SpawnError};
+use sp9_base_layer_config::Layer as Sp9Layer;
 
 /// tippecanoe 빌드 한 번 = 한 layer.
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +59,7 @@ impl LayerKind {
     /// 검증 / matrix iteration 이 본 함수 사용 — admin/complex 같은 inactive layer 의
     /// `MissingLineage` false-positive 차단 (ADR 0027).
     #[must_use]
+    #[cfg(test)]
     pub fn active_vec() -> Vec<Self> {
         Sp9Layer::ALL
             .iter()
@@ -94,6 +95,7 @@ impl LayerKind {
     /// 프론트 `addLayer({ minzoom })` 권장값 — *render* 시작 zoom.
     /// PMTiles `min_zoom` 보다 *클* 수 있음 (e.g. parcels tile 14 부터 있지만 render 는 16+).
     #[must_use]
+    #[cfg(test)]
     pub const fn render_min_zoom(self) -> u8 {
         match self {
             Self::Parcels => 16,
@@ -105,6 +107,7 @@ impl LayerKind {
 
     /// 프론트 `addLayer({ maxzoom })` 권장값 (render 종료). `None` = mapbox-gl default 24.
     #[must_use]
+    #[cfg(test)]
     pub const fn render_max_zoom(self) -> Option<u8> {
         match self {
             Self::Admin => Some(16),
@@ -116,6 +119,7 @@ impl LayerKind {
     /// flat tile 은 immutable (URL versioning 으로 무효화) → 1년.
     /// 향후 layer 별 차등 (e.g. complex 일 6시간) 가능성 위해 `self` 인자 보존.
     #[must_use]
+    #[cfg(test)]
     #[allow(clippy::unused_self)]
     pub const fn cache_max_age_seconds(self) -> u32 {
         // 31_536_000s = 365일. immutable + URL versioning 패턴 (ADR 0021 § Tier A).
@@ -225,26 +229,53 @@ pub async fn check_available(host: Host) -> Result<String, TippecanoeError> {
 /// apt install). 이 경우도 warning — operator 가 setup script 실행하도록 유도.
 fn check_ssot_sha() {
     const SHA_FILE: &str = "/usr/local/bin/.sp9-tippecanoe-sha";
-    let Ok(raw) = std::fs::read_to_string(SHA_FILE) else {
-        // 파일 부재 — dev 환경 미설정 가능성. CI 는 workflow 가 직접 SHA 빌드라
-        // 본 파일 없음. 즉 trace 만 debug level (CI noise 회피).
-        tracing::debug!(
-            sha_file = SHA_FILE,
-            ssot_sha = sp9_base_layer_config::TIPPECANOE_GIT_SHA,
-            "tippecanoe SHA file 부재 — CI/Container 환경이면 정상, dev 환경이면 scripts/setup-dev-tippecanoe.sh 실행 권장"
-        );
+    let Some(installed) = read_installed_tippecanoe_sha(SHA_FILE) else {
+        log_missing_tippecanoe_sha_file(SHA_FILE);
         return;
     };
-    let installed = raw.trim();
-    if installed == sp9_base_layer_config::TIPPECANOE_GIT_SHA {
-        tracing::info!(sha = installed, "tippecanoe SHA matches SSOT");
-    } else {
-        tracing::warn!(
-            installed,
-            ssot = sp9_base_layer_config::TIPPECANOE_GIT_SHA,
-            "tippecanoe SHA mismatch with SSOT — capability drift 위험. 실행: scripts/setup-dev-tippecanoe.sh"
-        );
+
+    log_tippecanoe_sha_status(&installed);
+}
+
+fn read_installed_tippecanoe_sha(path: &str) -> Option<String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .map(|raw| raw.trim().to_owned())
+}
+
+fn log_missing_tippecanoe_sha_file(path: &str) {
+    // 파일 부재 — dev 환경 미설정 가능성. CI 는 workflow 가 직접 SHA 빌드라
+    // 본 파일 없음. 즉 trace 만 debug level (CI noise 회피).
+    tracing::debug!(
+        sha_file = path,
+        ssot_sha = sp9_base_layer_config::TIPPECANOE_GIT_SHA,
+        "tippecanoe SHA file 부재 — CI/Container 환경이면 정상, dev 환경이면 scripts/setup-dev-tippecanoe.sh 실행 권장"
+    );
+}
+
+fn log_tippecanoe_sha_status(installed: &str) {
+    if is_tippecanoe_sha_current(installed) {
+        log_tippecanoe_sha_match(installed);
+        return;
     }
+
+    log_tippecanoe_sha_mismatch(installed);
+}
+
+fn is_tippecanoe_sha_current(installed: &str) -> bool {
+    installed == sp9_base_layer_config::TIPPECANOE_GIT_SHA
+}
+
+fn log_tippecanoe_sha_match(installed: &str) {
+    tracing::info!(sha = installed, "tippecanoe SHA matches SSOT");
+}
+
+fn log_tippecanoe_sha_mismatch(installed: &str) {
+    tracing::warn!(
+        installed,
+        ssot = sp9_base_layer_config::TIPPECANOE_GIT_SHA,
+        "tippecanoe SHA mismatch with SSOT — capability drift 위험. 실행: scripts/setup-dev-tippecanoe.sh"
+    );
 }
 
 /// tippecanoe 실행. `args.inputs` 의 GeoJSON 들을 한 PMTiles 로 빌드.
@@ -362,7 +393,10 @@ pub async fn run(
     let _ = tokio::fs::remove_file(&metadata_file).await;
 
     info!(bytes = output_bytes, ?feature_count, "tippecanoe complete");
-    Ok(TippecanoeResult { output_bytes, feature_count })
+    Ok(TippecanoeResult {
+        output_bytes,
+        feature_count,
+    })
 }
 
 /// tippecanoe 가 특정 flag 를 지원하는지 검사. `--help` 출력에서 flag 문자열 grep.
@@ -437,7 +471,11 @@ mod tests {
         // match 가 컴파일러 에러로 차단 — 본 test 는 *layer_name 일관성* 추가 검증.
         let kinds = LayerKind::all_vec();
         let layers = Sp9Layer::ALL;
-        assert_eq!(kinds.len(), layers.len(), "count drift between LayerKind and Sp9Layer");
+        assert_eq!(
+            kinds.len(),
+            layers.len(),
+            "count drift between LayerKind and Sp9Layer"
+        );
         for (kind, layer) in kinds.iter().zip(layers.iter()) {
             assert_eq!(
                 kind.layer_name(),

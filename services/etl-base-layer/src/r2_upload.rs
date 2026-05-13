@@ -78,6 +78,7 @@ impl R2Config {
 
     /// Gold manifest key: `<gold_prefix>/manifest.json`.
     #[must_use]
+    #[cfg(test)]
     pub fn manifest_key(&self) -> String {
         format!("{}/manifest.json", self.gold_prefix)
     }
@@ -85,6 +86,7 @@ impl R2Config {
     /// Gold manifest backup key: `<gold_prefix>/manifest.<version>.json`.
     /// `version` 은 [`Version`] — 백업 키도 동일 검증 통과.
     #[must_use]
+    #[cfg(test)]
     pub fn manifest_backup_key(&self, version: &Version) -> String {
         format!("{}/manifest.{}.json", self.gold_prefix, version)
     }
@@ -92,7 +94,10 @@ impl R2Config {
     /// Gold staging spec key: `<gold_prefix>/staging/<version>/<layer>.spec.json`.
     #[must_use]
     pub fn staging_spec_key(&self, version: &Version, layer_name: &str) -> String {
-        format!("{}/staging/{}/{}.spec.json", self.gold_prefix, version, layer_name)
+        format!(
+            "{}/staging/{}/{}.spec.json",
+            self.gold_prefix, version, layer_name
+        )
     }
 
     /// Tiles URL template for `TileJSON` / manifest:
@@ -113,7 +118,10 @@ impl R2Config {
         };
         #[allow(clippy::literal_string_with_formatting_args)]
         {
-            format!("{base}{}/{}/{}/{{z}}/{{x}}/{{y}}.pbf", self.gold_prefix, version, layer_name)
+            format!(
+                "{base}{}/{}/{}/{{z}}/{{x}}/{{y}}.pbf",
+                self.gold_prefix, version, layer_name
+            )
         }
     }
 }
@@ -365,14 +373,19 @@ impl R2Uploader {
             "uploading file → R2"
         );
 
-        breaker_execute(&self.breaker, &self.policy, "r2.put_object_file", || async {
-            let body = ByteStream::from_path(path)
-                .await
-                .map_err(|e| UploadError::ReadFile {
-                    path: path.display().to_string(),
-                    source: std::io::Error::other(e),
-                })?;
-            self.client
+        breaker_execute(
+            &self.breaker,
+            &self.policy,
+            "r2.put_object_file",
+            || async {
+                let body =
+                    ByteStream::from_path(path)
+                        .await
+                        .map_err(|e| UploadError::ReadFile {
+                            path: path.display().to_string(),
+                            source: std::io::Error::other(e),
+                        })?;
+                self.client
                 .put_object()
                 .bucket(&self.config.bucket)
                 .key(key)
@@ -389,8 +402,9 @@ impl R2Uploader {
                     key: key.to_owned(),
                     detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
                 })?;
-            Ok::<(), UploadError>(())
-        })
+                Ok::<(), UploadError>(())
+            },
+        )
         .await
         .map_err(|e| breaker_to_upload("r2.put_object_file", e))?;
 
@@ -556,6 +570,7 @@ impl R2Uploader {
     /// # Errors
     ///
     /// `DeleteObject` API 실패 / circuit open / timeout.
+    #[cfg(test)]
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn delete_object(&self, key: &str) -> Result<(), UploadError> {
         breaker_execute(&self.breaker, &self.policy, "r2.delete_object", || async {
@@ -594,25 +609,20 @@ impl R2Uploader {
         let mut continuation: Option<String> = None;
         loop {
             let token = continuation.clone();
-            let resp = breaker_execute(
-                &self.breaker,
-                &self.policy,
-                "r2.list_objects",
-                || async {
-                    let mut req = self
-                        .client
-                        .list_objects_v2()
-                        .bucket(&self.config.bucket)
-                        .prefix(prefix);
-                    if let Some(t) = token.as_deref() {
-                        req = req.continuation_token(t);
-                    }
-                    req.send().await.map_err(|e| UploadError::ListObjects {
-                        prefix: prefix.to_owned(),
-                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-                    })
-                },
-            )
+            let resp = breaker_execute(&self.breaker, &self.policy, "r2.list_objects", || async {
+                let mut req = self
+                    .client
+                    .list_objects_v2()
+                    .bucket(&self.config.bucket)
+                    .prefix(prefix);
+                if let Some(t) = token.as_deref() {
+                    req = req.continuation_token(t);
+                }
+                req.send().await.map_err(|e| UploadError::ListObjects {
+                    prefix: prefix.to_owned(),
+                    detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                })
+            })
             .await
             .map_err(|e| breaker_to_upload("r2.list_objects", e))?;
             for obj in resp.contents() {
@@ -736,6 +746,7 @@ impl R2Uploader {
     /// # Errors
     ///
     /// `GetObject` API / body stream 실패 (NoSuchKey 제외) / circuit open / timeout.
+    #[cfg(test)]
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn try_get_object_bytes(&self, key: &str) -> Result<Option<Vec<u8>>, UploadError> {
         let resp = breaker_execute(
@@ -818,24 +829,29 @@ impl R2Uploader {
         // breaker 의 retry 가 새 future 를 매번 만들기 때문에 body 도 매 호출마다 fresh.
         // `Arc<Vec<u8>>` 으로 share — clone 비용 감소.
         let json_arc = Arc::new(json);
-        breaker_execute(&self.breaker, &self.policy, "r2.put_object_json", || async {
-            let body = ByteStream::from(json_arc.as_ref().clone());
-            self.client
-                .put_object()
-                .bucket(&self.config.bucket)
-                .key(key)
-                .body(body)
-                .content_type("application/json")
-                .cache_control(cache_control)
-                .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
-                .send()
-                .await
-                .map_err(|e| UploadError::PutObject {
-                    key: key.to_owned(),
-                    detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
-                })?;
-            Ok::<(), UploadError>(())
-        })
+        breaker_execute(
+            &self.breaker,
+            &self.policy,
+            "r2.put_object_json",
+            || async {
+                let body = ByteStream::from(json_arc.as_ref().clone());
+                self.client
+                    .put_object()
+                    .bucket(&self.config.bucket)
+                    .key(key)
+                    .body(body)
+                    .content_type("application/json")
+                    .cache_control(cache_control)
+                    .server_side_encryption(aws_sdk_s3::types::ServerSideEncryption::Aes256)
+                    .send()
+                    .await
+                    .map_err(|e| UploadError::PutObject {
+                        key: key.to_owned(),
+                        detail: format!("{}", aws_sdk_s3::error::DisplayErrorContext(&e)),
+                    })?;
+                Ok::<(), UploadError>(())
+            },
+        )
         .await
         .map_err(|e| breaker_to_upload("r2.put_object_json", e))?;
 
@@ -913,10 +929,7 @@ mod tests {
     #[test]
     fn manifest_backup_key_layout() {
         let cfg = test_config("bucket");
-        assert_eq!(
-            cfg.manifest_backup_key(&v("v2")),
-            "gold/manifest.v2.json"
-        );
+        assert_eq!(cfg.manifest_backup_key(&v("v2")), "gold/manifest.v2.json");
     }
 
     #[test]
@@ -931,11 +944,7 @@ mod tests {
     #[test]
     fn tiles_url_template_with_trailing_slash() {
         let cfg = test_config("bucket");
-        let url = cfg.tiles_url_template(
-            &pub_base("https://r2.example.com/"),
-            &v("v3"),
-            "parcels",
-        );
+        let url = cfg.tiles_url_template(&pub_base("https://r2.example.com/"), &v("v3"), "parcels");
         assert_eq!(
             url,
             "https://r2.example.com/gold/v3/parcels/{z}/{x}/{y}.pbf"
@@ -945,15 +954,8 @@ mod tests {
     #[test]
     fn tiles_url_template_without_trailing_slash() {
         let cfg = test_config("bucket");
-        let url = cfg.tiles_url_template(
-            &pub_base("https://r2.example.com"),
-            &v("v3"),
-            "admin",
-        );
-        assert_eq!(
-            url,
-            "https://r2.example.com/gold/v3/admin/{z}/{x}/{y}.pbf"
-        );
+        let url = cfg.tiles_url_template(&pub_base("https://r2.example.com"), &v("v3"), "admin");
+        assert_eq!(url, "https://r2.example.com/gold/v3/admin/{z}/{x}/{y}.pbf");
     }
 
     #[test]
@@ -970,10 +972,17 @@ mod tests {
         };
         let ver = v("v1");
         let prefix = cfg.gold_layer_prefix(&ver, "parcels");
-        assert!(prefix.starts_with("custom-gold/"), "gold_prefix must be respected");
-        assert!(cfg.manifest_key().starts_with("custom-gold/"), "manifest must use gold_prefix");
         assert!(
-            cfg.staging_spec_key(&ver, "parcels").starts_with("custom-gold/"),
+            prefix.starts_with("custom-gold/"),
+            "gold_prefix must be respected"
+        );
+        assert!(
+            cfg.manifest_key().starts_with("custom-gold/"),
+            "manifest must use gold_prefix"
+        );
+        assert!(
+            cfg.staging_spec_key(&ver, "parcels")
+                .starts_with("custom-gold/"),
             "staging key must use gold_prefix"
         );
     }
@@ -1081,10 +1090,7 @@ mod tests {
         // 5번 연속 NoSuchKey — open 안 되어야 함.
         for _ in 0..5 {
             let r = uploader.try_get_object_bytes("missing.json").await;
-            assert!(
-                matches!(r, Ok(None)),
-                "expected Ok(None), got: {r:?}"
-            );
+            assert!(matches!(r, Ok(None)), "expected Ok(None), got: {r:?}");
         }
     }
 

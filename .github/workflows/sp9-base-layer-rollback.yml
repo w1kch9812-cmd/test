@@ -1,5 +1,8 @@
 name: SP9 Base Layer Rollback
 
+# ADR 0036 / platform-core ADR 0004 이후 rollback owner 는 platform-core Catalog.
+# 이 workflow 는 과거 Gongzzang-owned `gold/manifest.json` rollback 경로라서 비활성.
+#
 # 긴급 rollback — `gold/manifest.json` 의 current_version 을 *이전 버전* 으로 atomic flip.
 #
 # 사용 시나리오:
@@ -36,78 +39,11 @@ env:
 
 jobs:
   rollback:
-    name: Rollback (manifest atomic revert)
+    name: Rollback disabled (platform-core owns manifest)
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
-        with: { shared-key: sp9-etl }
-
-      - name: Pre-check — staging spec 존재 (R2 list)
-        env:
-          # ADR 0029 — production namespace 격리 (bash 가 직접 R2 access).
-          ETL_ENVIRONMENT: production
-          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
+      - name: Platform-core manifest owner notice
         run: |
-          # `aws-cli` (s3 호환) 로 list — staging 누락 시 promote 도 즉시 실패하지만
-          # 사용자에게 친절한 사전 경고.
-          # ADR 0028 — pip + awscli 모두 reproducible pin. Codex Round 6 finding #17 fix.
-          python -m pip install -q 'pip==24.3.1'
-          pip install -q 'awscli==1.35.13'
-          export AWS_ACCESS_KEY_ID="${R2_PRODUCTION_ACCESS_KEY}"
-          export AWS_SECRET_ACCESS_KEY="${R2_PRODUCTION_SECRET_KEY}"
-          export AWS_DEFAULT_REGION=auto
-          ENDPOINT="https://${R2_PRODUCTION_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          aws --endpoint-url "$ENDPOINT" s3 ls \
-            "s3://${R2_PRODUCTION_BUCKET}/gold/staging/${{ inputs.target_version }}/" \
-            || { echo "::error::staging specs for ${{ inputs.target_version }} not found in R2"; exit 1; }
-
-      - name: Run promote (rollback)
-        env:
-          # ADR 0029 — production namespace 격리. Rust ETL 가 직접 소비.
-          ETL_ENVIRONMENT: production
-          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-          # L4 — Sentry tag 로 rollback incident 박제.
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          GIT_SHA: ${{ github.sha }}
-        run: |
-          cargo run -q -p etl-base-layer --frozen --release -- \
-            promote --version "${{ inputs.target_version }}"
-
-      - name: Sentry — incident 박제
-        if: always()
-        env:
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          # ADR 0028 — sentry-cli version pin. Round 6 finding #14 fix.
-          SENTRY_CLI_VERSION: "2.41.1"
-        run: |
-          set -euo pipefail
-          # rollback 은 incident response path — DSN 필수 (silent skip 거부, finding #18 fix).
-          if [ -z "${SENTRY_DSN:-}" ]; then
-            echo "::error::SENTRY_DSN secret is required for rollback audit alerting (ADR 0028)."
-            exit 1
-          fi
-          install_dir="${RUNNER_TEMP:-/tmp}/sentry-cli"
-          mkdir -p "${install_dir}"
-          curl -sSfL --proto '=https' --tlsv1.2 -o "${install_dir}/sentry-cli" \
-            "https://github.com/getsentry/sentry-cli/releases/download/${SENTRY_CLI_VERSION}/sentry-cli-Linux-x86_64"
-          chmod +x "${install_dir}/sentry-cli"
-          status="${{ job.status }}"
-          "${install_dir}/sentry-cli" send-event \
-            --message "SP9 Base Layer ROLLBACK to ${{ inputs.target_version }} (${status})" \
-            --level "$([ "$status" = success ] && echo warning || echo error)" \
-            --tag "workflow:sp9-base-layer-rollback" \
-            --tag "target_version:${{ inputs.target_version }}" \
-            --tag "actor:${{ github.actor }}" \
-            --tag "reason:${{ inputs.reason }}"
+          echo "::notice::Vector tile manifest rollback now belongs to platform-core Catalog."

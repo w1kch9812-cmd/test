@@ -21,7 +21,9 @@ use crate::r2_upload::UploadError;
 #[derive(Debug, Error)]
 pub enum PrepareError {
     /// R2 자격 미설정.
-    #[error("R2 credentials not configured — set R2_ACCOUNT_ID/R2_ACCESS_KEY/R2_SECRET_KEY/R2_BUCKET")]
+    #[error(
+        "R2 credentials not configured — set R2_ACCOUNT_ID/R2_ACCESS_KEY/R2_SECRET_KEY/R2_BUCKET"
+    )]
     R2NotConfigured,
     /// R2 list/download.
     #[error("dtmk R2: {0}")]
@@ -86,6 +88,14 @@ pub enum UploadStepError {
         /// 사용자 가독 사유 (env 미설정 / scheme 위반 / host 부재 등).
         detail: String,
     },
+    /// Internal default version literal failed newtype validation.
+    #[error("default GOLD_VERSION invalid: {raw:?} ({detail})")]
+    DefaultGoldVersionInvalid {
+        /// Invalid literal.
+        raw: String,
+        /// Newtype validation error.
+        detail: String,
+    },
     /// R2 `PutObject` / `ListObjects`.
     #[error("r2 upload: {0}")]
     R2(#[from] UploadError),
@@ -99,4 +109,3 @@ pub enum UploadStepError {
     #[error("build: {0}")]
     Build(#[from] BuildError),
 }
-

@@ -193,7 +193,13 @@ fn build_r2_config_strict(prefix: &str) -> Result<Option<R2Config>, ConfigError>
         .collect();
     let missing: Vec<String> = values
         .iter()
-        .filter_map(|(s, v)| if v.is_none() { Some((*s).to_owned()) } else { None })
+        .filter_map(|(s, v)| {
+            if v.is_none() {
+                Some((*s).to_owned())
+            } else {
+                None
+            }
+        })
         .collect();
 
     // 4개 모두 unset → local-only mode (정상 path).
@@ -394,10 +400,13 @@ mod tests {
         env::set_var("R2_STAGING_ACCOUNT_ID", "x");
         env::set_var("R2_STAGING_ACCESS_KEY", "y");
         // SECRET_KEY / BUCKET 누락.
-        let err = Config::from_env()
-            .expect_err("partial namespace must fail-fast (ADR 0035)");
+        let err = Config::from_env().expect_err("partial namespace must fail-fast (ADR 0035)");
         match err {
-            ConfigError::PartialR2Namespace { prefix, present, missing } => {
+            ConfigError::PartialR2Namespace {
+                prefix,
+                present,
+                missing,
+            } => {
                 assert_eq!(prefix, "R2_STAGING_");
                 assert!(present.contains(&"ACCOUNT_ID".to_owned()));
                 assert!(missing.contains(&"SECRET_KEY".to_owned()));
@@ -415,8 +424,8 @@ mod tests {
         clear_all_r2_env();
         env::set_var("ETL_ENVIRONMENT", "local");
         env::set_var("GOLD_VERSION", "V3"); // invalid — Version 은 lowercase 'v' prefix 만.
-        let err = Config::from_env()
-            .expect_err("invalid GOLD_VERSION must return typed err, not panic");
+        let err =
+            Config::from_env().expect_err("invalid GOLD_VERSION must return typed err, not panic");
         assert!(
             matches!(err, ConfigError::InvalidGoldVersion { ref raw, .. } if raw == "V3"),
             "expected InvalidGoldVersion variant, got {err:?}"

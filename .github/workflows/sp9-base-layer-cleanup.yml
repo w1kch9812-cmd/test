@@ -1,5 +1,8 @@
 name: SP9 Base Layer Cleanup (L6 Lifecycle)
 
+# ADR 0036 / platform-core ADR 0004 이후 vector tile artifact lifecycle owner 는
+# platform-core Catalog. Gongzzang 쪽 R2 prefix cleanup 은 비활성.
+#
 # 매월 15일 02:00 KST cron — `gold/<old-version>/` + `gold/staging/<old-version>/`
 # 삭제 (rollback retention 보존: 최근 3 version 유지).
 #
@@ -37,82 +40,11 @@ env:
 
 jobs:
   cleanup:
-    name: R2 prefix cleanup
+    name: R2 prefix cleanup disabled (platform-core owns artifacts)
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-
-      - name: Install aws-cli
-        # ADR 0028 — pip + awscli 모두 reproducible pin. Codex Round 6 finding #16 fix.
+      - name: Platform-core artifact owner notice
         run: |
-          python -m pip install -q 'pip==24.3.1'
-          pip install -q 'awscli==1.35.13'
-
-      - name: List + (optional) delete old versions
-        env:
-          # ADR 0029 — Environment 명시 분리 + production namespace 격리.
-          # bash 가 직접 R2 access 하므로 R2_PRODUCTION_* 도 export (Rust ETL 같은 SSOT).
-          ETL_ENVIRONMENT: production
-          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
-          RETENTION: ${{ inputs.retention_count || '3' }}
-          CONFIRM: ${{ inputs.confirm_delete || 'false' }}
-        run: |
-          set -euo pipefail
-          # ADR 0029 — namespace 박제. 본 bash 가 production env 임을 명시.
-          export AWS_ACCESS_KEY_ID="${R2_PRODUCTION_ACCESS_KEY}"
-          export AWS_SECRET_ACCESS_KEY="${R2_PRODUCTION_SECRET_KEY}"
-          export AWS_DEFAULT_REGION=auto
-          ENDPOINT="https://${R2_PRODUCTION_ACCOUNT_ID}.r2.cloudflarestorage.com"
-          # backward-compat — 본 step 내부 alias (이전 변수명 참조 코드 유지).
-          R2_BUCKET="${R2_PRODUCTION_BUCKET}"
-
-          # 현재 manifest 의 current_version (절대 삭제 금지).
-          current=$(aws --endpoint-url "$ENDPOINT" s3 cp "s3://${R2_BUCKET}/gold/manifest.json" - \
-              | jq -r .current_version)
-          echo "current_version (활성, 보호 대상): $current"
-
-          # gold/v*/ prefix 들 모두 list — `aws s3 ls` 가 기본 prefix 분리.
-          # `--delimiter /` 로 first-level prefix (= version) 만 추출.
-          versions=$(aws --endpoint-url "$ENDPOINT" s3api list-objects-v2 \
-              --bucket "$R2_BUCKET" --prefix "gold/" --delimiter "/" \
-              --query 'CommonPrefixes[].Prefix' --output text \
-              | tr '\t' '\n' \
-              | grep -v -E '(staging/|manifest\.json)' \
-              | sed 's|gold/||;s|/$||')
-
-          echo "발견된 version 들:"
-          echo "$versions"
-
-          # 정렬 (lex order — `v_2026_05` < `v_2026_06`). 최근 N 개 제외 = 삭제 대상.
-          delete_targets=$(echo "$versions" | grep -v "^$current$" | sort -r | tail -n +"$RETENTION")
-
-          if [ -z "$delete_targets" ]; then
-            echo "삭제할 version 없음 (3개 이하)"
-            exit 0
-          fi
-
-          echo "삭제 대상 version 들 (current 제외, 최근 $RETENTION 제외):"
-          echo "$delete_targets"
-
-          if [ "$CONFIRM" != "true" ]; then
-            echo "::notice::DRY RUN — confirm_delete=true 시 실제 삭제."
-            exit 0
-          fi
-
-          # 실 삭제 — gold/<v>/ + gold/staging/<v>/.
-          while IFS= read -r v; do
-            [ -z "$v" ] && continue
-            echo "deleting gold/$v/"
-            aws --endpoint-url "$ENDPOINT" s3 rm \
-              "s3://${R2_BUCKET}/gold/$v/" --recursive
-            echo "deleting gold/staging/$v/"
-            aws --endpoint-url "$ENDPOINT" s3 rm \
-              "s3://${R2_BUCKET}/gold/staging/$v/" --recursive --include "*" \
-              || echo "(staging/$v/ 없음 — 정상)"
-          done <<< "$delete_targets"
-
-          echo "::notice::cleanup complete"
+          echo "::notice::Vector tile artifact lifecycle now belongs to platform-core Catalog."

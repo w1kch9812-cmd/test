@@ -24,17 +24,28 @@
 //! revalidate, 분 단위 staleness 가능 — purge 하면 즉시).
 
 #![allow(clippy::doc_markdown)]
+#![cfg_attr(test, allow(dead_code))]
 
+#[cfg(test)]
 use std::collections::BTreeMap;
 
+#[cfg(test)]
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sp9_base_layer_config::{Environment, R2PublicBase, Version};
+use sp9_base_layer_config::Version;
+#[cfg(test)]
+use sp9_base_layer_config::{Environment, R2PublicBase};
 use thiserror::Error;
-use tracing::{info, instrument, warn};
+#[cfg(test)]
+use tracing::warn;
+use tracing::{info, instrument};
 
-use super::manifest::{BuildLineage, GoldArtifact, GoldManifest};
+use super::manifest::BuildLineage;
+#[cfg(test)]
+use super::manifest::{GoldArtifact, GoldManifest};
 use super::tippecanoe::LayerKind;
+#[cfg(test)]
+use crate::r2_upload::RemoteObject;
 use crate::r2_upload::{R2Uploader, UploadError};
 
 /// promote 단계 에러.
@@ -47,6 +58,7 @@ pub enum PromoteError {
     #[error("json: {0}")]
     Json(#[from] serde_json::Error),
     /// 특정 layer 의 lineage 가 staging 에 없음 (build 미완 / 사용자 누락).
+    #[cfg(test)]
     #[error("missing staging lineage for layer {layer} (key {key})")]
     MissingLineage {
         /// 누락 layer.
@@ -55,6 +67,7 @@ pub enum PromoteError {
         key: String,
     },
     /// 특정 layer 의 flat tile 이 R2 에 0 개 — silent drop / partial PUT 의심.
+    #[cfg(test)]
     #[error("no flat tiles found in {prefix} for layer {layer}")]
     NoFlatTiles {
         /// 누락 layer.
@@ -63,6 +76,7 @@ pub enum PromoteError {
         prefix: String,
     },
     /// 이전 manifest 의 `current_version` 이 [`Version`] 형식 위반 (R2 외부 변조 / 구버전 manifest).
+    #[cfg(test)]
     #[error("invalid previous_version in manifest: {raw:?} ({detail})")]
     InvalidPreviousVersion {
         /// manifest 에서 읽힌 원본 문자열.
@@ -71,9 +85,11 @@ pub enum PromoteError {
         detail: String,
     },
     /// HTTP 통신 (Cloudflare CDN purge).
+    #[cfg(test)]
     #[error("cdn purge http: {0}")]
     Http(#[from] reqwest::Error),
     /// CDN purge 가 non-2xx 응답.
+    #[cfg(test)]
     #[error("cdn purge failed status={status} body={body} body_read_error={body_read_error:?}")]
     CdnPurge {
         /// HTTP status.
@@ -88,17 +104,20 @@ pub enum PromoteError {
     /// `CLOUDFLARE_ZONE_ID` / `R2_PUBLIC_URL_BASE`) 가 누락. dev / staging 은 silent
     /// skip 허용, production 은 fail-fast (manifest 가 stale CDN 으로 publish 되는
     /// silent partial 차단).
+    #[cfg(test)]
     #[error("CDN purge config missing in production: {missing} (set CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID / R2_PUBLIC_URL_BASE or override ETL_ENVIRONMENT)")]
     CdnPurgeMissingConfig {
         /// 어느 env 가 누락됐는지.
         missing: String,
     },
     /// Round 5 P1 — `cleanup_manifest_backups(keep=0)` 실수 차단.
+    #[cfg(test)]
     #[error("cleanup keep must be >= 1 (refusing to delete entire backup chain)")]
     InvalidCleanupKeep,
     /// Round 5 (final) — cleanup 중 일부 backup delete 실패. 이전엔 warn 후 `Ok(())` →
     /// silent partial. 새 path: 진행은 계속 (다른 backup 도 시도) 후 typed Err 박제.
     /// workflow 가 본 에러로 exit 1 + Sentry alert.
+    #[cfg(test)]
     #[error("partial cleanup: {deleted}/{attempted} succeeded, {} failed: {failures:?}", failures.len())]
     PartialCleanup {
         /// 삭제 시도한 총 개수.
@@ -148,7 +167,9 @@ pub async fn write_staging_spec(
     layer: LayerKind,
     spec: &ArtifactSpec,
 ) -> Result<(), PromoteError> {
-    let key = uploader.config().staging_spec_key(version, layer.layer_name());
+    let key = uploader
+        .config()
+        .staging_spec_key(version, layer.layer_name());
     // typed `ArtifactSpec` 그대로 직렬화 — read 측 `read_staging_artifact` 가
     // 동일 schema 로 typed deserialize 하므로 누락/오타 자동 거부 (P0 typed gate).
     uploader
@@ -165,21 +186,25 @@ pub async fn write_staging_spec(
 /// **P0 typed gate** (Codex Round 3 발견 fix): `serde_json::Value` + `unwrap_or_default()`
 /// 가 누락 필드를 0/empty 로 통과시키던 trick 제거. [`ArtifactSpec`] 으로 typed
 /// deserialize → 필드 부재 / 타입 오류 시 [`PromoteError::Json`] 으로 fail-fast.
+#[cfg(test)]
 async fn read_staging_artifact(
     uploader: &R2Uploader,
     version: &Version,
     layer: LayerKind,
 ) -> Result<GoldArtifact, PromoteError> {
-    let key = uploader.config().staging_spec_key(version, layer.layer_name());
+    let key = uploader
+        .config()
+        .staging_spec_key(version, layer.layer_name());
     // try_get_object_bytes → NoSuchKey 는 `Ok(None)` 으로 closure 안에서 흡수
     // (breaker failure 누적 0). None 이면 typed `MissingLineage` 로 매핑.
-    let bytes = uploader
-        .try_get_object_bytes(&key)
-        .await?
-        .ok_or_else(|| PromoteError::MissingLineage {
-            layer: layer.layer_name().to_owned(),
-            key,
-        })?;
+    let bytes =
+        uploader
+            .try_get_object_bytes(&key)
+            .await?
+            .ok_or_else(|| PromoteError::MissingLineage {
+                layer: layer.layer_name().to_owned(),
+                key,
+            })?;
     // typed `ArtifactSpec` 으로 deserialize — 누락 필드는 serde_json 에러로 abort.
     let spec: ArtifactSpec = serde_json::from_slice(&bytes)?;
     let (tile_min_zoom, tile_max_zoom) = layer.zoom_range();
@@ -203,6 +228,7 @@ async fn read_staging_artifact(
 
 /// promote 입력.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub struct PromoteArgs<'a> {
     /// promote 할 version (newtype — invalid 라벨 컴파일 차단).
     pub version: &'a Version,
@@ -214,6 +240,7 @@ pub struct PromoteArgs<'a> {
 
 /// Round 4 #5 — CDN purge 결과의 typed outcome (이전 `Option<bool>` 의 ambiguity 제거).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 pub enum CdnPurgeOutcome {
     /// Cloudflare API 200 OK — manifest URL purge 완료.
     Purged,
@@ -231,6 +258,7 @@ pub enum CdnPurgeOutcome {
 
 /// promote 결과.
 #[derive(Debug, Clone)]
+#[cfg(test)]
 pub struct PromoteResult {
     /// 새 manifest 의 활성 version.
     pub current_version: String,
@@ -262,6 +290,7 @@ pub struct PromoteResult {
 /// - CDN purge 실패는 warn (manifest no-cache header fallback) — 단 production 의
 ///   missing-config 은 step 0 에서 이미 차단됨.
 #[allow(clippy::too_many_lines)]
+#[cfg(test)]
 #[instrument(skip(uploader, args), fields(version = %args.version))]
 pub async fn run(
     uploader: &R2Uploader,
@@ -315,46 +344,44 @@ pub async fn run(
     // 3. 이전 manifest backup (있으면). first publish 는 *expected miss* — breaker 가
     //    failure 로 카운트하지 않도록 `try_get_object_bytes` 사용.
     let manifest_key = uploader.config().manifest_key();
-    let previous_version: Option<Version> = if let Some(prev_bytes) =
-        uploader.try_get_object_bytes(&manifest_key).await?
-    {
-        let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
-        // current_version 은 Version newtype — invalid 라벨이 manifest 에 박혀있으면
-        // promote 단계에서 `PromoteError::InvalidPreviousVersion` 으로 거부.
-        let prev_ver = prev
-            .get("current_version")
-            .and_then(|v| v.as_str())
-            .map(|raw| {
-                Version::new(raw).map_err(|e| PromoteError::InvalidPreviousVersion {
-                    raw: raw.to_owned(),
-                    detail: e.to_string(),
+    let previous_version: Option<Version> =
+        if let Some(prev_bytes) = uploader.try_get_object_bytes(&manifest_key).await? {
+            let prev: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+            // current_version 은 Version newtype — invalid 라벨이 manifest 에 박혀있으면
+            // promote 단계에서 `PromoteError::InvalidPreviousVersion` 으로 거부.
+            let prev_ver = prev
+                .get("current_version")
+                .and_then(|v| v.as_str())
+                .map(|raw| {
+                    Version::new(raw).map_err(|e| PromoteError::InvalidPreviousVersion {
+                        raw: raw.to_owned(),
+                        detail: e.to_string(),
+                    })
                 })
-            })
-            .transpose()?;
-        if let Some(ref pv) = prev_ver {
-            let backup_key = uploader.config().manifest_backup_key(pv);
-            // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
-            let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
-            uploader
-                .put_object_json(&backup_key, &raw, "public, max-age=31536000, immutable")
-                .await?;
-            info!(backup_key = %backup_key, "previous manifest backed up (rollback ready)");
-        }
-        prev_ver
-    } else {
-        info!("no previous manifest — first publish");
-        None
-    };
+                .transpose()?;
+            if let Some(ref pv) = prev_ver {
+                let backup_key = uploader.config().manifest_backup_key(pv);
+                // raw bytes 그대로 PUT — 직렬화 다시 안 함 (sha256 동일 보장).
+                let raw: serde_json::Value = serde_json::from_slice(&prev_bytes)?;
+                uploader
+                    .put_object_json(&backup_key, &raw, "public, max-age=31536000, immutable")
+                    .await?;
+                info!(backup_key = %backup_key, "previous manifest backed up (rollback ready)");
+            }
+            prev_ver
+        } else {
+            info!("no previous manifest — first publish");
+            None
+        };
 
     // 4. new manifest 빌드 + publish.
     // P1.3: tiles_url_template — R2Config::tiles_url_template SSOT.
     // `{layer}` 는 클라이언트가 치환할 리터럴 placeholder — 의도적 formatting arg.
     #[allow(clippy::literal_string_with_formatting_args)]
-    let tiles_url_template = uploader.config().tiles_url_template(
-        args.public_url_base,
-        args.version,
-        "{layer}",
-    );
+    let tiles_url_template =
+        uploader
+            .config()
+            .tiles_url_template(args.public_url_base, args.version, "{layer}");
 
     let manifest = GoldManifest {
         current_version: args.version.as_str().to_owned(),
@@ -402,105 +429,188 @@ pub async fn run(
 ///
 /// - R2 list / delete API 실패
 /// - `keep` 가 0 이면 [`PromoteError::InvalidCleanupKeep`] (실수 방지)
+#[cfg(test)]
 pub async fn cleanup_manifest_backups(
     uploader: &R2Uploader,
     keep: usize,
 ) -> Result<CleanupResult, PromoteError> {
+    validate_cleanup_keep(keep)?;
+
+    let backups = list_manifest_backups(uploader).await?;
+    let total_found = backups.len();
+
+    log_manifest_backup_chain_listed(total_found, keep);
+
+    if total_found <= keep {
+        return Ok(cleanup_not_needed(total_found, keep));
+    }
+
+    let delete_targets = manifest_backup_delete_targets(backups, keep);
+    let report = delete_manifest_backup_targets(uploader, &delete_targets).await;
+
+    log_manifest_backup_cleanup_attempted(total_found, &report);
+
+    cleanup_result(total_found, report)
+}
+
+#[cfg(test)]
+fn log_manifest_backup_chain_listed(total_found: usize, keep: usize) {
+    info!(
+        backup_count = total_found,
+        keep, "manifest backup chain listed"
+    );
+}
+
+#[cfg(test)]
+fn log_manifest_backup_cleanup_attempted(total_found: usize, report: &BackupDeletionReport) {
+    info!(
+        total = total_found,
+        kept = total_found - report.deleted,
+        deleted = report.deleted,
+        failures = report.failures.len(),
+        "manifest backup cleanup attempted"
+    );
+}
+
+#[cfg(test)]
+const fn validate_cleanup_keep(keep: usize) -> Result<(), PromoteError> {
     if keep == 0 {
         return Err(PromoteError::InvalidCleanupKeep);
     }
+    Ok(())
+}
+
+#[cfg(test)]
+async fn list_manifest_backups(uploader: &R2Uploader) -> Result<Vec<RemoteObject>, PromoteError> {
     // backup key 형식 — `<gold_prefix>/manifest.<version>.json`. prefix 는 manifest_key
     // 의 dirname + `manifest.` glob.
-    let backup_prefix = format!("{}/manifest.", uploader.config().gold_prefix);
+    let backup_prefix = manifest_backup_prefix(uploader);
+    let manifest_key = uploader.config().manifest_key();
     let listed = uploader.list_objects(&backup_prefix).await?;
 
+    Ok(listed
+        .into_iter()
+        .filter(|obj| is_manifest_backup_object(obj, &backup_prefix, &manifest_key))
+        .collect())
+}
+
+#[cfg(test)]
+fn manifest_backup_prefix(uploader: &R2Uploader) -> String {
+    format!("{}/manifest.", uploader.config().gold_prefix)
+}
+
+#[cfg(test)]
+fn is_manifest_backup_object(obj: &RemoteObject, backup_prefix: &str, manifest_key: &str) -> bool {
     // backup 파일만 — `manifest.json` 자체는 제외 (`manifest.<version>.json` 만).
     // 패턴: `<gold_prefix>/manifest.<라벨>.json` 의 `.` 가 정확히 2개 (`manifest`,
     // `<라벨>`, `json`). `manifest.json` 은 `.` 1개.
-    let manifest_key = uploader.config().manifest_key();
-    let mut backups: Vec<_> = listed
-        .into_iter()
-        .filter(|obj| {
-            // `<gold_prefix>/manifest.<...>.json` 형식만 — 정확히 .json 끝 + manifest. prefix.
-            std::path::Path::new(&obj.key)
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
-                && obj.key.starts_with(&backup_prefix)
-                && obj.key != manifest_key
-        })
-        .collect();
+    std::path::Path::new(&obj.key)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+        && obj.key.starts_with(backup_prefix)
+        && obj.key != manifest_key
+}
 
+#[cfg(test)]
+fn cleanup_not_needed(total_found: usize, keep: usize) -> CleanupResult {
     info!(
-        backup_count = backups.len(),
-        keep,
-        "manifest backup chain listed"
+        backup_count = total_found,
+        keep, "no cleanup needed (within retention)"
     );
-
-    if backups.len() <= keep {
-        info!(
-            backup_count = backups.len(),
-            keep,
-            "no cleanup needed (within retention)"
-        );
-        return Ok(CleanupResult {
-            total_found: backups.len(),
-            kept: backups.len(),
-            deleted: 0,
-        });
+    CleanupResult {
+        total_found,
+        kept: total_found,
+        deleted: 0,
     }
+}
 
+#[cfg(test)]
+fn manifest_backup_delete_targets(
+    mut backups: Vec<RemoteObject>,
+    keep: usize,
+) -> Vec<RemoteObject> {
     // 오래된 것 먼저 — backup key 의 *문자열* 정렬 으로 충분 (version 라벨이
     // `v_YYYY_MM` 형식이라 lexicographic = chronological).
     // 단 외부 변경에 안전하려면 `etag` 또는 별도 LastModified field 가 더 정확.
     // 본 단계는 lexicographic 으로 충분 — runbook § 6 에서 "외부 변경 0" 가정.
     backups.sort_by(|a, b| a.key.cmp(&b.key));
+    backups.truncate(backups.len() - keep);
+    backups
+}
 
-    let to_delete = backups.len() - keep;
-    let delete_targets: Vec<_> = backups.iter().take(to_delete).cloned().collect();
+#[derive(Debug, Default)]
+#[cfg(test)]
+struct BackupDeletionReport {
+    deleted: usize,
+    failures: Vec<(String, String)>,
+}
 
-    let mut deleted = 0;
-    let mut failures: Vec<(String, String)> = Vec::new();
-    for obj in &delete_targets {
-        match uploader.delete_object(&obj.key).await {
-            Ok(()) => {
-                deleted += 1;
-                info!(key = %obj.key, "manifest backup deleted (cleanup)");
-            }
-            Err(e) => {
-                // Round 5 (final stop-hook) — partial cleanup 실패는 typed `Err` 로
-                // 전파. 이전엔 warn 후 `Ok(())` 반환 — silent partial = SSS 위반.
-                // 진행은 계속 (다른 backup 도 시도) — 모든 실패 모은 후 `Err` 박제.
-                warn!(key = %obj.key, error = %e, "backup delete failed — collecting for typed Err");
-                failures.push((obj.key.clone(), e.to_string()));
-            }
+#[cfg(test)]
+async fn delete_manifest_backup_targets(
+    uploader: &R2Uploader,
+    targets: &[RemoteObject],
+) -> BackupDeletionReport {
+    let mut report = BackupDeletionReport::default();
+    for obj in targets {
+        match delete_manifest_backup(uploader, obj).await {
+            Ok(()) => report.deleted += 1,
+            Err(failure) => report.failures.push(failure),
         }
     }
+    report
+}
 
-    info!(
-        total = backups.len(),
-        kept = backups.len() - deleted,
-        deleted,
-        failures = failures.len(),
-        "manifest backup cleanup attempted"
-    );
+#[cfg(test)]
+async fn delete_manifest_backup(
+    uploader: &R2Uploader,
+    obj: &RemoteObject,
+) -> Result<(), (String, String)> {
+    match uploader.delete_object(&obj.key).await {
+        Ok(()) => {
+            log_manifest_backup_deleted(&obj.key);
+            Ok(())
+        }
+        Err(e) => Err(log_manifest_backup_delete_failed(obj, &e)),
+    }
+}
 
-    if !failures.is_empty() {
+#[cfg(test)]
+fn log_manifest_backup_deleted(key: &str) {
+    info!(key = %key, "manifest backup deleted (cleanup)");
+}
+
+#[cfg(test)]
+fn log_manifest_backup_delete_failed(obj: &RemoteObject, error: &UploadError) -> (String, String) {
+    // Round 5 (final stop-hook) — partial cleanup 실패는 typed `Err` 로
+    // 전파. 이전엔 warn 후 `Ok(())` 반환 — silent partial = SSS 위반.
+    // 진행은 계속 (다른 backup 도 시도) — 모든 실패 모은 후 `Err` 박제.
+    warn!(key = %obj.key, error = %error, "backup delete failed — collecting for typed Err");
+    (obj.key.clone(), error.to_string())
+}
+
+#[cfg(test)]
+fn cleanup_result(
+    total_found: usize,
+    report: BackupDeletionReport,
+) -> Result<CleanupResult, PromoteError> {
+    if !report.failures.is_empty() {
         return Err(PromoteError::PartialCleanup {
-            attempted: delete_targets.len(),
-            deleted,
-            failures,
+            attempted: report.deleted + report.failures.len(),
+            deleted: report.deleted,
+            failures: report.failures,
         });
     }
 
     Ok(CleanupResult {
-        total_found: backups.len(),
-        kept: backups.len() - deleted,
-        deleted,
+        total_found,
+        kept: total_found - report.deleted,
+        deleted: report.deleted,
     })
 }
 
 /// `cleanup_manifest_backups` 결과.
 #[derive(Debug, Clone, Copy)]
+#[cfg(test)]
 pub struct CleanupResult {
     /// 발견한 backup 총 개수.
     pub total_found: usize,
@@ -515,20 +625,54 @@ pub struct CleanupResult {
 ///
 /// 본 check 는 `cloudflare_purge` 의 분기와 *동일 로직* 으로 wired — drift 차단.
 /// dev/staging 에서는 silent OK (`SkippedDevMode` 가 step 5 에서 자연 발생).
+#[cfg(test)]
 fn preflight_cdn_config() -> Result<(), PromoteError> {
     // ADR 0029 — `Environment::is_production_from_env()` SSOT (ETL_ENVIRONMENT 또는
     // ADR 0035 — `ETL_ENVIRONMENT` SSOT only.
     if !Environment::is_production_from_env() {
         return Ok(());
     }
-    let missing: Vec<&str> = [
-        ("CLOUDFLARE_API_TOKEN", env_nonempty("CLOUDFLARE_API_TOKEN")),
-        ("CLOUDFLARE_ZONE_ID", env_nonempty("CLOUDFLARE_ZONE_ID")),
-        ("R2_PUBLIC_URL_BASE", env_nonempty("R2_PUBLIC_URL_BASE")),
-    ]
-    .iter()
-    .filter_map(|(name, present)| if *present { None } else { Some(*name) })
-    .collect();
+    cdn_config_missing_error(&current_missing_cdn_config_names())
+}
+
+#[cfg(test)]
+fn env_nonempty_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+fn current_missing_cdn_config_names() -> Vec<&'static str> {
+    missing_cdn_config_names(
+        env_nonempty_value("CLOUDFLARE_API_TOKEN").is_some(),
+        env_nonempty_value("CLOUDFLARE_ZONE_ID").is_some(),
+        env_nonempty_value("R2_PUBLIC_URL_BASE").is_some(),
+    )
+}
+
+#[cfg(test)]
+fn missing_cdn_config_names(
+    token_present: bool,
+    zone_id_present: bool,
+    public_base_present: bool,
+) -> Vec<&'static str> {
+    let mut missing = Vec::new();
+    if !token_present {
+        missing.push("CLOUDFLARE_API_TOKEN");
+    }
+    if !zone_id_present {
+        missing.push("CLOUDFLARE_ZONE_ID");
+    }
+    if !public_base_present {
+        missing.push("R2_PUBLIC_URL_BASE");
+    }
+    missing
+}
+
+#[cfg(test)]
+fn cdn_config_missing_error(missing: &[&str]) -> Result<(), PromoteError> {
     if missing.is_empty() {
         return Ok(());
     }
@@ -537,10 +681,12 @@ fn preflight_cdn_config() -> Result<(), PromoteError> {
     })
 }
 
-fn env_nonempty(name: &str) -> bool {
-    std::env::var(name)
-        .ok()
-        .is_some_and(|v| !v.trim().is_empty())
+#[derive(Debug)]
+#[cfg(test)]
+struct CdnPurgeConfig {
+    token: String,
+    zone_id: String,
+    public_base: String,
 }
 
 /// Cloudflare CDN purge — `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ZONE_ID` + `R2_PUBLIC_URL_BASE`
@@ -549,71 +695,105 @@ fn env_nonempty(name: &str) -> bool {
 /// Round 4 #5 (Codex audit): production env 에서 config 누락 = fail-fast (이전: silent
 /// `Ok(false)` 로 manifest 가 stale CDN 으로 publish 되는 trick). dev / staging 은
 /// silent skip 그대로 (`SkippedDevMode`).
+#[cfg(test)]
 async fn cloudflare_purge(manifest_key: &str) -> Result<CdnPurgeOutcome, PromoteError> {
-    let token = std::env::var("CLOUDFLARE_API_TOKEN")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let zone_id = std::env::var("CLOUDFLARE_ZONE_ID")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-    let base = std::env::var("R2_PUBLIC_URL_BASE")
-        .ok()
-        .filter(|v| !v.trim().is_empty());
-
-    // typed unpack — 누락 detection 과 unwrap 을 하나의 match 로. production 시 fail-fast,
-    // 그 외 env 는 SkippedDevMode (manifest 의 no-cache header 가 fallback).
-    let (token, zone_id, base) = match (token, zone_id, base) {
-        (Some(t), Some(z), Some(b)) => (t, z, b),
-        (token, zone_id, base) => {
-            let missing: Vec<&str> = [
-                ("CLOUDFLARE_API_TOKEN", token.is_some()),
-                ("CLOUDFLARE_ZONE_ID", zone_id.is_some()),
-                ("R2_PUBLIC_URL_BASE", base.is_some()),
-            ]
-            .iter()
-            .filter_map(|(name, present)| if *present { None } else { Some(*name) })
-            .collect();
-            // ADR 0029 — preflight 와 동일 SSOT 검사.
-            if Environment::is_production_from_env() {
-                return Err(PromoteError::CdnPurgeMissingConfig {
-                    missing: missing.join(", "),
-                });
-            }
-            info!(missing = ?missing, "CDN purge skipped in non-production env");
-            return Ok(CdnPurgeOutcome::SkippedDevMode);
-        }
+    let Some(config) = read_cdn_purge_config()? else {
+        return Ok(CdnPurgeOutcome::SkippedDevMode);
     };
 
-    let url = format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache");
-    let target_url = if base.ends_with('/') {
-        format!("{base}{manifest_key}")
-    } else {
-        format!("{base}/{manifest_key}")
-    };
+    let url = cloudflare_purge_api_url(&config.zone_id);
+    let target_url = cdn_manifest_url(&config.public_base, manifest_key);
     let body = serde_json::json!({ "files": [target_url] });
+    let resp = send_cdn_purge_request(&config, &url, &body).await?;
 
+    ensure_cdn_purge_success(resp).await?;
+    info!(target = %target_url, "CDN cache purged");
+    Ok(CdnPurgeOutcome::Purged)
+}
+
+#[cfg(test)]
+fn read_cdn_purge_config() -> Result<Option<CdnPurgeConfig>, PromoteError> {
+    let token = env_nonempty_value("CLOUDFLARE_API_TOKEN");
+    let zone_id = env_nonempty_value("CLOUDFLARE_ZONE_ID");
+    let public_base = env_nonempty_value("R2_PUBLIC_URL_BASE");
+
+    match (token, zone_id, public_base) {
+        (Some(token), Some(zone_id), Some(public_base)) => Ok(Some(CdnPurgeConfig {
+            token,
+            zone_id,
+            public_base,
+        })),
+        (token, zone_id, public_base) => {
+            handle_incomplete_cdn_config(token.is_some(), zone_id.is_some(), public_base.is_some())
+        }
+    }
+}
+
+#[cfg(test)]
+fn handle_incomplete_cdn_config(
+    token_present: bool,
+    zone_id_present: bool,
+    public_base_present: bool,
+) -> Result<Option<CdnPurgeConfig>, PromoteError> {
+    let missing = missing_cdn_config_names(token_present, zone_id_present, public_base_present);
+    // ADR 0029 — preflight 와 동일 SSOT 검사.
+    if Environment::is_production_from_env() {
+        cdn_config_missing_error(&missing)?;
+    } else {
+        info!(missing = ?missing, "CDN purge skipped in non-production env");
+    }
+    Ok(None)
+}
+
+#[cfg(test)]
+fn cloudflare_purge_api_url(zone_id: &str) -> String {
+    format!("https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache")
+}
+
+#[cfg(test)]
+fn cdn_manifest_url(public_base: &str, manifest_key: &str) -> String {
+    if public_base.ends_with('/') {
+        return format!("{public_base}{manifest_key}");
+    }
+    format!("{public_base}/{manifest_key}")
+}
+
+#[cfg(test)]
+async fn send_cdn_purge_request(
+    config: &CdnPurgeConfig,
+    url: &str,
+    body: &serde_json::Value,
+) -> Result<reqwest::Response, PromoteError> {
     let client = reqwest::Client::new();
-    let resp = client
-        .post(&url)
-        .bearer_auth(token)
-        .json(&body)
+    Ok(client
+        .post(url)
+        .bearer_auth(&config.token)
+        .json(body)
         .send()
-        .await?;
+        .await?)
+}
+
+#[cfg(test)]
+async fn ensure_cdn_purge_success(resp: reqwest::Response) -> Result<(), PromoteError> {
     let status = resp.status();
     if !status.is_success() {
         // Round 4 #6 — body read 실패도 typed 박제. 이전 `unwrap_or_default()` silent loss 제거.
-        let (body, body_read_error) = match resp.text().await {
-            Ok(text) => (text.chars().take(1024).collect::<String>(), None),
-            Err(e) => (String::new(), Some(format!("body read failed: {e}"))),
-        };
-        return Err(PromoteError::CdnPurge {
-            status: status.as_u16(),
-            body,
-            body_read_error,
-        });
+        return Err(cdn_purge_failure(status, resp).await);
     }
-    info!(target = %target_url, "CDN cache purged");
-    Ok(CdnPurgeOutcome::Purged)
+    Ok(())
+}
+
+#[cfg(test)]
+async fn cdn_purge_failure(status: reqwest::StatusCode, resp: reqwest::Response) -> PromoteError {
+    let (body, body_read_error) = match resp.text().await {
+        Ok(text) => (text.chars().take(1024).collect::<String>(), None),
+        Err(e) => (String::new(), Some(format!("body read failed: {e}"))),
+    };
+    PromoteError::CdnPurge {
+        status: status.as_u16(),
+        body,
+        body_read_error,
+    }
 }
 
 #[cfg(test)]
@@ -800,7 +980,6 @@ mod tests {
             "body_read_error must propagate: {display}"
         );
     }
-
 
     /// P0 typed gate (Codex Round 3 발견 fix): staging spec round-trip.
     /// `write_staging_spec` 가 직렬화한 JSON 이 `ArtifactSpec` 으로 1:1 round-trip.

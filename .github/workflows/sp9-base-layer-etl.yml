@@ -327,47 +327,21 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────────────────
-  # Phase 4: Promote — manifest atomic flip (L3 + L10).
-  # 모든 layer 가 success 후에만 실행. promote subcommand 가 staging spec 검증 후
-  # gold/manifest.json publish + Cloudflare CDN purge.
+  # Phase 4: Promote — disabled.
+  # ADR 0036 / platform-core ADR 0004 이후 `gold/manifest.json` owner 는
+  # platform-core Catalog 이다. Gongzzang ETL 은 tile artifact 를 만들 수 있지만
+  # manifest publish/rollback pointer 는 더 이상 write 하지 않는다.
   # ─────────────────────────────────────────────────────────────────────────────
   promote:
-    name: Promote (manifest atomic flip)
+    name: Promote disabled (platform-core owns manifest)
     needs: [setup, gold]
-    if: ${{ success() && inputs.target_version == '' }}
+    if: ${{ false }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
-        with: { shared-key: sp9-etl }
-      - name: Compute version
-        id: ver
+      - name: Platform-core manifest owner notice
         run: |
-          if [ -n "${{ inputs.target_version }}" ]; then
-            echo "version=${{ inputs.target_version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=v$(date -u +%Y_%m)" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Run promote (L3 atomicity)
-        env:
-          # ADR 0029 — `ETL_ENVIRONMENT=production` + production namespace.
-          ETL_ENVIRONMENT: production
-          R2_PRODUCTION_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_PRODUCTION_ACCESS_KEY: ${{ secrets.R2_ACCESS_KEY }}
-          R2_PRODUCTION_SECRET_KEY: ${{ secrets.R2_SECRET_KEY }}
-          R2_PRODUCTION_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_PUBLIC_URL_BASE: ${{ secrets.R2_PUBLIC_URL_BASE }}
-          # CDN purge — `ETL_ENVIRONMENT=production` 에서는 양쪽 필수 (Rust `cloudflare_purge`
-          # 가 `CdnPurgeConfigMissing` 으로 fail-fast). dev/staging 에서만 silent skip.
-          # Codex Round 6 finding #12 — 표면적 "warn skip" 표현은 production fail-fast 와 모순,
-          # production-only workflow 본 yml 에서는 secret 필수임을 명시.
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
-        run: |
-          cargo run -q -p etl-base-layer --frozen --release -- \
-            promote --version "${{ steps.ver.outputs.version }}"
+          echo "::notice::Gongzzang no longer publishes vector tile manifests; use platform-core Catalog."
 
   # ─────────────────────────────────────────────────────────────────────────────
   # Phase 5: Notify on failure — workflow-level alert.
