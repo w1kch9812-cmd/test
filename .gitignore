@@ -83,3 +83,6 @@ _archive/
 .claude/scheduled_tasks.lock
 
 .superpowers/
+
+# Spike artifacts (Valhalla isochrone — 2026-05-11)
+.spike/

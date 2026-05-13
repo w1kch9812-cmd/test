@@ -5,6 +5,10 @@
 **데이터 출처**: OpenStreetMap, ODbL 1.0
 **방법**: Overpass API, 200m bbox, highway=* way, 10개 산단 표본
 
+**원본 실행 표본 성공/실패**: 10/10 succeeded, 0 failed (모든 표본에서 Overpass 응답 정상 수신, ERROR 0건). N=0 표본은 "API 실패" 가 아니라 "200m bbox 내 해당 카테고리 way 부재".
+
+**방법론 보완 (stop-gate 검토 반영, 2026-05-11)**: 원본 스크립트는 Overpass API 실패 표본과 "도로 없음" 표본을 같은 `emptyStats()` 로 처리해 통계상 indistinguishable 했음. 통계 분모/분자에는 0 기여라 결과값 자체는 부풀려지지 않지만, 재현/감사 시 *실패 표본 수* 가 보이지 않아 결론의 신뢰도 평가가 어려움. fix 후 스크립트는 `failed: boolean` 을 표본별로 추적하고 aggregate 에서 *실패 표본 제외* + *성공/실패 카운트를 명시 출력*. 본 결과의 결론(0% fill) 은 *모든 표본 성공* 전제 위에서 유효.
+
 ---
 
 ## 1. 전체 집계 (핵심 결과)

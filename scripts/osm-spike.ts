@@ -116,7 +116,7 @@ function processSample(elements, name) {
       if (tags[tag] != null && tags[tag] !== "") stats.tagCounts[tag]++;
     }
   }
-  return { name, major, local, other };
+  return { name, major, local, other, failed: false };
 }
 
 function pct(count, total) {
@@ -128,6 +128,10 @@ function printTable(results) {
   console.log("\n=== Fill-rate per sample (M=major, L=local roads) ===");
   console.log(["Sample".padEnd(20), "Cat", "N", ...ALL_TAGS].join("\t"));
   for (const r of results) {
+    if (r.failed) {
+      console.log([r.name.padEnd(20), "FAILED", "-", ...ALL_TAGS.map(() => "  N/A")].join("\t"));
+      continue;
+    }
     for (const [label, stats] of [
       ["M", r.major],
       ["L", r.local],
@@ -147,7 +151,14 @@ function printTable(results) {
 function aggregate(results) {
   const major = emptyStats(),
     local = emptyStats();
+  let succeeded = 0,
+    failed = 0;
   for (const r of results) {
+    if (r.failed) {
+      failed++;
+      continue;
+    }
+    succeeded++;
     major.total += r.major.total;
     local.total += r.local.total;
     for (const tag of ALL_TAGS) {
@@ -155,7 +166,7 @@ function aggregate(results) {
       local.tagCounts[tag] += r.local.tagCounts[tag];
     }
   }
-  return { major, local };
+  return { major, local, succeeded, failed };
 }
 
 function decisionTrigger(s) {
@@ -194,13 +205,30 @@ async function main() {
       console.log(els.length + " ways (M:" + r.major.total + " L:" + r.local.total + ")");
     } catch (err) {
       console.log("ERROR: " + err);
-      results.push({ name: s.name, major: emptyStats(), local: emptyStats(), other: emptyStats() });
+      results.push({
+        name: s.name,
+        major: emptyStats(),
+        local: emptyStats(),
+        other: emptyStats(),
+        failed: true,
+      });
     }
     if (i < SAMPLES.length - 1) await sleep(500);
   }
   printTable(results);
   const agg = aggregate(results);
-  console.log("\n=== Aggregate fill rate ===");
+  console.log(
+    "\n=== Sample success/failure ===\n  succeeded: " +
+      agg.succeeded +
+      " / failed: " +
+      agg.failed +
+      " (failed samples EXCLUDED from aggregate)",
+  );
+  if (agg.succeeded === 0) {
+    console.log("[osm-spike] All samples failed — aggregate is meaningless. Abort.");
+    process.exit(2);
+  }
+  console.log("\n=== Aggregate fill rate (succeeded samples only) ===");
   console.log(["Cat".padEnd(8), "N", ...ALL_TAGS].join("	"));
   console.log(
     [
