@@ -22,7 +22,7 @@ production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
 |---|---|---|
 | 매물 페이지 첫 폴리곤 render TTI | **p50 ≤ 1.0s, p95 ≤ 2.5s** | Web Vitals + RUM (manifest fetch + 첫 tile fetch) |
 | flat tile cache hit ratio | **≥ 95%** | Cloudflare Analytics (R2 origin pull 비율 보수) |
-| 폴리곤 render 가시성 (z14+ 부평구) | **100%** | E2E `naver-all-features-probe.spec.ts` 매일 운영 ping |
+| 폴리곤 render 가시성 (z14+ 부평구) | **100%** | Probe `pnpm --filter @gongzzang/web probe:naver` 매일 운영 ping |
 
 ### 1.2 ETL 측 (데이터 품질)
 

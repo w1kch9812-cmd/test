@@ -18,7 +18,12 @@ import { isHTTPError } from "ky";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useForm } from "react-hook-form";
+import {
+  type FieldErrors,
+  type UseFormRegister,
+  type UseFormSetError,
+  useForm,
+} from "react-hook-form";
 import { toast } from "sonner";
 
 import { createListing } from "@/lib/listings/mutations";
@@ -30,6 +35,136 @@ import {
   TRANSACTION_TYPES,
 } from "@/lib/listings/schema";
 
+interface ProblemDetailsBody {
+  title: string;
+  detail: string | null;
+  type: string | null;
+}
+
+interface PricingFieldsProps {
+  errors: FieldErrors<CreateListingFormValues>;
+  register: UseFormRegister<CreateListingFormValues>;
+  showDeposit: boolean;
+  showMonthlyRent: boolean;
+  t: (key: string) => string;
+  tErr: (message: string | undefined) => string | undefined;
+}
+
+function nullableNumber(value: unknown): number | null {
+  return value === "" || value === null ? null : Number(value);
+}
+
+function PricingFields({
+  errors,
+  register,
+  showDeposit,
+  showMonthlyRent,
+  t,
+  tErr,
+}: PricingFieldsProps) {
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <div className="space-y-2">
+        <Label htmlFor="price_krw">{t("labels.price")}</Label>
+        <Input
+          id="price_krw"
+          type="number"
+          inputMode="numeric"
+          {...register("price_krw", { valueAsNumber: true })}
+        />
+        {errors.price_krw ? (
+          <p className="text-sm text-red-600">{tErr(errors.price_krw?.message)}</p>
+        ) : null}
+      </div>
+
+      {showDeposit ? (
+        <div className="space-y-2">
+          <Label htmlFor="deposit_krw">{t("labels.deposit")}</Label>
+          <Input
+            id="deposit_krw"
+            type="number"
+            inputMode="numeric"
+            {...register("deposit_krw", {
+              valueAsNumber: true,
+              setValueAs: nullableNumber,
+            })}
+          />
+          {errors.deposit_krw ? (
+            <p className="text-sm text-red-600">{tErr(errors.deposit_krw?.message)}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {showMonthlyRent ? (
+        <div className="space-y-2">
+          <Label htmlFor="monthly_rent_krw">{t("labels.monthlyRent")}</Label>
+          <Input
+            id="monthly_rent_krw"
+            type="number"
+            inputMode="numeric"
+            {...register("monthly_rent_krw", {
+              valueAsNumber: true,
+              setValueAs: nullableNumber,
+            })}
+          />
+          {errors.monthly_rent_krw ? (
+            <p className="text-sm text-red-600">{tErr(errors.monthly_rent_krw?.message)}</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function translateFormError(
+  translate: (key: string) => string,
+  message: string | undefined,
+): string | undefined {
+  if (!message) return undefined;
+  try {
+    return translate(message);
+  } catch {
+    return message;
+  }
+}
+
+function stringProperty(body: unknown, key: "title" | "detail" | "type"): string | null {
+  if (typeof body !== "object" || body === null || !(key in body)) return null;
+  const value = (body as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : null;
+}
+
+function parseProblemDetailsBody(body: unknown, fallbackTitle: string): ProblemDetailsBody {
+  return {
+    title: stringProperty(body, "title") ?? fallbackTitle,
+    detail: stringProperty(body, "detail"),
+    type: stringProperty(body, "type"),
+  };
+}
+
+async function showCreateListingHttpError(
+  error: unknown,
+  fallbackTitle: string,
+  setError: UseFormSetError<CreateListingFormValues>,
+): Promise<void> {
+  if (!isHTTPError(error)) {
+    toast.error(fallbackTitle);
+    return;
+  }
+
+  try {
+    const problem = parseProblemDetailsBody(await error.response.json(), fallbackTitle);
+    toast.error(problem.detail ? `${problem.title}: ${problem.detail}` : problem.title);
+    if (problem.type?.includes("transaction-fields")) {
+      setError("transaction_type", {
+        message: problem.detail ?? problem.title,
+      });
+    }
+  } catch {
+    toast.error(fallbackTitle);
+  }
+}
+
 export function ListingForm(): React.ReactElement {
   const router = useRouter();
   const t = useTranslations("listingForm");
@@ -40,14 +175,7 @@ export function ListingForm(): React.ReactElement {
 
   // zod schema 의 message 는 i18n key (예: 'listingForm.errors.pnuFormat').
   // 표시 시점에 root translator 로 변환. 키 누락 시 raw key 그대로 표시 (개발자에게 신호).
-  const tErr = (msg: string | undefined): string | undefined => {
-    if (!msg) return undefined;
-    try {
-      return tRoot(msg);
-    } catch {
-      return msg;
-    }
-  };
+  const tErr = (msg: string | undefined): string | undefined => translateFormError(tRoot, msg);
 
   const LISTING_TYPE_LABELS: Record<(typeof LISTING_TYPES)[number], string> = {
     factory: tListingType("factory"),
@@ -97,40 +225,7 @@ export function ListingForm(): React.ReactElement {
     onError(error) {
       // RFC 7807 ProblemDetails 매핑 — server 가 client 검증 통과 후 거부 시.
       const fallback = t("submitErrorFallback");
-      if (isHTTPError(error)) {
-        // detail 표시 — production 에서는 generic, dev 에서는 raw.
-        void error.response
-          .json()
-          .then((body: unknown) => {
-            const detail =
-              typeof body === "object" &&
-              body !== null &&
-              "detail" in body &&
-              typeof (body as { detail: unknown }).detail === "string"
-                ? (body as { detail: string }).detail
-                : null;
-            const title =
-              typeof body === "object" &&
-              body !== null &&
-              "title" in body &&
-              typeof (body as { title: unknown }).title === "string"
-                ? (body as { title: string }).title
-                : fallback;
-            toast.error(detail ? `${title}: ${detail}` : title);
-            // 가능하면 form field 매핑.
-            if (typeof body === "object" && body !== null && "type" in body) {
-              const type = (body as { type: unknown }).type;
-              if (typeof type === "string" && type.includes("transaction-fields")) {
-                setError("transaction_type", {
-                  message: detail ?? title,
-                });
-              }
-            }
-          })
-          .catch(() => toast.error(fallback));
-      } else {
-        toast.error(fallback);
-      }
+      void showCreateListingHttpError(error, fallback, setError);
     },
   });
 
@@ -194,56 +289,14 @@ export function ListingForm(): React.ReactElement {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="price_krw">{t("labels.price")}</Label>
-          <Input
-            id="price_krw"
-            type="number"
-            inputMode="numeric"
-            {...register("price_krw", { valueAsNumber: true })}
-          />
-          {errors.price_krw ? (
-            <p className="text-sm text-red-600">{tErr(errors.price_krw?.message)}</p>
-          ) : null}
-        </div>
-
-        {showDeposit ? (
-          <div className="space-y-2">
-            <Label htmlFor="deposit_krw">{t("labels.deposit")}</Label>
-            <Input
-              id="deposit_krw"
-              type="number"
-              inputMode="numeric"
-              {...register("deposit_krw", {
-                valueAsNumber: true,
-                setValueAs: (v: string) => (v === "" || v === null ? null : Number(v)),
-              })}
-            />
-            {errors.deposit_krw ? (
-              <p className="text-sm text-red-600">{tErr(errors.deposit_krw?.message)}</p>
-            ) : null}
-          </div>
-        ) : null}
-
-        {showMonthlyRent ? (
-          <div className="space-y-2">
-            <Label htmlFor="monthly_rent_krw">{t("labels.monthlyRent")}</Label>
-            <Input
-              id="monthly_rent_krw"
-              type="number"
-              inputMode="numeric"
-              {...register("monthly_rent_krw", {
-                valueAsNumber: true,
-                setValueAs: (v: string) => (v === "" || v === null ? null : Number(v)),
-              })}
-            />
-            {errors.monthly_rent_krw ? (
-              <p className="text-sm text-red-600">{tErr(errors.monthly_rent_krw?.message)}</p>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+      <PricingFields
+        errors={errors}
+        register={register}
+        showDeposit={showDeposit}
+        showMonthlyRent={showMonthlyRent}
+        t={t}
+        tErr={tErr}
+      />
 
       <div className="space-y-2">
         <Label htmlFor="area_m2">{t("labels.area")}</Label>

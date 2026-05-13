@@ -18,7 +18,7 @@ T3b.x spike 의 일환으로 Naver 의 mapbox-gl 인스턴스 의 vector polygon
 
 ### Probe scope 정정 (2026-05-07 EOD)
 
-본 ADR 의 dump (`apps/web/tests/e2e/naver-polygons-probe.spec.ts:104-107`) 는 *polygon type 만* 필터:
+본 ADR 의 초기 dump 는 polygon type 만 필터했고, 현재 probe 는 `apps/web/tests/probes/naver-sdk.probe.ts` 의 별도 `probe:naver` 명령으로 관리한다:
 
 ```ts
 const polygonLayers = layers.filter(
@@ -28,7 +28,7 @@ const polygonLayers = layers.filter(
 
 따라서 **`symbol` (POI 라벨/아이콘 — 지하철역, 학교, 병원, 주유소, 관공서 등) / `line` (도로 centerline, 행정 경계, 철도) / `circle` (점 POI) / `raster` (3D 건물, 위성) / `heatmap`** 미검증. 본 ADR 의 "Naver vector 의 한계 4개" 는 *polygon 카테고리에 한해서만* 유효.
 
-**후속 probe**: `apps/web/tests/e2e/naver-all-features-probe.spec.ts` — polygon-only filter 제거 + multi-viewport (강남/부평/서울역) + `naver.maps.CadastralLayer` 비교 dump. 사용자가 dev 서버에서 돌려야 결과 박제 가능.
+**후속 probe**: `apps/web/tests/probes/naver-sdk.probe.ts` — polygon-only filter 제거 + multi-viewport (강남/부평/서울역) + `naver.maps.CadastralLayer` 비교 dump. `pnpm --filter @gongzzang/web probe:naver` 로 별도 실행한다.
 
 ### 발견 — Naver 의 vector polygon layer 23개 (총 layer 279개 중)
 
@@ -108,7 +108,7 @@ mb.setFeatureState(
 - **FU 40 — `Building.geom` 정확 footprint** — V-World `LT_C_SPBD` 또는 `AL_D194_*` (건물 dataset) 별도 PMTiles. ADR 0020 의 직접 후속.
   - 사용자 *건물 식별 needs* 명시 (2026-05-07) → SP9 finale 이후 *2순위 sub-project* 로 escalate 검토.
 - **POI properties 활용** — Naver `poi4osm` source 의 properties 분석 + 매물 검색 시 인접 POI 표시 (지하철역 / 학교 / 등).
-- **Symbol/line layer probe 확장** — `naver-all-features-probe.spec.ts` 결과 박제 후 *식별 가능 symbol layer* (지하철역, 학교, 관공서) 의 properties schema + feature.id 보유 여부 확인. 결과에 따라 새 ADR (Naver POI runtime 활용 model).
+- **Symbol/line layer probe 확장** — `apps/web/tests/probes/naver-sdk.probe.ts` 결과 박제 후 *식별 가능 symbol layer* (지하철역, 학교, 관공서) 의 properties schema + feature.id 보유 여부 확인. 결과에 따라 새 ADR (Naver POI runtime 활용 model).
 - **Naver `CadastralLayer` 비교** — Naver SDK 가 *별도 옵션* 으로 cadastral overlay 제공 (raster 추정, 약관상 PNU 비공개 가능성). 우리 PMTiles 와 *기능 + 약관* 비교 후 정당성 재확인.
 
 ## 참고
