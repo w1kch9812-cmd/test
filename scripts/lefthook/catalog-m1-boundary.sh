@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Catalog M1 boundary guardrail — ADR 0030 / 0031 / 0034.
 #
-# During M1 phase, gongzzang3 is sole owner of catalog (industrial-complex /
+# During M1 phase, gongzzang is sole owner of catalog (industrial-complex /
 # parcel / building / manufacturer). After M3.2 cutover, ownership moves to
 # platform-core. Any new mutation surface added now will need rewrite — so
 # this hook blocks it at commit time.

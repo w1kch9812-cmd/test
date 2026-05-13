@@ -1,7 +1,7 @@
 //! Catalog event contracts for the platform-core extraction path.
 //!
 //! These events describe the published language expected for catalog outbox rows.
-//! During M1 they are schema only in `gongzzang3`; actual catalog ownership moves to
+//! During M1 they are schema only in `gongzzang`; actual catalog ownership moves to
 //! `platform-core` during the ADR 0034 cutover sequence.
 
 #![allow(
@@ -115,7 +115,7 @@ impl CatalogEventV1 {
 
     /// Add the source fetch timestamp.
     #[must_use]
-    pub fn with_source_fetched_at(mut self, fetched_at: DateTime<Utc>) -> Self {
+    pub const fn with_source_fetched_at(mut self, fetched_at: DateTime<Utc>) -> Self {
         self.source_fetched_at = Some(fetched_at);
         self
     }

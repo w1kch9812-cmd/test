@@ -317,8 +317,7 @@ impl Environment {
     /// - 빈 문자열 → [`EnvironmentParseError::Empty`]
     /// - 알 수 없는 값 → [`EnvironmentParseError::Invalid`]
     pub fn from_env_required() -> Result<Self, EnvironmentParseError> {
-        let raw = std::env::var("ETL_ENVIRONMENT")
-            .map_err(|_| EnvironmentParseError::Unset)?;
+        let raw = std::env::var("ETL_ENVIRONMENT").map_err(|_| EnvironmentParseError::Unset)?;
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             return Err(EnvironmentParseError::Empty);
@@ -360,9 +359,7 @@ impl Environment {
             .ok()
             .as_deref()
             .map(str::trim)
-            .is_some_and(|v| {
-                v.eq_ignore_ascii_case("production") || v.eq_ignore_ascii_case("prod")
-            })
+            .is_some_and(|v| v.eq_ignore_ascii_case("production") || v.eq_ignore_ascii_case("prod"))
     }
 
     /// 사람-가독 이름.
@@ -426,10 +423,7 @@ mod tests {
     #[test]
     fn version_too_long() {
         let s = format!("v{}", "a".repeat(64));
-        assert!(matches!(
-            Version::new(s),
-            Err(TypeError::VersionTooLong(_))
-        ));
+        assert!(matches!(Version::new(s), Err(TypeError::VersionTooLong(_))));
     }
 
     #[test]
@@ -518,7 +512,12 @@ mod tests {
 
     #[test]
     fn r2_public_base_rejects_invalid_scheme() {
-        for s in ["", "ftp://r2.example.com", "r2.example.com", "//r2.example.com"] {
+        for s in [
+            "",
+            "ftp://r2.example.com",
+            "r2.example.com",
+            "//r2.example.com",
+        ] {
             assert!(R2PublicBase::new(s).is_err(), "must reject {s:?}");
         }
     }

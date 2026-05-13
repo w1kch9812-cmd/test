@@ -29,9 +29,7 @@
 #![allow(clippy::doc_markdown)]
 
 pub mod types;
-pub use types::{
-    Environment, EnvironmentParseError, R2PublicBase, Srs, TypeError, Version,
-};
+pub use types::{Environment, EnvironmentParseError, R2PublicBase, Srs, TypeError, Version};
 
 use serde::{Deserialize, Serialize};
 
@@ -82,7 +80,8 @@ pub const DTMK_LICENSE: &str = "공공누리 제1유형: 출처표시";
 /// 실제 URL 은 `dtmk_source_url()` 헬퍼 또는 workflow 의
 /// `${{ needs.setup.outputs.dtmk_source_url }}` 변수 치환으로 생성.
 /// Round 4 SSOT — license / source URL 양쪽 박제.
-pub const DTMK_SOURCE_URL_TEMPLATE: &str = "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}";
+pub const DTMK_SOURCE_URL_TEMPLATE: &str =
+    "https://www.vworld.kr/dtmk/dtmk_ntads_s002.do?dsId={ds_id}";
 
 /// `DTMK_SOURCE_URL_TEMPLATE` 의 `{ds_id}` 를 [`DTMK_DS_ID`] 로 치환한 절대 URL.
 #[must_use]
