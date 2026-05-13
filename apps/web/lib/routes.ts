@@ -16,6 +16,9 @@
 export const ROUTES = {
   home: "/",
   login: "/login",
+  /** `/profile` (top-level route — `(authenticated)/profile/page.tsx`). M3 cutover
+   * 후 `/me/profile` 로 이동 가능하나 현재는 legacy 위치. */
+  profile: "/profile",
   listings: {
     index: "/listings",
     new: "/listings/new",
@@ -24,7 +27,6 @@ export const ROUTES = {
   },
   me: {
     notifications: "/me/notifications",
-    profile: "/me/profile",
   },
 } as const;
 

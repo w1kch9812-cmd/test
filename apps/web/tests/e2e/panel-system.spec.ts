@@ -28,8 +28,8 @@ test.describe("SP10 Panel System", () => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_UUID}.summary`);
     // breadcrumb 에 두 entry 노출 — registry 가 known 이라 fetcher 결과와 무관하게 표시.
     const nav = page.getByRole("navigation", { name: /경로/ });
-    await expect(nav.getByText("parcel.summary")).toBeVisible();
-    await expect(nav.getByText("listing.summary")).toBeVisible();
+    await expect(nav.getByText("필지")).toBeVisible();
+    await expect(nav.getByText("매물")).toBeVisible();
   });
 
   test("Browser back pops top panel", async ({ page }) => {

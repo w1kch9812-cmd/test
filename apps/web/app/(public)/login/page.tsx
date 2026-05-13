@@ -9,7 +9,7 @@ export default async function LoginPage({
 }) {
   const t = await getTranslations("auth.login");
   const params = await searchParams;
-  const returnTo = params.returnTo ?? ROUTES.me.profile;
+  const returnTo = params.returnTo ?? ROUTES.profile;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-8">
