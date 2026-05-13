@@ -6,6 +6,11 @@
 | 상태 | Accepted |
 | 선행 | [ADR 0021](./0021-static-vector-tile-decomposition.md), [ADR 0024](./0024-etl-cancel-protocol-immediate-abort.md), [ADR 0027](./0027-admin-complex-layer-source-deferred.md) |
 
+> **Handover note**: the supply-chain SHA pin policy remains active. The manifest
+> backup cleanup cron portion is superseded by [ADR 0036](./0036-static-vector-tile-runtime-contract.md)
+> and platform-core ADR 0004. Gongzzang no longer promotes, rolls back, or cleans
+> up `gold/manifest.json`; platform-core Catalog owns that lifecycle.
+
 ## 결정
 
 본 ADR 은 Codex Round 5 audit 가 발견한 *enterprise-grade 운영 통제* 미박제 영역 중
@@ -43,24 +48,10 @@ SHA pin + `# @<channel>` 주석 형식 허용 (e.g. `@21dc36...  # @stable`):
 
 ### 2. Manifest backup cleanup cron
 
-`gold/manifest.<previous_version>.json` backup chain (runbook § 6) 의 **12개 보존**
-정책을 *실제 강제* 하는 cron. 이전엔 runbook 박제만 + 실코드 0.
-
-```yaml
-# .github/workflows/sp9-manifest-backup-cleanup.yml (실 구현됨 — efa1af4)
-on:
-  schedule:
-    # ETL etl.yml 이 매월 1일 18:00 UTC. cleanup 은 다음 날 04:00 UTC (= 13:00 KST) —
-    # promote 직후 충분 buffer.
-    - cron: "0 4 2 * *"
-jobs:
-  cleanup:
-    steps:
-      - run: ./target/release/etl-base-layer cleanup-manifest-backups --keep 12
-```
-
-본 ADR 은 정책 박제. 실 구현 — commit `efa1af4` 의 `cleanup_manifest_backups` Rust
-함수 + `.github/workflows/sp9-manifest-backup-cleanup.yml`.
+Historical decision. This cleanup path is now disabled in Gongzzang after ADR 0036.
+`gold/manifest.<previous_version>.json` retention and cleanup belongs to platform-core
+Catalog. The Gongzzang workflow remains present only as a disabled audit stub, and
+`etl-base-layer cleanup-manifest-backups` exits with the platform-core handover notice.
 
 ## 컨텍스트 — Codex Round 5 audit
 
@@ -99,13 +90,12 @@ jobs:
 
 ### 후속 sprint (본 ADR 박제만, 구현은 별도 PR)
 - 모든 workflow yml 의 actions 를 dependabot 의 첫 PR 로 SHA pin 전환
-- `etl-base-layer cleanup-manifest-backups` subcommand 구현
-- `.github/workflows/sp9-manifest-backup-cleanup.yml` 신설
+- manifest cleanup 후속 구현은 platform-core Catalog 로 이관
 
 ### 변경 없음
 - 기존 workflow yml — dependabot PR 이 자동 갱신할 예정
 - cargo-deny / pip-audit / gitleaks gate — 이미 박제됨 (Round 3 P0-5)
-- runbook § 6 (backup retention) — 정책 박제는 그대로, 본 ADR 이 *구현 절차* 박제
+- runbook § 6 (backup retention) — Gongzzang 절차는 ADR 0036 handover 로 superseded
 
 ## SSS 7기둥 매핑
 

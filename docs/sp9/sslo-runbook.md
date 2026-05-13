@@ -3,6 +3,11 @@
 > **갱신일**: 2026-05-08 (Round 4 enterprise audit — secret rotation / backup retention / compliance / DR 박제)
 > **Owner**: Platform / SP9
 > **연계**: [sp9-base-layer-etl.yml](../../.github/workflows/sp9-base-layer-etl.yml) · [sp9-base-layer-rollback.yml](../../.github/workflows/sp9-base-layer-rollback.yml) · [crates/sp9-base-layer-config](../../crates/sp9-base-layer-config/) (SSOT)
+>
+> **Platform-core handover**: `gold/manifest.json` promote, rollback, and manifest
+> backup cleanup are no longer operated from Gongzzang. Gongzzang is a manifest
+> consumer only. Use platform-core Catalog APIs and runbooks for manifest pointer
+> changes.
 
 본 문서가 SP9 base layer 의 *서비스 수준 목표 (SLO)* + *사고 대응 절차 (Runbook)* SSOT.
 production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
@@ -25,7 +30,7 @@ production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
 |---|---|---|
 | 매월 cron 빌드 성공률 | **≥ 95%** (12개월 rolling) | etl.yml의 success/failure 비율 (Sentry release tracking) |
 | Bronze → Gold 빌드 시간 | **≤ 4시간 p50, ≤ 8시간 p99** | etl.yml 의 timestamp 차이 |
-| 강남 PNU `1168010100107370000` 등장 | **100%** (모든 prod build) | L2 verify spot-check (`gold/promote` 단계) |
+| 강남 PNU `1168010100107370000` 등장 | **100%** (모든 prod build) | L2 verify spot-check + platform-core manifest promote smoke |
 | Manifest atomic flip | **100%** (no partial state in prod) | L3 promote 의 staging spec all-or-nothing |
 | Bronze input fingerprint 박제 | **100%** (모든 manifest) | L10 lineage `bronze_inputs` non-empty for parcels |
 
@@ -70,8 +75,10 @@ production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
 **조치**:
 
 - **manifest 가 최근 version 가리키지만 tile 404**: 이전 version 으로 rollback (§ 2.4).
-- **manifest 자체 404**: R2 dashboard 에서 객체 존재 확인. promote 단계 실패한 것
-  가능성 → re-run `etl.yml` workflow_dispatch 로 promote 만 다시.
+- **manifest 자체 404**: R2 dashboard 에서 객체 존재 확인. platform-core Catalog
+  outbox publisher / R2 pointer write 상태를 확인하고, 필요 시 platform-core
+  `PUT /catalog/v1/vector-tiles/manifest:promote` 로 재승격한다. Gongzzang ETL
+  promote workflow_dispatch 는 사용하지 않는다.
 - **클라 에러 (CORS / 404 stream)**: `R2_PUBLIC_URL_BASE` env 가 `apps/web` 에 정확
   설정됐는지 검증.
 
@@ -79,13 +86,13 @@ production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
 
 **진단 절차**:
 
-1. Sentry 의 incident detail 에서 어느 phase 실패인지 (bronze / gold / promote) 확인.
+1. Sentry 의 incident detail 에서 어느 phase 실패인지 (bronze / gold / platform-core pointer) 확인.
 2. GitHub Actions run 의 log 점검 — 보통 다음 케이스:
    - **bronze 실패**: V-World 사이트 maintenance / 자격 만료 / Captcha 발동.
    - **gold 실패**: tippecanoe OOM (runner 격상 필요) / dtmk ZIP 일부 corrupt
      (Bronze re-fetch 필요).
-   - **promote 실패**: staging spec 누락 (matrix 의 한 layer 가 fail-fast 로 silent
-     skip 된 것 의심) / R2 권한 만료.
+   - **manifest pointer 실패**: platform-core Catalog promote/outbox/R2 publisher 상태 확인.
+     Gongzzang promote job 은 ADR 0036 이후 비활성이다.
 
 **조치**:
 
@@ -96,8 +103,9 @@ production deploy 또는 incident 대응 시 본 문서를 첫 reference 로.
   bronze 만 별도 실행 후 재시도.
 - **gold OOM**: etl.yml 의 `runs-on: ubuntu-22.04-large` 확인 + GitHub billing 의
   large runner 활성 확인.
-- **promote 실패 (한 layer staging 누락)**: gold matrix log 에서 어느 layer fail —
-  해당 layer 만 단독 dispatch:
+- **manifest pointer 실패**: Gongzzang 에서 재-promote 하지 않는다. platform-core
+  Catalog active manifest, outbox event, R2 pointer write를 확인한다. tile artifact 재빌드가
+  필요할 때만 해당 layer 를 단독 dispatch:
   ```
   workflow_dispatch sp9-base-layer-etl.yml { layers: "complex", bronze_skip: true }
   ```
@@ -132,7 +140,8 @@ curl -s https://r2.gongzzang.dev/gold/manifest.json | jq .current_version
 # → 입력한 target_version 과 일치 여야 함.
 ```
 
-**소요 시간**: ~2 분 (promote subcommand + CDN purge).
+**소요 시간**: platform-core rollback API + outbox publisher R2 pointer write 기준으로
+측정한다. Gongzzang `promote` subcommand 는 사용하지 않는다.
 
 ### 2.5 Cloudflare R2 outage
 
@@ -163,9 +172,8 @@ secondary origin failover. 현재 미구현 (R2 SLA 99.9% 신뢰).
 - [ ] `SENTRY_DSN` 이 SP9 전용 project 또는 product project 의 SP9 tag 환경.
 - [ ] `VWORLD_USERNAME` / `VWORLD_PASSWORD` 가 운영 계정 (개인 dev 계정 X).
 - [ ] `ubuntu-22.04-large` runner 가 GitHub billing 에 활성.
-- [ ] 첫 빌드는 `workflow_dispatch { target_version: v_dryrun_2026_05 }` 로 staging
-      검증 후 `gold/manifest.json` 미수정. 이후 manual `promote` 호출.
-- [ ] § 2.4 rollback workflow 가 dispatch 가능한 권한 (Actions write) 부여 확인.
+- [ ] platform-core `PUT /catalog/v1/vector-tiles/manifest:promote` smoke test 완료.
+- [ ] platform-core `POST /catalog/v1/vector-tiles/manifest:rollback` smoke test 완료.
 - [ ] 본 runbook 의 § 2 의 4 incident scenario 가 실제 staging 에서 1번씩 시뮬레이션
       완료 (특히 § 2.4 rollback 절차).
 
@@ -198,15 +206,15 @@ which secret) 박제. PIPC 감사 대비.
 
 ### 6.1 Manifest backup chain
 
-`gold/manifest.json` 의 publish 시 `gold/manifest.<previous_version>.json` 으로 backup
-(L3 promote, [services/etl-base-layer/src/gold/promote.rs](../../services/etl-base-layer/src/gold/promote.rs)).
+`gold/manifest.json` pointer lifecycle 과 backup cleanup 은 platform-core Catalog 가
+담당한다. Gongzzang 의 legacy manifest backup cleanup workflow 와 CLI 는 비활성이다.
 
 | 항목 | 정책 |
 |---|---|
 | 보존 개수 | **최근 12개 manifest** (1년치, 매월 1회 cron 기준) |
 | 보존 mechanism | R2 immutable URL — flat tile 은 자동 보존, manifest backup 은 명시 PUT |
-| 청소 정책 | manifest 13개 째 부터 oldest 자동 삭제 — [sp9-manifest-backup-cleanup.yml](../../.github/workflows/sp9-manifest-backup-cleanup.yml) (매월 2일 04:00 UTC, ADR 0028) |
-| 복구 절차 | § 2.4 — workflow_dispatch `target_version=<old>` |
+| 청소 정책 | platform-core Catalog manifest backup cleanup policy |
+| 복구 절차 | platform-core rollback API with `expected_current_version` |
 
 **RPO** (Recovery Point Objective): **0 분** — manifest atomic flip 직전 상태 = R2 의
 `manifest.<prev>.json` 그대로. 데이터 손실 0.
@@ -282,8 +290,8 @@ SP9 SLO 침해 incident 로 분류.
 
 **영향**: ETL cron / manual dispatch 모두 차단.
 
-**fallback**: workflow yml 을 local Rust ETL binary 로 실행 가능 (모든 step 은
-`./target/release/etl-base-layer gold/promote` 호출). dev 머신이나 별도 EC2 에서.
+**fallback**: Gongzzang ETL 은 immutable tile artifact 재빌드까지만 허용한다.
+Manifest pointer promote/rollback 은 반드시 platform-core Catalog 에서 수행한다.
 
 **RTO**: GitHub 복구 (외부) 또는 manual local run (~4-8h).
 

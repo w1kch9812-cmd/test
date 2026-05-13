@@ -4,13 +4,13 @@ Updated: 2026-05-12
 
 ## Decision
 
-Start the extraction inside `gongzzang3` by enforcing the M1 boundary locally.
+Start the extraction inside `gongzzang` by enforcing the M1 boundary locally.
 Claude Code sibling-repo trust is a tooling boundary, not an architecture boundary; the
 architecture remains the three-service split from ADR 0030, ADR 0031, and ADR 0034.
 
 ## Why This Path
 
-M1 says `gongzzang3` is still the temporary catalog owner while `platform-core` prepares
+M1 says `gongzzang` is still the temporary catalog owner while `platform-core` prepares
 shadow reads. The sound move is therefore to prevent new catalog ownership drift in this
 repo: no new catalog write surfaces, no repository/writer ports in catalog domain crates,
 and no catalog mutation HTTP routes.
@@ -40,7 +40,7 @@ The guardrail is wired into `lefthook.yml` for pre-commit and pre-push, and into
 
 `crates/domain/core/shared-kernel/src/catalog_event.rs` defines `CatalogEventV1` and
 `CatalogEventKind`. The schema gives the M3 dual-write/outbox phase stable event types
-such as `catalog.parcel.changed.v1` without adding any new writer in `gongzzang3`.
+such as `catalog.parcel.changed.v1` without adding any new writer in `gongzzang`.
 
 ## Next Cross-Repo Step
 

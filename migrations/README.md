@@ -59,7 +59,7 @@ bash scripts/sqlx-migrate.sh
 sqlx-cli가 없다면:
 
 ```bash
-cargo install sqlx-cli --version 0.8.2 --locked --no-default-features --features postgres,rustls
+cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
 ```
 
 ## CI 검증

@@ -12,7 +12,7 @@
 | **공공 API raw 응답** | DB의 `raw_response JSONB` | Redis 캐시, 분석 마트 | 컬럼 누락 검증 (sqlx 스키마) |
 | **비즈니스 규칙** | `crates/domain/*` Rust 코드 | 문서, 테스트 (둘 다 코드 따라옴) | 도메인 외부 비즈니스 로직 = clippy lint |
 | **API 계약** | Rust 코드 + utoipa 매크로 | `openapi.json` (자동), TS 타입 (자동) | TS 타입 수동 작성 차단 (dependency-cruiser) |
-| **DB 스키마** | `db/migration/V*.sql` | Rust 타입 (sqlx 자동 검증) | 수동 ALTER TABLE 금지 |
+| **DB 스키마** | `migrations/*.sql` (`<MMmmm>_<snake_case>.sql`) | Rust 타입 + `.sqlx/` prepare metadata | 수동 ALTER TABLE 금지 |
 | **인프라 설정** | Pulumi TypeScript 코드 | AWS 콘솔 (절대 수동 변경 금지) | Pulumi `refresh` drift 감지 → 알림 |
 | **시크릿** | AWS Secrets Manager / Vault | `.env.example`은 placeholder만 | gitleaks |
 | **도메인 용어** | `docs/glossary.md` | 모든 코드/UI/문서 사용 | grep CI 룰 |

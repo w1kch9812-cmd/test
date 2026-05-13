@@ -8,7 +8,7 @@
 - SOC 2 Type II (B2B 진출 시, Phase 4+)
 - ISO 27001 (Phase 4+)
 - 공공데이터 라이선스 (각 데이터셋별)
-- Audit Log immutable (S3 Object Lock)
+- Audit Log immutable (Cloudflare R2 bucket lock/retention)
 - 데이터 retention 정책
 - GDPR 호환 (글로벌 진출 시 활성화)
 - 우 right to be forgotten (가입 탈퇴 시 데이터 삭제 또는 가명화)
@@ -20,7 +20,7 @@
 - `isms-p.md` — 인증 준비 + 추진 일정
 - `soc2.md` — SOC 2 Type II (Vanta/Drata 검토)
 - `iso-27001.md` — ISO 27001
-- `audit-log-immutable.md` — S3 Object Lock 구성
+- `audit-log-immutable.md` — R2 bucket lock/retention 구성
 - `data-retention.md` — 영역별 보존 기간
 - `gdpr-rtbf.md` — 삭제 흐름 + 가명화
 - `public-data-licensing.md` — 데이터셋별 매트릭스

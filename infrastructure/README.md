@@ -5,7 +5,7 @@ Pulumi (TypeScript) IaC. AWS Seoul + Cloudflare 무료 활용. sub-project 8에�
 ## 향후 모듈 (sub-project 8+)
 - `networking/` — VPC, Subnet, NACL, Security Group
 - `compute/` — ECS Fargate (Phase 3+) → EKS (Phase 4+)
-- `data/` — RDS (Postgres + PostGIS), ElastiCache (Valkey), S3
+- `data/` — RDS (Postgres + PostGIS), ElastiCache (Valkey), Cloudflare R2
 - `messaging/` — SQS, SNS, EventBridge, Kafka MSK (Phase 4+)
 - `security/` — WAF, KMS, Secrets Manager, IAM
 - `observability/` — CloudWatch, OTel Collector
@@ -13,7 +13,7 @@ Pulumi (TypeScript) IaC. AWS Seoul + Cloudflare 무료 활용. sub-project 8에�
 - `batch-scheduler/` — EventBridge + Lambda
 - `cdn/` — CloudFront 또는 Cloudflare Pages
 - `dr/` — DR 리전 (Phase 4+)
-- `compliance/` — Audit log S3 Object Lock
+- `compliance/` — Audit log R2 bucket lock/retention
 
 ## 정책
 - AWS 콘솔 직접 변경 = SSOT 위반 (drift 자동 감지)

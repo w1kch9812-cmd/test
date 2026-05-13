@@ -19,5 +19,5 @@ Rust 배치/크론 작업 (Tokio + apalis).
 | `realprice-ingest` | 일일 04:00 — data.go.kr 실거래 신규분 |
 | `building-register-sync` | 주간 일요일 02:00 |
 | `cache-expire-sweep` | 시간당 |
-| `audit-log-archive` | 월 1일 — S3 Glacier |
+| `audit-log-archive` | 월 1일 — R2 archive |
 | `embedding-rebuild` | 일일 (Phase 3+) — 매물 임베딩 갱신 |

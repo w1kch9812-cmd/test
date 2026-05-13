@@ -14,7 +14,7 @@
 | `realprice-ingest` | 일일 04:00 | data.go.kr 실거래가 신규분 적재 |
 | `building-register-sync` | 주간 일요일 02:00 | 건축물대장 변동분 동기화 |
 | `cache-expire-sweep` | 시간당 | 만료 캐시 정리 |
-| `audit-log-archive` | 월간 1일 | 감사 로그 S3 아카이브 |
+| `audit-log-archive` | 월간 1일 | 감사 로그 R2 아카이브 |
 
 ## 정책
 
