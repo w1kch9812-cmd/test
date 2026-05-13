@@ -211,7 +211,7 @@ async fn update_bumps_version() {
     repo.save(&listing, test_ctx()).await.unwrap();
 
     listing.view_count = 5;
-    listing.version = 1;
+    listing.version = 2;
     repo.save(&listing, test_ctx()).await.unwrap();
 
     let fetched = repo.find(&listing.id).await.unwrap().unwrap();

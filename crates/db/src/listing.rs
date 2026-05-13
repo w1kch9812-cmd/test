@@ -69,6 +69,14 @@ const LISTING_FULL_COLUMNS: &str = "id, owner_id, parcel_pnu, listing_type, tran
     geom_point IS NOT NULL as has_geom, \
     created_at, updated_at, expires_at, version";
 
+const LISTING_FULL_COLUMNS_WITH_L_ALIAS: &str = "l.id, l.owner_id, l.parcel_pnu, l.listing_type, \
+    l.transaction_type, l.price_krw, l.deposit_krw, l.monthly_rent_krw, l.area_m2, \
+    l.title, l.description, l.status, l.contact_visibility, \
+    l.view_count, l.bookmark_count, \
+    ST_X(l.geom_point) as geom_lng, ST_Y(l.geom_point) as geom_lat, \
+    l.geom_point IS NOT NULL as has_geom, \
+    l.created_at, l.updated_at, l.expires_at, l.version";
+
 /// 지도 마커 projection — 필요한 필드만.
 const LISTING_MARKER_COLUMNS: &str = "id, listing_type, transaction_type, price_krw, \
     ST_X(geom_point) as geom_lng, ST_Y(geom_point) as geom_lat";
@@ -654,8 +662,8 @@ impl ListingRepository for PgListingRepository {
                 geom_point = excluded.geom_point,
                 updated_at = excluded.updated_at,
                 expires_at = excluded.expires_at,
-                version = listing.version + 1
-            where listing.version = $21
+                version = excluded.version
+            where listing.version = $21 - 1
             ",
         )
         .bind(listing.id.as_str())
@@ -763,7 +771,7 @@ impl ListingRepository for PgListingRepository {
         // 1. Listing + bookmark JOIN (단일 row).
         let detail_sql = format!(
             r"
-            SELECT {LISTING_FULL_COLUMNS},
+            SELECT {LISTING_FULL_COLUMNS_WITH_L_ALIAS},
                    COALESCE(bm.cnt, 0)::int8 AS jc_bookmark_count,
                    CASE WHEN ub.user_id IS NOT NULL THEN true ELSE false END AS jc_is_bookmarked
             FROM listing l
