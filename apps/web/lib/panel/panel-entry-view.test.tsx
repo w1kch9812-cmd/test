@@ -1,6 +1,7 @@
 // apps/web/lib/panel/panel-entry-view.test.tsx
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
 import type React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PanelEntryView } from "./panel-entry-view";
@@ -35,6 +36,20 @@ const ErrorCard = ({ error }: { error: unknown }) => (
 );
 const Loading = () => <div>L</div>;
 const Empty = () => <div>E</div>;
+const messages = {
+  panel: {
+    labels: {
+      parcel: {
+        summary: "Parcel summary",
+        buildings: "Parcel buildings",
+        listings: "Parcel listings",
+      },
+      listing: {
+        summary: "Listing summary",
+      },
+    },
+  },
+};
 
 function makeRegistry() {
   defineKind({
@@ -78,7 +93,11 @@ function makeRegistry() {
 function renderWithQuery(ui: React.ReactNode) {
   // disable retries so the test does not loop
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <NextIntlClientProvider locale="ko" messages={messages}>
+      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+    </NextIntlClientProvider>,
+  );
 }
 
 describe("PanelEntryView ErrorBoundary", () => {

@@ -3,8 +3,6 @@ import { getTranslations } from "next-intl/server";
 import { FilterBar } from "@/components/listings/filter-bar";
 import { ListingCardList } from "@/components/listings/listing-card-list";
 import { ListingMap } from "@/components/listings/listing-map";
-import "@/components/panels/listing/register"; // SP10: side-effect kind register
-import "@/components/panels/parcel/register"; // SP10: side-effect kind register
 import { SearchBar } from "@/components/listings/search-bar";
 import { PanelRenderer } from "@/lib/panel/panel-renderer";
 

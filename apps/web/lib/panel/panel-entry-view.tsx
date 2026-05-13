@@ -2,6 +2,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import React, { createElement, useEffect, useMemo, useRef, useState } from "react";
 import { PanelCard } from "./panel-card";
 import { getKindDefinition, getView } from "./registry";
@@ -41,7 +42,16 @@ class PanelErrorBoundary extends React.Component<
  * Spec rule § 9 #1 (registry SSOT), #6 (error boundary via PanelCard + PanelErrorBoundary),
  * #8 (AbortController per slot — TanStack Query 가 자동), #17 (4-state).
  */
-export function PanelEntryView({ entry, depth }: { entry: PanelStackEntry; depth: number }) {
+export function PanelEntryView({
+  entry,
+  depth,
+  isTop = true,
+}: {
+  entry: PanelStackEntry;
+  depth: number;
+  isTop?: boolean;
+}) {
+  const t = useTranslations("panel");
   const def = getKindDefinition(entry.kind);
   const viewDef = getView(entry.kind, entry.view);
   const startedAt = useRef(performance.now());
@@ -95,10 +105,21 @@ export function PanelEntryView({ entry, depth }: { entry: PanelStackEntry; depth
     );
   }
 
+  const viewLabel =
+    entry.kind === "parcel"
+      ? entry.view === "summary"
+        ? t("labels.parcel.summary")
+        : entry.view === "buildings"
+          ? t("labels.parcel.buildings")
+          : t("labels.parcel.listings")
+      : t("labels.listing.summary");
+
   return (
     <PanelCard
       state={stateNarrowed}
       onClose={pop}
+      closeOnEscape={isTop}
+      ariaLabel={`${viewLabel}: ${entry.id}`}
       loading={createElement(def.loadingComponent, { entry: entry as never })}
       error={createElement(def.errorComponent, {
         entry: entry as never,

@@ -32,6 +32,7 @@ export function SideBySideStack({ stack }: { stack: PanelStack }) {
             key={`${entry.kind}-${entry.id}-${entry.view}`}
             entry={entry}
             depth={top2Start + i + 1}
+            isTop={i === visible.length - 1}
           />
         ))}
       </div>

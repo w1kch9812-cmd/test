@@ -7,6 +7,10 @@ import { POST as loginPOST } from "@/app/api/auth/login/route";
 import { SID_COOKIE_NAME, TEMP_COOKIE_NAME, verifyTempPayload } from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(async () => (key: string) => key),
+}));
+
 vi.mock("@/lib/oidc", async () => {
   const actual = await vi.importActual<typeof import("@/lib/oidc")>("@/lib/oidc");
   return {

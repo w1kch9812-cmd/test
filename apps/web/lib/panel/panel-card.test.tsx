@@ -9,6 +9,7 @@ describe("PanelCard", () => {
       <PanelCard
         state="loading"
         onClose={() => {}}
+        ariaLabel="Panel"
         loading={<div>LOADING</div>}
         error={<div>ERR</div>}
         empty={<div>EMPTY</div>}
@@ -25,6 +26,7 @@ describe("PanelCard", () => {
       <PanelCard
         state="error"
         onClose={() => {}}
+        ariaLabel="Panel"
         loading={<div>LOADING</div>}
         error={<div>ERR</div>}
         empty={<div>EMPTY</div>}
@@ -41,6 +43,7 @@ describe("PanelCard", () => {
       <PanelCard
         state="ok"
         onClose={() => {}}
+        ariaLabel="Panel"
         loading={<div>LOADING</div>}
         error={<div>ERR</div>}
         empty={<div>EMPTY</div>}
@@ -58,6 +61,7 @@ describe("PanelCard", () => {
       <PanelCard
         state="ok"
         onClose={onClose}
+        ariaLabel="Panel"
         loading={null}
         error={null}
         empty={null}
@@ -70,11 +74,32 @@ describe("PanelCard", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not call onClose on ESC when closeOnEscape=false", () => {
+    const onClose = vi.fn();
+    render(
+      <PanelCard
+        state="ok"
+        onClose={onClose}
+        closeOnEscape={false}
+        ariaLabel="Panel"
+        loading={null}
+        error={null}
+        empty={null}
+        authRequired={null}
+      >
+        <div>CONTENT</div>
+      </PanelCard>,
+    );
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("has aria-modal=true and role=dialog", () => {
     render(
       <PanelCard
         state="ok"
         onClose={() => {}}
+        ariaLabel="Parcel summary"
         loading={null}
         error={null}
         empty={null}
@@ -83,7 +108,7 @@ describe("PanelCard", () => {
         <div />
       </PanelCard>,
     );
-    const dialog = screen.getByRole("dialog");
+    const dialog = screen.getByRole("dialog", { name: "Parcel summary" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
 });

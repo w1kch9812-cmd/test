@@ -49,7 +49,7 @@ describe("usePanelStack", () => {
     });
   });
 
-  it("pop calls router.back", () => {
+  it("pop truncates the stack with router.replace", () => {
     mockSearchParams.set(
       "p",
       "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary",
@@ -58,7 +58,20 @@ describe("usePanelStack", () => {
     act(() => {
       result.current.pop();
     });
-    expect(mockBack).toHaveBeenCalledTimes(1);
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith("/listings?p=parcel%3A1168010100107370000.summary", {
+      scroll: false,
+    });
+  });
+
+  it("pop removes ?p with router.replace when the stack has one panel", () => {
+    mockSearchParams.set("p", "parcel:1168010100107370000.summary");
+    const { result } = renderHook(() => usePanelStack());
+    act(() => {
+      result.current.pop();
+    });
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(mockReplace).toHaveBeenCalledWith("/listings", { scroll: false });
   });
 
   it("silent recover from broken url (empty stack)", () => {

@@ -10,12 +10,33 @@
  * 실 데이터 시드를 위해서는 별도 fixture 작업 필요 (out of scope).
  */
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+import { plantAuthenticatedSession } from "./auth";
 
 const TEST_PNU = "1168010100107370000"; // 19-digit fixture
 const TEST_LISTING_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
+async function expectPanelParam(page: Page, expected: string | null) {
+  await expect.poll(() => new URL(page.url()).searchParams.get("p")).toBe(expected);
+}
+
+async function expectDialogHydrated(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement.getAttribute("role")
+          : null,
+      ),
+    )
+    .toBe("dialog");
+}
+
 test.describe("SP10 Panel System", () => {
+  test.beforeEach(async ({ context }) => {
+    await plantAuthenticatedSession(context);
+  });
+
   test("URL hydration: depth 1 panel from ?p directly", async ({ page }) => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary`);
     // Dialog (panel) presence — 데이터 fetch 가 실패해도 frame 은 존재.
@@ -36,7 +57,7 @@ test.describe("SP10 Panel System", () => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary`);
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_UUID}.summary`);
     await page.goBack();
-    await expect(page).toHaveURL(/p=parcel%3A.*\.summary$/);
+    await expectPanelParam(page, `parcel:${TEST_PNU}.summary`);
   });
 
   test("Refresh preserves stack", async ({ page }) => {
@@ -58,13 +79,15 @@ test.describe("SP10 Panel System", () => {
     await expect(dialog).toBeVisible();
     // back 버튼 (‹).
     await page.getByRole("button", { name: /이전/ }).click();
-    await expect(page).toHaveURL(/\/listings(\?[^p]|$)/);
+    await expectPanelParam(page, null);
   });
 
   test("Keyboard ESC pops top panel", async ({ page }) => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary`);
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectDialogHydrated(page);
     await page.keyboard.press("Escape");
-    await expect(page).toHaveURL(/\/listings(\?[^p]|$)/);
+    await expectPanelParam(page, null);
   });
 
   test("a11y: no axe violations at panel depth 1", async ({ page }) => {
