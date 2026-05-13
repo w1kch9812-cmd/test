@@ -3,13 +3,15 @@ import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { tStatic } from "@/lib/i18n/static";
+import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
 import { checkRate } from "@/lib/ratelimit";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
 
-// SP9 ADR 0021 채택 후 — 우리 origin 의 PMTiles/SW prefix 모두 폐기. 클라가 R2
-// (`NEXT_PUBLIC_TILES_BASE_URL`) 와 직결, 표준 mapbox-gl `type:"vector"` source.
+// SP9 ADR 0036 / platform-core ADR 0004 채택 후 — 우리 origin 의 PMTiles/SW prefix
+// 모두 폐기. 클라가 platform-core manifest 를 읽고, 표준 mapbox-gl `type:"vector"`
+// source 의 tile URL 은 manifest.tiles_url_template 이 결정한다.
 //
 // `/dev-tiles` — dev 환경에서만 Next dev 가 자체 호스팅 (apps/web/public/dev-tiles/).
 // `/dev-x9-test` — ADR 0021 X9 path 시각 검증 page. dev 한정.
@@ -116,20 +118,13 @@ export async function proxy(req: NextRequest) {
   const imgSrc = isDev
     ? "'self' data: blob: http: https:"
     : "'self' data: blob: https://*.map.naver.com https://map.naver.com https://*.map.naver.net https://map.naver.net https://*.pstatic.net";
-  // ADR 0021: vector tile 호스트 (R2) 의 origin 만 production CSP 에서 허용.
-  // process.env.NEXT_PUBLIC_TILES_BASE_URL 미설정 시 폴리곤 비활성 (지도 본체 정상).
-  const tilesOrigin = (() => {
-    const raw = process.env.NEXT_PUBLIC_TILES_BASE_URL;
-    if (!raw) return "";
-    try {
-      return new URL(raw).origin;
-    } catch {
-      return "";
-    }
-  })();
+  // ADR 0036 / platform-core ADR 0004: Gongzzang은 manifest consumer only.
+  // Manifest는 platform-core Catalog 또는 public R2/CDN manifest URL에서 읽고,
+  // 실제 tile URL은 manifest.tiles_url_template이 결정한다.
+  const tileOrigins = resolveVectorTileAllowedOrigins().join(" ");
   const connectSrc = isDev
     ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
-    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tilesOrigin ? ` ${tilesOrigin}` : ""}`;
+    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tileOrigins ? ` ${tileOrigins}` : ""}`;
 
   // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
   // 'strict-dynamic' 와 함께 modern browser 에서 호환 (CSP3).

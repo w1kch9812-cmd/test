@@ -1,7 +1,7 @@
 // apps/web/tests/e2e/panel-system.spec.ts
 /**
  * Spec § 10.2 — 패널 시스템 e2e.
- * Playwright. NEXT_PUBLIC_TILES_BASE_URL 미설정이면 폴리곤 click 은 skip
+ * Playwright. platform-core vector tile manifest 미설정이면 폴리곤 click 은 skip
  * (대안: marker click 시퀀스만 검증).
  *
  * NOTE — Backend NoOp adaptation:

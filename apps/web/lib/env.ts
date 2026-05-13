@@ -3,9 +3,16 @@ import { z } from "zod";
 /**
  * Client + server 공통: NEXT_PUBLIC_* 만 client bundle 에 inline됨.
  */
+const optionalUrl = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().url().optional(),
+);
+
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:8080"),
   NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: z.string().min(1).default("naver-maps-placeholder"),
+  NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: optionalUrl,
+  NEXT_PUBLIC_TILES_MANIFEST_URL: optionalUrl,
 });
 
 /**
@@ -30,6 +37,8 @@ const Schema = isServer ? ServerEnvSchema : PublicEnvSchema;
 const parsed = Schema.safeParse({
   NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
   NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID,
+  NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL,
+  NEXT_PUBLIC_TILES_MANIFEST_URL: process.env.NEXT_PUBLIC_TILES_MANIFEST_URL,
   ZITADEL_ISSUER: process.env.ZITADEL_ISSUER,
   ZITADEL_CLIENT_ID: process.env.ZITADEL_CLIENT_ID,
   ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE,
