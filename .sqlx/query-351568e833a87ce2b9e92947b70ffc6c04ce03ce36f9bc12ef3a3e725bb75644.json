@@ -1,0 +1,122 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select\n                id,\n                zitadel_sub,\n                email,\n                phone_kr_hash,\n                display_name,\n                user_kind,\n                business_number,\n                business_verified_at,\n                broker_license_number,\n                broker_verified_at,\n                roles as \"roles!: Vec<String>\",\n                nice_verified_at,\n                marketing_consent_at,\n                created_at,\n                updated_at,\n                last_login_at,\n                deleted_at,\n                version\n            from \"user\"\n            where id = $1 and deleted_at is null\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "zitadel_sub",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "phone_kr_hash",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "display_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "user_kind",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "business_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "business_verified_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "broker_license_number",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "broker_verified_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "roles!: Vec<String>",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 11,
+        "name": "nice_verified_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "marketing_consent_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "last_login_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "deleted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "version",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": ["Bpchar"]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "351568e833a87ce2b9e92947b70ffc6c04ce03ce36f9bc12ef3a3e725bb75644"
+}

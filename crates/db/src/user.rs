@@ -43,63 +43,113 @@ const ALL_USER_COLUMNS: &str = "id, zitadel_sub, email, phone_kr_hash, display_n
     roles, nice_verified_at, marketing_consent_at, \
     created_at, updated_at, last_login_at, deleted_at, version";
 
+#[derive(Debug)]
+struct UserRow {
+    id: String,
+    zitadel_sub: String,
+    email: String,
+    phone_kr_hash: Option<String>,
+    display_name: String,
+    user_kind: String,
+    business_number: Option<String>,
+    business_verified_at: Option<DateTime<Utc>>,
+    broker_license_number: Option<String>,
+    broker_verified_at: Option<DateTime<Utc>>,
+    roles: Vec<String>,
+    nice_verified_at: Option<DateTime<Utc>>,
+    marketing_consent_at: Option<DateTime<Utc>>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    last_login_at: Option<DateTime<Utc>>,
+    deleted_at: Option<DateTime<Utc>>,
+    version: i64,
+}
+
+fn pg_row_to_user_row(row: &PgRow) -> Result<UserRow, RepoError> {
+    Ok(UserRow {
+        id: row
+            .try_get("id")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        zitadel_sub: row
+            .try_get("zitadel_sub")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        email: row
+            .try_get("email")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        phone_kr_hash: row
+            .try_get("phone_kr_hash")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        display_name: row
+            .try_get("display_name")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        user_kind: row
+            .try_get("user_kind")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        business_number: row
+            .try_get("business_number")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        business_verified_at: row
+            .try_get("business_verified_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        broker_license_number: row
+            .try_get("broker_license_number")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        broker_verified_at: row
+            .try_get("broker_verified_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        roles: row
+            .try_get("roles")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        nice_verified_at: row
+            .try_get("nice_verified_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        marketing_consent_at: row
+            .try_get("marketing_consent_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        created_at: row
+            .try_get("created_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        updated_at: row
+            .try_get("updated_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        last_login_at: row
+            .try_get("last_login_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        deleted_at: row
+            .try_get("deleted_at")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+        version: row
+            .try_get("version")
+            .map_err(|e| RepoError::Database(e.to_string()))?,
+    })
+}
+
 /// `PgRow` 를 `User` 로 변환해요. 18 필드 모두 round-trip.
-#[allow(clippy::too_many_lines)]
 fn row_to_user(row: &PgRow) -> Result<User, RepoError> {
-    let id_str: String = row
-        .try_get("id")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let zitadel_sub: String = row
-        .try_get("zitadel_sub")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let email_str: String = row
-        .try_get("email")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let phone_kr_hash: Option<String> = row
-        .try_get("phone_kr_hash")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let display_name: String = row
-        .try_get("display_name")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let user_kind_str: String = row
-        .try_get("user_kind")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let business_number_str: Option<String> = row
-        .try_get("business_number")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let business_verified_at: Option<DateTime<Utc>> = row
-        .try_get("business_verified_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let broker_license_str: Option<String> = row
-        .try_get("broker_license_number")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let broker_verified_at: Option<DateTime<Utc>> = row
-        .try_get("broker_verified_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let roles_strs: Vec<String> = row
-        .try_get("roles")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let nice_verified_at: Option<DateTime<Utc>> = row
-        .try_get("nice_verified_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let marketing_consent_at: Option<DateTime<Utc>> = row
-        .try_get("marketing_consent_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let created_at: DateTime<Utc> = row
-        .try_get("created_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let updated_at: DateTime<Utc> = row
-        .try_get("updated_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let last_login_at: Option<DateTime<Utc>> = row
-        .try_get("last_login_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let deleted_at: Option<DateTime<Utc>> = row
-        .try_get("deleted_at")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let version: i64 = row
-        .try_get("version")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
+    user_row_to_user(pg_row_to_user_row(row)?)
+}
+
+fn user_row_to_user(row: UserRow) -> Result<User, RepoError> {
+    let UserRow {
+        id: id_str,
+        zitadel_sub,
+        email: email_str,
+        phone_kr_hash,
+        display_name,
+        user_kind: user_kind_str,
+        business_number: business_number_str,
+        business_verified_at,
+        broker_license_number: broker_license_str,
+        broker_verified_at,
+        roles: roles_strs,
+        nice_verified_at,
+        marketing_consent_at,
+        created_at,
+        updated_at,
+        last_login_at,
+        deleted_at,
+        version,
+    } = row;
 
     let id = Id::<UserMarker>::try_from_str(&id_str)
         .map_err(|e| RepoError::Database(format!("malformed id in DB: {e}")))?;
@@ -172,15 +222,37 @@ fn row_to_user(row: &PgRow) -> Result<User, RepoError> {
 impl UserRepository for PgUserRepository {
     #[instrument(skip(self), fields(user_id = %id.as_str()))]
     async fn find_by_id(&self, id: &Id<UserMarker>) -> Result<Option<User>, RepoError> {
-        let sql = format!(
-            r#"select {ALL_USER_COLUMNS} from "user" where id = $1 and deleted_at is null"#
-        );
-        let row = sqlx::query(&sql)
-            .bind(id.as_str())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
-        row.as_ref().map(row_to_user).transpose()
+        let row = sqlx::query_as!(
+            UserRow,
+            r#"
+            select
+                id,
+                zitadel_sub,
+                email,
+                phone_kr_hash,
+                display_name,
+                user_kind,
+                business_number,
+                business_verified_at,
+                broker_license_number,
+                broker_verified_at,
+                roles as "roles!: Vec<String>",
+                nice_verified_at,
+                marketing_consent_at,
+                created_at,
+                updated_at,
+                last_login_at,
+                deleted_at,
+                version
+            from "user"
+            where id = $1 and deleted_at is null
+            "#,
+            id.as_str()
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        row.map(user_row_to_user).transpose()
     }
 
     #[instrument(skip(self))]

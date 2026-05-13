@@ -276,8 +276,11 @@ async fn save_user_with_metadata_writes_to_after_state() {
     .fetch_one(&pool)
     .await
     .unwrap();
+    let after_state = after_state.expect("after_state snapshot");
     assert_eq!(
-        after_state,
-        Some(serde_json::json!({"zitadel_sub": "zsub-meta-1"}))
+        after_state["__metadata__"],
+        serde_json::json!({"zitadel_sub": "zsub-meta-1"})
     );
+    assert_eq!(after_state["zitadel_sub"], "zsub-meta-1");
+    assert_eq!(after_state["email"], "meta1@example.com");
 }

@@ -1,4 +1,4 @@
-name: db-migrations
+name: sqlx-prepare
 
 on:
   push:
@@ -21,8 +21,8 @@ env:
   POSTGRES_DB: gongzzang
 
 jobs:
-  migrate:
-    name: V001 + V002 migrations + audit immutable
+  drift-check:
+    name: SQLx query/schema drift check
     runs-on: ubuntu-latest
 
     services:
@@ -37,7 +37,7 @@ jobs:
           --health-cmd "pg_isready -U gongzzang"
           --health-interval 5s
           --health-timeout 3s
-          --health-retries 10
+          --health-retries 20
 
     env:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
@@ -49,7 +49,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with:
-          shared-key: sqlx-cli
+          shared-key: sqlx-prepare
 
       - name: Install sqlx-cli
         run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
@@ -61,8 +61,8 @@ jobs:
             sleep 1
           done
 
-      - name: Apply V001 migrations
-        run: bash tests/migrations/test_v001_full.sh
+      - name: Apply migrations
+        run: sqlx migrate run --source migrations
 
-      - name: Apply V002 migrations + audit immutable
-        run: bash tests/migrations/test_v002_audit_immutable.sh
+      - name: Check committed SQLx metadata
+        run: cargo sqlx prepare --workspace --check

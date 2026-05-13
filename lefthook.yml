@@ -68,7 +68,7 @@ pre-push:
         - merge
         - rebase
     sqlx-prepare-check:
-      run: cargo sqlx prepare --workspace --check 2>/dev/null || echo "sqlx prepare check skipped (cargo or DB unavailable - CI enforces)"
+      run: command -v cargo >/dev/null 2>&1 && command -v sqlx >/dev/null 2>&1 && cargo sqlx prepare --workspace --check
       skip:
         - merge
         - rebase

@@ -21,6 +21,9 @@
 
 ## 정책
 
-- 현재는 `sqlx::query` 런타임 `API` 사용 (compile-time `DB` 연결 불필요).
-- Sub-project 5에서 `sqlx prepare` 캐시 도입 후 `query!` 매크로로 전환해요.
+- 고정된 SQL shape 는 `sqlx::query!`, `sqlx::query_as!`, `sqlx::query_scalar!`
+  매크로로 작성해 컴파일 시점에 schema drift 를 차단해요.
+- `.sqlx/` prepare metadata 는 쿼리와 DB schema 사이의 계약이므로 커밋 대상이에요.
+- 검색 필터/정렬처럼 SQL shape 가 실제로 동적인 경우에만 runtime `sqlx::query`
+  계열을 허용하고, 해당 위치에는 동적 SQL 사유와 parameter binding 보장을 남겨요.
 - `unwrap`/`expect` 금지 — 모든 에러는 `RepoError`로 매핑해요.
