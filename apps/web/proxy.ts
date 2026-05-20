@@ -22,6 +22,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/forbidden",
   "/api/auth",
+  "/platform-core/events",
   "/dev-tiles",
   "/dev-x9-test",
   "/fonts",
