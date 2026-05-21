@@ -213,7 +213,6 @@ jobs:
   scraper-py:
     name: scraper-py lint + import
     runs-on: ubuntu-22.04
-    if: hashFiles('services/scraper-py/requirements.txt') != ''
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0 (Round 5 SHA pin, ADR 0028)
