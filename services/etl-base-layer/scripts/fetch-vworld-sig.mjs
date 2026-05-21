@@ -14,7 +14,7 @@
  * SP9 T3b.2 의 로컬 smoke 전용. Production 빌드는 SHP from 공공데이터포털 사용.
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
