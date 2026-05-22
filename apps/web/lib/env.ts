@@ -10,6 +10,11 @@ const optionalUrl = z.preprocess(
 
 const forbiddenPublicClientIds = new Set(["naver-maps-placeholder", "your_naver_client_id_here"]);
 const devInternalAuthSecret = "dev-internal-auth-must-be-shared";
+const forbiddenProductionSessionSecrets = new Set([
+  "change-me-to-random-32-byte-base64-string-aaaaaaaaaa",
+  "ci-placeholder-secret-32-bytes-padding-ok",
+  "test-secret-placeholder-32-chars-x",
+]);
 const isProduction = process.env.NODE_ENV === "production";
 
 const requiredPublicClientId = z
@@ -25,6 +30,14 @@ const requiredInternalAuthSecret = z
   .trim()
   .min(16)
   .refine((value) => !isProduction || value !== devInternalAuthSecret, {
+    message: "must be configured explicitly in production",
+  });
+
+const requiredSessionSecret = z
+  .string()
+  .trim()
+  .min(32)
+  .refine((value) => !isProduction || !forbiddenProductionSessionSecrets.has(value), {
     message: "must be configured explicitly in production",
   });
 
@@ -49,7 +62,7 @@ const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_AUDIENCE: z.string().min(1),
   ZITADEL_REDIRECT_URI: z.string().url(),
   REDIS_URL: z.string().url(),
-  SESSION_SECRET: z.string().min(32),
+  SESSION_SECRET: requiredSessionSecret,
   // audit 2026-05-08: services/api 의 /internal/auth/event shared secret. Rust API
   // 와 *동일 값* 공유 — 미설정 시 401 (audit log 누락만, 서비스 정상). production
   // 은 Pulumi secret. dev 는 .env.local.
