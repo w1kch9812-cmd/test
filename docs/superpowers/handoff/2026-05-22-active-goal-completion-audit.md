@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `8c0e002` listing photo R2 config isolation, `89fbc9f` listing photo mock upload URL removal, `2f95b77` auth production guard evidence refresh, `b9a708b` production auth dev-mode guard, `648f469` workspace typecheck evidence refresh |
+| Latest Gongzzang commits | `7964dc3` listing photo upload confirmation lifecycle hardening, `d468b74` roadmap photo upload status sync, `8c0e002` listing photo R2 config isolation, `89fbc9f` listing photo mock upload URL removal, `2f95b77` auth production guard evidence refresh |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -52,6 +52,7 @@ For this implementation slice, the concrete deliverables are:
 | Production auth mock guard | `b9a708b` passes `is_production` into `build_verifier` and rejects `AUTH_DEV_MODE=true` in production with `StartupError::ProductionConfig`; startup tests cover production rejection and non-production allowance | Covered locally |
 | Listing photo upload mock URL removal | `89fbc9f` replaces `MOCK://` presigned upload responses with an R2 presigned PUT issuer, returns required upload headers, disables photo upload honestly in unconfigured dev, and fails production startup when R2 upload config is missing | Covered locally |
 | Listing photo upload R2 config SSOT | `8c0e002` separates listing photo binary upload config into `LISTING_PHOTO_R2_*` and removes the accidental dependency on Bronze raw archive `R2_BUCKET`/`R2RawCaptureConfig` | Covered locally |
+| Listing photo upload confirmation lifecycle | `7964dc3` adds a storage object verifier, `POST /listings/:listing_id/photos/:photo_id/confirm`, confirmed-only photo reads, pending-photo non-exposure tests, and DB upsert coverage for upload confirmation metadata | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -141,10 +142,19 @@ cargo test -p api startup::tests
 # 4 passed; 0 failed
 
 cargo test -p api photo_upload::tests
-# 2 passed; 0 failed
+# 7 passed; 0 failed
+
+cargo test -p listing-photo-domain
+# 27 passed; 0 failed
+
+DATABASE_URL loaded from .env; cargo test -p db --features integration --test listing_photo_integration -- --test-threads=1 --nocapture
+# 12 passed; 0 failed
+
+DATABASE_URL loaded from .env; cargo test -p db --features integration --test bookmark_integration find_detail_excludes_pending_upload_photos -- --test-threads=1 --nocapture
+# 1 passed; 0 failed
 
 cargo test -p api
-# api unit tests: 42 passed; raw_capture_sync tests: 2 passed; sp10_panel_endpoints tests: 3 passed
+# api unit tests: 48 passed; raw_capture_sync tests: 2 passed; sp10_panel_endpoints tests: 3 passed
 
 rg -n "R2RawCaptureConfig::from_env\(|R2RawCaptureConfig" services/api/src/photo_upload.rs services/api/src/startup.rs
 # R2RawCaptureConfig remains only in startup raw_capture wiring; no photo_upload dependency
