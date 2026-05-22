@@ -56,10 +56,10 @@ describe("env schema (SP6-i extension)", () => {
 
   it("throws on missing NEXT_PUBLIC_API_BASE_URL in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.ZITADEL_ISSUER = "http://localhost:8443";
-    process.env.ZITADEL_CLIENT_ID = "x";
-    process.env.ZITADEL_AUDIENCE = "x";
-    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -71,10 +71,10 @@ describe("env schema (SP6-i extension)", () => {
 
   it("throws on missing NEXT_PUBLIC_PLATFORM_CORE_BASE_URL in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.ZITADEL_ISSUER = "http://localhost:8443";
-    process.env.ZITADEL_CLIENT_ID = "x";
-    process.env.ZITADEL_AUDIENCE = "x";
-    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
@@ -111,10 +111,10 @@ describe("env schema (SP6-i extension)", () => {
 
   it("throws on example SESSION_SECRET in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.ZITADEL_ISSUER = "http://localhost:8443";
-    process.env.ZITADEL_CLIENT_ID = "x";
-    process.env.ZITADEL_AUDIENCE = "x";
-    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "change-me-to-random-32-byte-base64-string-aaaaaaaaaa";
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
@@ -127,10 +127,10 @@ describe("env schema (SP6-i extension)", () => {
 
   it("throws on missing INTERNAL_AUTH_SECRET in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.ZITADEL_ISSUER = "http://localhost:8443";
-    process.env.ZITADEL_CLIENT_ID = "x";
-    process.env.ZITADEL_AUDIENCE = "x";
-    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
@@ -143,16 +143,48 @@ describe("env schema (SP6-i extension)", () => {
 
   it("throws on development INTERNAL_AUTH_SECRET in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    process.env.ZITADEL_ISSUER = "http://localhost:8443";
-    process.env.ZITADEL_CLIENT_ID = "x";
-    process.env.ZITADEL_AUDIENCE = "x";
-    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
     process.env.INTERNAL_AUTH_SECRET = "dev-internal-auth-must-be-shared";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on placeholder ZITADEL_CLIENT_ID in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "ci-placeholder";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
+    process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on placeholder ZITADEL_AUDIENCE in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "ci-placeholder";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
+    process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });

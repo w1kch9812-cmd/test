@@ -15,6 +15,14 @@ const forbiddenProductionSessionSecrets = new Set([
   "ci-placeholder-secret-32-bytes-padding-ok",
   "test-secret-placeholder-32-chars-x",
 ]);
+const forbiddenProductionZitadelIdentifiers = new Set([
+  "ci-placeholder",
+  "demo-client",
+  "placeholder",
+  "test-client",
+  "x",
+  "your_zitadel_client_id_here",
+]);
 const isProduction = process.env.NODE_ENV === "production";
 
 const requiredPublicClientId = z
@@ -41,6 +49,14 @@ const requiredSessionSecret = z
     message: "must be configured explicitly in production",
   });
 
+const requiredZitadelIdentifier = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !isProduction || !forbiddenProductionZitadelIdentifiers.has(value), {
+    message: "must be configured explicitly in production",
+  });
+
 const publicApiBaseUrl = isProduction
   ? z.string().url()
   : z.string().url().default("http://localhost:8080");
@@ -58,8 +74,8 @@ const PublicEnvSchema = z.object({
  */
 const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_ISSUER: z.string().url(),
-  ZITADEL_CLIENT_ID: z.string().min(1),
-  ZITADEL_AUDIENCE: z.string().min(1),
+  ZITADEL_CLIENT_ID: requiredZitadelIdentifier,
+  ZITADEL_AUDIENCE: requiredZitadelIdentifier,
   ZITADEL_REDIRECT_URI: z.string().url(),
   REDIS_URL: z.string().url(),
   SESSION_SECRET: requiredSessionSecret,
