@@ -4,12 +4,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { NotificationBell } from "@/components/notifications/notification-bell";
+import { ROUTES } from "@/lib/routes";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession } from "@/lib/session/store";
 
 // cast: typed route generation (next build) 전 단계에서도 타입 오류 없이 redirect 가능
-const LOGIN_ROUTE = "/login" as Route;
-const LISTINGS_ROUTE = "/listings" as Route;
+const LOGIN_ROUTE = ROUTES.login as Route;
+const LISTINGS_ROUTE = ROUTES.listings.index as Route;
 
 export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("common");

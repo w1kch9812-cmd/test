@@ -12,10 +12,13 @@
 // 외부 URL (Naver Maps SDK / V-World source link 등) 은 본 파일 *외부* 에 별도
 // 정의 (도메인 의존).
 
+const API_PROXY_BASE = "/api/proxy";
+
 /** Internal page routes (사용자 navigate target). */
 export const ROUTES = {
   home: "/",
   login: "/login",
+  forbidden: "/forbidden",
   /** `/profile` (top-level route — `(authenticated)/profile/page.tsx`). M3 cutover
    * 후 `/me/profile` 로 이동 가능하나 현재는 legacy 위치. */
   profile: "/profile",
@@ -39,7 +42,16 @@ export const API = {
     refresh: "/api/auth/refresh",
   },
   proxy: {
-    base: "/api/proxy",
+    base: API_PROXY_BASE,
+    listingMarkerTilesPrefix: `${API_PROXY_BASE}/map/v1/marker-tiles/listing`,
+    listingMarkerTileTemplate: `${API_PROXY_BASE}/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash={hash}`,
+    listingPhoto: (listingId: string, photoId: string) =>
+      `${API_PROXY_BASE}/listings/${encodeURIComponent(listingId)}/photos/${encodeURIComponent(
+        photoId,
+      )}` as const,
+  },
+  platformCore: {
+    events: "/platform-core/events",
   },
 } as const;
 

@@ -34,6 +34,7 @@ import {
   LISTING_TYPES,
   TRANSACTION_TYPES,
 } from "@/lib/listings/schema";
+import { ROUTES } from "@/lib/routes";
 
 interface ProblemDetailsBody {
   title: string;
@@ -220,7 +221,7 @@ export function ListingForm(): React.ReactElement {
     mutationFn: createListing,
     onSuccess(data) {
       toast.success(t("submitSuccess", { id: data.id }));
-      router.push("/listings" as Route);
+      router.push(ROUTES.listings.index as Route);
     },
     onError(error) {
       // RFC 7807 ProblemDetails 매핑 — server 가 client 검증 통과 후 거부 시.

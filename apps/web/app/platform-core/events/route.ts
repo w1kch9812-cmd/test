@@ -1,6 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { type NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ROUTES } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,7 +88,7 @@ function requiredHeader(req: NextRequest, name: string): string | undefined {
 }
 
 function invalidateCatalogCache() {
-  revalidatePath("/listings", "page");
+  revalidatePath(ROUTES.listings.index, "page");
   revalidateTag(CATALOG_CACHE_TAG, { expire: 0 });
 }
 

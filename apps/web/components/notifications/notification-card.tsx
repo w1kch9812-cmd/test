@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import type { Notification } from "@/lib/notifications/api";
+import { ROUTES } from "@/lib/routes";
 
 interface NotificationCardProps {
   notification: Notification;
@@ -70,7 +71,7 @@ function renderByKind(n: Notification, t: TFn): RenderResult {
       return {
         title: t("approved.title", { title: listingTitle }),
         description: t("approved.description"),
-        href: listingId ? `/listings/${listingId}` : undefined,
+        href: listingId ? ROUTES.listings.detail(listingId) : undefined,
         Icon: ListChecks,
       };
     case "listing_rejected":
@@ -80,7 +81,7 @@ function renderByKind(n: Notification, t: TFn): RenderResult {
           typeof payload.reason === "string"
             ? t("rejected.reasonPrefix", { reason: payload.reason })
             : t("rejected.descriptionFallback"),
-        href: listingId ? `/listings/${listingId}` : undefined,
+        href: listingId ? ROUTES.listings.detail(listingId) : undefined,
         Icon: XCircle,
       };
     case "listing_bookmarked": {
@@ -90,7 +91,7 @@ function renderByKind(n: Notification, t: TFn): RenderResult {
           : t("fallbackBookmarker");
       return {
         title: t("bookmarked.title", { bookmarker, title: listingTitle }),
-        href: listingId ? `/listings/${listingId}` : undefined,
+        href: listingId ? ROUTES.listings.detail(listingId) : undefined,
         Icon: Heart,
       };
     }

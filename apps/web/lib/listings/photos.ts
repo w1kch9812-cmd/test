@@ -6,7 +6,5 @@ type ListingPhotoRef = {
 };
 
 export function listingPhotoImageSrc(listingId: string, photo: ListingPhotoRef): string {
-  return `${API.proxy.base}/listings/${encodeURIComponent(listingId)}/photos/${encodeURIComponent(
-    photo.photo_id,
-  )}`;
+  return API.proxy.listingPhoto(listingId, photo.photo_id);
 }

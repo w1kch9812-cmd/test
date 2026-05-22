@@ -6,7 +6,7 @@ import { tStatic } from "@/lib/i18n/static";
 import { resolveMarkerTileAllowedOrigins } from "@/lib/map/marker-tile-contract";
 import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
 import { checkRate } from "@/lib/ratelimit";
-import { ROUTES } from "@/lib/routes";
+import { API, AUTH_PATH_PREFIX, ROUTES } from "@/lib/routes";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
@@ -21,10 +21,10 @@ import { sanitizeReturnTo } from "@/lib/url";
 // production 빌드는 R2 직결이라 본 prefix 없음. dev 의 *X9 path 시각 검증* 용도.
 const PUBLIC_PATHS = [
   ROUTES.login,
-  "/forbidden",
-  "/api/auth",
-  "/platform-core/events",
-  "/api/proxy/map/v1/marker-tiles/listing",
+  ROUTES.forbidden,
+  AUTH_PATH_PREFIX,
+  API.platformCore.events,
+  API.proxy.listingMarkerTilesPrefix,
   "/fonts",
 ];
 const DEV_ONLY_PUBLIC_PATHS = ["/dev-tiles", "/dev-x9-test"];
@@ -39,8 +39,8 @@ type BrokerRule =
   | { kind: "exact"; path: string }
   | { kind: "prefix-suffix"; prefix: string; suffix: string };
 const BROKER_GATED_RULES: readonly BrokerRule[] = [
-  { kind: "exact", path: "/listings/new" },
-  { kind: "prefix-suffix", prefix: "/listings/", suffix: "/edit" },
+  { kind: "exact", path: ROUTES.listings.new },
+  { kind: "prefix-suffix", prefix: `${ROUTES.listings.index}/`, suffix: "/edit" },
 ];
 const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
 
@@ -74,7 +74,7 @@ function isBrokerGated(pathname: string): boolean {
 
 async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null> {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (req.nextUrl.pathname === "/api/auth/login") {
+  if (req.nextUrl.pathname === API.auth.login) {
     const r = await checkRate(`login:${ip}`, 5, 60);
     if (!r.allowed) {
       return problem({
@@ -85,7 +85,7 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
         instance: req.url,
       }).toResponse() as unknown as NextResponse;
     }
-  } else if (req.nextUrl.pathname === "/api/auth/callback") {
+  } else if (req.nextUrl.pathname === API.auth.callback) {
     const r = await checkRate(`callback:${ip}`, 10, 60);
     if (!r.allowed) {
       return problem({
@@ -95,7 +95,7 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
         instance: req.url,
       }).toResponse() as unknown as NextResponse;
     }
-  } else if (req.nextUrl.pathname === "/api/auth/refresh") {
+  } else if (req.nextUrl.pathname === API.auth.refresh) {
     const sid = req.cookies.get(SID_COOKIE_NAME)?.value ?? "anon";
     const r = await checkRate(`refresh:${sid}`, 30, 60);
     if (!r.allowed) {
@@ -223,11 +223,11 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isAdmin(url.pathname) && !ADMIN_ROLES.has(session.role)) {
-    return NextResponse.redirect(new URL("/forbidden", req.url));
+    return NextResponse.redirect(new URL(ROUTES.forbidden, req.url));
   }
   // SP6-iv: 매물 등록/수정 broker (또는 admin) 만 진입.
   if (isBrokerGated(url.pathname) && !BROKER_ALLOWED_ROLES.has(session.role)) {
-    return NextResponse.redirect(new URL("/forbidden", req.url));
+    return NextResponse.redirect(new URL(ROUTES.forbidden, req.url));
   }
 
   return nextWithSecurityHeaders(reqHeaders, cspHeader);

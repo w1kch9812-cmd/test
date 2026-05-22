@@ -1,10 +1,10 @@
 import { z } from "zod";
+import { API } from "@/lib/routes";
 
 const MARKER_TILE_CONTRACT_PATH = "/map/v1/marker-tiles/contract";
 const MARKER_TILE_ENDPOINT_TEMPLATE =
   "/map/v1/marker-tiles/{layer}/{z}/{x}/{y}.pbf?filter_hash={hash}";
-const LISTING_MARKER_TILE_ENDPOINT_TEMPLATE =
-  "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash={hash}";
+const LISTING_MARKER_TILE_ENDPOINT_TEMPLATE = API.proxy.listingMarkerTileTemplate;
 export const PARCEL_ANCHOR_MARKER_TILE_LAYER = "parcel_anchor";
 export const LISTING_MARKER_TILE_LAYER = "listing";
 export const ALL_ACTIVE_MARKER_FILTER_HASH = "all-active-v1";

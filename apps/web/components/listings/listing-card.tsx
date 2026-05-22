@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import type { ListingCard as ListingCardData } from "@/lib/listings/api";
 import { formatAreaPyeong, formatPriceKrw } from "@/lib/listings/format";
 import { usePanelStack } from "@/lib/panel/use-panel-stack";
+import { ROUTES } from "@/lib/routes";
 
 /*
  * ListingCard — Claude.com spec 의 feature-card 패턴 (cream-card surface).
@@ -40,7 +41,7 @@ export function ListingCard({ data }: ListingCardProps) {
       ].join(" ")}
     >
       <Link
-        href={`/listings/${data.id}` as Route}
+        href={ROUTES.listings.detail(data.id) as Route}
         onClick={(e) => {
           // Cmd/Ctrl-click / middle-click 은 그대로 새 탭 — server redirect 가 받음.
           if (e.metaKey || e.ctrlKey || e.button === 1) return;
