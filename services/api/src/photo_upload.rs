@@ -1,15 +1,86 @@
+use std::env;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use aws_credential_types::Credentials;
+use aws_sdk_s3::config::{
+    BehaviorVersion, Builder as S3ConfigBuilder, Region, RequestChecksumCalculation,
+    ResponseChecksumValidation,
+};
 use aws_sdk_s3::presigning::PresigningConfig;
 use aws_sdk_s3::Client as S3Client;
 use listing_photo_domain::entity::PhotoContentType;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::r2_raw_capture::R2RawCaptureConfig;
-
 const LISTING_PHOTO_UPLOAD_EXPIRES: Duration = Duration::from_secs(15 * 60);
+
+#[derive(Debug, Clone)]
+pub struct ListingPhotoUploadConfig {
+    pub account_id: String,
+    pub access_key: String,
+    pub secret_key: String,
+    pub bucket: String,
+}
+
+#[derive(Debug, Error)]
+pub enum ListingPhotoUploadConfigError {
+    #[error("env {0} not set")]
+    MissingEnv(&'static str),
+    #[error("env {0} empty")]
+    EmptyEnv(&'static str),
+}
+
+impl ListingPhotoUploadConfig {
+    pub fn from_env() -> Result<Self, ListingPhotoUploadConfigError> {
+        Ok(Self {
+            account_id: require_env("LISTING_PHOTO_R2_ACCOUNT_ID")?,
+            access_key: require_env("LISTING_PHOTO_R2_ACCESS_KEY")?,
+            secret_key: require_env("LISTING_PHOTO_R2_SECRET_KEY")?,
+            bucket: require_env("LISTING_PHOTO_R2_BUCKET")?,
+        })
+    }
+
+    #[must_use]
+    pub fn endpoint_url(&self) -> String {
+        format!("https://{}.r2.cloudflarestorage.com", self.account_id)
+    }
+
+    #[must_use]
+    pub fn s3_client(&self) -> S3Client {
+        let creds = Credentials::new(
+            &self.access_key,
+            &self.secret_key,
+            None,
+            None,
+            "api-listing-photo-upload",
+        );
+        let s3_config = S3ConfigBuilder::default()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("auto"))
+            .endpoint_url(self.endpoint_url())
+            .credentials_provider(creds)
+            .force_path_style(true)
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
+            .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(1))
+            .timeout_config(
+                aws_config::timeout::TimeoutConfig::builder()
+                    .operation_attempt_timeout(Duration::from_secs(15))
+                    .build(),
+            )
+            .build();
+        S3Client::from_conf(s3_config)
+    }
+}
+
+fn require_env(name: &'static str) -> Result<String, ListingPhotoUploadConfigError> {
+    match env::var(name) {
+        Ok(v) if v.trim().is_empty() => Err(ListingPhotoUploadConfigError::EmptyEnv(name)),
+        Ok(v) => Ok(v),
+        Err(_) => Err(ListingPhotoUploadConfigError::MissingEnv(name)),
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PhotoUploadUrlRequest {
@@ -69,9 +140,9 @@ pub struct R2ListingPhotoUploadUrlIssuer {
 
 impl R2ListingPhotoUploadUrlIssuer {
     #[must_use]
-    pub fn new(config: R2RawCaptureConfig) -> Self {
+    pub fn new(config: ListingPhotoUploadConfig) -> Self {
         Self {
-            client: config.s3_client("api-listing-photo-upload"),
+            client: config.s3_client(),
             bucket: config.bucket,
             expires_in: LISTING_PHOTO_UPLOAD_EXPIRES,
         }
@@ -114,20 +185,18 @@ impl ListingPhotoUploadUrlIssuer for R2ListingPhotoUploadUrlIssuer {
 mod tests {
     use listing_photo_domain::entity::PhotoContentType;
 
+    use super::ListingPhotoUploadConfig;
     use super::{
         DisabledListingPhotoUploadUrlIssuer, ListingPhotoUploadUrlIssuer, PhotoUploadUrlError,
         PhotoUploadUrlRequest, R2ListingPhotoUploadUrlIssuer,
     };
-    use crate::r2_raw_capture::R2RawCaptureConfig;
 
-    fn r2_config() -> R2RawCaptureConfig {
-        R2RawCaptureConfig {
+    fn r2_config() -> ListingPhotoUploadConfig {
+        ListingPhotoUploadConfig {
             account_id: "account-id".to_owned(),
             access_key: "access-key".to_owned(),
             secret_key: "secret-key".to_owned(),
             bucket: "listing-photos".to_owned(),
-            bronze_prefix: "bronze".to_owned(),
-            fallback_dir: None,
         }
     }
 

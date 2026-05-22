@@ -237,13 +237,16 @@ pub fn build_photo_upload_issuer(
 ) -> Result<Arc<dyn photo_upload::ListingPhotoUploadUrlIssuer>, StartupError> {
     build_photo_upload_issuer_from_config_result(
         is_production,
-        r2_raw_capture::R2RawCaptureConfig::from_env(),
+        photo_upload::ListingPhotoUploadConfig::from_env(),
     )
 }
 
 pub fn build_photo_upload_issuer_from_config_result(
     is_production: bool,
-    config_result: Result<r2_raw_capture::R2RawCaptureConfig, r2_raw_capture::R2ConfigError>,
+    config_result: Result<
+        photo_upload::ListingPhotoUploadConfig,
+        photo_upload::ListingPhotoUploadConfigError,
+    >,
 ) -> Result<Arc<dyn photo_upload::ListingPhotoUploadUrlIssuer>, StartupError> {
     match config_result {
         Ok(config) => Ok(Arc::new(photo_upload::R2ListingPhotoUploadUrlIssuer::new(
@@ -371,6 +374,8 @@ fn build_data_go_kr_building_reader(
 mod tests {
     use auth::verifier::Verifier;
 
+    use crate::photo_upload::ListingPhotoUploadConfigError;
+
     use super::{
         build_photo_upload_issuer_from_config_result, build_verifier, required_env, StartupError,
     };
@@ -408,14 +413,15 @@ mod tests {
     fn production_rejects_missing_listing_photo_upload_r2_config() {
         let result = build_photo_upload_issuer_from_config_result(
             true,
-            Err(crate::r2_raw_capture::R2ConfigError::MissingEnv(
-                "R2_BUCKET",
+            Err(ListingPhotoUploadConfigError::MissingEnv(
+                "LISTING_PHOTO_R2_BUCKET",
             )),
         );
 
         assert!(
             matches!(result, Err(StartupError::ProductionConfig { reason })
-                if reason.contains("listing photo upload") && reason.contains("R2_BUCKET"))
+                if reason.contains("listing photo upload")
+                    && reason.contains("LISTING_PHOTO_R2_BUCKET"))
         );
     }
 }
