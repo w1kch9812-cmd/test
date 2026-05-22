@@ -79,7 +79,9 @@ export function ListingCard({ data }: ListingCardProps) {
             {formatPriceKrw(data.price_krw)}
           </div>
           <div className="mt-1 flex items-center gap-4 text-[length:var(--text-caption)] text-[var(--color-muted)]">
-            <span title={t("card.viewCount")}>조회 {data.view_count}</span>
+            <span title={t("card.viewCount")}>
+              {t("card.viewCountWithCount", { count: data.view_count })}
+            </span>
             <button
               type="button"
               aria-label={t("card.favoritePlaceholder")}

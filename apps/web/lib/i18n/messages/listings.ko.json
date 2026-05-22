@@ -11,7 +11,9 @@
       "transaction": "거래 방식",
       "areaM2": "면적 (m²)",
       "priceKrw": "가격 (원)",
-      "sort": "정렬"
+      "sort": "정렬",
+      "minValueAria": "최소값",
+      "maxValueAria": "최대값"
     },
     "type": {
       "factory": "공장",
@@ -35,8 +37,14 @@
     },
     "card": {
       "viewCount": "조회",
+      "viewCountWithCount": "조회 {count}",
       "bookmarkCount": "관심",
       "favoritePlaceholder": "즐겨찾기"
+    },
+    "detailNotFound": {
+      "title": "매물을 찾을 수 없어요",
+      "description": "삭제된 매물이거나 권한이 없는 매물일 수 있어요.",
+      "backToSearch": "매물 검색으로 돌아가기"
     },
     "empty": "조건에 맞는 매물이 없어요",
     "loading": "매물을 불러오는 중이에요",

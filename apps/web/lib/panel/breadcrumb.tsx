@@ -20,17 +20,20 @@ interface BreadcrumbItemProps {
   onSelect: (depth: number) => void;
 }
 
-function fallbackLabel(kind: PanelStackEntry["kind"]): string {
-  return kind === "parcel" ? "필지" : "매물";
+function fallbackLabel(
+  kind: PanelStackEntry["kind"],
+  translateLabel: (key: string) => string,
+): string {
+  return kind === "parcel" ? translateLabel("parcel.summary") : translateLabel("listing.summary");
 }
 
 function breadcrumbLabel(entry: PanelStackEntry, translateLabel: (key: string) => string): string {
-  if (!getKindDefinition(entry.kind)) return fallbackLabel(entry.kind);
+  if (!getKindDefinition(entry.kind)) return fallbackLabel(entry.kind, translateLabel);
 
   try {
     return translateLabel(`${entry.kind}.${entry.view}`);
   } catch {
-    return fallbackLabel(entry.kind);
+    return fallbackLabel(entry.kind, translateLabel);
   }
 }
 

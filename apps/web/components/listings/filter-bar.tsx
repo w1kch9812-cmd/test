@@ -71,6 +71,8 @@ export function FilterBar() {
                 maxAreaM2: max === AREA_MAX ? undefined : max,
               })
             }
+            minAriaLabel={t("filter.minValueAria")}
+            maxAriaLabel={t("filter.maxValueAria")}
             formatValue={formatAreaM2}
           />
         </div>
@@ -89,6 +91,8 @@ export function FilterBar() {
                 maxPriceKrw: max === PRICE_MAX ? undefined : max,
               })
             }
+            minAriaLabel={t("filter.minValueAria")}
+            maxAriaLabel={t("filter.maxValueAria")}
             formatValue={formatPriceKrw}
           />
         </div>

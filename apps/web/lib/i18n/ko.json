@@ -1,9 +1,20 @@
 {
   "common": {
+    "brandName": "공짱",
     "loading": "불러오는 중이에요",
     "error": "오류가 발생했어요",
     "retry": "다시 시도해 주세요",
     "notFound": "페이지를 찾을 수 없어요"
+  },
+  "notFoundPage": {
+    "title": "페이지를 찾을 수 없어요",
+    "description": "주소가 맞는지 다시 한번 확인해 주세요.",
+    "homeLink": "홈으로 돌아가기"
+  },
+  "errorPage": {
+    "title": "오류가 발생했어요",
+    "description": "잠시 후 다시 시도해 주세요. 문제가 계속되면 관리자에게 문의해 주세요.",
+    "retry": "다시 시도"
   },
   "errors": {
     "network": "네트워크 연결을 확인해 주세요",
@@ -12,6 +23,7 @@
   "panel": {
     "back": "이전",
     "breadcrumb": "경로",
+    "authRequired": "로그인이 필요해요",
     "labels": {
       "parcel": {
         "summary": "필지",
@@ -32,6 +44,10 @@
     }
   },
   "listingForm": {
+    "page": {
+      "title": "매물 등록",
+      "description": "매물 정보를 정확하게 입력해 주세요. 등록 후 검토 요청을 보내면 관리자가 확인해요."
+    },
     "submitSuccess": "매물이 등록되었어요 ({id})",
     "submitErrorFallback": "등록 중 오류가 발생했어요",
     "contactVisibility": {
@@ -101,6 +117,10 @@
     }
   },
   "notifications": {
+    "page": {
+      "title": "알림",
+      "description": "최근 365일 동안 받은 알림이에요."
+    },
     "fallbackListingTitle": "매물",
     "fallbackBookmarker": "한 사용자",
     "default": "알림이 도착했어요",
@@ -146,6 +166,7 @@
         "landUse": "지목",
         "zoning": "용도지역",
         "officialPrice": "공시지가",
+        "officialPricePerM2": "{value} 원/㎡",
         "viewBuildings": "건축물 보기",
         "viewListings": "등록 매물 보기",
         "codeFallback": "행정코드 {code}"
