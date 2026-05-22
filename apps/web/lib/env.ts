@@ -44,6 +44,11 @@ const requiredProductionPublicUrl = requiredUrl.refine(isProductionPublicUrl, {
   message: productionPublicUrlMessage,
 });
 
+const optionalProductionPublicUrl = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  requiredProductionPublicUrl.optional(),
+);
+
 const requiredPublicClientId = z
   .string()
   .trim()
@@ -80,12 +85,13 @@ const publicApiBaseUrl = isProduction
   ? requiredProductionPublicUrl
   : requiredUrl.default("http://localhost:8080");
 const platformCoreBaseUrl = isProduction ? requiredProductionPublicUrl : optionalUrl;
+const tilesManifestUrl = isProduction ? optionalProductionPublicUrl : optionalUrl;
 
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: publicApiBaseUrl,
   NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: requiredPublicClientId,
   NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: platformCoreBaseUrl,
-  NEXT_PUBLIC_TILES_MANIFEST_URL: optionalUrl,
+  NEXT_PUBLIC_TILES_MANIFEST_URL: tilesManifestUrl,
 });
 
 /**

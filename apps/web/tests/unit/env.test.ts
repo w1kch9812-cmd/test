@@ -230,4 +230,11 @@ describe("env schema (SP6-i extension)", () => {
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
+
+  it("throws on localhost NEXT_PUBLIC_TILES_MANIFEST_URL in production", async () => {
+    setValidProductionEnv();
+    process.env.NEXT_PUBLIC_TILES_MANIFEST_URL = "http://localhost:18082/v1/map/tiles/manifest";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
 });
