@@ -1,7 +1,7 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
-  "globalDependencies": ["**/.env", "**/.env.local", "tsconfig.base.json"],
+  "globalDependencies": ["**/.env", "**/.env.local", "biome.json", "tsconfig.base.json"],
   "globalEnv": [
     "NODE_ENV",
     "VWORLD_API_KEY",
@@ -32,7 +32,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig.json", "package.json"],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "dev": {
@@ -41,21 +41,21 @@
     },
     "typecheck": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig.json"],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": []
     },
     "test": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "test/**", "*.config.*"],
-      "outputs": ["coverage/**"]
+      "inputs": ["$TURBO_DEFAULT$"],
+      "outputs": []
     },
     "test:e2e": {
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "e2e/**", "tests/**", "playwright.config.*"],
+      "inputs": ["$TURBO_DEFAULT$"],
       "outputs": ["playwright-report/**", "test-results/**"]
     },
     "lint": {
-      "inputs": ["src/**", "*.ts", "*.tsx", "*.js", "*.json", "biome.json"]
+      "inputs": ["$TURBO_DEFAULT$"]
     },
     "clean": {
       "cache": false
