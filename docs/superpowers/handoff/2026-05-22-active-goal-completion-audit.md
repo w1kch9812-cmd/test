@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `eca931d` forbidden implementation marker guardrail, `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -68,6 +68,7 @@ For this implementation slice, the concrete deliverables are:
 | Production tile manifest URL fail-fast | `440c167` applies the same loopback/non-HTTPS rejection to optional `NEXT_PUBLIC_TILES_MANIFEST_URL` when it is set in production | Covered locally |
 | Production Redis TLS URL fail-fast | `fb7f072` requires production `REDIS_URL` to use non-loopback `rediss://` and keeps local `redis://localhost` valid for non-production tests | Covered locally |
 | Auth-state cookie naming clarity | `05d54b1` removes `TEMP_COOKIE_NAME`/`auth-tmp` naming from the auth flow, renames the signed OAuth state helpers to auth-state terminology, and keeps login/callback integration coverage green | Covered locally |
+| Forbidden implementation marker guardrail | `eca931d` adds a pre-commit/pre-push guardrail that blocks `TODO`/`HACK`/`XXX`/`TEMP`/`ALLOWED_FOR_FRONTEND_TEMP` markers in `apps`, `services`, `crates`, and `packages`, with tests covering allowed `ATTEMPTS` names and forbidden markers | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -275,6 +276,14 @@ pnpm --filter @gongzzang/web test -- tests/unit/session/cookie.test.ts tests/int
 
 rg -n "TEMP_COOKIE_NAME|auth-tmp|signTempPayload|verifyTempPayload|setTempCookie|deleteTempCookie|buildTempCookie|TempAuthState|tmpCookie|tmpMatch|const tmp\b|typeof tmp" apps\web\lib apps\web\app apps\web\tests
 # no matches
+
+bash scripts/lefthook/check-forbidden-implementation-markers.tests.sh
+# ok - allows explicit names and words containing attempts
+# ok - rejects TEMP identifiers
+# ok - rejects HACK comments
+
+bash scripts/lefthook/check-forbidden-implementation-markers.sh
+# forbidden-implementation-markers-ok
 
 gitleaks detect --no-git --source <temporary sample with NAVER_MAPS_CLIENT_ID assignment> --config .gitleaks.toml --redact -v
 # expected failure: naver-maps-credential-assignment reported the fake sample assignment
