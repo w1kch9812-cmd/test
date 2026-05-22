@@ -13,7 +13,7 @@
 
 **증상**: Frontend 로그인 후 `/api/proxy/listings` → `/listings` (백엔드) 호출 시
 `AUTH_USER_PROVISION_FAILED` (500). Zitadel access_token JWT 가 `email`/
-`preferred_username` claim 을 포함하지 않아 [`provision_new_user`](crates/auth/src/middleware.rs#L119)
+`preferred_username` claim 을 포함하지 않아 [`provision_new_user`](../crates/auth/src/middleware.rs#L119)
 가 새 user 생성 못 함.
 
 **원인**: Zitadel 기본 동작 — access_token 은 sub/aud/exp 만, user info 는
@@ -39,7 +39,7 @@
 ### 2. SP6-ii-gl: Naver gl WebGL 커스텀 레이어 (deck.gl + mapbox-gl)
 
 **현재 상태**: `gl: true` 로 Naver WebGL 백엔드 활성화 + `_mapbox` 인스턴스 부착
-확인 ([`listing-map.tsx`](apps/web/components/listings/listing-map.tsx#L30)).
+확인 ([`listing-map.tsx`](../apps/web/components/listings/listing-map.tsx#L30)).
 하지만 그 위에 아무 layer 도 안 그림.
 
 **SSS 격차** (vs `C:\Users\User\Desktop\gongzzang\gongzzang\apps\gongzzang-design-lab`):
@@ -61,7 +61,7 @@
 
 **현재 상태**: Claude.com 의 cream/coral/dark-navy trinity + spec 의 typography
 tokens 그대로 차용 (Pretendard Variable 만 한글용으로 sub).
-[packages/ui/tokens/colors.css](packages/ui/tokens/colors.css) 상단 주석 참조.
+[packages/ui/tokens/colors.css](../packages/ui/tokens/colors.css) 상단 주석 참조.
 
 **격차**:
 

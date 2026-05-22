@@ -127,10 +127,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Check internal Markdown links
-        run: |
-          for f in $(find docs -name "*.md") README.md AGENTS.md TECH.md MEMORY.md; do
-            [ -f "$f" ] && pnpm markdown-link-check -q "$f" || true
-          done
+        run: bash scripts/ci/check-markdown-links.sh
 
   file-size:
     name: File size limit (≤500 권장 / 1500 강제)

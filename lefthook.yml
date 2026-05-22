@@ -1,7 +1,6 @@
 # https://lefthook.dev/configuration/
-# pre-commit: 빠른 lint + 포맷 + 시크릿 스캔 (단일 라인 명령)
-# pre-push: 깊은 검증 (typecheck, cargo)
-# commit-msg: Conventional Commits 강제
+# pre-commit: fast local checks for staged changes.
+# pre-push: full local verification gates.
 
 pre-commit:
   parallel: true
@@ -33,16 +32,12 @@ pre-commit:
         - merge
         - rebase
     panel-no-framework-import-kind:
-      # SP10 spec § 9 #5: lib/panel/** 는 components/panels/** 에 의존 금지.
-      # 프레임워크 → kind 단방향. 위반 시 commit 차단.
       glob: "apps/web/lib/panel/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-framework-import-kind.sh
     panel-no-direct-codec:
-      # SP10 spec § 5.2: codec 외부에서 ad-hoc split('>') 금지 (URL grammar 우회 방지).
       glob: "apps/web/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-direct-codec.sh
     panel-no-state-without-router:
-      # SP10 spec § 5.4: zustand store 가 panelStack 보유 금지 — URL 이 SSOT.
       glob: "apps/web/stores/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-state-without-router.sh
     catalog-m1-boundary:
@@ -62,9 +57,6 @@ pre-push:
         - merge
         - rebase
     typecheck:
-      # SSS § 2 자동강제: node_modules 누락 / lockfile drift 시 자가복구.
-      # `pnpm install --frozen-lockfile` 은 idempotent — sync 상태면 no-op (수 초),
-      # 누락/drift 면 full install. fresh checkout / dirty workspace 어디서든 안전.
       run: pnpm install --frozen-lockfile --reporter=silent && pnpm turbo run typecheck
       skip:
         - merge
@@ -84,7 +76,11 @@ pre-push:
       skip:
         - merge
         - rebase
-    # markdown-links는 CI에서만 강제 (외부 URL 인터넷 의존이라 로컬 push에선 skip)
+    markdown-links:
+      run: bash scripts/ci/check-markdown-links.sh
+      skip:
+        - merge
+        - rebase
 
-# commit-msg hook은 CI(Spectral 또는 별도 룰)에서 강제 — Windows bash regex 호환 이슈로 로컬 hook 제거
-# Conventional Commits 형식: docs/conventions/git-and-pr.md 참조
+# commit-msg is enforced by CI/Spectral or a separate rule.
+# Conventional Commits format: docs/conventions/git-and-pr.md
