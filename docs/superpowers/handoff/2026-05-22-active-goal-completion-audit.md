@@ -5,6 +5,8 @@
 | Date | 2026-05-22 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
+| Latest Gongzzang commits | `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
+| Latest platform-core commit | `b96d2b4` PNU anchor marker tile contract |
 
 ## Restated Objective
 
@@ -163,14 +165,29 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-sri
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness.ps1 -Root .
 ```
 
-`check-platform-core-prelaunch-readiness.ps1` now reports `failed=0`, with one remaining blocker:
-Gongzzang consumer local readiness is blocked because the deployment root has uncommitted/untracked
-files. That is a source-control/cutover-readiness gate, not a static code-quality failure.
+After committing the Gongzzang implementation and map-runtime research evidence, both local
+repositories are source-control clean and the strict local prelaunch gate reports:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails.ps1 -Root .
+# sss-guardrails-ok checks=60 supplemental_checks=2
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness.ps1 -Root .
+# platform-core-prelaunch-readiness-ok status=ready checks=18 failed=0 blockers=0
+
+git -C C:\Users\admin\Desktop\platform-core status --short
+git -C C:\Users\admin\Desktop\gongzzang status --short
+# both commands returned no entries
+```
+
+The remaining incomplete scope is not local code quality. It is the future AWS/deployed cutover
+scope: production orchestrator evidence and deployed consumer receiver E2E evidence.
 
 ## Completion Decision
 
 `completion_claim_allowed=false`.
 
-The current Gongzzang listing PBF marker-tile implementation slice has evidence-backed coverage, but
-the broad active thread goal is not a finite product-launch goal. Do not claim the whole project is
-complete from this audit. Do not call update_goal from this state.
+The current Gongzzang listing PBF marker-tile implementation slice has evidence-backed local
+coverage and the platform-core local prelaunch gate is ready. The broad active thread goal still
+includes production-grade operational proof that does not exist locally yet. Do not claim whole
+project completion from this audit. Do not call update_goal from this state.
