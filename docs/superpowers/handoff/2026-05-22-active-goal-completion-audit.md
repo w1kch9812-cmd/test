@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `7964dc3` listing photo upload confirmation lifecycle hardening, `d468b74` roadmap photo upload status sync, `8c0e002` listing photo R2 config isolation, `89fbc9f` listing photo mock upload URL removal, `2f95b77` auth production guard evidence refresh |
+| Latest Gongzzang implementation commits | `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `d468b74` roadmap photo upload status sync, `8c0e002` listing photo R2 config isolation, `89fbc9f` listing photo mock upload URL removal |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -53,6 +53,7 @@ For this implementation slice, the concrete deliverables are:
 | Listing photo upload mock URL removal | `89fbc9f` replaces `MOCK://` presigned upload responses with an R2 presigned PUT issuer, returns required upload headers, disables photo upload honestly in unconfigured dev, and fails production startup when R2 upload config is missing | Covered locally |
 | Listing photo upload R2 config SSOT | `8c0e002` separates listing photo binary upload config into `LISTING_PHOTO_R2_*` and removes the accidental dependency on Bronze raw archive `R2_BUCKET`/`R2RawCaptureConfig` | Covered locally |
 | Listing photo upload confirmation lifecycle | `7964dc3` adds a storage object verifier, `POST /listings/:listing_id/photos/:photo_id/confirm`, confirmed-only photo reads, pending-photo non-exposure tests, and DB upsert coverage for upload confirmation metadata | Covered locally |
+| Listing photo signed download routing | `8946709` exposes authenticated `GET /listings/:listing_id/photos/:photo_id`, checks listing visibility, rejects pending or mismatched photos, issues short-lived R2 signed GET URLs, adds `photo_id` to listing detail projection, and moves frontend image paths to a single `listingPhotoImageSrc` helper | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -166,6 +167,33 @@ cargo check -p api
 cargo clippy -p api --all-targets -- -D warnings
 cargo fmt --check
 git diff --check
+
+pnpm --filter @gongzzang/web lint
+# Checked 151 files. No fixes applied.
+
+pnpm --filter @gongzzang/web typecheck
+# tsc --noEmit passed
+
+pnpm --filter @gongzzang/web test
+# 35 test files passed, 137 tests passed, 1 skipped
+
+cargo clippy -p db --features integration --all-targets -- -D warnings
+# passed
+
+cargo test -p api -- --nocapture
+# api unit tests: 51 passed; raw_capture_sync tests: 2 passed; sp10_panel_endpoints tests: 3 passed
+
+DATABASE_URL loaded from .env; cargo test -p db --features integration --test listing_photo_integration -- --test-threads=1 --nocapture
+# 12 passed; 0 failed
+
+DATABASE_URL loaded from .env; cargo test -p db --features integration --test bookmark_integration find_detail_ -- --test-threads=1 --nocapture
+# 6 passed; 0 failed
+
+rg -n "r2_key|listingPhotoImageSrc|/photos/" apps/web/components apps/web/lib apps/web/app/api/proxy apps/web/tests/unit/api-proxy-route.test.ts apps/web/lib/listings/photos.test.ts
+# UI image rendering now uses listingPhotoImageSrc(...photo_id); r2_key remains parsed data, not the route key.
+
+rg -n "photo_id|find\(&pid\)|issue_download_url|photo_download_issuer|is_upload_confirmed" services/api/src crates/db/src/listing crates/domain/core/listing/src/repository.rs crates/db/tests/bookmark_integration.rs crates/db/tests/listing_photo_integration.rs
+# backend route, startup wiring, repository projection, and integration tests cover the signed download path
 
 rg -n "MOCK://|photo\.upload\.mock|presigned URL .*mock|SP4-iii-e pending|mock presigned" \
   services/api/src/routes/listings/photos.rs services/api/src/photo_upload.rs services/api/src/startup.rs
