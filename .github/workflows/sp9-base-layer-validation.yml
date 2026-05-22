@@ -1,11 +1,8 @@
 name: SP9 Base Layer Validation
 
-# PR 시 SP9 ETL 관련 파일 (etl-base-layer Rust + Dockerfile.etl + scraper-py) 변경 시
-# 자동 검증. 일반 ci.yml 의 cargo clippy / typecheck 와 *별개* — SP9 특이 path:
-#   1) Dockerfile.etl 이 valid 한지 (build 통과)
-#   2) tippecanoe / ogr2ogr 이 actual binary 로 동작하는지 (mini-fixture E2E)
-#   3) verify module 의 sha256 / lonlat_to_tile 단위 테스트 (이미 ci.yml 에 포함되지만
-#      여기서 한 번 더 — runner 환경 차이 디버깅 용이).
+# Focused validation for SP9 ETL changes. The general CI workflow still runs
+# workspace-level Rust and frontend gates; this workflow adds ETL-specific
+# binary, mini-fixture, Docker, and scraper checks.
 
 on:
   pull_request:
@@ -32,22 +29,18 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # TIPPECANOE_VERSION 등은 sp9-config-print binary 가 매 job 시작 시 $GITHUB_ENV
-  # 에 inject — workspace SSOT 의 reflection. 본 workflow 에 hardcode 0.
+  # TIPPECANOE_VERSION is injected from the sp9-base-layer-config SSOT.
+  # This workflow intentionally hardcodes no Tippecanoe version.
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 1: etl-base-layer test + clippy (focused) — 일반 ci.yml 의 workspace
-  # 빌드보다 *빠른* feedback (ETL crate 만).
-  # ─────────────────────────────────────────────────────────────────────────────
   rust-focused:
     name: cargo test/clippy (etl-base-layer + sp9-base-layer-config)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1", components: "clippy" }
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with: { shared-key: sp9-etl }
       - name: cargo clippy (sp9-base-layer-config + etl-base-layer)
         run: |
@@ -58,23 +51,18 @@ jobs:
           cargo test -p sp9-base-layer-config --all-features --frozen
           cargo test -p etl-base-layer --all-features --frozen
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 2: Tippecanoe smoke — 실 binary 로 mini-fixture build → decode → verify.
-  # build 가 *작동* 하는지 (binary spawn / GeoJSON parse / pmtiles output) 의
-  # E2E 검증. CI 에서 외부 도구 회귀 잡는 용도.
-  # ─────────────────────────────────────────────────────────────────────────────
   tippecanoe-smoke:
     name: tippecanoe smoke (mini-fixture)
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 (Round 5 SHA pin, ADR 0028)
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with: { shared-key: sp9-etl }
 
-      - name: Load SSOT config (sp9-base-layer-config) → $GITHUB_ENV
+      - name: Load SSOT config into GITHUB_ENV
         run: |
           cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- env \
             >> "$GITHUB_ENV"
@@ -82,11 +70,10 @@ jobs:
       - name: Install build deps + GDAL (pinned via SSOT)
         run: |
           sudo apt-get update -q
-          # GDAL_VERSION_PIN 예: "3.4.*" — gdal-bin=3.4.* 로 pin.
           sudo apt-get install -y --no-install-recommends \
             build-essential libsqlite3-dev zlib1g-dev "gdal-bin=${GDAL_VERSION_PIN}"
 
-      - name: Build & install tippecanoe (SSOT SHA pin)
+      - name: Build and install tippecanoe (SSOT SHA pin)
         run: |
           mkdir -p /tmp/tippecanoe && cd /tmp/tippecanoe
           git init -q
@@ -95,7 +82,7 @@ jobs:
           git checkout FETCH_HEAD
           actual="$(git rev-parse HEAD)"
           if [ "$actual" != "${TIPPECANOE_GIT_SHA}" ]; then
-            echo "::error::tippecanoe SHA mismatch — expected ${TIPPECANOE_GIT_SHA}, got ${actual}"
+            echo "::error::tippecanoe SHA mismatch: expected ${TIPPECANOE_GIT_SHA}, got ${actual}"
             exit 1
           fi
           make -j"$(nproc)"
@@ -105,14 +92,13 @@ jobs:
         run: |
           tippecanoe --version
           tile-join --version
-          # tippecanoe-decode 는 --version flag 미지원 → presence 만 확인.
           which tippecanoe-decode
           ogr2ogr --version
 
       - name: Build etl-base-layer (release, --frozen)
         run: cargo build -p etl-base-layer --release --frozen
 
-      - name: Mini fixture — single-feature GeoJSON
+      - name: Create mini fixture GeoJSON
         run: |
           mkdir -p var/sample
           cat > var/sample/mini.geojson <<'EOF'
@@ -139,9 +125,7 @@ jobs:
 
       - name: Run gold build (parcels, mini-fixture)
         env:
-          # Host::detect() = Native (Linux runner).
-          # SSOT verify: default-on. mini fixture 는 100MB 이하라 MIN_BYTES override.
-          # 강남 PNU 는 SSOT (VERIFY_LANDMARKS) 에서 자동 — env 명시 X.
+          # Mini fixture output is intentionally smaller than production data.
           VERIFY_MIN_BYTES: "100"
         run: |
           ./target/release/etl-base-layer gold \
@@ -153,47 +137,45 @@ jobs:
         run: |
           test -f ./var/gold/v_smoke/parcels.pmtiles
           test -d ./var/gold/v_smoke/parcels
-          # at maxzoom (z17), 강남 좌표 tile 이 있어야 함.
-          ls ./var/gold/v_smoke/parcels/17/ | head -3 || echo "z17 디렉터리 없음"
+          first_tile="$(find ./var/gold/v_smoke/parcels/17 -type f -print -quit)"
+          if [ -z "$first_tile" ]; then
+            echo "::error::expected at least one z17 tile file"
+            exit 1
+          fi
+          printf 'first z17 tile: %s\n' "$first_tile"
 
-      - name: Decode + jq 검증 (강남 PNU exact match)
+      - name: Decode and verify exact PNU match
         run: |
-          # tippecanoe-decode → jq 로 properties.pnu 정확 비교 (substring false-positive 차단).
-          # `cargo run gold` 단계의 verify 가 이미 JSON 파싱 검증 — 본 step 은 redundant guard.
           decoded="$(tippecanoe-decode -l parcels \
             ./var/gold/v_smoke/parcels.pmtiles 17 111789 50783)"
-          # Walking the FeatureCollection (or layer wrapper) and exact-equal pnu.
           found="$(echo "$decoded" | jq '
             ([.features // empty, (.[] // empty | .features // empty)] | add // [])
             | map(.properties.pnu // empty) | any(. == "1168010100107370000")
           ')"
           if [ "$found" != "true" ]; then
-            echo "::error::강남 PNU not found in z17 tile (decode: ${decoded:0:200}...)"
+            echo "::error::Gangnam PNU not found in z17 tile (decode: ${decoded:0:200}...)"
             exit 1
           fi
-          echo "✅ 강남 PNU exact-match in z17 tile"
+          echo "Gangnam PNU exact-match in z17 tile"
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 3: Dockerfile.etl 빌드 검증 — image 가 실제로 빌드되는지 (push 안 함).
-  # ─────────────────────────────────────────────────────────────────────────────
   docker-build:
     name: Dockerfile.etl build
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435  # v3.10.0 (Round 5 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.10.0 (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17 # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.5 (Round 5 SHA pin, ADR 0028)
         with: { shared-key: sp9-etl }
 
-      - name: Load SSOT config → $GITHUB_ENV
+      - name: Load SSOT config into GITHUB_ENV
         run: |
           cargo run -q -p sp9-base-layer-config --bin sp9-config-print --frozen -- env \
             >> "$GITHUB_ENV"
 
-      - name: Build (no push) — TIPPECANOE_VERSION from SSOT
-        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991  # v6.10.0 (Round 5 SHA pin, ADR 0028)
+      - name: Build without push using SSOT Tippecanoe version
+        uses: docker/build-push-action@ca877d9245402d1537745e0e356eab47c3520991 # v6.10.0 (Round 5 SHA pin, ADR 0028)
         with:
           context: .
           file: services/etl-base-layer/Dockerfile.etl
@@ -207,15 +189,12 @@ jobs:
             TIPPECANOE_VERSION=${{ env.TIPPECANOE_VERSION }}
           tags: gongzzang/etl-base-layer:pr-${{ github.event.number || github.run_id }}
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # Job 4: scraper-py lint + dtmk_vworld import smoke (Python service 격리).
-  # ─────────────────────────────────────────────────────────────────────────────
   scraper-py:
     name: scraper-py lint + import
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0 (Round 5 SHA pin, ADR 0028)
         with:
           python-version: "3.11"
           cache: pip
@@ -223,15 +202,12 @@ jobs:
       - name: pip install
         working-directory: services/scraper-py
         run: |
-          # ADR 0028 — pip / ruff 모두 reproducible pin. Codex Round 6 finding #11 + #15 fix.
-          # `pip install --upgrade pip` 의 floating upgrade 제거.
           python -m pip install 'pip==24.3.1'
           pip install -r requirements.txt
           pip install 'ruff==0.7.4'
       - name: ruff check (mandatory)
         working-directory: services/scraper-py
-        # Codex Round 6 finding #15 — "있으면" optional skip 제거. validation 단계의 lint 는 항상 강제.
         run: python -m ruff check .
-      - name: import smoke (script not actually executed)
+      - name: import smoke (script not executed)
         working-directory: services/scraper-py
         run: python -c "import dtmk_vworld; print('import OK')"

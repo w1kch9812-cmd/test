@@ -23,6 +23,11 @@ write_lefthook() {
   cat > "${tmp_root}/lefthook.yml"
 }
 
+write_workflow() {
+  mkdir -p "${tmp_root}/.github/workflows"
+  cat > "${tmp_root}/.github/workflows/ci.yml"
+}
+
 assert_success() {
   local name="$1"
   shift
@@ -80,3 +85,20 @@ pre-commit:
       run: gitleaks protect --staged --redact -v || echo "gitleaks not installed locally - CI enforces"
 YAML
 assert_failure_contains "rejects ci-enforces skip wording" "CI enforces" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_lefthook <<'YAML'
+pre-push:
+  commands:
+    cargo-check:
+      run: cargo check --workspace --all-features
+YAML
+write_workflow <<'YAML'
+name: CI
+jobs:
+  fake-pass:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: cargo check --workspace || echo "cargo not installed locally"
+YAML
+assert_failure_contains "rejects workflow echo fallback" "fake-pass fallback" bash "$script" "$tmp_root"
