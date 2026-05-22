@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn rejects_listing_marker_tile_path_without_pbf_suffix() {
         let err = parse_listing_marker_tile_query("8", "10", "11", ListingMarkerFilter::AllActive)
-            .unwrap_err();
+            .expect_err("z below listing marker tile minimum must be rejected");
 
         assert_eq!(err.status, StatusCode::BAD_REQUEST);
     }

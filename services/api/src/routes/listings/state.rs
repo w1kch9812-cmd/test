@@ -1,0 +1,17 @@
+use std::sync::Arc;
+
+use listing_domain::repository::ListingRepository;
+use listing_photo_domain::repository::ListingPhotoRepository;
+use parcel_lookup::ParcelInfoLookup;
+
+/// 핸들러 공유 상태.
+#[derive(Clone)]
+pub struct ListingsState {
+    /// `Listing` 저장소.
+    pub listing_repo: Arc<dyn ListingRepository>,
+    /// `ListingPhoto` 저장소.
+    pub photo_repo: Arc<dyn ListingPhotoRepository>,
+    /// PNU → 행정/지목/용도지역 lookup (ADR 0018, SP9 T4).
+    /// production = `VWorldParcelInfoLookup`, dev/test = `NoOpParcelInfoLookup`.
+    pub parcel_lookup: Arc<dyn ParcelInfoLookup>,
+}
