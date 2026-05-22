@@ -5,7 +5,7 @@
 | Date | 2026-05-22 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `d7b0085` audit evidence refresh, `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup, `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
+| Latest Gongzzang commits | `cc83aed` internal Markdown link enforcement, `d224a88` lefthook fake-pass removal, `8cd1390` stale temporary marker cleanup, `d7b0085` audit evidence refresh, `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -48,6 +48,8 @@ For this implementation slice, the concrete deliverables are:
 | Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions; `906b7bd` realigned the DB evidence path to `crates/db/src/listing/marker_tile.rs` after the repository split | Covered |
 | Rust TLS supply-chain advisories | `f953380` moves the workspace to Rust `1.91.1`, pins the matched AWS SDK line, uses `default-https-client`, and removes `rustls-webpki 0.101.x` from the dependency graph | Covered locally |
 | Rust/SQLx/web local verification gates | Fresh `cargo deny`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo sqlx prepare --workspace --check`, `pnpm lint`, `pnpm test`, and `pnpm lefthook run pre-push` evidence | Covered locally |
+| Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
+| Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
 | Platform-core manifest/contract CORS behavior | `../platform-core/services/api/src/routes/mod.rs` now has RED/GREEN coverage for local `localhost:3900` manifest/marker-contract preflights, invalid local-origin fallback using the same default-origin SSOT, and production default origin list remaining empty; live HTTP smoke on `127.0.0.1:18082` returned `access-control-allow-origin: http://localhost:3900` for both endpoints | Covered |
 | Whole product production launch | AWS/production data/deployment are outside this local implementation slice | Not covered |
@@ -94,6 +96,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-
 
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
 # check-pnu-anchor-pbf-marker-contract-tests-ok
+
+bash scripts/lefthook/check-no-fake-pass.tests.sh
+# ok - allows strict commands
+# ok - rejects echo fallback
+# ok - rejects ci-enforces skip wording
+
+bash scripts/lefthook/check-no-fake-pass.sh
+# lefthook-no-fake-pass-ok
+
+bash scripts/ci/check-markdown-links.tests.sh
+# ok - checks internal links without network
+# ok - fails on missing internal relative link
+
+bash scripts/ci/check-markdown-links.sh
+# markdown-links-ok files=96 links=301
+
+pnpm lefthook run pre-push
+# includes cargo-check, cargo-clippy, catalog-m1-boundary, lefthook-no-fake-pass,
+# markdown-links, sqlx-prepare-check, and typecheck; all passed
 ```
 
 `906b7bd` is intentionally a guardrail-only follow-up: it prevents a false negative caused by the
