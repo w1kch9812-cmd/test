@@ -5,6 +5,7 @@ describe("__Host- sid cookie helpers (production)", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.gongzzang.test");
     vi.stubEnv("INTERNAL_AUTH_SECRET", "production-internal-auth-secret");
   });
 

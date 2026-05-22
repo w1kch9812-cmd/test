@@ -28,8 +28,12 @@ const requiredInternalAuthSecret = z
     message: "must be configured explicitly in production",
   });
 
+const publicApiBaseUrl = isProduction
+  ? z.string().url()
+  : z.string().url().default("http://localhost:8080");
+
 const PublicEnvSchema = z.object({
-  NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:8080"),
+  NEXT_PUBLIC_API_BASE_URL: publicApiBaseUrl,
   NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: requiredPublicClientId,
   NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: optionalUrl,
   NEXT_PUBLIC_TILES_MANIFEST_URL: optionalUrl,
