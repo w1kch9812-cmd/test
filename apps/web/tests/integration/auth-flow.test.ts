@@ -4,7 +4,11 @@ import { NextRequest } from "next/server";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as callbackGET } from "@/app/api/auth/callback/route";
 import { POST as loginPOST } from "@/app/api/auth/login/route";
-import { SID_COOKIE_NAME, TEMP_COOKIE_NAME, verifyTempPayload } from "@/lib/session/cookie";
+import {
+  AUTH_STATE_COOKIE_NAME,
+  SID_COOKIE_NAME,
+  verifyAuthStatePayload,
+} from "@/lib/session/cookie";
 import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 
 vi.mock("next-intl/server", () => ({
@@ -52,22 +56,22 @@ describe("auth flow integration", () => {
     const loginRes = await loginPOST(loginReq);
     expect(loginRes.status).toBe(302);
     const setCookie = loginRes.headers.get("set-cookie") ?? "";
-    expect(setCookie).toContain(`${TEMP_COOKIE_NAME}=`);
+    expect(setCookie).toContain(`${AUTH_STATE_COOKIE_NAME}=`);
 
-    const tmpMatch = setCookie.match(new RegExp(`${TEMP_COOKIE_NAME}=([^;]+)`));
-    expect(tmpMatch).not.toBeNull();
-    const tmp = String(tmpMatch?.[1]);
-    // C2: cookie is now HMAC-signed (payload.mac); use verifyTempPayload to decode
-    const rawPayload = verifyTempPayload(tmp);
+    const authStateMatch = setCookie.match(new RegExp(`${AUTH_STATE_COOKIE_NAME}=([^;]+)`));
+    expect(authStateMatch).not.toBeNull();
+    const authState = String(authStateMatch?.[1]);
+    // C2: cookie is now HMAC-signed (payload.mac); use verifyAuthStatePayload to decode
+    const rawPayload = verifyAuthStatePayload(authState);
     expect(rawPayload).not.toBeNull();
-    if (!rawPayload) throw new Error("verifyTempPayload returned null");
+    if (!rawPayload) throw new Error("verifyAuthStatePayload returned null");
     const decoded = JSON.parse(rawPayload) as {
       state: string;
     };
 
     const callbackReq = new NextRequest(
       `http://localhost:3000/api/auth/callback?code=abc&state=${decoded.state}`,
-      { headers: { cookie: `${TEMP_COOKIE_NAME}=${tmp}` } },
+      { headers: { cookie: `${AUTH_STATE_COOKIE_NAME}=${authState}` } },
     );
     const callbackRes = await callbackGET(callbackReq);
     expect(callbackRes.status).toBe(302);

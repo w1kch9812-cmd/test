@@ -6,10 +6,10 @@ import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { exchangeCode, type TokenResult } from "@/lib/oidc";
 import {
-  deleteTempCookie,
+  AUTH_STATE_COOKIE_NAME,
+  deleteAuthStateCookie,
   setSidCookie,
-  TEMP_COOKIE_NAME,
-  verifyTempPayload,
+  verifyAuthStatePayload,
 } from "@/lib/session/cookie";
 import { createSession, REFRESH_TTL_SEC } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
@@ -19,9 +19,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const tmpCookie = req.cookies.get(TEMP_COOKIE_NAME)?.value;
+  const authStateCookie = req.cookies.get(AUTH_STATE_COOKIE_NAME)?.value;
 
-  if (!code || !state || !tmpCookie) {
+  if (!code || !state || !authStateCookie) {
     return problem({
       type: "auth/state-mismatch",
       title: t("verifyFailedTitle"),
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   // C2: verify HMAC signature before trusting cookie contents
-  const rawPayload = verifyTempPayload(tmpCookie);
+  const rawPayload = verifyAuthStatePayload(authStateCookie);
   if (!rawPayload) {
     return problem({
       type: "auth/state-mismatch",
@@ -42,14 +42,14 @@ export async function GET(req: NextRequest) {
     }).toResponse();
   }
 
-  let tmp: {
+  let authStatePayload: {
     code_verifier: string;
     state: string;
     nonce: string;
     return_to: string;
   };
   try {
-    tmp = JSON.parse(rawPayload) as typeof tmp;
+    authStatePayload = JSON.parse(rawPayload) as typeof authStatePayload;
   } catch {
     return problem({
       type: "auth/state-mismatch",
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
   }
 
   // I1: timing-safe state comparison (timing attack prevention)
-  const a = Buffer.from(tmp.state, "utf-8");
+  const a = Buffer.from(authStatePayload.state, "utf-8");
   const b = Buffer.from(state, "utf-8");
   if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return problem({
@@ -79,9 +79,9 @@ export async function GET(req: NextRequest) {
       clientId: env.ZITADEL_CLIENT_ID,
       redirectUri: env.ZITADEL_REDIRECT_URI,
       callbackUrl: new URL(req.url),
-      expectedState: tmp.state,
-      code_verifier: tmp.code_verifier,
-      expectedNonce: tmp.nonce,
+      expectedState: authStatePayload.state,
+      code_verifier: authStatePayload.code_verifier,
+      expectedNonce: authStatePayload.nonce,
     });
   } catch (err) {
     // I4: production 에서 err.message 노출 제거 (internal info leak 방지)
@@ -118,14 +118,14 @@ export async function GET(req: NextRequest) {
   }).catch(() => undefined);
 
   // C1: sanitize return_to before redirect (open redirect prevention — second line of defense)
-  const redirectTo = sanitizeReturnTo(tmp.return_to);
+  const redirectTo = sanitizeReturnTo(authStatePayload.return_to);
 
   return new NextResponse(null, {
     status: 302,
     headers: [
       ["Location", redirectTo],
       ["Set-Cookie", setSidCookie(sid, REFRESH_TTL_SEC)],
-      ["Set-Cookie", deleteTempCookie()],
+      ["Set-Cookie", deleteAuthStateCookie()],
     ],
   });
 }
