@@ -42,6 +42,19 @@ describe("proxy platform-core receiver public access", () => {
     expect(res.status).toBe(200);
   });
 
+  it("does not expose dev-x9-test in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const req = new NextRequest("https://gongzzang.com/dev-x9-test");
+
+      const res = await proxy(req);
+
+      expect(res.status).toBe(404);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("allows platform-core PBF marker tile origin in production CSP", async () => {
     vi.stubEnv("NODE_ENV", "production");
     try {

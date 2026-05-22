@@ -25,10 +25,9 @@ const PUBLIC_PATHS = [
   "/api/auth",
   "/platform-core/events",
   "/api/proxy/map/v1/marker-tiles/listing",
-  "/dev-tiles",
-  "/dev-x9-test",
   "/fonts",
 ];
+const DEV_ONLY_PUBLIC_PATHS = ["/dev-tiles", "/dev-x9-test"];
 const ADMIN_PATHS = ["/admin"];
 const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
 // SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
@@ -46,7 +45,16 @@ const BROKER_GATED_RULES: readonly BrokerRule[] = [
 const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
 
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+  return [...PUBLIC_PATHS, ...DEV_ONLY_PUBLIC_PATHS].some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+function isProductionDevOnlyPath(pathname: string): boolean {
+  return (
+    process.env.NODE_ENV === "production" &&
+    DEV_ONLY_PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  );
 }
 
 function isLocalHostname(hostname: string): boolean {
@@ -151,6 +159,12 @@ function nextWithSecurityHeaders(reqHeaders: Headers, cspHeader: string): NextRe
   return res;
 }
 
+function notFoundWithSecurityHeaders(cspHeader: string): NextResponse {
+  const res = new NextResponse(null, { status: 404 });
+  res.headers.set("Content-Security-Policy", cspHeader);
+  return res;
+}
+
 function redirectToLogin(req: NextRequest, pathname: string): NextResponse {
   const loginUrl = new URL("/login", req.url);
   loginUrl.searchParams.set("returnTo", sanitizeReturnTo(pathname));
@@ -178,6 +192,10 @@ export async function proxy(req: NextRequest) {
   reqHeaders.set("x-csp-nonce", nonce);
 
   // 3. Auth gate
+  if (isProductionDevOnlyPath(url.pathname)) {
+    return notFoundWithSecurityHeaders(cspHeader);
+  }
+
   if (isPublic(url.pathname)) {
     return nextWithSecurityHeaders(reqHeaders, cspHeader);
   }
