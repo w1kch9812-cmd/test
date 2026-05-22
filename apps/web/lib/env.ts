@@ -26,6 +26,13 @@ const forbiddenProductionZitadelIdentifiers = new Set([
 const isProduction = process.env.NODE_ENV === "production";
 const loopbackHostnames = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
 
+const isNotRepeatedProductionSecret = (value: string) => {
+  if (!isProduction) {
+    return true;
+  }
+  return new Set(value).size > 1;
+};
+
 const isProductionPublicUrl = (value: string) => {
   if (!isProduction) {
     return true;
@@ -82,6 +89,9 @@ const requiredInternalAuthSecret = z
   })
   .refine((value) => !isProduction || value !== devInternalAuthSecret, {
     message: "must be configured explicitly in production",
+  })
+  .refine(isNotRepeatedProductionSecret, {
+    message: "must not be a repeated character in production",
   });
 
 const requiredSessionSecret = z
@@ -90,6 +100,9 @@ const requiredSessionSecret = z
   .min(32)
   .refine((value) => !isProduction || !forbiddenProductionSessionSecrets.has(value), {
     message: "must be configured explicitly in production",
+  })
+  .refine(isNotRepeatedProductionSecret, {
+    message: "must not be a repeated character in production",
   });
 
 const requiredZitadelIdentifier = z

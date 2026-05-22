@@ -147,6 +147,13 @@ describe("env schema (SP6-i extension)", () => {
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
 
+  it("throws on repeated-character SESSION_SECRET in production", async () => {
+    setValidProductionEnv();
+    process.env.SESSION_SECRET = "x".repeat(32);
+
+    await expect(import("@/lib/env")).rejects.toThrow(/SESSION_SECRET/);
+  });
+
   it("throws on missing INTERNAL_AUTH_SECRET in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
@@ -182,6 +189,13 @@ describe("env schema (SP6-i extension)", () => {
   it("throws on too-short INTERNAL_AUTH_SECRET in production", async () => {
     setValidProductionEnv();
     process.env.INTERNAL_AUTH_SECRET = "production-short-secret";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/INTERNAL_AUTH_SECRET/);
+  });
+
+  it("throws on repeated-character INTERNAL_AUTH_SECRET in production", async () => {
+    setValidProductionEnv();
+    process.env.INTERNAL_AUTH_SECRET = "x".repeat(32);
 
     await expect(import("@/lib/env")).rejects.toThrow(/INTERNAL_AUTH_SECRET/);
   });
