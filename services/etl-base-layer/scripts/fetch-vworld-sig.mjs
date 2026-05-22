@@ -33,6 +33,9 @@ const SIG = getArg("--sig", "11680"); // 강남구 default
 const OUTPUT = getArg("--output", resolve(REPO_ROOT, "var/sample/gangnam.geojson"));
 const MAX_PAGES = Number.parseInt(getArg("--max-pages", "5"), 10);
 const PAGE_SIZE = 1000;
+const writeLine = (message = "") => {
+  process.stdout.write(`${message}\n`);
+};
 
 // ===== .env loader (KEY=VALUE per line) =====
 function loadEnv() {
@@ -84,7 +87,7 @@ async function fetchPage(page) {
 
 // ===== main =====
 async function main() {
-  console.log(`Fetching SIG=${SIG} (max ${MAX_PAGES} pages of ${PAGE_SIZE})`);
+  writeLine(`Fetching SIG=${SIG} (max ${MAX_PAGES} pages of ${PAGE_SIZE})`);
 
   // probe page 1 to get total
   const probe = await fetchPage(1);
@@ -94,7 +97,7 @@ async function main() {
   }
   const total = Number.parseInt(probe?.response?.page?.total ?? 0, 10);
   const totalPages = Math.min(Math.ceil(total / PAGE_SIZE), MAX_PAGES);
-  console.log(`  total=${total.toLocaleString()} features, fetching ${totalPages} page(s)`);
+  writeLine(`  total=${total.toLocaleString()} features, fetching ${totalPages} page(s)`);
 
   const allFeatures = [];
   // re-use probe's features as page 1 result
@@ -119,12 +122,12 @@ async function main() {
       });
     }
   }
-  console.log(`\n  fetched ${allFeatures.length.toLocaleString()} features`);
+  writeLine(`\n  fetched ${allFeatures.length.toLocaleString()} features`);
 
   mkdirSync(dirname(OUTPUT), { recursive: true });
   const fc = { type: "FeatureCollection", features: allFeatures };
   writeFileSync(OUTPUT, JSON.stringify(fc));
-  console.log(`  wrote ${OUTPUT}`);
+  writeLine(`  wrote ${OUTPUT}`);
 }
 
 await main();

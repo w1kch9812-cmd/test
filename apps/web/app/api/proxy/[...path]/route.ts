@@ -6,59 +6,86 @@ import { problem } from "@/lib/http/problem";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession } from "@/lib/session/store";
 
+const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
+
+async function resolveBearer(req: NextRequest): Promise<string | undefined> {
+  const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
+  if (!sid) return undefined;
+
+  const session = await getSession(sid);
+  return session?.access_token;
+}
+
+function createRequestId(req: NextRequest): string {
+  return (
+    req.headers.get("x-request-id") ??
+    `req_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 26).toUpperCase()}`
+  );
+}
+
+function searchParamsRecord(search: string): Record<string, string> | undefined {
+  if (!search) return undefined;
+
+  const searchParams: Record<string, string> = {};
+  for (const [key, value] of new URLSearchParams(search).entries()) {
+    searchParams[key] = value;
+  }
+  return searchParams;
+}
+
+async function assignJsonBody(req: NextRequest, requestInit: KyOptions): Promise<void> {
+  if (!BODY_METHODS.has(req.method)) return;
+
+  try {
+    requestInit.json = await req.json();
+  } catch {
+    // body 없는 요청 허용
+  }
+}
+
+async function buildProxyRequestOptions(
+  req: NextRequest,
+  requestId: string,
+  bearer: string | undefined,
+): Promise<KyOptions> {
+  const headers: Record<string, string> = { "x-request-id": requestId };
+  if (bearer) headers.Authorization = `Bearer ${bearer}`;
+
+  // throwHttpErrors=false: 4xx/5xx 도 정상 Response 로 받아 body 한 번만 읽음.
+  // 기존 동작 (throw → catch → err.response.text()) 은 ky 가 error 생성 시 body 를
+  // 내부 소비해서 "Body is unusable" 에러 발생. body single consumption 으로 우회.
+  const requestInit: KyOptions = {
+    method: req.method,
+    headers,
+    throwHttpErrors: false,
+    searchParams: searchParamsRecord(new URL(req.url).search),
+  };
+
+  await assignJsonBody(req, requestInit);
+  return requestInit;
+}
+
+async function readProxyBody(
+  response: Response,
+  contentType: string,
+): Promise<string | ArrayBuffer> {
+  return isBinaryProxyResponse(contentType) ? response.arrayBuffer() : response.text();
+}
+
 async function forward(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
   const t = await getTranslations("server.proxy");
   const path = params.path.join("/");
-  const url = new URL(req.url);
-  const search = url.search;
-
-  // SP6-i: sid → access_token 변환
-  const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
-  let bearer: string | undefined;
-  if (sid) {
-    const session = await getSession(sid);
-    if (session) bearer = session.access_token;
-  }
-
   const api = createServerApi();
-
   // SP-Obs T2: X-Request-Id propagation -- 프론트가 보낸 ID 또는 자동 생성.
   // backend Axum middleware 가 동일 ID 를 응답 echo + tracing span 에 attach.
-  const requestId =
-    req.headers.get("x-request-id") ??
-    `req_${(globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 26).toUpperCase()}`;
+  const requestId = createRequestId(req);
 
   try {
-    const headers: Record<string, string> = { "x-request-id": requestId };
-    if (bearer) headers.Authorization = `Bearer ${bearer}`;
-    // throwHttpErrors=false: 4xx/5xx 도 정상 Response 로 받아 body 한 번만 읽음.
-    // 기존 동작 (throw → catch → err.response.text()) 은 ky 가 error 생성 시 body 를
-    // 내부 소비해서 "Body is unusable" 에러 발생. body single consumption 으로 우회.
-    const requestInit: KyOptions = {
-      method: req.method,
-      headers,
-      throwHttpErrors: false,
-    };
-
-    if (search) {
-      const searchParams: Record<string, string> = {};
-      for (const [k, v] of new URLSearchParams(search).entries()) searchParams[k] = v;
-      requestInit.searchParams = searchParams;
-    }
-
-    if (["POST", "PUT", "PATCH"].includes(req.method)) {
-      try {
-        requestInit.json = await req.json();
-      } catch {
-        // body 없는 요청 허용
-      }
-    }
-
+    const bearer = await resolveBearer(req);
+    const requestInit = await buildProxyRequestOptions(req, requestId, bearer);
     const response = await api(path, requestInit);
     const contentType = response.headers.get("content-type") ?? "text/plain";
-    const body = isBinaryProxyResponse(contentType)
-      ? await response.arrayBuffer()
-      : await response.text();
+    const body = await readProxyBody(response, contentType);
     // SP-Obs T2: backend echo 받은 X-Request-Id 응답 propagate (debugging UX).
     const responseRequestId = response.headers.get("x-request-id") ?? requestId;
     return new NextResponse(body, {

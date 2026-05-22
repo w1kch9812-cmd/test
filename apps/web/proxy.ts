@@ -102,24 +102,9 @@ async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null
   return null;
 }
 
-/**
- * Next.js 16 `proxy` — *모든 request* 의 auth gate + CSP nonce + rate limit.
- *
- * Next.js 16 부터 `middleware.ts` → `proxy.ts` 로 rename (deprecated).
- * runtime = `nodejs` (configurable 안 됨) — `node:crypto` / Redis 직접 사용 가능.
- * 본 file 이 `apps/web/proxy.ts` + `proxy` 이름 export 일 때만 Next.js 가 자동 invoke.
- */
-export async function proxy(req: NextRequest) {
-  const url = req.nextUrl;
-
-  // 1. Rate limit (auth routes only)
-  const rateBlocked = await checkAuthRateLimit(req);
-  if (rateBlocked) return rateBlocked;
-
-  // 2. CSP nonce 주입
-  const nonce = randomBytes(16).toString("base64");
+function buildCspHeader(hostname: string, nonce: string): string {
   const isDev = process.env.NODE_ENV !== "production";
-  const allowLocalHttpMapRuntime = isDev || isLocalHostname(url.hostname);
+  const allowLocalHttpMapRuntime = isDev || isLocalHostname(hostname);
 
   // Dev: Naver Maps gl 이 일부 tile/cursor 를 HTTP 로 요청 (legacy) → http:/https: 둘 다 허용.
   // Production: SP6-iam-infra 가 strict allowlist 정리.
@@ -134,13 +119,14 @@ export async function proxy(req: NextRequest) {
   ]
     .sort()
     .join(" ");
+  const tileConnectSrc = tileOrigins ? ` ${tileOrigins}` : "";
   const connectSrc = allowLocalHttpMapRuntime
-    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:${tileOrigins ? ` ${tileOrigins}` : ""}`
-    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tileOrigins ? ` ${tileOrigins}` : ""}`;
+    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:${tileConnectSrc}`
+    : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tileConnectSrc}`;
 
   // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
   // 'strict-dynamic' 와 함께 modern browser 에서 호환 (CSP3).
-  const cspHeader = [
+  return [
     `default-src 'self'`,
     // Naver Maps SDK 는 app/layout.tsx 의 <head> 에서 sync 로드되므로 strict-dynamic 을 쓰면
     // SDK 자체가 차단된다. 대신 명시적 allowlist + nonce + unsafe-eval (gl WebGL 필수) 조합.
@@ -157,29 +143,53 @@ export async function proxy(req: NextRequest) {
     `base-uri 'self'`,
     `form-action 'self' ${env.ZITADEL_ISSUER}`,
   ].join("; ");
+}
 
+function nextWithSecurityHeaders(reqHeaders: Headers, cspHeader: string): NextResponse {
+  const res = NextResponse.next({ request: { headers: reqHeaders } });
+  res.headers.set("Content-Security-Policy", cspHeader);
+  return res;
+}
+
+function redirectToLogin(req: NextRequest, pathname: string): NextResponse {
+  const loginUrl = new URL("/login", req.url);
+  loginUrl.searchParams.set("returnTo", sanitizeReturnTo(pathname));
+  return NextResponse.redirect(loginUrl);
+}
+
+/**
+ * Next.js 16 `proxy` — *모든 request* 의 auth gate + CSP nonce + rate limit.
+ *
+ * Next.js 16 부터 `middleware.ts` → `proxy.ts` 로 rename (deprecated).
+ * runtime = `nodejs` (configurable 안 됨) — `node:crypto` / Redis 직접 사용 가능.
+ * 본 file 이 `apps/web/proxy.ts` + `proxy` 이름 export 일 때만 Next.js 가 자동 invoke.
+ */
+export async function proxy(req: NextRequest) {
+  const url = req.nextUrl;
+
+  // 1. Rate limit (auth routes only)
+  const rateBlocked = await checkAuthRateLimit(req);
+  if (rateBlocked) return rateBlocked;
+
+  // 2. CSP nonce 주입
+  const nonce = randomBytes(16).toString("base64");
+  const cspHeader = buildCspHeader(url.hostname, nonce);
   const reqHeaders = new Headers(req.headers);
   reqHeaders.set("x-csp-nonce", nonce);
 
   // 3. Auth gate
   if (isPublic(url.pathname)) {
-    const res = NextResponse.next({ request: { headers: reqHeaders } });
-    res.headers.set("Content-Security-Policy", cspHeader);
-    return res;
+    return nextWithSecurityHeaders(reqHeaders, cspHeader);
   }
 
   const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
   if (!sid) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("returnTo", sanitizeReturnTo(url.pathname));
-    return NextResponse.redirect(loginUrl);
+    return redirectToLogin(req, url.pathname);
   }
 
   const session: SessionData | null = await getSession(sid);
   if (!session) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("returnTo", sanitizeReturnTo(url.pathname));
-    const res = NextResponse.redirect(loginUrl);
+    const res = redirectToLogin(req, url.pathname);
     res.cookies.delete(SID_COOKIE_NAME);
     return res;
   }
@@ -192,9 +202,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/forbidden", req.url));
   }
 
-  const res = NextResponse.next({ request: { headers: reqHeaders } });
-  res.headers.set("Content-Security-Policy", cspHeader);
-  return res;
+  return nextWithSecurityHeaders(reqHeaders, cspHeader);
 }
 
 export const config = {

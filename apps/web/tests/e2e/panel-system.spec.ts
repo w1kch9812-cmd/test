@@ -14,7 +14,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { plantAuthenticatedSession } from "./auth";
 
 const TEST_PNU = "1168010100107370000"; // 19-digit fixture
-const TEST_LISTING_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+const TEST_LISTING_ID = "lst_01HXY3NK0Z9F6S1B2C3D4E5F6G";
 
 async function expectPanelParam(page: Page, expected: string | null) {
   await expect.poll(() => new URL(page.url()).searchParams.get("p")).toBe(expected);
@@ -46,7 +46,7 @@ test.describe("SP10 Panel System", () => {
   });
 
   test("URL hydration: depth 2 chain", async ({ page }) => {
-    await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_UUID}.summary`);
+    await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_ID}.summary`);
     // breadcrumb 에 두 entry 노출 — registry 가 known 이라 fetcher 결과와 무관하게 표시.
     const nav = page.getByRole("navigation", { name: /경로/ });
     await expect(nav.getByText("필지")).toBeVisible();
@@ -55,7 +55,7 @@ test.describe("SP10 Panel System", () => {
 
   test("Browser back pops top panel", async ({ page }) => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary`);
-    await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_UUID}.summary`);
+    await page.goto(`/listings?p=parcel:${TEST_PNU}.summary>listing:${TEST_LISTING_ID}.summary`);
     await page.goBack();
     await expectPanelParam(page, `parcel:${TEST_PNU}.summary`);
   });

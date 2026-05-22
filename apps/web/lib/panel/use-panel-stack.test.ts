@@ -15,6 +15,8 @@ vi.mock("next/navigation", () => ({
 
 import { usePanelStack } from "./use-panel-stack";
 
+const TEST_LISTING_ID = "lst_01HXY3NK0Z9F6S1B2C3D4E5F6G";
+
 beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
@@ -52,7 +54,7 @@ describe("usePanelStack", () => {
   it("pop truncates the stack with router.replace", () => {
     mockSearchParams.set(
       "p",
-      "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary",
+      `parcel:1168010100107370000.summary>listing:${TEST_LISTING_ID}.summary`,
     );
     const { result } = renderHook(() => usePanelStack());
     act(() => {
@@ -102,7 +104,7 @@ describe("usePanelStack", () => {
   it("truncate uses router.replace (not push) — does not extend history", () => {
     mockSearchParams.set(
       "p",
-      "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary",
+      `parcel:1168010100107370000.summary>listing:${TEST_LISTING_ID}.summary`,
     );
     const { result } = renderHook(() => usePanelStack());
     act(() => {
