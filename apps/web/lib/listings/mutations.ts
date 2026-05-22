@@ -33,7 +33,6 @@ export async function createListing(
     title: values.title,
     description: values.description,
     contact_visibility: values.contact_visibility,
-    geom_point: values.geom_point ?? null,
   };
 
   const json = await api.post("listings", { json: body }).json<unknown>();

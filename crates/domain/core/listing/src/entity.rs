@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use shared_kernel::area::AreaM2;
 use shared_kernel::contact_visibility::ContactVisibility;
 use shared_kernel::description::Description;
-use shared_kernel::geometry::PointSrid;
 use shared_kernel::id::{Id, ListingMarker, UserMarker};
 use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::listing_title::ListingTitle;
@@ -49,8 +48,6 @@ pub struct Listing {
     pub view_count: u64,
     /// 북마크 수 (`u64`).
     pub bookmark_count: u64,
-    /// 매물 좌표 (`WGS84` `Point`). 선택 — 필지 좌표는 R2.
-    pub geom_point: Option<PointSrid>,
     /// 생성 시각.
     pub created_at: DateTime<Utc>,
     /// 마지막 갱신 시각.
@@ -86,7 +83,6 @@ impl Listing {
         area: AreaM2,
         title: ListingTitle,
         description: Description,
-        geom_point: Option<PointSrid>,
         now: DateTime<Utc>,
     ) -> Result<Self, ListingError> {
         let deposit_required = transaction_type.requires_deposit();
@@ -123,7 +119,6 @@ impl Listing {
             contact_visibility: ContactVisibility::LoginRequired,
             view_count: 0,
             bookmark_count: 0,
-            geom_point,
             created_at: now,
             updated_at: now,
             expires_at: None,
@@ -305,9 +300,6 @@ impl Listing {
         if let Some(a) = update.area {
             self.area = a;
         }
-        if let Some(g) = update.geom_point {
-            self.geom_point = g;
-        }
         if let Some(c) = update.contact_visibility {
             self.contact_visibility = c;
         }
@@ -320,8 +312,8 @@ impl Listing {
 
 /// `Listing::update_editable_fields` 의 partial-update 페이로드.
 ///
-/// 외부 `Option` = "변경 의도 있음" / 내부 `Option` (`deposit` / `monthly_rent` /
-/// `geom_point`) = 실제 값 (`None` 으로 clear 가능). 이 두-단계 Option 패턴이
+/// 외부 `Option` = "변경 의도 있음" / 내부 `Option` (`deposit` / `monthly_rent`)
+/// = 실제 값 (`None` 으로 clear 가능). 이 두-단계 Option 패턴이
 /// partial update 의 표준 — `null` 로 clear 와 "필드 미언급" 을 구분.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ListingUpdate {
@@ -337,8 +329,6 @@ pub struct ListingUpdate {
     pub monthly_rent: Option<Option<MoneyKrw>>,
     /// 면적.
     pub area: Option<AreaM2>,
-    /// 좌표 — 외부 `Some` = 변경, 내부 `None` = 좌표 제거.
-    pub geom_point: Option<Option<PointSrid>>,
     /// 연락처 공개 범위.
     pub contact_visibility: Option<ContactVisibility>,
 }

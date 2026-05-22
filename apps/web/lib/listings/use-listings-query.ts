@@ -12,24 +12,21 @@ const PAGE_SIZE = 20;
  */
 export function useListingsQuery() {
   const filters = useListingsStore((s) => s.filters);
-  const bounds = useListingsStore((s) => s.bounds);
   const { stack } = usePanelStack();
 
   const top = stack.entries[stack.entries.length - 1];
   const derivedPnu = top?.kind === "parcel" ? top.id : undefined;
 
   return useInfiniteQuery<ListingsResponse>({
-    queryKey: ["listings", filters, bounds, derivedPnu],
+    queryKey: ["listings", filters, derivedPnu],
     queryFn: ({ pageParam }) =>
       fetchListings({
         filters,
-        bounds,
         pnu: derivedPnu,
         page: pageParam as number,
         size: PAGE_SIZE,
       }),
     initialPageParam: 0,
     getNextPageParam: (last) => (last.has_next ? last.page + 1 : undefined),
-    enabled: bounds !== undefined,
   });
 }

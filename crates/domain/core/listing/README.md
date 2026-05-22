@@ -13,7 +13,7 @@
 
 ## 의존
 
-- `shared-kernel` (Id, MoneyKrw, AreaM2, PointSrid, Pnu, ListingType,
+- `shared-kernel` (Id, MoneyKrw, AreaM2, Pnu, ListingType,
   TransactionType, ListingStatus, ContactVisibility, ListingTitle,
   Description).
 - `user-domain` 의존 *없어요* — `UserMarker`는 `shared-kernel::id` 거쳐요.

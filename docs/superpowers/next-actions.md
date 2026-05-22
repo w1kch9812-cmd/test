@@ -1,5 +1,23 @@
 # 다음 작업 (Next Actions)
 
+> **Current gate**: 2026-05-22 — Gongzzang-owned listing PBF marker tiles are in
+> local-verification-backed. This is not a whole-product launch completion claim; re-run the linked
+> handoff/audit verification before changing or claiming this slice.
+>
+> **Current SSOT**:
+> [ADR 0018](../adr/0018-pnu-first-identity-no-coordinates.md),
+> [ADR 0037](../adr/0037-pnu-anchor-pbf-marker-tiles.md),
+> [listing PBF design spec](./specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md).
+> Handoff: [2026-05-22 listing PBF review gate](./handoff/2026-05-22-listing-pbf-review-gate.md).
+> Completion audit:
+> [2026-05-22 active goal completion audit](./handoff/2026-05-22-active-goal-completion-audit.md).
+>
+> **Boundary**: platform-core owns PNU anchors; Gongzzang owns listing semantics and
+> Gongzzang listing PBF tiles. Older sections below are historical unless explicitly
+> revalidated against the current SSOT.
+
+---
+
 > **갱신일**: 2026-05-07 EOD++ (Plan D 진행 중 — SSS 10-layer enterprise prod. 줌 + dtmk pipeline 완료, 잔여: GH Actions + L1-L10)
 > **목적**: 다음 세션이 컨텍스트 없이도 즉시 시작 가능하도록 우선순위 + 진입점 명시.
 > **SSOT**: 본 문서 = 단기 작업큐. 장기 = [`roadmap.md`](./roadmap.md). 진행 현황 = [`memory/project_progress.md`](../../memory/project_progress.md).

@@ -1,16 +1,12 @@
-//! `ListingRepository` port (interface) + 지도 마커 projection.
+//! `ListingRepository` port (interface) + listing read projections.
 //!
 //! 구현체는 sub-project 5 (`crates/db`)에서 추가.
 
-// `ListingRepository`/`ListingMarker` 처럼 모듈명 반복은 의도된 공개 API 형태.
+// `ListingRepository`처럼 모듈명 반복은 의도된 공개 API 형태.
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
 use shared_kernel::admin_division::EupmyeondongCode;
-use shared_kernel::bounding_box::BoundingBox;
-use shared_kernel::geometry::PointSrid;
-// `shared_kernel::id::ListingMarker`는 `Id<_>`용 phantom marker.
-// 이 모듈의 `ListingMarker` projection과 이름이 겹치므로 `ListingIdMarker`로 별명 부여.
 use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
 use shared_kernel::land_use_type::LandUseType;
 use shared_kernel::listing_status::ListingStatus;
@@ -34,30 +30,32 @@ pub trait ListingRepository: Send + Sync {
     /// DB 통신 실패 시 [`RepoError::Database`].
     async fn find(&self, id: &Id<ListingIdMarker>) -> Result<Option<Listing>, RepoError>;
 
-    /// 지도 마커용 lightweight projection.
-    ///
-    /// `bbox` 안에 `geom_point`이 있는 `Active` 매물만 반환해요.
-    /// 전체 [`Listing`] 대신 필요한 필드만 가져와 지도 렌더 성능을 최적화.
-    ///
-    /// # Errors
-    ///
-    /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn find_markers_in_bbox(
-        &self,
-        bbox: BoundingBox,
-    ) -> Result<Vec<ListingMarker>, RepoError>;
-
-    /// 카드 list 검색 — `status='active'` + `geom_point` not null + filter 적용.
+    /// 카드 list 검색 — `status='active'` + filter 적용.
     ///
     /// `query.size` 의 max 100 (caller 가 검증). 응답은 (cards, total\_count) 튜플.
     ///
     /// # Errors
     ///
     /// DB 통신 실패 시 [`RepoError::Database`].
-    async fn find_card_summaries_in_bbox(
+    async fn find_card_summaries(
         &self,
         query: CardSearchQuery,
     ) -> Result<(Vec<ListingCardSummary>, u64), RepoError>;
+
+    /// Gongzzang-owned listing marker `MVT/PBF` tile.
+    ///
+    /// Marker positions must come from the platform-core `PNU` anchor projection, not from
+    /// listing-owned coordinates. A successful tile must preserve `represented_count ==
+    /// eligible_count`.
+    ///
+    /// # Errors
+    ///
+    /// DB failures, incomplete anchor coverage, or completeness invariant failures return
+    /// [`RepoError::Database`].
+    async fn find_listing_marker_tile(
+        &self,
+        query: ListingMarkerTileQuery,
+    ) -> Result<ListingMarkerTile, RepoError>;
 
     /// 소유자별 매물 조회. `status`가 `Some`이면 해당 상태만.
     ///
@@ -166,23 +164,6 @@ pub struct ListingPhotoSummary {
     pub content_type: String,
 }
 
-/// 지도 마커용 lightweight `Listing` projection.
-///
-/// 지도 렌더에 필요한 필드만 (전체 `Listing` 가져오기 비용 회피).
-#[derive(Debug, Clone, PartialEq)]
-pub struct ListingMarker {
-    /// 매물 ID.
-    pub id: Id<ListingIdMarker>,
-    /// 좌표 (`WGS84`).
-    pub geom: PointSrid,
-    /// 가격 (`KRW`).
-    pub price: MoneyKrw,
-    /// 매물 유형.
-    pub listing_type: ListingType,
-    /// 거래 유형.
-    pub transaction_type: TransactionType,
-}
-
 /// 카드 list 용 풍부한 projection (지도 핀 + 우측 카드 양쪽 사용).
 ///
 /// 전체 [`Listing`] 의 21 필드 중 list 페이지에 필요한 것만.
@@ -196,8 +177,6 @@ pub struct ListingCardSummary {
     pub id: Id<ListingIdMarker>,
     /// 제목.
     pub title: String,
-    /// 좌표 (`WGS84`, `geom_point` 가 NULL 인 매물은 응답 제외).
-    pub geom: PointSrid,
     /// 매물 유형.
     pub listing_type: ListingType,
     /// 거래 유형.
@@ -223,16 +202,153 @@ pub struct ListingCardSummary {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// Gongzzang listing marker vector-tile layer name.
+pub const LISTING_MARKER_TILE_LAYER: &str = "listing";
+
+/// Initial public listing marker filter hash.
+pub const ALL_ACTIVE_LISTING_MARKER_FILTER_HASH: &str = "all-active-v1";
+
+/// Marker tile response content type.
+pub const LISTING_MARKER_TILE_CONTENT_TYPE: &str = "application/vnd.mapbox-vector-tile";
+
+/// Maximum zoom accepted by the listing marker tile API.
+pub const LISTING_MARKER_TILE_MAX_ZOOM: u8 = 24;
+
+/// Supported listing marker filters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListingMarkerFilter {
+    /// Public active listings only.
+    AllActive,
+}
+
+impl ListingMarkerFilter {
+    /// Stable cache identity for this filter.
+    #[must_use]
+    pub const fn hash(self) -> &'static str {
+        match self {
+            Self::AllActive => ALL_ACTIVE_LISTING_MARKER_FILTER_HASH,
+        }
+    }
+
+    /// Parse a public filter hash into a typed marker filter.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ListingMarkerFilterError::UnsupportedHash`] when `hash` is not registered.
+    pub fn try_from_hash(hash: &str) -> Result<Self, ListingMarkerFilterError> {
+        match hash {
+            ALL_ACTIVE_LISTING_MARKER_FILTER_HASH => Ok(Self::AllActive),
+            other => Err(ListingMarkerFilterError::UnsupportedHash(other.to_owned())),
+        }
+    }
+}
+
+/// Listing marker filter parse error.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ListingMarkerFilterError {
+    /// The filter hash is not registered or supported.
+    #[error("unsupported listing marker filter hash: {0}")]
+    UnsupportedHash(String),
+}
+
+/// Validated tile query for the listing marker PBF surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ListingMarkerTileQuery {
+    /// Web mercator zoom.
+    pub z: u8,
+    /// Web mercator x coordinate.
+    pub x: u32,
+    /// Web mercator y coordinate.
+    pub y: u32,
+    /// Typed marker filter.
+    pub filter: ListingMarkerFilter,
+}
+
+impl ListingMarkerTileQuery {
+    /// Build a query without validation. Use only when inputs are already trusted.
+    #[must_use]
+    pub const fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
+        Self { z, x, y, filter }
+    }
+
+    /// Validate public tile-coordinate input.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ListingMarkerTileQueryError`] when zoom or axis values are outside the vector-tile
+    /// coordinate range.
+    pub fn try_new(
+        z: u8,
+        x: u32,
+        y: u32,
+        filter: ListingMarkerFilter,
+    ) -> Result<Self, ListingMarkerTileQueryError> {
+        if z > LISTING_MARKER_TILE_MAX_ZOOM {
+            return Err(ListingMarkerTileQueryError::InvalidZoom { z });
+        }
+        let axis_limit = 1_u32 << u32::from(z);
+        if x >= axis_limit {
+            return Err(ListingMarkerTileQueryError::InvalidX { z, x });
+        }
+        if y >= axis_limit {
+            return Err(ListingMarkerTileQueryError::InvalidY { z, y });
+        }
+        Ok(Self::new(z, x, y, filter))
+    }
+}
+
+/// Listing marker tile coordinate validation error.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ListingMarkerTileQueryError {
+    /// Zoom is outside the accepted MVT range.
+    #[error("listing marker tile zoom out of range: {z}")]
+    InvalidZoom {
+        /// Invalid zoom.
+        z: u8,
+    },
+    /// X coordinate is outside the zoom-dependent axis range.
+    #[error("listing marker tile x out of range for z={z}: {x}")]
+    InvalidX {
+        /// Zoom.
+        z: u8,
+        /// Invalid x coordinate.
+        x: u32,
+    },
+    /// Y coordinate is outside the zoom-dependent axis range.
+    #[error("listing marker tile y out of range for z={z}: {y}")]
+    InvalidY {
+        /// Zoom.
+        z: u8,
+        /// Invalid y coordinate.
+        y: u32,
+    },
+}
+
+/// Gongzzang listing marker PBF tile plus server-side completeness metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerTile {
+    /// MVT/PBF response bytes.
+    pub bytes: Vec<u8>,
+    /// MVT source-layer name.
+    pub layer_name: &'static str,
+    /// Active listings selected for this tile and filter.
+    pub eligible_count: i64,
+    /// Listings represented by returned features or truthful aggregates.
+    pub represented_count: i64,
+    /// Raw feature count in the tile.
+    pub feature_count: i64,
+    /// Aggregate feature count in the tile.
+    pub aggregate_count: i64,
+    /// Anchor snapshot identity used by represented features.
+    pub anchor_snapshot_id: Option<String>,
+}
+
 /// 카드 list 검색 조건 (모두 optional, default 는 "전체").
 ///
 /// SP6-iii: `viewer_user_id` 가 필수 — 모든 listings endpoint 가 인증 사용자
 /// 전용이라 항상 존재. `is_bookmarked` JOIN 에 사용.
 #[derive(Debug, Clone)]
 pub struct CardSearchQuery {
-    /// 지도 영역 (4326). None 이면 한국 전체. **Deprecated (ADR 0018)** —
-    /// `pnu` / `admin_code` 기반 검색으로 대체 진행 중. `geom_point` 컬럼 제거
-    /// 시 함께 제거.
-    pub bbox: Option<BoundingBox>,
     /// 필지 PNU 19자리 정확 매칭 (ADR 0018 SP9 T4) — 폴리곤 클릭 시 사용.
     pub pnu: Option<Pnu>,
     /// 행정구역 코드 prefix 매칭 (2/5/8자리) — 시도/시군구/읍면동 어느 단계든.

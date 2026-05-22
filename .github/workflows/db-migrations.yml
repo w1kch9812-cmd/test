@@ -22,7 +22,7 @@ env:
 
 jobs:
   migrate:
-    name: V001 + V002 migrations + audit immutable
+    name: Full migrations + schema invariants
     runs-on: ubuntu-latest
 
     services:
@@ -62,7 +62,7 @@ jobs:
             sleep 1
           done
 
-      - name: Apply V001 migrations
+      - name: Apply full migration chain + schema invariants
         run: bash tests/migrations/test_v001_full.sh
 
       - name: Apply V002 migrations + audit immutable

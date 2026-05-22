@@ -1,19 +1,19 @@
--- V001_01: Core BC RDS 동적 — user, listing, listing_photo (spec § 5.1)
--- Parcel/Building/IndustrialComplex/Manufacturer는 R2 정적 — 본 파일 범위 밖 (spec § 4)
+-- V001_01: Core BC RDS tables: user, listing, listing_photo.
+-- Listing map placement is PNU-anchor owned. Listing rows do not store product coordinates.
 
 create table "user" (
     id char(30) primary key,                            -- usr_01HXY...
     zitadel_sub varchar(255) not null unique,           -- Zitadel JWT sub claim
     email varchar(320) not null unique,
-    phone_kr_hash varchar(64),                          -- SHA-256 해시 (PIPA)
+    phone_kr_hash varchar(64),                          -- SHA-256 hash (PIPA)
     display_name varchar(100) not null,
     user_kind varchar(20) not null check (user_kind in ('individual', 'corporation')),
-    business_number varchar(12),                        -- format 000-00-00000 (검증된 사업자만)
+    business_number varchar(12),                        -- format 000-00-00000
     business_verified_at timestamptz,
-    broker_license_number varchar(50),                  -- 공인중개사 자격번호
+    broker_license_number varchar(50),
     broker_verified_at timestamptz,
-    roles text[] not null default '{}',                 -- ['Buyer','Seller','Broker','Developer','Enterprise','Operator','Admin']
-    nice_verified_at timestamptz,                       -- NICE 본인인증
+    roles text[] not null default '{}',
+    nice_verified_at timestamptz,
     marketing_consent_at timestamptz,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
@@ -29,7 +29,7 @@ create index user_active_idx on "user"(created_at desc) where deleted_at is null
 create table listing (
     id char(30) primary key,                            -- lst_...
     owner_id char(30) not null references "user"(id),
-    parcel_pnu char(19) not null,                       -- R2의 Parcel과 매핑 (FK 아님 — R2이라)
+    parcel_pnu char(19) not null,
     listing_type varchar(30) not null check (listing_type in
         ('factory', 'warehouse', 'office', 'knowledge_industry_center', 'industrial_land', 'logistics_center')),
     transaction_type varchar(20) not null check (transaction_type in
@@ -46,7 +46,6 @@ create table listing (
         (contact_visibility in ('public', 'login_required', 'verified_only')),
     view_count bigint not null default 0,
     bookmark_count bigint not null default 0,
-    geom_point geometry(Point, 4326),                   -- 매물 위치 (지도 마커)
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     expires_at timestamptz,
@@ -56,7 +55,6 @@ create table listing (
 create index listing_status_idx on listing(status);
 create index listing_listing_type_idx on listing(listing_type);
 create index listing_owner_idx on listing(owner_id);
-create index listing_geom_gist_idx on listing using gist(geom_point);
 create index listing_created_idx on listing(created_at desc) where status = 'active';
 create index listing_pnu_idx on listing(parcel_pnu);
 

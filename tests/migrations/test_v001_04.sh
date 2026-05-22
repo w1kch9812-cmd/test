@@ -8,10 +8,11 @@ fi
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL not set" >&2; exit 1
 fi
+SQLX_BIN="${SQLX_BIN:-sqlx}"
 
-sqlx database drop -y >/dev/null 2>&1 || true
-sqlx database create
-sqlx migrate run --source migrations
+"$SQLX_BIN" database drop -y >/dev/null 2>&1 || true
+"$SQLX_BIN" database create
+"$SQLX_BIN" migrate run --source migrations
 
 EXPECTED=(pipeline_schedule pipeline_run)
 for t in "${EXPECTED[@]}"; do
@@ -62,7 +63,7 @@ if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint c where c.conrel
 fi
 
 # pipeline_run partial index on running status per spec § 5.4 (admin UI active runs)
-if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_indexes where tablename='pipeline_run' and indexdef ilike '%started_at%' and indexdef ilike '%where (status = ''running''::text)%';" | grep -q '^1$'; then
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_index i join pg_class idx on idx.oid=i.indexrelid join pg_class tbl on tbl.oid=i.indrelid where tbl.relname='pipeline_run' and idx.relname='pipeline_run_running_idx' and pg_get_indexdef(i.indexrelid) ilike '%started_at%' and pg_get_expr(i.indpred, i.indrelid) ilike '%status%' and pg_get_expr(i.indpred, i.indrelid) ilike '%running%';" | grep -q '^1$'; then
   echo "FAIL: pipeline_run missing partial index on started_at WHERE status='running'" >&2; exit 1
 fi
 

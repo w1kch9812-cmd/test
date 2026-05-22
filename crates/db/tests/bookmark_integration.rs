@@ -95,7 +95,6 @@ async fn seed_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingM
         AreaM2::try_new(100.00).unwrap(),
         ListingTitle::try_new("bookmark test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");
@@ -439,7 +438,6 @@ async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<L
         AreaM2::try_new(150.0).unwrap(),
         ListingTitle::try_new("active listing for detail test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");

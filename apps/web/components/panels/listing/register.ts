@@ -2,6 +2,7 @@
 // Side-effect-only module: importing this file triggers defineKind('listing') once.
 // No exports. T6 imports it from app/listings/page.tsx for registration.
 
+import { LISTING_ID_PATTERN } from "@/lib/identity/patterns";
 import { fetchListingDetail, type ListingDetail } from "@/lib/listings/api";
 import { defineKind, defineView } from "@/lib/panel/registry";
 import { ListingEmptyCard, ListingErrorCard, ListingLoadingSkeleton } from "./skeletons";
@@ -9,7 +10,7 @@ import { ListingSummaryCard } from "./summary";
 
 defineKind({
   kind: "listing",
-  idPattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  idPattern: LISTING_ID_PATTERN,
   views: {
     summary: defineView<"listing", ListingDetail>({
       component: ListingSummaryCard,

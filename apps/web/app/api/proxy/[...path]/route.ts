@@ -55,11 +55,13 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
     }
 
     const response = await api(path, requestInit);
-    const text = await response.text();
     const contentType = response.headers.get("content-type") ?? "text/plain";
+    const body = isBinaryProxyResponse(contentType)
+      ? await response.arrayBuffer()
+      : await response.text();
     // SP-Obs T2: backend echo 받은 X-Request-Id 응답 propagate (debugging UX).
     const responseRequestId = response.headers.get("x-request-id") ?? requestId;
-    return new NextResponse(text, {
+    return new NextResponse(body, {
       status: response.status,
       headers: {
         "content-type": contentType,
@@ -76,6 +78,10 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
       instance: req.url,
     }).toResponse() as unknown as NextResponse;
   }
+}
+
+function isBinaryProxyResponse(contentType: string): boolean {
+  return contentType.toLowerCase().startsWith("application/vnd.mapbox-vector-tile");
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {

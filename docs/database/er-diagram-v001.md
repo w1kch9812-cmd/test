@@ -43,7 +43,6 @@ erDiagram
         varchar listing_type
         varchar transaction_type "sale/monthly_rent/jeonse"
         bigint price_krw
-        geometry geom_point "SRID 4326"
         bigint version "optimistic locking"
     }
     listing_photo {

@@ -59,6 +59,25 @@ B2C 도메인 (`crates/domain/core/{listing, listing-photo, user}`,
 `crates/domain/market/*`, `crates/domain/insights/*`) 은 이 repo 가 영구 owner 이며
 영향 없음.
 
+### 지도/매물 마커 SSOT 및 현재 게이트
+
+지도·매물 마커 작업은 먼저 아래 문서를 확인하세요:
+
+- [ADR 0018](./docs/adr/0018-pnu-first-identity-no-coordinates.md) — Listing 위치 identity 는 PNU-first
+- [ADR 0037](./docs/adr/0037-pnu-anchor-pbf-marker-tiles.md) — PNU-anchor PBF marker tile contract
+- [Listing PBF design spec](./docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md)
+- [Listing PBF review-gate handoff](./docs/superpowers/handoff/2026-05-22-listing-pbf-review-gate.md)
+
+현재 원칙:
+
+- `platform-core` owns parcel geometry, PNU marker anchors, and public/reference spatial layers.
+- `gongzzang` owns listing semantics and Gongzzang-owned listing PBF marker tiles.
+- listing rows must not own canonical marker coordinates such as `geom_point`, latitude, or longitude.
+- launch marker requests must not use public `bbox`/`bounds` marker request shapes.
+- implementation gate is now verification-first: listing PBF endpoint, anchor read model
+  migration, and frontend listing PBF switch must be backed by tests, migration smoke, and
+  guardrails before any completion claim.
+
 ---
 
 ## 1. 절대 규칙

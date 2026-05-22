@@ -45,7 +45,6 @@ fn sample_draft(now: DateTime<Utc>) -> Listing {
         AreaM2::try_new(250.0).expect("area"),
         ListingTitle::try_new("샘플 매물").expect("title"),
         Description::try_new("위치 좋아요.").expect("desc"),
-        None,
         now,
     )
     .expect("valid draft")
@@ -512,7 +511,6 @@ fn update_editable_fields_clearing_deposit_on_jeonse_returns_mismatch() {
         AreaM2::try_new(250.0).unwrap(),
         ListingTitle::try_new("Jeonse 매물").unwrap(),
         Description::try_new("desc").unwrap(),
-        None,
         t0(),
     )
     .expect("valid jeonse draft");

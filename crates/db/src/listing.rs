@@ -1,13 +1,7 @@
-//! `ListingRepository` `Postgres` 구현체 (spec § 5.1 — 21 필드 + `PostGIS` + `OCC`).
+//! `ListingRepository` `Postgres` implementation.
 //!
-//! `geom_point` 은 `PostGIS` `geometry(Point, 4326)`. SQL 경계에서 `ST_MakePoint`
-//! / `ST_X` / `ST_Y` 로 lng/lat 쌍과 변환. `area_m2` `numeric(12, 2)` 는
-//! `BigDecimal` 로 받아 `f64` 로 변환 (`AreaM2` 이 `f64` 기반).
-//!
-//! `find_markers_in_bbox` 는 `ListingMarker` projection 만 가져오는 lightweight
-//! 쿼리 — 지도 렌더용. `status = 'active'` + `geom_point is not null` 필터 +
-//! `ST_Within(geom, ST_MakeEnvelope(..., 4326))`.
-//!
+//! `area_m2` `numeric(12, 2)` is read as `BigDecimal` and converted to `f64`
+//! at the SQL boundary.
 //! SP5-iv: `save` 가 트랜잭션 안에서 `listing` UPSERT + `audit_log` +
 //! `outbox_event` 를 함께 기록 — `MutationContext` 패턴 (`PgAdminActionRepository`
 //! 와 동일).
@@ -22,14 +16,12 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use chrono::{DateTime, Utc};
 use listing_domain::entity::Listing;
 use listing_domain::repository::{
-    ListingDetail, ListingMarker, ListingParcelDenormalize, ListingPhotoSummary, ListingRepository,
-    RepoError,
+    ListingDetail, ListingMarkerTile, ListingMarkerTileQuery, ListingParcelDenormalize,
+    ListingPhotoSummary, ListingRepository, RepoError, LISTING_MARKER_TILE_LAYER,
 };
 use shared_kernel::area::AreaM2;
-use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::contact_visibility::ContactVisibility;
 use shared_kernel::description::Description;
-use shared_kernel::geometry::PointSrid;
 use shared_kernel::id::{
     AuditLogMarker, Id, ListingMarker as ListingIdMarker, OutboxEventMarker, UserMarker,
 };
@@ -60,26 +52,18 @@ impl PgListingRepository {
     }
 }
 
-/// 모든 `listing` 컬럼 + `PostGIS` 좌표 분해 (`ST_X`/`ST_Y`).
+/// All `listing` aggregate columns.
 const LISTING_FULL_COLUMNS: &str = "id, owner_id, parcel_pnu, listing_type, transaction_type, \
     price_krw, deposit_krw, monthly_rent_krw, area_m2, \
     title, description, status, contact_visibility, \
     view_count, bookmark_count, \
-    ST_X(geom_point) as geom_lng, ST_Y(geom_point) as geom_lat, \
-    geom_point IS NOT NULL as has_geom, \
     created_at, updated_at, expires_at, version";
 
 const LISTING_FULL_COLUMNS_WITH_L_ALIAS: &str = "l.id, l.owner_id, l.parcel_pnu, l.listing_type, \
     l.transaction_type, l.price_krw, l.deposit_krw, l.monthly_rent_krw, l.area_m2, \
     l.title, l.description, l.status, l.contact_visibility, \
     l.view_count, l.bookmark_count, \
-    ST_X(l.geom_point) as geom_lng, ST_Y(l.geom_point) as geom_lat, \
-    l.geom_point IS NOT NULL as has_geom, \
     l.created_at, l.updated_at, l.expires_at, l.version";
-
-/// 지도 마커 projection — 필요한 필드만.
-const LISTING_MARKER_COLUMNS: &str = "id, listing_type, transaction_type, price_krw, \
-    ST_X(geom_point) as geom_lng, ST_Y(geom_point) as geom_lat";
 
 /// `PgRow` 를 `Listing` 으로 변환해요. 21 필드 모두 round-trip.
 #[allow(clippy::too_many_lines)]
@@ -129,15 +113,6 @@ fn row_to_listing(row: &PgRow) -> Result<Listing, RepoError> {
     let bookmark_count_i64: i64 = row
         .try_get("bookmark_count")
         .map_err(|e| RepoError::Database(e.to_string()))?;
-    let has_geom: bool = row
-        .try_get("has_geom")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let geom_lng: Option<f64> = row
-        .try_get("geom_lng")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let geom_lat: Option<f64> = row
-        .try_get("geom_lat")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
     let created_at: DateTime<Utc> = row
         .try_get("created_at")
         .map_err(|e| RepoError::Database(e.to_string()))?;
@@ -184,18 +159,6 @@ fn row_to_listing(row: &PgRow) -> Result<Listing, RepoError> {
         .map_err(|e| RepoError::Database(format!("invalid description in DB: {e}")))?;
     let status = parse_listing_status(&status_str)?;
     let contact_visibility = parse_contact_visibility(&contact_vis_str)?;
-    let geom_point = if has_geom {
-        match (geom_lng, geom_lat) {
-            (Some(x), Some(y)) => Some(
-                PointSrid::try_new_wgs84(x, y)
-                    .map_err(|e| RepoError::Database(format!("invalid geom in DB: {e}")))?,
-            ),
-            _ => None,
-        }
-    } else {
-        None
-    };
-
     let view_count = u64::try_from(view_count_i64).unwrap_or(0);
     let bookmark_count = u64::try_from(bookmark_count_i64).unwrap_or(0);
 
@@ -215,50 +178,10 @@ fn row_to_listing(row: &PgRow) -> Result<Listing, RepoError> {
         contact_visibility,
         view_count,
         bookmark_count,
-        geom_point,
         created_at,
         updated_at,
         expires_at,
         version,
-    })
-}
-
-/// `PgRow` 를 `ListingMarker` projection 으로 변환해요.
-fn row_to_marker(row: &PgRow) -> Result<ListingMarker, RepoError> {
-    let id_str: String = row
-        .try_get("id")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let listing_type_str: String = row
-        .try_get("listing_type")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let transaction_type_str: String = row
-        .try_get("transaction_type")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let price_krw: i64 = row
-        .try_get("price_krw")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let geom_lng: f64 = row
-        .try_get("geom_lng")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-    let geom_lat: f64 = row
-        .try_get("geom_lat")
-        .map_err(|e| RepoError::Database(e.to_string()))?;
-
-    let id = Id::<ListingIdMarker>::try_from_str(&id_str)
-        .map_err(|e| RepoError::Database(format!("malformed listing id in DB: {e}")))?;
-    let geom = PointSrid::try_new_wgs84(geom_lng, geom_lat)
-        .map_err(|e| RepoError::Database(format!("invalid geom in DB: {e}")))?;
-    let price = MoneyKrw::try_new(price_krw)
-        .map_err(|e| RepoError::Database(format!("invalid price_krw in DB: {e}")))?;
-    let listing_type = parse_listing_type(&listing_type_str)?;
-    let transaction_type = parse_transaction_type(&transaction_type_str)?;
-
-    Ok(ListingMarker {
-        id,
-        geom,
-        price,
-        listing_type,
-        transaction_type,
     })
 }
 
@@ -325,42 +248,13 @@ impl ListingRepository for PgListingRepository {
         row.as_ref().map(row_to_listing).transpose()
     }
 
-    #[instrument(skip(self, bbox), fields(min_lng = bbox.min_lng, min_lat = bbox.min_lat, max_lng = bbox.max_lng, max_lat = bbox.max_lat))]
-    async fn find_markers_in_bbox(
-        &self,
-        bbox: BoundingBox,
-    ) -> Result<Vec<ListingMarker>, RepoError> {
-        let sql = format!(
-            "select {LISTING_MARKER_COLUMNS} from listing \
-             where status = 'active' \
-               and geom_point is not null \
-               and ST_Within(geom_point, ST_MakeEnvelope($1, $2, $3, $4, 4326))"
-        );
-        let rows = sqlx::query(&sql)
-            .bind(bbox.min_lng)
-            .bind(bbox.min_lat)
-            .bind(bbox.max_lng)
-            .bind(bbox.max_lat)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(map_sqlx_err)?;
-        rows.iter().map(row_to_marker).collect()
-    }
-
     #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, query))]
-    async fn find_card_summaries_in_bbox(
+    async fn find_card_summaries(
         &self,
         query: listing_domain::repository::CardSearchQuery,
     ) -> Result<(Vec<listing_domain::repository::ListingCardSummary>, u64), RepoError> {
         use listing_domain::repository::{CardSearchSort, ListingCardSummary};
-
-        // bbox: None → 전체 한국. ST_MakeEnvelope($1=min_lng, $2=min_lat, $3=max_lng, $4=max_lat, 4326).
-        let (min_lng, min_lat, max_lng, max_lat) = query
-            .bbox
-            .map_or((124.0_f64, 33.0_f64, 132.0_f64, 39.0_f64), |b| {
-                (b.min_lng, b.min_lat, b.max_lng, b.max_lat)
-            });
 
         // listing_type / transaction_type 필터 (None or empty = 전체).
         let types_array: Option<Vec<&str>> = query
@@ -399,7 +293,8 @@ impl ListingRepository for PgListingRepository {
         // SP6-iii: bookmark_count 와 is_bookmarked 는 bookmark_listing 테이블 JOIN
         // (denormalized listing.bookmark_count 컬럼 미사용 — FU 70 schema 제거 예정).
         // ADR 0018 SP9 T4: pnu / admin_code_prefix / land_use_type 필터 추가.
-        // bbox 와 함께 쓰면 모두 AND. pnu 단독으로도 동작 (폴리곤 클릭 모델).
+        // 지도 marker placement 는 platform-core PNU-anchor PBF 경로가 담당하고,
+        // listing cards 는 PNU/admin-code 기반 목록 조회만 담당한다.
         let pnu_filter: Option<&str> = query.pnu.as_ref().map(Pnu::as_str);
         let admin_prefix_filter: Option<&str> = query.admin_code_prefix.as_deref();
         let land_use_filter: Option<&str> = query.land_use_type.map(|t| {
@@ -410,20 +305,18 @@ impl ListingRepository for PgListingRepository {
         let sql = format!(
             r"
             WITH filtered AS (
-                SELECT id, title, geom_point, listing_type, transaction_type,
+                SELECT id, title, listing_type, transaction_type,
                        price_krw, deposit_krw, monthly_rent_krw, area_m2,
                        view_count, created_at, owner_id
                 FROM listing
                 WHERE status = 'active'
-                  AND geom_point IS NOT NULL
-                  AND ST_Within(geom_point, ST_MakeEnvelope($1, $2, $3, $4, 4326))
-                  AND ($5::text[] IS NULL OR listing_type = ANY($5::text[]))
-                  AND ($6::text[] IS NULL OR transaction_type = ANY($6::text[]))
-                  AND area_m2::float8 BETWEEN $7 AND $8
-                  AND price_krw BETWEEN $9 AND $10
-                  AND ($14::text IS NULL OR parcel_pnu = $14)
-                  AND ($15::text IS NULL OR admin_code LIKE $15 || '%')
-                  AND ($16::text IS NULL OR parcel_land_use_type = $16)
+                  AND ($1::text[] IS NULL OR listing_type = ANY($1::text[]))
+                  AND ($2::text[] IS NULL OR transaction_type = ANY($2::text[]))
+                  AND area_m2::float8 BETWEEN $3 AND $4
+                  AND price_krw BETWEEN $5 AND $6
+                  AND ($10::text IS NULL OR parcel_pnu = $10)
+                  AND ($11::text IS NULL OR admin_code LIKE $11 || '%')
+                  AND ($12::text IS NULL OR parcel_land_use_type = $12)
             ),
             bm_count AS (
                 SELECT listing_id, COUNT(*)::int8 AS cnt
@@ -434,7 +327,6 @@ impl ListingRepository for PgListingRepository {
             SELECT
                 (SELECT COUNT(*) FROM filtered) AS total_count,
                 f.id, f.title,
-                ST_X(f.geom_point) AS geom_lng, ST_Y(f.geom_point) AS geom_lat,
                 f.listing_type, f.transaction_type,
                 f.price_krw, f.deposit_krw, f.monthly_rent_krw,
                 f.area_m2::float8 AS area_m2,
@@ -445,17 +337,13 @@ impl ListingRepository for PgListingRepository {
             FROM filtered f
             LEFT JOIN bm_count bc ON bc.listing_id = f.id
             LEFT JOIN bookmark_listing ub
-              ON ub.listing_id = f.id AND ub.user_id = $13
+              ON ub.listing_id = f.id AND ub.user_id = $9
             ORDER BY f.{order_by}
-            LIMIT $11 OFFSET $12
+            LIMIT $7 OFFSET $8
             "
         );
 
         let rows = sqlx::query(&sql)
-            .bind(min_lng)
-            .bind(min_lat)
-            .bind(max_lng)
-            .bind(max_lat)
             .bind(types_array.as_deref())
             .bind(txns_array.as_deref())
             .bind(min_area)
@@ -487,15 +375,6 @@ impl ListingRepository for PgListingRepository {
             let title: String = row
                 .try_get("title")
                 .map_err(|e| RepoError::Database(e.to_string()))?;
-
-            let geom_lng: f64 = row
-                .try_get("geom_lng")
-                .map_err(|e| RepoError::Database(e.to_string()))?;
-            let geom_lat: f64 = row
-                .try_get("geom_lat")
-                .map_err(|e| RepoError::Database(e.to_string()))?;
-            let geom = PointSrid::try_new_wgs84(geom_lng, geom_lat)
-                .map_err(|e| RepoError::Database(format!("invalid geom in DB: {e}")))?;
 
             let lt_str: String = row
                 .try_get("listing_type")
@@ -547,7 +426,6 @@ impl ListingRepository for PgListingRepository {
             cards.push(ListingCardSummary {
                 id,
                 title,
-                geom,
                 listing_type,
                 transaction_type,
                 price,
@@ -563,6 +441,113 @@ impl ListingRepository for PgListingRepository {
         }
 
         Ok((cards, total_count))
+    }
+
+    #[instrument(skip(self), fields(
+        z = query.z,
+        x = query.x,
+        y = query.y,
+        filter_hash = query.filter.hash(),
+    ))]
+    async fn find_listing_marker_tile(
+        &self,
+        query: ListingMarkerTileQuery,
+    ) -> Result<ListingMarkerTile, RepoError> {
+        let row = sqlx::query(
+            r"
+            WITH unanchored_active AS (
+                SELECT COUNT(*)::int8 AS count
+                FROM listing l
+                LEFT JOIN parcel_marker_anchor a ON a.pnu = l.parcel_pnu
+                WHERE l.status = 'active'
+                  AND a.pnu IS NULL
+            ),
+            eligible AS (
+                SELECT
+                    l.id,
+                    l.parcel_pnu AS pnu,
+                    a.anchor_point,
+                    a.anchor_snapshot_id,
+                    row_number() OVER (ORDER BY l.created_at DESC, l.id ASC)::int4 AS rank
+                FROM listing l
+                INNER JOIN parcel_marker_anchor a ON a.pnu = l.parcel_pnu
+                WHERE l.status = 'active'
+                  AND ST_Intersects(
+                      ST_Transform(a.anchor_point, 3857),
+                      ST_TileEnvelope($1, $2, $3)
+                  )
+            ),
+            features AS (
+                SELECT
+                    id,
+                    pnu,
+                    'listing'::text AS kind,
+                    1::int4 AS count,
+                    rank,
+                    id::text AS detail_ref,
+                    anchor_snapshot_id,
+                    ST_AsMVTGeom(
+                        ST_Transform(anchor_point, 3857),
+                        ST_TileEnvelope($1, $2, $3),
+                        4096,
+                        256,
+                        true
+                    ) AS geom
+                FROM eligible
+            ),
+            represented AS (
+                SELECT *
+                FROM features
+                WHERE geom IS NOT NULL
+            ),
+            tile AS (
+                SELECT ST_AsMVT(represented, $4, 4096, 'geom') AS bytes
+                FROM represented
+            )
+            SELECT
+                COALESCE((SELECT bytes FROM tile), '\x'::bytea) AS bytes,
+                (SELECT count FROM unanchored_active) AS unanchored_active_count,
+                (SELECT COUNT(*)::int8 FROM eligible) AS eligible_count,
+                (SELECT COUNT(*)::int8 FROM represented) AS represented_count,
+                (SELECT COUNT(*)::int8 FROM represented) AS feature_count,
+                0::int8 AS aggregate_count,
+                (SELECT max(anchor_snapshot_id) FROM represented) AS anchor_snapshot_id
+            ",
+        )
+        .bind(i32::from(query.z))
+        .bind(i32::try_from(query.x).map_err(|e| RepoError::Database(e.to_string()))?)
+        .bind(i32::try_from(query.y).map_err(|e| RepoError::Database(e.to_string()))?)
+        .bind(LISTING_MARKER_TILE_LAYER)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+
+        let unanchored_active_count: i64 = row
+            .try_get("unanchored_active_count")
+            .map_err(map_sqlx_err)?;
+        if unanchored_active_count > 0 {
+            return Err(RepoError::Database(format!(
+                "listing marker tile completeness violation: unanchored_active_count={unanchored_active_count}"
+            )));
+        }
+
+        let eligible_count: i64 = row.try_get("eligible_count").map_err(map_sqlx_err)?;
+        let represented_count: i64 = row.try_get("represented_count").map_err(map_sqlx_err)?;
+        if eligible_count != represented_count {
+            return Err(RepoError::Database(format!(
+                "listing marker tile completeness violation: eligible_count={eligible_count}, represented_count={represented_count}"
+            )));
+        }
+
+        Ok(ListingMarkerTile {
+            bytes: row.try_get("bytes").map_err(map_sqlx_err)?,
+            layer_name: LISTING_MARKER_TILE_LAYER,
+            eligible_count,
+            represented_count,
+            feature_count: row.try_get("feature_count").map_err(map_sqlx_err)?,
+            aggregate_count: row.try_get("aggregate_count").map_err(map_sqlx_err)?,
+            anchor_snapshot_id: row.try_get("anchor_snapshot_id").map_err(map_sqlx_err)?,
+        })
     }
 
     #[instrument(skip(self), fields(owner_id = %owner_id.as_str()))]
@@ -615,15 +600,12 @@ impl ListingRepository for PgListingRepository {
         let area_decimal = BigDecimal::from_str(&area_str)
             .map_err(|e| RepoError::Database(format!("invalid area_m2 conversion: {e}")))?;
 
-        let geom_lng_opt = listing.geom_point.as_ref().map(|p| p.lng);
-        let geom_lat_opt = listing.geom_point.as_ref().map(|p| p.lat);
-
         let view_count_i64 = i64::try_from(listing.view_count).unwrap_or(i64::MAX);
         let bookmark_count_i64 = i64::try_from(listing.bookmark_count).unwrap_or(i64::MAX);
 
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
 
-        // 0. SP-Obs T4: before_state snapshot. PostGIS geom_point 는 GeoJSON 으로 변환.
+        // 0. SP-Obs T4: before_state snapshot.
         let before_state = crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
 
         // 1. listing UPSERT with OCC.
@@ -634,7 +616,6 @@ impl ListingRepository for PgListingRepository {
                 price_krw, deposit_krw, monthly_rent_krw, area_m2,
                 title, description, status, contact_visibility,
                 view_count, bookmark_count,
-                geom_point,
                 created_at, updated_at, expires_at, version
             )
             values (
@@ -642,9 +623,7 @@ impl ListingRepository for PgListingRepository {
                 $6, $7, $8, $9,
                 $10, $11, $12, $13,
                 $14, $15,
-                case when $16::float8 is null or $17::float8 is null then null
-                     else ST_SetSRID(ST_MakePoint($16, $17), 4326) end,
-                $18, $19, $20, $21
+                $16, $17, $18, $19
             )
             on conflict (id) do update set
                 listing_type = excluded.listing_type,
@@ -659,11 +638,10 @@ impl ListingRepository for PgListingRepository {
                 contact_visibility = excluded.contact_visibility,
                 view_count = excluded.view_count,
                 bookmark_count = excluded.bookmark_count,
-                geom_point = excluded.geom_point,
                 updated_at = excluded.updated_at,
                 expires_at = excluded.expires_at,
                 version = excluded.version
-            where listing.version = $21 - 1
+            where listing.version = $19 - 1
             ",
         )
         .bind(listing.id.as_str())
@@ -681,8 +659,6 @@ impl ListingRepository for PgListingRepository {
         .bind(listing.contact_visibility.as_str())
         .bind(view_count_i64)
         .bind(bookmark_count_i64)
-        .bind(geom_lng_opt)
-        .bind(geom_lat_opt)
         .bind(listing.created_at)
         .bind(listing.updated_at)
         .bind(listing.expires_at)

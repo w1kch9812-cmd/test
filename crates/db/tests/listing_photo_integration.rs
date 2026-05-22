@@ -86,7 +86,6 @@ async fn seed_listing(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<Listin
         AreaM2::try_new(100.00).unwrap(),
         ListingTitle::try_new("photo test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");

@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { tStatic } from "@/lib/i18n/static";
+import { resolveMarkerTileAllowedOrigins } from "@/lib/map/marker-tile-contract";
 import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
 import { checkRate } from "@/lib/ratelimit";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
@@ -23,6 +24,7 @@ const PUBLIC_PATHS = [
   "/forbidden",
   "/api/auth",
   "/platform-core/events",
+  "/api/proxy/map/v1/marker-tiles/listing",
   "/dev-tiles",
   "/dev-x9-test",
   "/fonts",
@@ -45,6 +47,10 @@ const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+function isLocalHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 function isAdmin(pathname: string): boolean {
@@ -113,18 +119,23 @@ export async function proxy(req: NextRequest) {
   // 2. CSP nonce 주입
   const nonce = randomBytes(16).toString("base64");
   const isDev = process.env.NODE_ENV !== "production";
+  const allowLocalHttpMapRuntime = isDev || isLocalHostname(url.hostname);
 
   // Dev: Naver Maps gl 이 일부 tile/cursor 를 HTTP 로 요청 (legacy) → http:/https: 둘 다 허용.
   // Production: SP6-iam-infra 가 strict allowlist 정리.
-  const imgSrc = isDev
+  const imgSrc = allowLocalHttpMapRuntime
     ? "'self' data: blob: http: https:"
     : "'self' data: blob: https://*.map.naver.com https://map.naver.com https://*.map.naver.net https://map.naver.net https://*.pstatic.net";
   // ADR 0036 / platform-core ADR 0004: Gongzzang은 manifest consumer only.
   // Manifest는 platform-core Catalog 또는 public R2/CDN manifest URL에서 읽고,
   // 실제 tile URL은 manifest.tiles_url_template이 결정한다.
-  const tileOrigins = resolveVectorTileAllowedOrigins().join(" ");
-  const connectSrc = isDev
-    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:`
+  const tileOrigins = [
+    ...new Set([...resolveVectorTileAllowedOrigins(), ...resolveMarkerTileAllowedOrigins()]),
+  ]
+    .sort()
+    .join(" ");
+  const connectSrc = allowLocalHttpMapRuntime
+    ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:${tileOrigins ? ` ${tileOrigins}` : ""}`
     : `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} https://*.map.naver.com https://*.map.naver.net https://*.naver.com https://*.navercorp.com${tileOrigins ? ` ${tileOrigins}` : ""}`;
 
   // Naver Maps gl 이 WebGL + eval 사용 → 'unsafe-eval' 필수.
@@ -134,7 +145,7 @@ export async function proxy(req: NextRequest) {
     // Naver Maps SDK 는 app/layout.tsx 의 <head> 에서 sync 로드되므로 strict-dynamic 을 쓰면
     // SDK 자체가 차단된다. 대신 명시적 allowlist + nonce + unsafe-eval (gl WebGL 필수) 조합.
     // Naver gl SDK 는 nrbe.map.naver.net (style json) + auth 등 일부 리소스를 HTTP 로 호출하므로 dev 에서는 http: 도 허용.
-    isDev
+    allowLocalHttpMapRuntime
       ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline' http: https:`
       : `script-src 'self' 'nonce-${nonce}' 'unsafe-eval' 'unsafe-inline' https://oapi.map.naver.com https://*.map.naver.net https://*.pstatic.net`,
     `worker-src 'self' blob:`,

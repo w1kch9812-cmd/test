@@ -59,6 +59,7 @@ mod routes {
     pub mod bookmarks;
     pub mod buildings; // SP10 T3
     pub mod health;
+    pub mod listing_marker_tiles;
     pub mod listings;
     pub mod notifications;
     pub mod parcels; // SP10 T3
@@ -566,6 +567,15 @@ async fn async_main() -> Result<(), StartupError> {
     // /listings 라우터 — auth_layer 통과 후 GET 검색/상세 (SP6-ii/iii) +
     // POST/PATCH/transitions/photos (SP6-iv). 모든 mutation 핸들러는 require_role(Broker)
     // + ownership check.
+    let listing_marker_tiles_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
+            get(routes::listing_marker_tiles::get_listing_marker_tile),
+        )
+        .with_state(routes::listing_marker_tiles::ListingMarkerTilesState {
+            listing_repo: listings_state.listing_repo.clone(),
+        });
+
     let listings_router: Router<()> = Router::new()
         .route(
             "/listings",
@@ -715,6 +725,7 @@ async fn async_main() -> Result<(), StartupError> {
 
     let app = public
         .merge(protected)
+        .merge(listing_marker_tiles_router)
         .merge(listings_router)
         .merge(parcels_router) // SP10 T3
         .merge(buildings_router) // SP10 T3

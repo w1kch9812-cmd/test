@@ -18,10 +18,8 @@ use listing_photo_domain::repository::ListingPhotoRepository;
 use parcel_lookup::ParcelInfoLookup;
 use serde::{Deserialize, Serialize};
 use shared_kernel::area::AreaM2;
-use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::contact_visibility::ContactVisibility;
 use shared_kernel::description::Description;
-use shared_kernel::geometry::PointSrid;
 use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, ListingPhotoMarker, UserMarker};
 use shared_kernel::land_use_type::LandUseType;
 use shared_kernel::listing_title::ListingTitle;
@@ -49,10 +47,6 @@ pub struct ListingsState {
 /// `GET /listings` 쿼리 파라미터.
 #[derive(Debug, Deserialize)]
 pub struct ListingsQuery {
-    /// 지도 영역: `"south,west,north,east"` (float 4개, WGS84).
-    /// **Deprecated (ADR 0018)** — `pnu` / `admin_code` 기반 검색으로 대체. 제거는
-    /// `geom_point` 컬럼 deprecate 와 함께 (3단계 path).
-    pub bounds: Option<String>,
     /// 필지 PNU 19자리 — 폴리곤 클릭 시 해당 필지 매물만 (ADR 0018, SP9 T4).
     pub pnu: Option<String>,
     /// 행정구역 코드 (시도 2 / 시군구 5 / 읍면동 8자리). prefix 매치로 처리해 시도/
@@ -101,10 +95,6 @@ pub struct ListingCardResponse {
     pub monthly_rent_krw: Option<i64>,
     /// 면적 (m²).
     pub area_m2: f64,
-    /// 위도.
-    pub lat: f64,
-    /// 경도.
-    pub lng: f64,
     /// 썸네일 URL (SP6-iii 이후 채워짐).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thumbnail_url: Option<String>,
@@ -158,42 +148,6 @@ pub async fn get_listings(
             Some(format!("got size={size}, allowed 1..=100")),
         ));
     }
-
-    // bounds 파싱: "south,west,north,east" → BoundingBox(min_lng=west, min_lat=south, max_lng=east, max_lat=north).
-    let bbox = if let Some(b) = q.bounds.as_deref() {
-        let parts: Vec<&str> = b.split(',').collect();
-        if parts.len() != 4 {
-            return Err(problem(
-                "listings/invalid-bounds",
-                "bounds 파라미터가 올바르지 않아요",
-                StatusCode::BAD_REQUEST,
-                Some("expected 'south,west,north,east' (4 floats)".into()),
-            ));
-        }
-        let floats: Result<Vec<f64>, _> = parts.iter().map(|s| s.trim().parse::<f64>()).collect();
-        let floats = floats.map_err(|e| {
-            problem(
-                "listings/invalid-bounds",
-                "bounds 파라미터가 올바르지 않아요",
-                StatusCode::BAD_REQUEST,
-                Some(e.to_string()),
-            )
-        })?;
-        // south=floats[0], west=floats[1], north=floats[2], east=floats[3]
-        // BoundingBox: min_lng=west, min_lat=south, max_lng=east, max_lat=north
-        BoundingBox::try_new_wgs84(floats[1], floats[0], floats[3], floats[2])
-            .map(Some)
-            .map_err(|e| {
-                problem(
-                    "listings/invalid-bounds",
-                    "bounds 파라미터가 올바르지 않아요",
-                    StatusCode::BAD_REQUEST,
-                    Some(e.to_string()),
-                )
-            })?
-    } else {
-        None
-    };
 
     let types = if let Some(s) = q.types.as_deref().filter(|s| !s.is_empty()) {
         let parsed: Result<Vec<ListingType>, _> = s
@@ -296,7 +250,6 @@ pub async fn get_listings(
         })?;
 
     let query = CardSearchQuery {
-        bbox,
         pnu: pnu_filter,
         admin_code_prefix: admin_prefix_filter,
         land_use_type: land_use_filter,
@@ -314,7 +267,7 @@ pub async fn get_listings(
 
     let (cards, total) = state
         .listing_repo
-        .find_card_summaries_in_bbox(query)
+        .find_card_summaries(query)
         .await
         .map_err(|e| {
             // C1: DB 내부 정보(쿼리 구조, 테이블명 등)를 client 에 노출하지 않음.
@@ -339,8 +292,6 @@ pub async fn get_listings(
             deposit_krw: c.deposit.map(MoneyKrw::as_i64),
             monthly_rent_krw: c.monthly_rent.map(MoneyKrw::as_i64),
             area_m2: c.area_m2,
-            lat: c.geom.lat,
-            lng: c.geom.lng,
             thumbnail_url: c.thumbnail_url,
             view_count: c.view_count,
             bookmark_count: c.bookmark_count,
@@ -385,19 +336,8 @@ pub struct CreateListingRequest {
     pub title: String,
     /// 설명 (≤5000자).
     pub description: String,
-    /// 좌표 — 선택. 없으면 None.
-    pub geom_point: Option<GeomPointInput>,
     /// 연락처 공개 범위 (default `login_required`).
     pub contact_visibility: Option<String>,
-}
-
-/// 좌표 입력.
-#[derive(Debug, Deserialize)]
-pub struct GeomPointInput {
-    /// 경도.
-    pub lng: f64,
-    /// 위도.
-    pub lat: f64,
 }
 
 /// `POST /listings` 응답.
@@ -586,20 +526,6 @@ fn build_draft_from_request(
             Some(e.to_string()),
         )
     })?;
-    let geom_point = body
-        .geom_point
-        .as_ref()
-        .map(|g| PointSrid::try_new_wgs84(g.lng, g.lat))
-        .transpose()
-        .map_err(|e| {
-            problem(
-                "validation",
-                "geom_point 가 유효하지 않아요",
-                StatusCode::BAD_REQUEST,
-                Some(e.to_string()),
-            )
-        })?;
-
     let mut listing = Listing::try_new_draft(
         Id::<ListingIdMarker>::new(),
         owner_id,
@@ -612,7 +538,6 @@ fn build_draft_from_request(
         area,
         title,
         description,
-        geom_point,
         now,
     )
     .map_err(|e| from_listing_error(&e))?;
@@ -655,9 +580,6 @@ pub struct UpdateListingRequest {
     pub monthly_rent_krw: Option<Option<i64>>,
     /// 새 면적.
     pub area_m2: Option<f64>,
-    /// `null` = 좌표 제거, 객체 = 변경, 미언급 = 그대로.
-    #[serde(default, deserialize_with = "deserialize_optional_geom")]
-    pub geom_point: Option<Option<GeomPointInput>>,
     /// 새 `contact_visibility`.
     pub contact_visibility: Option<String>,
 }
@@ -670,14 +592,6 @@ where
     D: serde::Deserializer<'de>,
 {
     Option::<T>::deserialize(de).map(Some)
-}
-
-#[allow(clippy::option_option)]
-fn deserialize_optional_geom<'de, D>(de: D) -> Result<Option<Option<GeomPointInput>>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    Option::<GeomPointInput>::deserialize(de).map(Some)
 }
 
 /// `PATCH /listings/:id` 응답.
@@ -873,20 +787,6 @@ fn build_update_from_request(body: UpdateListingRequest) -> Result<ListingUpdate
             Some(e.to_string()),
         )
     })?;
-    let geom_point = match body.geom_point {
-        Some(Some(g)) => Some(Some(PointSrid::try_new_wgs84(g.lng, g.lat).map_err(
-            |e| {
-                problem(
-                    "validation",
-                    "geom_point 가 유효하지 않아요",
-                    StatusCode::BAD_REQUEST,
-                    Some(e.to_string()),
-                )
-            },
-        )?)),
-        Some(None) => Some(None),
-        None => None,
-    };
     let contact_visibility = body
         .contact_visibility
         .map(|s| ContactVisibility::from_str(&s))
@@ -907,7 +807,6 @@ fn build_update_from_request(body: UpdateListingRequest) -> Result<ListingUpdate
         deposit,
         monthly_rent,
         area,
-        geom_point,
         contact_visibility,
     })
 }
@@ -1267,9 +1166,6 @@ pub struct ListingDetailResponse {
     pub status: String,
     /// 연락처 공개 범위.
     pub contact_visibility: String,
-    /// 좌표 (위/경도).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub geom_point: Option<PointResponse>,
     /// 조회수.
     pub view_count: i64,
     /// 즐겨찾기 수 (JOIN COUNT).
@@ -1287,15 +1183,6 @@ pub struct ListingDetailResponse {
     pub expires_at: Option<DateTime<Utc>>,
     /// 사진 (`display_order ASC`).
     pub photos: Vec<PhotoResponse>,
-}
-
-/// 좌표 응답.
-#[derive(Debug, Serialize)]
-pub struct PointResponse {
-    /// 위도.
-    pub lat: f64,
-    /// 경도.
-    pub lng: f64,
 }
 
 /// 사진 응답.
@@ -1402,10 +1289,6 @@ fn detail_to_response(detail: listing_domain::repository::ListingDetail) -> List
         description: l.description.as_str().to_owned(),
         status: l.status.as_str().to_owned(),
         contact_visibility: l.contact_visibility.as_str().to_owned(),
-        geom_point: l.geom_point.map(|p| PointResponse {
-            lat: p.lat,
-            lng: p.lng,
-        }),
         view_count: i64::try_from(l.view_count).unwrap_or(i64::MAX),
         bookmark_count: detail.bookmark_count,
         is_bookmarked: detail.is_bookmarked,

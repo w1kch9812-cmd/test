@@ -1,0 +1,176 @@
+# Active Goal Completion Audit
+
+| Field | Value |
+|---|---|
+| Date | 2026-05-22 |
+| Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
+| Completion claim allowed | false |
+
+## Restated Objective
+
+The active goal is to keep the current Gongzzang work SSS-grade: SSOT and layer ownership must be
+explicit, marker-position architecture must be root-cause clean, and no completion claim may be made
+without concrete evidence.
+
+For this implementation slice, the concrete deliverables are:
+
+- Gongzzang owns listing semantics and serves Gongzzang listing marker `MVT/PBF` tiles.
+- Platform-core remains the owner of PNU/parcel anchors; Gongzzang reads only a local anchor
+  projection keyed by `PNU`.
+- Listing rows do not gain canonical marker coordinates.
+- Public marker request shape is tile based, not viewport `bbox`/`bounds` based.
+- Successful listing marker tiles do not silently drop eligible active listings.
+- Frontend map registration uses the listing PBF source and preserves binary proxy responses.
+- Tests, migration smoke, guardrails, formatting/build/type checks, and diff checks provide evidence.
+
+## Prompt-To-Artifact Checklist
+
+| Requirement | Evidence | Status |
+|---|---|---|
+| PNU-anchor SSOT for marker position | `docs/adr/0037-pnu-anchor-pbf-marker-tiles.md`, `migrations/30012_parcel_marker_anchor_projection.sql` | Covered |
+| Gongzzang/platform-core ownership boundary | ADR 0037, design spec, guardrail tokens | Covered |
+| Gongzzang listing PBF repository contract | `ListingRepository::find_listing_marker_tile`, `ListingMarkerTileQuery`, `ListingMarkerFilter` | Covered |
+| No listing-owned canonical coordinates | Migration uses `parcel_marker_anchor.anchor_point`; guardrail forbids `geom_point`, `geom_lng`, `geom_lat`, `anchor_lng`, `anchor_lat` in this path | Covered |
+| No viewport-bounds public marker API | Route is `/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf`; guardrail forbids bbox/bounds marker paths | Covered |
+| No silent marker drop | DB implementation checks `unanchored_active_count == 0` and `eligible_count == represented_count` | Covered |
+| Active listings on same PNU are both represented | `listing_marker_tile_represents_every_active_listing_on_same_pnu` | Covered |
+| Draft listings are excluded from marker tiles | Same integration test asserts `eligible_count == 2` after seeding two active listings and one draft | Covered |
+| Active listing without anchor fails readiness | `listing_marker_tile_rejects_active_listing_without_anchor` | Covered |
+| Tile coordinate validation | `listing_marker_tile_validation_rejects_out_of_range_coordinates`, API route tests | Covered |
+| API PBF route and content type | `services/api/src/routes/listing_marker_tiles.rs`, `cargo test -p api listing_marker_tile` | Covered |
+| Frontend listing PBF source and layer | `marker-tile-contract.ts`, `marker-tile-style.ts`, `listing-map.tsx`, focused web unit tests | Covered |
+| Binary proxy preservation | `apps/web/app/api/proxy/[...path]/route.ts`, `api-proxy-route.test.ts` | Covered |
+| Public same-origin listing PBF proxy path | `apps/web/proxy.ts`, `platform-core-proxy.test.ts` | Covered |
+| Listing panel ID pattern correctness | `LISTING_ID_PATTERN`, panel codec tests rejecting UUID listing IDs | Covered |
+| Full migration chain includes anchor projection | `tests/migrations/test_v001_full.sh` | Covered |
+| Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions | Covered |
+| Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
+| Platform-core manifest/contract CORS behavior | `../platform-core/services/api/src/routes/mod.rs` now has RED/GREEN coverage for local `localhost:3900` manifest/marker-contract preflights, invalid local-origin fallback using the same default-origin SSOT, and production default origin list remaining empty; live HTTP smoke on `127.0.0.1:18082` returned `access-control-allow-origin: http://localhost:3900` for both endpoints | Covered |
+| Whole product production launch | AWS/production data/deployment are outside this local implementation slice | Not covered |
+
+## Fresh Evidence Used
+
+Fresh verification for the implementation slice:
+
+```powershell
+cargo fmt --check
+cargo check -p api
+cargo check -p db
+cargo test -p api listing_marker_tile
+DATABASE_URL loaded from .env; cargo test -p db --features integration --test listing_marker_tile_integration
+pnpm --filter @gongzzang/web test -- tests/unit/api-proxy-route.test.ts tests/unit/platform-core-proxy.test.ts lib/panel/codec.test.ts tests/unit/map/marker-tile-contract.test.ts tests/unit/map/marker-tile-style.test.ts
+pnpm --filter @gongzzang/web typecheck
+pnpm --filter @gongzzang/web build
+pnpm markdownlint-cli2 AGENTS.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/superpowers/plans/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles.md docs/superpowers/handoff/2026-05-22-listing-pbf-review-gate.md docs/superpowers/handoff/2026-05-22-active-goal-completion-audit.md docs/superpowers/next-actions.md
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+git diff --check
+```
+
+After the platform-core CORS fix, the cross-repo entrypoint docs and guardrail expected tokens were
+updated from the earlier review-gate wording to the current local-verification-backed state. The
+Gongzzang guardrail now checks `docs/superpowers/roadmap.md` as well, and rejects stale
+review-gate wording such as `implementation-approved` or `waiting for user review`. The
+platform-core guardrail now also requires the Gongzzang preview CORS origin and the CORS regression
+tests in `services/api/src/routes/mod.rs` (`required_tokens=136`). Fresh guardrail evidence:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root C:\Users\admin\Desktop\platform-core
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+```
+
+Fresh migration smoke:
+
+```bash
+SQLX_BIN=/mnt/c/Users/admin/.cargo/bin/sqlx.exe ./tests/migrations/test_v001_full.sh
+```
+
+Fresh local API smoke:
+
+```text
+GET http://127.0.0.1:19080/map/v1/marker-tiles/listing/0/0/0.pbf?filter_hash=all-active-v1
+Status: 200
+Content-Type: application/vnd.mapbox-vector-tile
+Cache-Control: public, max-age=30, stale-while-revalidate=30
+Byte-Length: 197
+```
+
+Fresh browser smoke after seeding one local active listing and one `parcel_marker_anchor` row:
+
+```text
+GET http://localhost:3900/listings
+Rendered canvas count: 1
+Rendered listing card text: Smoke marker listing
+GET http://localhost:3900/api/proxy/listings?page=0&size=20 -> 200
+GET http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/8/218/98.pbf?filter_hash=all-active-v1 -> 200
+GET http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/8/218/99.pbf?filter_hash=all-active-v1 -> 200
+GET http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/8/217/98.pbf?filter_hash=all-active-v1 -> 200
+GET http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/8/217/99.pbf?filter_hash=all-active-v1 -> 200
+```
+
+The same smoke also found a remaining cross-service gap:
+
+```text
+GET http://127.0.0.1:18080/catalog/v1/vector-tiles/manifest -> blocked by browser CORS
+GET http://127.0.0.1:18080/map/v1/marker-tiles/contract -> blocked by browser CORS
+```
+
+Follow-up evidence from `../platform-core` fixed that specific CORS root cause at the router layer:
+
+```powershell
+C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api cors_default_local_origins_include_gongzzang_preview
+C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api cors_invalid_local_origins_fall_back_to_default_local_origins
+C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api router_allows_gongzzang_preview_preflights
+C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
+C:\Users\admin\.cargo\bin\cargo.exe fmt --check
+C:\Users\admin\.cargo\bin\cargo.exe check -p platform-core-api
+git diff --check -- services/api/src/routes/mod.rs
+```
+
+Live HTTP smoke then started the new `platform-core-api` binary on `127.0.0.1:18082` with
+`PLATFORM_CORE_RUNTIME_ENV=development` and confirmed the same origin/endpoint pair:
+
+```powershell
+curl.exe -s -D - -o NUL -H "Origin: http://localhost:3900" http://127.0.0.1:18082/map/v1/marker-tiles/contract
+curl.exe -s -D - -o NUL -H "Origin: http://localhost:3900" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
+curl.exe -s -D - -o NUL -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/map/v1/marker-tiles/contract
+curl.exe -s -D - -o NUL -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
+```
+
+All four responses returned `HTTP/1.1 200 OK` and
+`access-control-allow-origin: http://localhost:3900`. The temporary server was stopped after the
+smoke check.
+
+The platform-core SSS runner was re-run after adding the PNU/CORS guardrail. It first exposed a
+real static guardrail issue: `services/api/src/routes/catalog.rs` exceeded the 1500-line limit.
+The Catalog route tests were moved to `services/api/src/routes/catalog_tests.rs`, reducing
+`catalog.rs` to 953 lines and keeping `catalog_tests.rs` at 655 lines. The same runner then exposed
+missing local SRID evidence around PostGIS calls; source SQL comments and guardrail fixture tokens
+now place EPSG evidence next to those calls.
+
+Fresh focused evidence:
+
+```powershell
+C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
+C:\Users\admin\.cargo\bin\cargo.exe check -p catalog-infra
+C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test marker_tile_reads
+C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test parcel_marker_anchor_rebuild
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness.ps1 -Root .
+```
+
+`check-platform-core-prelaunch-readiness.ps1` now reports `failed=0`, with one remaining blocker:
+Gongzzang consumer local readiness is blocked because the deployment root has uncommitted/untracked
+files. That is a source-control/cutover-readiness gate, not a static code-quality failure.
+
+## Completion Decision
+
+`completion_claim_allowed=false`.
+
+The current Gongzzang listing PBF marker-tile implementation slice has evidence-backed coverage, but
+the broad active thread goal is not a finite product-launch goal. Do not claim the whole project is
+complete from this audit. Do not call update_goal from this state.

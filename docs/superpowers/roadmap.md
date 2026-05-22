@@ -1,5 +1,17 @@
 # 공짱 Sub-project Roadmap
 
+> **Current supersession**: 2026-05-22 — listing marker placement and map-marker data flow are
+> governed by [ADR 0018](../adr/0018-pnu-first-identity-no-coordinates.md),
+> [ADR 0037](../adr/0037-pnu-anchor-pbf-marker-tiles.md), and the
+> [Gongzzang-owned listing PBF design spec](./specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md).
+> Older roadmap entries mentioning `listing.geom_point`, bbox/bounds marker requests, or
+> listing marker placement outside PNU anchors are historical only and must be revalidated against
+> those documents before implementation.
+>
+> **Current gate**: the Gongzzang-owned listing PBF marker implementation slice has local
+> verification evidence. This is not a whole-product launch completion claim; re-run the linked
+> handoff/audit verification before changing or claiming this slice.
+>
 > **갱신일**: 2026-05-06 (SP-Obs 1차 종료 직후)
 > **현재 main**: `56e222e` (SP-Obs T7 — health liveness/readiness/db)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.

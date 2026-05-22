@@ -4,7 +4,7 @@
 //! `PostGIS` 쿼리에서 좌표계 누락이 컴파일 타임에 막혀요.
 //!
 //! `lat` ∈ `[-90, 90]`, `lng` ∈ `[-180, 180]` 범위 검증해요. `NaN`/`±∞` 거부.
-//! 한국 영역으로 좁힌 검증은 aggregate level (예: `Listing.geom_point`) 책임이에요.
+//! Parcel-attached listing marker placement is resolved from PNU anchors outside this value object.
 
 use crate::srid::Srid;
 use geo_types::{MultiPolygon as GeoMultiPolygon, Point as GeoPoint, Polygon as GeoPolygon};

@@ -19,8 +19,6 @@ export const ListingCardSchema = z.object({
   deposit_krw: z.number().int().nullish(),
   monthly_rent_krw: z.number().int().nullish(),
   area_m2: z.number(),
-  lat: z.number(),
-  lng: z.number(),
   thumbnail_url: z.string().nullish(),
   view_count: z.number().int(),
   bookmark_count: z.number().int(),
@@ -42,7 +40,6 @@ export type ListingsResponse = z.infer<typeof ListingsResponseSchema>;
 
 export interface FetchListingsInput {
   filters: ListingFilters;
-  bounds?: { south: number; west: number; north: number; east: number };
   pnu?: string;
   page?: number;
   size?: number;
@@ -53,10 +50,6 @@ export async function fetchListings(
   signal?: AbortSignal,
 ): Promise<ListingsResponse> {
   const sp = toSearchParams(input.filters);
-  if (input.bounds) {
-    const { south, west, north, east } = input.bounds;
-    sp.set("bounds", `${south},${west},${north},${east}`);
-  }
   if (input.pnu) sp.set("pnu", input.pnu);
   if (input.page !== undefined) sp.set("page", String(input.page));
   if (input.size !== undefined) sp.set("size", String(input.size));
@@ -89,7 +82,6 @@ export const ListingDetailSchema = z.object({
   description: z.string(),
   status: z.string(),
   contact_visibility: z.string(),
-  geom_point: z.object({ lat: z.number(), lng: z.number() }).nullish(),
   view_count: z.number().int(),
   bookmark_count: z.number().int(),
   is_bookmarked: z.boolean(),

@@ -4,6 +4,7 @@
 
 import { type BuildingsResponse, fetchBuildings } from "@/lib/api/buildings";
 import { fetchParcel, type ParcelInfo } from "@/lib/api/parcels";
+import { PNU_PATTERN } from "@/lib/identity/patterns";
 import { fetchListings, type ListingsResponse } from "@/lib/listings/api";
 import { defineKind, defineView } from "@/lib/panel/registry";
 import { ParcelBuildingsCard } from "./buildings";
@@ -13,7 +14,7 @@ import { ParcelSummaryCard } from "./summary";
 
 defineKind({
   kind: "parcel",
-  idPattern: /^\d{19}$/,
+  idPattern: PNU_PATTERN,
   views: {
     summary: defineView<"parcel", ParcelInfo>({
       component: ParcelSummaryCard,
