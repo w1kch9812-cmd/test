@@ -2,6 +2,14 @@
 set -euo pipefail
 
 fail=0
+root="${1:-.}"
+
+if [ ! -d "$root" ]; then
+  echo "file-line-limit: root directory does not exist: ${root}" >&2
+  exit 2
+fi
+
+cd "$root"
 
 report_error() {
   local file="$1"
