@@ -13,9 +13,16 @@ regex = '''[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}'''
 keywords = ["VWORLD", "vworld"]
 
 [[rules]]
-id = "naver-maps-credential"
-description = "Naver Maps Client ID/Secret"
-regex = '''(?i)(naver[_-]?maps?[_-]?(client[_-]?id|client[_-]?secret|key)).{0,5}['"]?[a-z0-9]{10,40}['"]?'''
+id = "naver-maps-credential-assignment"
+description = "Naver Maps Client ID/Secret assignment"
+regex = '''(?i)(naver[_-]?maps?[_-]?(client[_-]?id|client[_-]?secret|key))\s*=\s*['"]?([a-z0-9][a-z0-9_-]{9,39})['"]?'''
+secretGroup = 3
+
+[[rules]]
+id = "naver-maps-credential-property"
+description = "Naver Maps Client ID/Secret object property"
+regex = '''(?i)(naver[_-]?maps?[_-]?(client[_-]?id|client[_-]?secret|key))\s*:\s*['"]([a-z0-9][a-z0-9_-]{9,39})['"]'''
+secretGroup = 3
 
 [[rules]]
 id = "zitadel-key"
@@ -44,10 +51,14 @@ regexes = [
     '''your_.*_here''',
     '''<your-.+>''',
     '''ZITADEL_API_KEY=$''',
+    '''naver-client''',
+    '''naver-maps-placeholder''',
     # test-secret-placeholder: SESSION_SECRET 테스트 픽스처, 실 secret 아님
     '''test-secret-placeholder''',
 ]
 stopwords = [
     # SESSION_SECRET 테스트 픽스처 값, 실 secret 아님
     "test-secret-placeholder-32-chars-x",
+    "naver-client",
+    "naver-maps-placeholder",
 ]

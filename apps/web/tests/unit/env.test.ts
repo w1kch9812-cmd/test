@@ -14,10 +14,37 @@ describe("env schema (SP6-i extension)", () => {
     process.env.REDIS_URL = "redis://localhost:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
 
     const { env } = await import("@/lib/env");
     expect(env.ZITADEL_ISSUER).toBe("http://localhost:8443");
     expect(env.SESSION_SECRET.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("throws on missing NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID", async () => {
+    process.env.ZITADEL_ISSUER = "http://localhost:8443";
+    process.env.ZITADEL_CLIENT_ID = "x";
+    process.env.ZITADEL_AUDIENCE = "x";
+    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "x".repeat(32);
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+    delete process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID;
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on placeholder NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID", async () => {
+    process.env.ZITADEL_ISSUER = "http://localhost:8443";
+    process.env.ZITADEL_CLIENT_ID = "x";
+    process.env.ZITADEL_AUDIENCE = "x";
+    process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "x".repeat(32);
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-maps-placeholder";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
 
   it("throws on missing SESSION_SECRET", async () => {
@@ -27,6 +54,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_AUDIENCE = "x";
     process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
@@ -38,6 +66,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_AUDIENCE = "x";
     process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
     process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
 
     await expect(import("@/lib/env")).rejects.toThrow();
   });

@@ -8,9 +8,19 @@ const optionalUrl = z.preprocess(
   z.string().url().optional(),
 );
 
+const forbiddenPublicClientIds = new Set(["naver-maps-placeholder", "your_naver_client_id_here"]);
+
+const requiredPublicClientId = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((value) => !forbiddenPublicClientIds.has(value), {
+    message: "must be configured explicitly",
+  });
+
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: z.string().url().default("http://localhost:8080"),
-  NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: z.string().min(1).default("naver-maps-placeholder"),
+  NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: requiredPublicClientId,
   NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: optionalUrl,
   NEXT_PUBLIC_TILES_MANIFEST_URL: optionalUrl,
 });
