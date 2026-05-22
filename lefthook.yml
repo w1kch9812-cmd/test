@@ -6,13 +6,15 @@
 pre-commit:
   parallel: true
   commands:
+    lefthook-no-fake-pass:
+      run: bash scripts/lefthook/check-no-fake-pass.sh
     biome:
       glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
       run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
     rustfmt:
       glob: "*.rs"
-      run: command -v cargo >/dev/null 2>&1 && cargo fmt -- {staged_files} || echo "cargo not installed - CI enforces"
+      run: cargo fmt -- {staged_files}
       stage_fixed: true
       skip:
         - merge
@@ -21,7 +23,7 @@ pre-commit:
       glob: "*.md"
       run: pnpm markdownlint-cli2 {staged_files}
     gitleaks:
-      run: command -v gitleaks >/dev/null 2>&1 && gitleaks protect --staged --redact -v || echo "gitleaks not installed locally - CI enforces"
+      run: gitleaks protect --staged --redact -v
       skip:
         - merge
         - rebase
@@ -49,6 +51,11 @@ pre-commit:
 pre-push:
   parallel: false
   commands:
+    lefthook-no-fake-pass:
+      run: bash scripts/lefthook/check-no-fake-pass.sh
+      skip:
+        - merge
+        - rebase
     catalog-m1-boundary:
       run: bash scripts/lefthook/catalog-m1-boundary.sh
       skip:
@@ -63,17 +70,17 @@ pre-push:
         - merge
         - rebase
     cargo-check:
-      run: command -v cargo >/dev/null 2>&1 && cargo check --workspace --all-features || echo "cargo not installed - CI enforces"
+      run: cargo check --workspace --all-features
       skip:
         - merge
         - rebase
     cargo-clippy:
-      run: command -v cargo >/dev/null 2>&1 && cargo clippy --workspace --all-features -- -D warnings || echo "cargo not installed - CI enforces"
+      run: cargo clippy --workspace --all-features --all-targets -- -D warnings
       skip:
         - merge
         - rebase
     sqlx-prepare-check:
-      run: command -v cargo >/dev/null 2>&1 && command -v sqlx >/dev/null 2>&1 && cargo sqlx prepare --workspace --check
+      run: cargo sqlx prepare --workspace --check
       skip:
         - merge
         - rebase
