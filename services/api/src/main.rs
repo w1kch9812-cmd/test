@@ -30,8 +30,9 @@ use user_domain::repository::UserRepository;
 
 use crate::startup::{
     build_building_reader, build_internal_auth_secret, build_parcel_lookup,
-    build_photo_upload_issuer, build_raw_capture, build_redis_pool_shared, build_verifier,
-    connect_postgres, init_tracing, is_production_env, required_env, StartupError,
+    build_photo_download_issuer, build_photo_upload_issuer, build_raw_capture,
+    build_redis_pool_shared, build_verifier, connect_postgres, init_tracing, is_production_env,
+    required_env, StartupError,
 };
 
 mod http {
@@ -108,6 +109,7 @@ async fn async_main() -> Result<(), StartupError> {
 
     let parcel_lookup = build_parcel_lookup(is_production, &raw_capture)?;
     let photo_upload_issuer = build_photo_upload_issuer(is_production)?;
+    let photo_download_issuer = build_photo_download_issuer(is_production)?;
     let photo_object_verifier = startup::build_photo_object_verifier(is_production)?;
 
     let listings_state = routes::listings::ListingsState {
@@ -115,6 +117,7 @@ async fn async_main() -> Result<(), StartupError> {
         photo_repo,
         parcel_lookup,
         photo_upload_issuer,
+        photo_download_issuer,
         photo_object_verifier,
     };
 
@@ -207,7 +210,8 @@ async fn async_main() -> Result<(), StartupError> {
         )
         .route(
             "/listings/:listing_id/photos/:photo_id",
-            axum::routing::delete(routes::listings::delete_photo),
+            get(routes::listings::get_photo_download_redirect)
+                .delete(routes::listings::delete_photo),
         )
         .route(
             "/listings/:listing_id/photos/:photo_id/confirm",

@@ -66,6 +66,8 @@ pub struct ListingDetailResponse {
 /// 사진 응답.
 #[derive(Debug, Serialize)]
 pub struct PhotoResponse {
+    /// Photo ID.
+    pub photo_id: String,
     /// R2 객체 키.
     pub r2_key: String,
     /// 썸네일 키 (선택).
@@ -178,6 +180,7 @@ fn detail_to_response(detail: listing_domain::repository::ListingDetail) -> List
             .photos
             .into_iter()
             .map(|p| PhotoResponse {
+                photo_id: p.photo_id,
                 r2_key: p.r2_key,
                 thumbnail_r2_key: p.thumbnail_r2_key,
                 caption: p.caption,

@@ -265,6 +265,41 @@ pub fn build_photo_upload_issuer_from_config_result(
     }
 }
 
+pub fn build_photo_download_issuer(
+    is_production: bool,
+) -> Result<Arc<dyn photo_upload::ListingPhotoDownloadUrlIssuer>, StartupError> {
+    build_photo_download_issuer_from_config_result(
+        is_production,
+        photo_upload::ListingPhotoUploadConfig::from_env(),
+    )
+}
+
+pub fn build_photo_download_issuer_from_config_result(
+    is_production: bool,
+    config_result: Result<
+        photo_upload::ListingPhotoUploadConfig,
+        photo_upload::ListingPhotoUploadConfigError,
+    >,
+) -> Result<Arc<dyn photo_upload::ListingPhotoDownloadUrlIssuer>, StartupError> {
+    match config_result {
+        Ok(config) => Ok(Arc::new(
+            photo_upload::R2ListingPhotoDownloadUrlIssuer::new(config),
+        )),
+        Err(error) if is_production => Err(production_config_error(format!(
+            "listing photo download R2 config missing: {error}"
+        ))),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "listing photo download R2 config missing - photo download disabled in dev"
+            );
+            Ok(Arc::new(
+                photo_upload::DisabledListingPhotoDownloadUrlIssuer,
+            ))
+        }
+    }
+}
+
 pub fn build_photo_object_verifier(
     is_production: bool,
 ) -> Result<Arc<dyn photo_upload::ListingPhotoObjectVerifier>, StartupError> {
@@ -410,6 +445,7 @@ mod tests {
     use crate::photo_upload::ListingPhotoUploadConfigError;
 
     use super::{
+        build_photo_download_issuer_from_config_result,
         build_photo_object_verifier_from_config_result,
         build_photo_upload_issuer_from_config_result, build_verifier, required_env, StartupError,
     };
@@ -485,5 +521,21 @@ mod tests {
         );
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn production_rejects_missing_listing_photo_download_r2_config() {
+        let result = build_photo_download_issuer_from_config_result(
+            true,
+            Err(ListingPhotoUploadConfigError::MissingEnv(
+                "LISTING_PHOTO_R2_BUCKET",
+            )),
+        );
+
+        assert!(
+            matches!(result, Err(StartupError::ProductionConfig { reason })
+                if reason.contains("listing photo download")
+                    && reason.contains("LISTING_PHOTO_R2_BUCKET"))
+        );
     }
 }

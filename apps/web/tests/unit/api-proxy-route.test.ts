@@ -56,4 +56,30 @@ describe("api proxy route", () => {
       }),
     );
   });
+
+  it("preserves image responses as binary", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xdb]);
+    apiMock.mockResolvedValueOnce(
+      new Response(bytes, {
+        status: 200,
+        headers: {
+          "content-type": "image/jpeg",
+          "x-request-id": "req_BINARYIMAGE0000000000000",
+        },
+      }),
+    );
+
+    const response = await GET(
+      new NextRequest("http://localhost:3000/api/proxy/listings/lst_1/photos/lph_1"),
+      {
+        params: Promise.resolve({
+          path: ["listings", "lst_1", "photos", "lph_1"],
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+  });
 });

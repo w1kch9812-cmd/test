@@ -4,18 +4,20 @@ use auth::middleware::AuthenticatedUser;
 use auth::role_guard::require_role;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::Redirect;
 use axum::{Extension, Json};
 use chrono::{DateTime, Utc};
+use listing_domain::entity::Listing;
 use listing_photo_domain::entity::ListingPhoto;
 use serde::{Deserialize, Serialize};
-use shared_kernel::id::{Id, ListingPhotoMarker};
+use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, ListingPhotoMarker, UserMarker};
 use user_domain::entity::UserRole;
 
 use crate::http::mutation_ctx::http_user_action;
 use crate::http::problem::{problem, ProblemResponse};
 use crate::photo_upload::{
-    PhotoObjectVerifyError, PhotoObjectVerifyRequest, PhotoUploadUrlError, PhotoUploadUrlRequest,
-    UploadHeader,
+    PhotoDownloadUrlError, PhotoDownloadUrlRequest, PhotoObjectVerifyError,
+    PhotoObjectVerifyRequest, PhotoUploadUrlError, PhotoUploadUrlRequest, UploadHeader,
 };
 
 use super::mutation::load_listing_for_actor;
@@ -184,7 +186,90 @@ fn photo_upload_problem(error: &PhotoUploadUrlError) -> ProblemResponse {
     )
 }
 
-/// `DELETE /listings/:id/photos/:photo_id` — soft-delete.
+/// `GET /listings/:listing_id/photos/:photo_id` redirects to a short-lived R2 signed URL.
+#[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %listing_id, photo_id = %photo_id))]
+pub async fn get_photo_download_redirect(
+    State(state): State<ListingsState>,
+    Extension(auth): Extension<AuthenticatedUser>,
+    Path((listing_id, photo_id)): Path<(String, String)>,
+) -> Result<Redirect, ProblemResponse> {
+    let listing_id = Id::<ListingIdMarker>::from_str(&listing_id).map_err(|e| {
+        problem(
+            "validation",
+            "listing id가 유효하지 않아요",
+            StatusCode::BAD_REQUEST,
+            Some(e.to_string()),
+        )
+    })?;
+    let listing = state
+        .listing_repo
+        .find(&listing_id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "listing find failed");
+            crate::http::problem::from_listing_repo_error(&e)
+        })?
+        .ok_or_else(|| {
+            problem(
+                "not-found",
+                "매물을 찾을 수 없어요",
+                StatusCode::NOT_FOUND,
+                None,
+            )
+        })?;
+    if !can_view_photo(&listing, &auth.user.id) {
+        return Err(problem(
+            "not-found",
+            "매물을 찾을 수 없어요",
+            StatusCode::NOT_FOUND,
+            None,
+        ));
+    }
+
+    let pid = Id::<ListingPhotoMarker>::from_str(&photo_id).map_err(|e| {
+        problem(
+            "validation",
+            "photo_id가 유효하지 않아요",
+            StatusCode::BAD_REQUEST,
+            Some(e.to_string()),
+        )
+    })?;
+    let photo = state
+        .photo_repo
+        .find(&pid)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "photo find failed");
+            photo_repo_problem(&e)
+        })?
+        .ok_or_else(|| {
+            problem(
+                "not-found",
+                "사진을 찾을 수 없어요",
+                StatusCode::NOT_FOUND,
+                None,
+            )
+        })?;
+    if photo.listing_id != listing.id || !photo.is_upload_confirmed() {
+        return Err(problem(
+            "not-found",
+            "사진을 찾을 수 없어요",
+            StatusCode::NOT_FOUND,
+            None,
+        ));
+    }
+
+    let download = state
+        .photo_download_issuer
+        .issue_download_url(PhotoDownloadUrlRequest {
+            r2_key: photo.r2_key,
+        })
+        .await
+        .map_err(|error| photo_download_problem(&error))?;
+
+    Ok(Redirect::temporary(&download.url))
+}
+
 /// `POST /listings/:listing_id/photos/:photo_id/confirm` verifies R2 object presence.
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %listing_id, photo_id = %photo_id))]
 pub async fn confirm_photo_upload(
@@ -300,6 +385,24 @@ fn photo_object_verify_problem(error: &PhotoObjectVerifyError) -> ProblemRespons
     }
 }
 
+fn photo_download_problem(error: &PhotoDownloadUrlError) -> ProblemResponse {
+    tracing::error!(error = %error, "photo download URL issue failed");
+    problem(
+        "photo-download-unavailable",
+        "사진 다운로드를 지금 사용할 수 없어요",
+        StatusCode::SERVICE_UNAVAILABLE,
+        None,
+    )
+}
+
+fn can_view_photo(listing: &Listing, viewer_id: &Id<UserMarker>) -> bool {
+    use shared_kernel::listing_status::ListingStatus;
+    matches!(
+        listing.status,
+        ListingStatus::Active | ListingStatus::Sold | ListingStatus::Expired
+    ) || listing.owner_id == *viewer_id
+}
+
 fn photo_repo_problem(error: &listing_photo_domain::repository::RepoError) -> ProblemResponse {
     match error {
         listing_photo_domain::repository::RepoError::NotFound => problem(
@@ -323,6 +426,7 @@ fn photo_repo_problem(error: &listing_photo_domain::repository::RepoError) -> Pr
     }
 }
 
+/// `DELETE /listings/:id/photos/:photo_id` soft-deletes a listing photo.
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %listing_id, photo_id = %photo_id))]
 pub async fn delete_photo(
     State(state): State<ListingsState>,

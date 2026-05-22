@@ -120,6 +120,47 @@ pub trait ListingPhotoUploadUrlIssuer: Send + Sync {
 }
 
 #[derive(Debug, Clone)]
+pub struct PhotoDownloadUrlRequest {
+    pub r2_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhotoDownloadUrl {
+    pub url: String,
+}
+
+#[derive(Debug, Error)]
+pub enum PhotoDownloadUrlError {
+    #[error("listing photo download storage is not configured")]
+    Disabled,
+    #[error("listing photo download presigning config: {0}")]
+    PresigningConfig(String),
+    #[error("listing photo download presign failed: {0}")]
+    Presign(String),
+}
+
+#[async_trait]
+pub trait ListingPhotoDownloadUrlIssuer: Send + Sync {
+    async fn issue_download_url(
+        &self,
+        request: PhotoDownloadUrlRequest,
+    ) -> Result<PhotoDownloadUrl, PhotoDownloadUrlError>;
+}
+
+#[derive(Debug, Default)]
+pub struct DisabledListingPhotoDownloadUrlIssuer;
+
+#[async_trait]
+impl ListingPhotoDownloadUrlIssuer for DisabledListingPhotoDownloadUrlIssuer {
+    async fn issue_download_url(
+        &self,
+        _request: PhotoDownloadUrlRequest,
+    ) -> Result<PhotoDownloadUrl, PhotoDownloadUrlError> {
+        Err(PhotoDownloadUrlError::Disabled)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct PhotoObjectVerifyRequest {
     pub r2_key: String,
     pub expected_content_type: PhotoContentType,
@@ -194,6 +235,24 @@ pub struct R2ListingPhotoUploadUrlIssuer {
 }
 
 #[derive(Debug, Clone)]
+pub struct R2ListingPhotoDownloadUrlIssuer {
+    client: S3Client,
+    bucket: String,
+    expires_in: Duration,
+}
+
+impl R2ListingPhotoDownloadUrlIssuer {
+    #[must_use]
+    pub fn new(config: ListingPhotoUploadConfig) -> Self {
+        Self {
+            client: config.s3_client(),
+            bucket: config.bucket,
+            expires_in: LISTING_PHOTO_UPLOAD_EXPIRES,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct R2ListingPhotoObjectVerifier {
     client: S3Client,
     bucket: String,
@@ -248,6 +307,28 @@ impl ListingPhotoUploadUrlIssuer for R2ListingPhotoUploadUrlIssuer {
         Ok(PhotoUploadUrl {
             url: presigned.uri().to_owned(),
             required_headers,
+        })
+    }
+}
+
+#[async_trait]
+impl ListingPhotoDownloadUrlIssuer for R2ListingPhotoDownloadUrlIssuer {
+    async fn issue_download_url(
+        &self,
+        request: PhotoDownloadUrlRequest,
+    ) -> Result<PhotoDownloadUrl, PhotoDownloadUrlError> {
+        let presigning_config = PresigningConfig::expires_in(self.expires_in)
+            .map_err(|error| PhotoDownloadUrlError::PresigningConfig(error.to_string()))?;
+        let presigned = self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .key(&request.r2_key)
+            .presigned(presigning_config)
+            .await
+            .map_err(|error| PhotoDownloadUrlError::Presign(error.to_string()))?;
+        Ok(PhotoDownloadUrl {
+            url: presigned.uri().to_owned(),
         })
     }
 }
@@ -321,10 +402,12 @@ mod tests {
 
     use super::ListingPhotoUploadConfig;
     use super::{
-        verified_object_metadata_from_head, DisabledListingPhotoObjectVerifier,
-        DisabledListingPhotoUploadUrlIssuer, ListingPhotoObjectVerifier,
-        ListingPhotoUploadUrlIssuer, PhotoObjectVerifyError, PhotoObjectVerifyRequest,
-        PhotoUploadUrlError, PhotoUploadUrlRequest, R2ListingPhotoUploadUrlIssuer,
+        verified_object_metadata_from_head, DisabledListingPhotoDownloadUrlIssuer,
+        DisabledListingPhotoObjectVerifier, DisabledListingPhotoUploadUrlIssuer,
+        ListingPhotoDownloadUrlIssuer, ListingPhotoObjectVerifier, ListingPhotoUploadUrlIssuer,
+        PhotoDownloadUrlError, PhotoDownloadUrlRequest, PhotoObjectVerifyError,
+        PhotoObjectVerifyRequest, PhotoUploadUrlError, PhotoUploadUrlRequest,
+        R2ListingPhotoDownloadUrlIssuer, R2ListingPhotoUploadUrlIssuer,
     };
 
     fn r2_config() -> ListingPhotoUploadConfig {
@@ -358,6 +441,17 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(PhotoObjectVerifyError::Disabled)));
+    }
+
+    #[tokio::test]
+    async fn disabled_download_issuer_fails_without_mock_url() {
+        let result = DisabledListingPhotoDownloadUrlIssuer
+            .issue_download_url(PhotoDownloadUrlRequest {
+                r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            })
+            .await;
+
+        assert!(matches!(result, Err(PhotoDownloadUrlError::Disabled)));
     }
 
     #[test]
@@ -427,6 +521,26 @@ mod tests {
                 header.name == "content-type" && header.value == PhotoContentType::Jpeg.as_str()
             }));
             assert!(!upload.url.starts_with("MOCK://"));
+        }
+    }
+
+    #[tokio::test]
+    async fn r2_download_issuer_presigns_get_without_mock_url() {
+        let issuer = R2ListingPhotoDownloadUrlIssuer::new(r2_config());
+        let result = issuer
+            .issue_download_url(PhotoDownloadUrlRequest {
+                r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            })
+            .await;
+
+        assert!(result.is_ok(), "expected presigned URL");
+        if let Ok(download) = result {
+            assert!(download
+                .url
+                .starts_with("https://account-id.r2.cloudflarestorage.com/"));
+            assert!(download.url.contains("X-Amz-Algorithm=AWS4-HMAC-SHA256"));
+            assert!(download.url.contains("x-id=GetObject"));
+            assert!(!download.url.starts_with("MOCK://"));
         }
     }
 }

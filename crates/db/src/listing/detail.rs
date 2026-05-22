@@ -43,7 +43,7 @@ pub(super) async fn find_detail_by_id(
 
     let photo_rows = sqlx::query(
         r"
-        SELECT r2_key, thumbnail_r2_key, caption, display_order, content_type
+        SELECT id, r2_key, thumbnail_r2_key, caption, display_order, content_type
         FROM listing_photo
         WHERE listing_id = $1 AND deleted_at IS NULL AND file_size_bytes IS NOT NULL
         ORDER BY display_order ASC
@@ -58,6 +58,7 @@ pub(super) async fn find_detail_by_id(
         .iter()
         .map(|r| {
             Ok::<_, RepoError>(ListingPhotoSummary {
+                photo_id: r.try_get("id").map_err(map_sqlx_err)?,
                 r2_key: r.try_get("r2_key").map_err(map_sqlx_err)?,
                 thumbnail_r2_key: r.try_get("thumbnail_r2_key").map_err(map_sqlx_err)?,
                 caption: r.try_get("caption").map_err(map_sqlx_err)?,

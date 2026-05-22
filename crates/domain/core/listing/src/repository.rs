@@ -152,6 +152,8 @@ pub struct ListingDetail {
 /// 사진 요약 — frontend 표시용 5 필드 (audit/소유 메타 제외, SP6-iii).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListingPhotoSummary {
+    /// Photo ID (`lph_...`).
+    pub photo_id: String,
     /// `R2` 객체 키.
     pub r2_key: String,
     /// 썸네일 `R2` 키 (선택).

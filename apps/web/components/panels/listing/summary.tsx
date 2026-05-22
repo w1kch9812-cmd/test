@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { ListingDetail } from "@/lib/listings/api";
 import { formatAreaPyeong, formatPriceKrw } from "@/lib/listings/format";
+import { listingPhotoImageSrc } from "@/lib/listings/photos";
 import type { PanelStackEntry } from "@/lib/panel/types";
 
 export function ListingSummaryCard({
@@ -24,7 +25,7 @@ export function ListingSummaryCard({
       {cover && !imageBroken && (
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-[var(--color-surface-cream-strong)]">
           <Image
-            src={`/api/listings/${entry.id}/photos/${cover.r2_key}`}
+            src={listingPhotoImageSrc(entry.id, cover)}
             alt={data.title}
             fill
             className="object-cover"

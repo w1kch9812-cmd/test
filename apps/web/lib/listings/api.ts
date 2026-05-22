@@ -61,6 +61,7 @@ export async function fetchListings(
 // ── SP6-iii: 매물 상세 ──────────────────────────────────────────────────
 
 export const ListingPhotoSchema = z.object({
+  photo_id: z.string(),
   r2_key: z.string(),
   thumbnail_r2_key: z.string().nullish(),
   caption: z.string().nullish(),

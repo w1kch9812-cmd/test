@@ -108,7 +108,10 @@ async function forward(req: NextRequest, params: { path: string[] }): Promise<Ne
 }
 
 function isBinaryProxyResponse(contentType: string): boolean {
-  return contentType.toLowerCase().startsWith("application/vnd.mapbox-vector-tile");
+  const normalized = contentType.toLowerCase();
+  return (
+    normalized.startsWith("application/vnd.mapbox-vector-tile") || normalized.startsWith("image/")
+  );
 }
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
