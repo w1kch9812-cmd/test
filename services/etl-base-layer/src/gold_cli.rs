@@ -180,7 +180,7 @@ fn log_gold_start(host: Host, opts: &GoldOpts) {
 
 async fn ensure_tippecanoe_available(host: Host) -> Result<(), ExitCode> {
     let version = check_available(host).await.map_err(|e| {
-        error!(error = %e, "tippecanoe not available ??set ETL_WSL_DISTRO if not Ubuntu, or apt install tippecanoe in WSL");
+        error!(error = %e, "tippecanoe not available - set ETL_WSL_DISTRO if not Ubuntu, or apt install tippecanoe in WSL");
         ExitCode::from(2)
     })?;
     info!(version = %version, "tippecanoe available");
@@ -203,7 +203,7 @@ async fn resolve_gold_inputs(host: Host, opts: &GoldOpts) -> Result<GoldInputSet
     };
 
     if geojson_inputs.is_empty() {
-        error!("no GeoJSON inputs after preparation ??aborting");
+        error!("no GeoJSON inputs after preparation - aborting");
         return Err(ExitCode::FAILURE);
     }
 

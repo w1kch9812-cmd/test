@@ -1,7 +1,8 @@
 import { z } from "zod";
 
 /**
- * Client + server 공통: NEXT_PUBLIC_* 만 client bundle 에 inline됨.
+ * Shared client/server schema. Only NEXT_PUBLIC_* values are inlined into the
+ * browser bundle.
  */
 const optionalUrl = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -127,7 +128,7 @@ const PublicEnvSchema = z.object({
 });
 
 /**
- * Server 전용: server-only secrets. Browser 에서 access 시 undefined.
+ * Server-only schema. These values must never be read from browser code.
  */
 const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_ISSUER: isProduction ? requiredProductionPublicUrl : requiredUrl,
@@ -136,9 +137,9 @@ const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_REDIRECT_URI: isProduction ? requiredProductionPublicUrl : requiredUrl,
   REDIS_URL: isProduction ? requiredProductionRedisUrl : requiredUrl,
   SESSION_SECRET: requiredSessionSecret,
-  // audit 2026-05-08: services/api 의 /internal/auth/event shared secret. Rust API
-  // 와 *동일 값* 공유 — 미설정 시 401 (audit log 누락만, 서비스 정상). production
-  // 은 Pulumi secret. dev 는 .env.local.
+  // services/api /internal/auth/event shared secret. A mismatch yields 401
+  // responses and missing audit events. Production must source this from
+  // infrastructure secrets; local development uses the explicit dev default.
   INTERNAL_AUTH_SECRET: isProduction
     ? requiredInternalAuthSecret
     : requiredInternalAuthSecret.default(devInternalAuthSecret),
@@ -168,8 +169,8 @@ if (!parsed.success) {
 }
 
 /**
- * Server-only env 는 client bundle 에서 undefined.
- * server-only secrets 사용 코드는 Route Handler / Server Component 안에서만.
+ * Server-only env export. Use secrets only from Route Handlers or Server
+ * Components.
  */
 export const env = parsed.data as z.infer<typeof ServerEnvSchema>;
 export type Env = z.infer<typeof ServerEnvSchema>;

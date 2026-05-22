@@ -97,7 +97,7 @@ pub async fn run_verify(
 }
 
 fn log_verify_disabled() {
-    warn!("VERIFY_DISABLE=1 ??verification skipped (dev / micro-fixture only)");
+    warn!("VERIFY_DISABLE=1 - verification skipped (dev / micro-fixture only)");
 }
 
 #[cfg(test)]

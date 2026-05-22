@@ -26,7 +26,7 @@ impl BronzeCliError {
 
 fn bronze_no_sources_exit() -> ExitCode {
     error!(
-        "no Bronze sources configured ??set BRONZE_PARCEL_SHP_URL / BRONZE_ADMIN_SHP_URL / BRONZE_COMPLEX_GEOJSON_URL"
+        "no Bronze sources configured - set BRONZE_PARCEL_SHP_URL / BRONZE_ADMIN_SHP_URL / BRONZE_COMPLEX_GEOJSON_URL"
     );
     ExitCode::from(2)
 }

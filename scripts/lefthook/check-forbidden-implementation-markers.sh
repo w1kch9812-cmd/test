@@ -34,7 +34,8 @@ for search_root in "${search_roots[@]}"; do
   fi
 done
 
-pattern='(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP)([^A-Za-z0-9]|$)'
+marker_pattern='(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP)([^A-Za-z0-9]|$)'
+mojibake_pattern='�|怨|留|鍮|먯|꾩|쒓|濡|踰|遺|곗|뚮|뺣|媛|嫄|숈|몄|퀎|븷|봣|봸'
 matches="$(
   "$rg_bin" \
     --line-number \
@@ -47,7 +48,8 @@ matches="$(
     --glob '*.rs' \
     --glob '*.py' \
     --glob '*.sql' \
-    --regexp "$pattern" \
+    --regexp "$marker_pattern" \
+    --regexp "$mojibake_pattern" \
     "${rg_roots[@]}" || true
 )"
 

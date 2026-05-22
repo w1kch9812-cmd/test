@@ -202,7 +202,7 @@ async fn publish_staging_spec(
     spec: &ArtifactSpec,
 ) -> Result<(), UploadStepError> {
     promote::write_staging_spec(uploader, request.version, request.layer, spec).await?;
-    info!("staging spec published ??platform-core Catalog owns manifest pointer flip");
+    info!("staging spec published - platform-core Catalog owns manifest pointer flip");
     Ok(())
 }
 

@@ -77,3 +77,10 @@ write_file "services/api/src/startup.rs" <<'RS'
 fn main() {}
 RS
 assert_failure_contains "rejects HACK comments" "forbidden implementation marker" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_file "apps/web/lib/env.ts" <<'TS'
+// Server ?꾩슜: server-only secrets.
+export const ok = true;
+TS
+assert_failure_contains "rejects mojibake comments" "forbidden implementation marker" bash "$script" "$tmp_root"
