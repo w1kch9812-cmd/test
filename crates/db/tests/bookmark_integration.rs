@@ -430,83 +430,11 @@ async fn find_detail_excludes_pending_upload_photos() {
     assert!(detail.photos.is_empty());
 }
 
-#[tokio::test]
-async fn find_detail_returns_confirmed_photo_id_for_download_route() {
-    use listing_domain::repository::ListingRepository as ListingRepo;
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let owner = seed_user(&pool, "zsub-detail-photo-id", "detail-photo-id@example.com").await;
-    let viewer = seed_user(
-        &pool,
-        "zsub-detail-photo-id-v",
-        "detail-photo-id-v@example.com",
-    )
-    .await;
-    let listing_id = seed_active_listing(&pool, owner).await;
-    let l_repo = PgListingRepository::new(pool.clone());
-    let p_repo = PgListingPhotoRepository::new(pool.clone());
-    let photo = ListingPhoto::try_new(
-        Id::<ListingPhotoMarker>::new(),
-        listing_id.clone(),
-        "listings/test/confirmed-detail-photo.jpg",
-        None,
-        None,
-        0,
-        None,
-        None,
-        Some(100),
-        PhotoContentType::Jpeg,
-        Utc::now(),
-    )
-    .expect("confirmed photo");
-    p_repo.save(&photo, test_ctx()).await.expect("save");
+#[path = "bookmark_integration/detail_photo.rs"]
+mod detail_photo;
 
-    let detail = l_repo
-        .find_detail_by_id(&listing_id, &viewer)
-        .await
-        .expect("ok")
-        .expect("found");
-
-    assert_eq!(detail.photos.len(), 1);
-    assert_eq!(detail.photos[0].photo_id, photo.id.as_str());
-}
-
-#[tokio::test]
-async fn increment_view_count_increments_value() {
-    use listing_domain::repository::ListingRepository as ListingRepo;
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let owner = seed_user(&pool, "zsub-detail-5", "detail5@example.com").await;
-    let viewer = seed_user(&pool, "zsub-detail-5v", "detail5v@example.com").await;
-    let listing_id = seed_active_listing(&pool, owner).await;
-    let l_repo = PgListingRepository::new(pool.clone());
-
-    l_repo.increment_view_count(&listing_id).await.expect("ok");
-    l_repo.increment_view_count(&listing_id).await.expect("ok");
-
-    let detail = l_repo
-        .find_detail_by_id(&listing_id, &viewer)
-        .await
-        .expect("ok")
-        .expect("found");
-    assert_eq!(detail.listing.view_count, 2);
-}
-
-#[tokio::test]
-async fn increment_view_count_nonexistent_returns_not_found() {
-    use listing_domain::repository::ListingRepository as ListingRepo;
-    use listing_domain::repository::RepoError as ListingRepoError;
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let l_repo = PgListingRepository::new(pool);
-
-    let fake_id = Id::<ListingMarker>::new();
-    let err = l_repo
-        .increment_view_count(&fake_id)
-        .await
-        .expect_err("not found");
-    assert!(matches!(err, ListingRepoError::NotFound));
-}
+#[path = "bookmark_integration/view_count.rs"]
+mod view_count;
 
 /// 도우미 — Active 상태 매물 시드 (`find_detail` RBAC 테스트용).
 async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingMarker> {
