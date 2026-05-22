@@ -52,6 +52,14 @@ scan_file() {
 scan_file "$lefthook_file"
 
 shopt -s nullglob
+top_level_script_files=("${root}"/scripts/*.sh)
+shopt -u nullglob
+
+for script_file in "${top_level_script_files[@]}"; do
+  scan_file "$script_file"
+done
+
+shopt -s nullglob
 workflow_files=("${root}"/.github/workflows/*.yml "${root}"/.github/workflows/*.yaml)
 shopt -u nullglob
 

@@ -88,7 +88,6 @@ function requiredHeader(req: NextRequest, name: string): string | undefined {
 
 function invalidateCatalogCache() {
   revalidatePath("/listings", "page");
-  revalidatePath("/dev-x9-test", "page");
   revalidateTag(CATALOG_CACHE_TAG, { expire: 0 });
 }
 

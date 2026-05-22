@@ -65,7 +65,7 @@ describe("POST /platform-core/events", () => {
       status: "accepted",
     });
     expect(mockRevalidatePath).toHaveBeenCalledWith("/listings", "page");
-    expect(mockRevalidatePath).toHaveBeenCalledWith("/dev-x9-test", "page");
+    expect(mockRevalidatePath).not.toHaveBeenCalledWith("/dev-x9-test", "page");
     expect(mockRevalidateTag).toHaveBeenCalledWith("platform-core-catalog", { expire: 0 });
   });
 

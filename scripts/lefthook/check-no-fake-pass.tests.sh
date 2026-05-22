@@ -28,6 +28,11 @@ write_workflow() {
   cat > "${tmp_root}/.github/workflows/ci.yml"
 }
 
+write_script() {
+  mkdir -p "${tmp_root}/scripts"
+  cat > "${tmp_root}/scripts/dev-helper.sh"
+}
+
 assert_success() {
   local name="$1"
   shift
@@ -119,3 +124,17 @@ jobs:
       - run: cargo test --workspace || true
 YAML
 assert_failure_contains "rejects workflow true fallback" "true fallback" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_lefthook <<'YAML'
+pre-push:
+  commands:
+    cargo-check:
+      run: cargo check --workspace --all-features
+YAML
+write_script <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+cargo run -q -p tool --bin print-config || true
+SH
+assert_failure_contains "rejects script true fallback" "true fallback" bash "$script" "$tmp_root"
