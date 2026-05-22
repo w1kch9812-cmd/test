@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import openapiTS from "openapi-typescript";
+import openapiTS, { astToString } from "openapi-typescript";
 
 /**
  * utoipa (services/api) 가 출력한 OpenAPI spec → TypeScript types.
@@ -27,7 +27,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const types = await openapiTS(JSON.parse(openapiContent));
+  const types = astToString(await openapiTS(JSON.parse(openapiContent)));
   await writeFile(OUTPUT_PATH, types, "utf-8");
   console.info(`[api-types] Generated TS types at ${OUTPUT_PATH}`);
 }

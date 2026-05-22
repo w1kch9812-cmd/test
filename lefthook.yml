@@ -57,7 +57,7 @@ pre-push:
         - merge
         - rebase
     typecheck:
-      run: pnpm install --frozen-lockfile --reporter=silent && pnpm turbo run typecheck
+      run: pnpm install --frozen-lockfile --reporter=silent && pnpm typecheck
       skip:
         - merge
         - rebase

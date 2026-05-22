@@ -58,7 +58,7 @@ jobs:
           node-version: 20.18
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run typecheck
+      - run: pnpm typecheck
 
   cargo-check:
     name: cargo check + cargo-deny
