@@ -72,8 +72,11 @@ jobs:
       - name: Sanitize log
         if: always()
         run: |
-          sed -i 's/ServiceKey=[^&"]*/ServiceKey=***/g' smoke.log || true
-          sed -i 's/key=[^&"]*/key=***/g' smoke.log || true
+          if [ ! -f smoke.log ]; then
+              printf 'smoke.log missing before sanitization\n' > smoke.log
+          fi
+          sed -i 's/ServiceKey=[^&"]*/ServiceKey=***/g' smoke.log
+          sed -i 's/key=[^&"]*/key=***/g' smoke.log
           tail -n 80 smoke.log > smoke.log.short
 
       - name: Record + Issue orchestration
@@ -148,7 +151,10 @@ jobs:
       - name: Sanitize log
         if: always()
         run: |
-          sed -i 's/key=[^&"]*/key=***/g' smoke.log || true
+          if [ ! -f smoke.log ]; then
+              printf 'smoke.log missing before sanitization\n' > smoke.log
+          fi
+          sed -i 's/key=[^&"]*/key=***/g' smoke.log
           tail -n 80 smoke.log > smoke.log.short
 
       - name: Record + Issue orchestration

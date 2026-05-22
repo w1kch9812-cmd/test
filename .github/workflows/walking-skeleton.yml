@@ -172,9 +172,15 @@ jobs:
         if: failure()
         run: |
           echo "=== api.log ==="
-          cat /tmp/api.log || true
+          if [ -f /tmp/api.log ]; then
+            cat /tmp/api.log
+          else
+            echo "api.log missing"
+          fi
 
       - name: Stop API
         if: always()
         run: |
-          if [ -n "${API_PID:-}" ]; then kill $API_PID || true; fi
+          if [ -n "${API_PID:-}" ] && kill -0 "$API_PID" 2>/dev/null; then
+            kill "$API_PID"
+          fi

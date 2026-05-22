@@ -32,6 +32,11 @@ scan_file() {
       status=1
     fi
 
+    if [[ "$line" == *"|| true"* ]]; then
+      printf 'lefthook-no-fake-pass: true fallback in %s:%s: %s\n' "$label" "$line_number" "$line" >&2
+      status=1
+    fi
+
     if [[ "$line" == *"CI enforces"* ]]; then
       printf 'lefthook-no-fake-pass: CI enforces skip wording in %s:%s: %s\n' "$label" "$line_number" "$line" >&2
       status=1

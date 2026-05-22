@@ -102,3 +102,20 @@ jobs:
       - run: cargo check --workspace || echo "cargo not installed locally"
 YAML
 assert_failure_contains "rejects workflow echo fallback" "fake-pass fallback" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_lefthook <<'YAML'
+pre-push:
+  commands:
+    cargo-check:
+      run: cargo check --workspace --all-features
+YAML
+write_workflow <<'YAML'
+name: CI
+jobs:
+  fake-pass:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: cargo test --workspace || true
+YAML
+assert_failure_contains "rejects workflow true fallback" "true fallback" bash "$script" "$tmp_root"
