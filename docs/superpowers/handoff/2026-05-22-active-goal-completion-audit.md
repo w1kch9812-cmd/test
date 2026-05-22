@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `c3495b8` workflow `true` fallback guardrail, `9cc1399` workflow fake-pass fallback guardrail, `18883bb` production-shaped frontend build environment, `674ac08` workflow-file forbidden marker scan, `e6a8802` CI forbidden marker workflow gate, `59f5a4c` mojibake implementation marker guardrail, `eca931d` forbidden implementation marker guardrail, `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `14f9269` production dev-X9 route denial, `c3495b8` workflow `true` fallback guardrail, `9cc1399` workflow fake-pass fallback guardrail, `18883bb` production-shaped frontend build environment, `674ac08` workflow-file forbidden marker scan, `e6a8802` CI forbidden marker workflow gate, `59f5a4c` mojibake implementation marker guardrail, `eca931d` forbidden implementation marker guardrail, `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -73,6 +73,7 @@ For this implementation slice, the concrete deliverables are:
 | Mojibake implementation marker guardrail | `59f5a4c` replaces unreadable env/ETL comments and log messages, extends the same pre-commit/pre-push guardrail to reject representative mojibake fragments, and keeps web env plus `etl-base-layer` check/test/clippy evidence green | Covered locally |
 | Forbidden marker CI enforcement | `e6a8802` adds the forbidden implementation marker guardrail to `.github/workflows/ci.yml`; `674ac08` extends the guardrail to scan `.github` YAML files while allowing the GitHub `RUNNER_TEMP` built-in | Covered locally |
 | Local and workflow fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml`; `9cc1399` extends `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` to scan GitHub workflow YAML files and rejects shell echo fallbacks; `c3495b8` rejects workflow `true` fallbacks and replaces the remaining workflow uses with explicit file/process existence checks | Covered locally |
+| Dev-only map diagnostic route production denial | `14f9269` moves `/dev-x9-test` interactive map diagnostics behind a server page plus proxy-level production 404, keeps the client-only map probe in `dev-x9-test-client.tsx`, and adds unit plus live production HTTP smoke evidence | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
 | Platform-core manifest/contract CORS behavior | `../platform-core/services/api/src/routes/mod.rs` now has RED/GREEN coverage for local `localhost:3900` manifest/marker-contract preflights, invalid local-origin fallback using the same default-origin SSOT, and production default origin list remaining empty; live HTTP smoke on `127.0.0.1:18082` returned `access-control-allow-origin: http://localhost:3900` for both endpoints | Covered |
@@ -143,6 +144,19 @@ pnpm exec js-yaml .github/workflows/walking-skeleton.yml
 
 rg -nP "[^\x00-\x7F]" .github/workflows/sp9-base-layer-validation.yml
 # no matches; the workflow no longer carries mojibake comments or messages
+
+pnpm --filter @gongzzang/web test -- tests/unit/platform-core-proxy.test.ts tests/unit/dev-x9-page.test.tsx
+# 2 test files passed, 6 tests passed; production /dev-x9-test proxy status is 404
+
+pnpm --filter @gongzzang/web test
+# 36 test files passed, 158 tests passed, 1 skipped
+
+pnpm --filter @gongzzang/web build
+# production-shaped env build passed
+
+pnpm --dir apps/web exec next start -p 3901
+curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:3901/dev-x9-test
+# 404; temporary server process stopped after smoke
 
 bash scripts/ci/check-markdown-links.tests.sh
 # ok - checks internal links without network
