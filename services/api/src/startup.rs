@@ -231,8 +231,13 @@ fn build_noop_parcel_lookup(
     Ok(Arc::new(NoOpParcelInfoLookup::new()))
 }
 
-pub fn build_verifier(dev_mode: bool) -> Result<Arc<Verifier>, StartupError> {
+pub fn build_verifier(dev_mode: bool, is_production: bool) -> Result<Arc<Verifier>, StartupError> {
     if dev_mode {
+        if is_production {
+            return Err(production_config_error(
+                "AUTH_DEV_MODE=true is forbidden in production because it enables mock DEV.<sub> tokens",
+            ));
+        }
         tracing::warn!(
             "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
         );
@@ -333,7 +338,9 @@ fn build_data_go_kr_building_reader(
 
 #[cfg(test)]
 mod tests {
-    use super::{required_env, StartupError};
+    use auth::verifier::Verifier;
+
+    use super::{build_verifier, required_env, StartupError};
 
     #[test]
     fn required_env_returns_typed_error_when_missing() {
@@ -343,5 +350,24 @@ mod tests {
         let result = required_env(NAME);
 
         assert!(matches!(result, Err(StartupError::MissingEnv { name }) if name == NAME));
+    }
+
+    #[test]
+    fn production_rejects_auth_dev_mode() {
+        let result = build_verifier(true, true);
+
+        assert!(
+            matches!(result, Err(StartupError::ProductionConfig { reason }) if reason.contains("AUTH_DEV_MODE"))
+        );
+    }
+
+    #[test]
+    fn non_production_allows_auth_dev_mode() {
+        let result = build_verifier(true, false);
+
+        assert!(result.is_ok(), "expected dev verifier");
+        if let Ok(verifier) = result {
+            assert!(matches!(verifier.as_ref(), Verifier::Dev));
+        }
     }
 }

@@ -113,7 +113,7 @@ async fn async_main() -> Result<(), StartupError> {
         parcel_lookup,
     };
 
-    let verifier = build_verifier(dev_mode)?;
+    let verifier = build_verifier(dev_mode, is_production)?;
     // SP-Obs T7: Redis pool 을 jti_denylist + health check 양쪽이 공유.
     // REDIS_URL 미설정 → 둘 다 None (개발 환경 fail-open). production 은 fail-fast.
     //
