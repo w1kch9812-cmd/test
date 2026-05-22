@@ -138,17 +138,4 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
       - name: Check file sizes
-        run: |
-          fail=0
-          while IFS= read -r f; do
-            lines=$(wc -l < "$f")
-            if [ "$lines" -gt 1500 ]; then
-              echo "::error file=$f::$lines lines (> 1500). 폴더로 분해하세요."
-              fail=1
-            elif [ "$lines" -gt 500 ]; then
-              echo "::warning file=$f::$lines lines (> 500). 분해 권장."
-            fi
-          done < <(find . -type f \( -name "*.md" -o -name "*.rs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.sql" \) \
-                   ! -path "./node_modules/*" ! -path "./_archive/*" ! -path "./target/*" ! -path "./.next/*" \
-                   ! -path "./reference/*" ! -path "./docs/superpowers/*")
-          exit $fail
+        run: bash scripts/lefthook/file-line-limit.sh

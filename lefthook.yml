@@ -25,6 +25,11 @@ pre-commit:
       skip:
         - merge
         - rebase
+    file-line-limit:
+      run: bash scripts/lefthook/file-line-limit.sh
+      skip:
+        - merge
+        - rebase
     panel-no-framework-import-kind:
       # SP10 spec § 9 #5: lib/panel/** 는 components/panels/** 에 의존 금지.
       # 프레임워크 → kind 단방향. 위반 시 commit 차단.
