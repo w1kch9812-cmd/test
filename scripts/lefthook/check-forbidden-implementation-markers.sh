@@ -35,7 +35,7 @@ for search_root in "${search_roots[@]}"; do
 done
 
 marker_pattern='(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP)([^A-Za-z0-9]|$)'
-mojibake_pattern='�|怨|留|鍮|먯|꾩|쒓|濡|踰|遺|곗|뚮|뺣|媛|嫄|숈|몄|퀎|븷|봣|봸'
+mojibake_pattern='\x{FFFD}|\x{6028}|\x{F9CD}|\x{936E}|\x{BA2F}|\x{AFA9}|\x{C493}|\x{6FE1}|\x{8E30}|\x{907A}|\x{ACD7}|\x{B6AE}|\x{BEA3}|\x{5A9B}|\x{5AC4}|\x{C208}|\x{BA84}|\x{D00E}|\x{BE37}|\x{BD23}|\x{BD38}'
 matches="$(
   "$rg_bin" \
     --line-number \

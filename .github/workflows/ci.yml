@@ -37,6 +37,8 @@ jobs:
       - name: PNU anchor PBF marker contract guardrail
         shell: pwsh
         run: ./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+      - name: Forbidden implementation marker guardrail
+        run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
       - name: markdownlint
         run: pnpm markdownlint-cli2 "**/*.md" "#**/node_modules/**" "#**/_archive/**" "#**/reference/**" "#**/target/**" "#**/.next/**" "#**/.turbo/**"
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
