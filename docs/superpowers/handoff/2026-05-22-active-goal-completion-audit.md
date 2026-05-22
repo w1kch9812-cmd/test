@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -56,6 +56,7 @@ For this implementation slice, the concrete deliverables are:
 | Listing photo signed download routing | `8946709` exposes authenticated `GET /listings/:listing_id/photos/:photo_id`, checks listing visibility, rejects pending or mismatched photos, issues short-lived R2 signed GET URLs, adds `photo_id` to listing detail projection, and moves frontend image paths to a single `listingPhotoImageSrc` helper | Covered locally |
 | Recent file-size debt from photo hardening | `2e29fde` splits `services/api/src/photo_upload.rs` tests, `services/api/src/startup.rs` tests, and bookmark detail/view-count integration tests into submodules so the recently touched code/test files are below the 500-line preferred threshold | Covered locally |
 | API contract placeholder removal | `550744e` makes `@gongzzang/api-types` generation fail when `services/api/openapi.json` is absent, removes the fake `/healthz` generated type, and adds a package test that rejects silent placeholder retention | Covered locally |
+| Naver Maps public client ID fail-fast | `738f06c` removes the `NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID` runtime placeholder default, rejects missing and known sentinel values in `apps/web/lib/env.ts`, keeps `.env.local.example` empty for explicit local configuration, and refines `.gitleaks.toml` so real Naver key assignments remain blocked without flagging schema identifiers | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -239,6 +240,24 @@ pnpm test
 pnpm lefthook run pre-push
 # cargo-check, cargo-clippy, catalog-m1-boundary, lefthook-no-fake-pass,
 # markdown-links, sqlx-prepare-check, and typecheck passed
+
+pnpm --filter @gongzzang/web test -- tests/unit/env.test.ts
+# 5 passed; missing and sentinel NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID are rejected
+
+pnpm --filter @gongzzang/web lint
+# Checked 151 files. No fixes applied.
+
+pnpm --filter @gongzzang/web typecheck
+# tsc --noEmit passed
+
+pnpm --filter @gongzzang/web test
+# 35 test files passed, 139 tests passed, 1 skipped
+
+gitleaks detect --no-git --source <temporary sample with NAVER_MAPS_CLIENT_ID assignment> --config .gitleaks.toml --redact -v
+# expected failure: naver-maps-credential-assignment reported the fake sample assignment
+
+gitleaks protect --staged --redact -v
+# no leaks found for the env schema/test changes after secretGroup refinement
 
 rg -n "MOCK://|photo\.upload\.mock|presigned URL .*mock|SP4-iii-e pending|mock presigned" \
   services/api/src/routes/listings/photos.rs services/api/src/photo_upload.rs services/api/src/startup.rs
