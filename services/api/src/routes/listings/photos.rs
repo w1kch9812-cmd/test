@@ -13,6 +13,7 @@ use user_domain::entity::UserRole;
 
 use crate::http::mutation_ctx::http_user_action;
 use crate::http::problem::{problem, ProblemResponse};
+use crate::photo_upload::{PhotoUploadUrlError, PhotoUploadUrlRequest, UploadHeader};
 
 use super::mutation::load_listing_for_actor;
 use super::state::ListingsState;
@@ -32,19 +33,17 @@ pub struct RequestPhotoUploadRequest {
 pub struct RequestPhotoUploadResponse {
     /// 새 사진 ID (`lph_<26 ULID>`).
     pub photo_id: String,
-    /// pre-signed PUT URL — 1차 mock (SP4-iii-e R2 통합 전).
+    /// pre-signed PUT URL.
     pub presigned_put_url: String,
+    /// Headers that must be sent with the PUT request.
+    pub upload_headers: Vec<UploadHeader>,
     /// R2 객체 키 (`listings/<lst_id>/<lph_id>.<ext>`).
     pub r2_key: String,
-    /// URL 만료 시각 (mock 은 +15분).
+    /// URL 만료 시각.
     pub expires_at: DateTime<Utc>,
 }
 
 /// `POST /listings/:id/photos` — pre-signed URL 발급 (Broker + 소유자 전용).
-///
-/// 1차 mock: `presigned_put_url = "MOCK://..."`. SP4-iii-e 의 `aws-sdk-s3` 통합
-/// 후 실 R2 URL 반환. `ListingPhoto` row 는 *지금* 생성됨 — frontend 가 PUT
-/// 성공 시 별도 confirm endpoint 호출은 후속 (FU 49).
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(skip(state, auth, body), fields(actor = %auth.user.id, listing_id = %id))]
 pub async fn request_photo_upload(
@@ -109,6 +108,15 @@ pub async fn request_photo_upload(
         )
     })?;
 
+    let upload_url = state
+        .photo_upload_issuer
+        .issue_upload_url(PhotoUploadUrlRequest {
+            r2_key: r2_key.clone(),
+            content_type,
+        })
+        .await
+        .map_err(|error| photo_upload_problem(&error))?;
+
     let ctx = http_user_action(&auth, "request_photo_upload");
     state.photo_repo.save(&photo, ctx).await.map_err(|e| {
         tracing::error!(error = %e, "photo save failed");
@@ -136,25 +144,26 @@ pub async fn request_photo_upload(
         }
     })?;
 
-    // SECURITY/UX: SP4-iii-e R2 통합 전. presigned URL 은 mock — frontend e2e 가
-    // 실 PUT 시도 안 함. tracing target=`photo.upload.mock` 으로 후속 R2 통합 시
-    // 검색 가능하도록 marker 남김.
-    tracing::info!(
-        target: "photo.upload.mock",
-        photo_id = %photo_id,
-        r2_key = %r2_key,
-        "issued mock presigned URL (SP4-iii-e pending)"
-    );
-
     Ok((
         StatusCode::CREATED,
         Json(RequestPhotoUploadResponse {
             photo_id: photo_id.as_str().to_owned(),
-            presigned_put_url: format!("MOCK://r2/{r2_key}"),
+            presigned_put_url: upload_url.url,
+            upload_headers: upload_url.required_headers,
             r2_key,
             expires_at: now + chrono::Duration::minutes(15),
         }),
     ))
+}
+
+fn photo_upload_problem(error: &PhotoUploadUrlError) -> ProblemResponse {
+    tracing::error!(error = %error, "photo upload URL issue failed");
+    problem(
+        "photo-upload-unavailable",
+        "사진 업로드를 지금 사용할 수 없어요",
+        StatusCode::SERVICE_UNAVAILABLE,
+        None,
+    )
 }
 
 /// `DELETE /listings/:id/photos/:photo_id` — soft-delete.

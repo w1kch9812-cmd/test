@@ -101,6 +101,34 @@ impl R2RawCaptureConfig {
         format!("https://{}.r2.cloudflarestorage.com", self.account_id)
     }
 
+    /// Build the shared S3-compatible R2 client from this config.
+    #[must_use]
+    pub fn s3_client(&self, credential_source: &'static str) -> S3Client {
+        let creds = Credentials::new(
+            &self.access_key,
+            &self.secret_key,
+            None,
+            None,
+            credential_source,
+        );
+        let s3_config = S3ConfigBuilder::default()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("auto"))
+            .endpoint_url(self.endpoint_url())
+            .credentials_provider(creds)
+            .force_path_style(true)
+            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
+            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
+            .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(1))
+            .timeout_config(
+                aws_config::timeout::TimeoutConfig::builder()
+                    .operation_attempt_timeout(Duration::from_secs(15))
+                    .build(),
+            )
+            .build();
+        S3Client::from_conf(s3_config)
+    }
+
     /// `fallback_dir` 가 `Some` 일 때, 실제로 mkdir + 쓰기 가능한지 startup 에서 확정 검증.
     ///
     /// audit 2026-05-08 round 4 (Codex stop-time review): env 존재만 검사하면
@@ -153,34 +181,8 @@ impl R2RawCapture {
     /// 새 [`R2RawCapture`].
     #[must_use]
     pub fn new(config: R2RawCaptureConfig) -> Self {
-        let creds = Credentials::new(
-            &config.access_key,
-            &config.secret_key,
-            None,
-            None,
-            "api-r2-raw-capture",
-        );
-        // R2 는 region 무시하지만 SigV4 가 필수로 요구 — `auto` 사용.
-        // R2 가 `STREAMING-UNSIGNED-PAYLOAD-TRAILER` 와 호환 안 함 → checksum WhenRequired.
-        let s3_config = S3ConfigBuilder::default()
-            .behavior_version(BehaviorVersion::latest())
-            .region(Region::new("auto"))
-            .endpoint_url(config.endpoint_url())
-            .credentials_provider(creds)
-            .force_path_style(true)
-            .request_checksum_calculation(RequestChecksumCalculation::WhenRequired)
-            .response_checksum_validation(ResponseChecksumValidation::WhenRequired)
-            // SDK retry 도 가능하지만 우리는 circuit_breaker::execute 의 retry 정책으로
-            // 통일 (Policy::r2_default) — SDK 내부 retry 는 1로 둠.
-            .retry_config(aws_config::retry::RetryConfig::standard().with_max_attempts(1))
-            .timeout_config(
-                aws_config::timeout::TimeoutConfig::builder()
-                    .operation_attempt_timeout(Duration::from_secs(15))
-                    .build(),
-            )
-            .build();
         Self {
-            client: S3Client::from_conf(s3_config),
+            client: config.s3_client("api-r2-raw-capture"),
             bucket: config.bucket,
             bronze_prefix: config.bronze_prefix,
             fallback_dir: config.fallback_dir,

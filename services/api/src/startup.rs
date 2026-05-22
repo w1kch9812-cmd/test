@@ -11,6 +11,7 @@ use sqlx::postgres::PgPoolOptions;
 use vworld_client::{VWorldClient, VWorldConfig, VWorldParcelReader};
 
 use crate::building_reader;
+use crate::photo_upload;
 use crate::r2_raw_capture;
 use crate::raw_capture_metadata;
 use crate::routes;
@@ -231,6 +232,36 @@ fn build_noop_parcel_lookup(
     Ok(Arc::new(NoOpParcelInfoLookup::new()))
 }
 
+pub fn build_photo_upload_issuer(
+    is_production: bool,
+) -> Result<Arc<dyn photo_upload::ListingPhotoUploadUrlIssuer>, StartupError> {
+    build_photo_upload_issuer_from_config_result(
+        is_production,
+        r2_raw_capture::R2RawCaptureConfig::from_env(),
+    )
+}
+
+pub fn build_photo_upload_issuer_from_config_result(
+    is_production: bool,
+    config_result: Result<r2_raw_capture::R2RawCaptureConfig, r2_raw_capture::R2ConfigError>,
+) -> Result<Arc<dyn photo_upload::ListingPhotoUploadUrlIssuer>, StartupError> {
+    match config_result {
+        Ok(config) => Ok(Arc::new(photo_upload::R2ListingPhotoUploadUrlIssuer::new(
+            config,
+        ))),
+        Err(error) if is_production => Err(production_config_error(format!(
+            "listing photo upload R2 config missing — production cannot issue mock upload URLs: {error}"
+        ))),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "listing photo upload R2 config missing — upload URL issuing disabled in dev"
+            );
+            Ok(Arc::new(photo_upload::DisabledListingPhotoUploadUrlIssuer))
+        }
+    }
+}
+
 pub fn build_verifier(dev_mode: bool, is_production: bool) -> Result<Arc<Verifier>, StartupError> {
     if dev_mode {
         if is_production {
@@ -340,7 +371,9 @@ fn build_data_go_kr_building_reader(
 mod tests {
     use auth::verifier::Verifier;
 
-    use super::{build_verifier, required_env, StartupError};
+    use super::{
+        build_photo_upload_issuer_from_config_result, build_verifier, required_env, StartupError,
+    };
 
     #[test]
     fn required_env_returns_typed_error_when_missing() {
@@ -369,5 +402,20 @@ mod tests {
         if let Ok(verifier) = result {
             assert!(matches!(verifier.as_ref(), Verifier::Dev));
         }
+    }
+
+    #[test]
+    fn production_rejects_missing_listing_photo_upload_r2_config() {
+        let result = build_photo_upload_issuer_from_config_result(
+            true,
+            Err(crate::r2_raw_capture::R2ConfigError::MissingEnv(
+                "R2_BUCKET",
+            )),
+        );
+
+        assert!(
+            matches!(result, Err(StartupError::ProductionConfig { reason })
+                if reason.contains("listing photo upload") && reason.contains("R2_BUCKET"))
+        );
     }
 }

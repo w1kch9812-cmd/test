@@ -29,9 +29,9 @@ use tower_http::trace::TraceLayer;
 use user_domain::repository::UserRepository;
 
 use crate::startup::{
-    build_building_reader, build_internal_auth_secret, build_parcel_lookup, build_raw_capture,
-    build_redis_pool_shared, build_verifier, connect_postgres, init_tracing, is_production_env,
-    required_env, StartupError,
+    build_building_reader, build_internal_auth_secret, build_parcel_lookup,
+    build_photo_upload_issuer, build_raw_capture, build_redis_pool_shared, build_verifier,
+    connect_postgres, init_tracing, is_production_env, required_env, StartupError,
 };
 
 mod http {
@@ -41,6 +41,7 @@ mod http {
 }
 
 mod observability;
+mod photo_upload;
 
 mod building_reader;
 mod r2_raw_capture;
@@ -106,11 +107,13 @@ async fn async_main() -> Result<(), StartupError> {
     let raw_capture = build_raw_capture(is_production, pool.clone())?;
 
     let parcel_lookup = build_parcel_lookup(is_production, &raw_capture)?;
+    let photo_upload_issuer = build_photo_upload_issuer(is_production)?;
 
     let listings_state = routes::listings::ListingsState {
         listing_repo,
         photo_repo,
         parcel_lookup,
+        photo_upload_issuer,
     };
 
     let verifier = build_verifier(dev_mode, is_production)?;
