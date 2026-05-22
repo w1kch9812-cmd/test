@@ -5,7 +5,7 @@
 | Date | 2026-05-22 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `cc83aed` internal Markdown link enforcement, `d224a88` lefthook fake-pass removal, `8cd1390` stale temporary marker cleanup, `d7b0085` audit evidence refresh, `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup |
+| Latest Gongzzang commits | `a4c07ed` workspace typecheck coverage enforcement, `dc9c001` guardrail hardening evidence refresh, `cc83aed` internal Markdown link enforcement, `d224a88` lefthook fake-pass removal, `8cd1390` stale temporary marker cleanup |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -48,6 +48,7 @@ For this implementation slice, the concrete deliverables are:
 | Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions; `906b7bd` realigned the DB evidence path to `crates/db/src/listing/marker_tile.rs` after the repository split | Covered |
 | Rust TLS supply-chain advisories | `f953380` moves the workspace to Rust `1.91.1`, pins the matched AWS SDK line, uses `default-https-client`, and removes `rustls-webpki 0.101.x` from the dependency graph | Covered locally |
 | Rust/SQLx/web local verification gates | Fresh `cargo deny`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo sqlx prepare --workspace --check`, `pnpm lint`, `pnpm test`, and `pnpm lefthook run pre-push` evidence | Covered locally |
+| Workspace TypeScript typecheck coverage | `a4c07ed` adds `scripts/ci/check-workspace-typecheck-coverage.{py,sh,tests.sh}`, adds `typecheck` scripts to `@gongzzang/api-types` and `@gongzzang/ui`, and changes root/CI/pre-push typecheck to verify all 3 workspace packages | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -115,6 +116,23 @@ bash scripts/ci/check-markdown-links.sh
 pnpm lefthook run pre-push
 # includes cargo-check, cargo-clippy, catalog-m1-boundary, lefthook-no-fake-pass,
 # markdown-links, sqlx-prepare-check, and typecheck; all passed
+
+bash scripts/ci/check-workspace-typecheck-coverage.tests.sh
+# ok - accepts full workspace typecheck coverage
+# ok - rejects package missing typecheck script
+
+bash scripts/ci/check-workspace-typecheck-coverage.sh
+# workspace-typecheck-coverage-ok packages=3
+
+pnpm typecheck
+# workspace-typecheck-coverage-ok packages=3
+# turbo typecheck ran @gongzzang/api-types, @gongzzang/ui, and @gongzzang/web
+
+pnpm lint
+# Checked 201 files. No fixes applied.
+
+pnpm test
+# 34 web test files passed, 135 tests passed, 1 existing live-platform-core test skipped
 ```
 
 `906b7bd` is intentionally a guardrail-only follow-up: it prevents a false negative caused by the
