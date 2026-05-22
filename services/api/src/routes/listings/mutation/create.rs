@@ -63,7 +63,7 @@ pub struct CreateListingResponse {
 ///
 /// 도메인 invariant 검증 → `Listing::try_new_draft` → `repo.save(&listing, ctx)`.
 /// `actor_id == owner_id` (인증 사용자 = 소유자). `MutationContext::new_user_action`
-/// 으로 audit_log + outbox row 자동 INSERT.
+/// 으로 `audit_log` + outbox row 자동 INSERT.
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(skip(state, auth, body), fields(actor = %auth.user.id))]
 pub async fn create_listing(

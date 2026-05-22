@@ -75,7 +75,7 @@ impl R2Uploader {
     /// ADR 0021 — flat tile 디렉터리 batch upload.
     ///
     /// `<local_root>/<z>/<x>/<y>.pbf` 들을 walk → R2 의
-    /// `<key_prefix>/<z>/<x>/<y>.pbf` 들로 *concurrent* PutObject (default 100).
+    /// `<key_prefix>/<z>/<x>/<y>.pbf` 들로 *concurrent* `PutObject` (default 100).
     /// tippecanoe 의 .pbf 는 기본 gzip → `Content-Encoding: gzip` + immutable
     /// `Cache-Control` metadata 자동 부여 (Cloudflare CDN edge 가 그대로 헤더 전달).
     ///

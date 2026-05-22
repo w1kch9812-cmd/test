@@ -110,7 +110,7 @@ mod tests {
     use super::*;
     use raw_capture_client::{NoOpRawCapture, RawCaptureKind};
 
-    /// inner = NoOp 일 때 receipt 의 object_key 가 `noop::` prefix.
+    /// inner = `NoOp` 일 때 receipt 의 `object_key` 가 `noop::` prefix.
     /// DB 호출은 mock 안 됨 — 실 DB 없이는 metadata UPSERT path 검증 불가 (별도 integration test).
     #[tokio::test]
     async fn inner_receipt_passthrough() {

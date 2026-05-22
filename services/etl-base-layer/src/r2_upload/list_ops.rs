@@ -171,17 +171,17 @@ impl R2Uploader {
         Ok(total)
     }
 
-    /// `GetObject` of a *possibly-missing* object — NoSuchKey → `Ok(None)`.
+    /// `GetObject` of a *possibly-missing* object — `NoSuchKey` → `Ok(None)`.
     ///
     /// ## 왜 `get_object_bytes` 와 분리했나
     ///
-    /// `get_object_bytes` 는 NoSuchKey 도 `UploadError::GetObject` 로 전파 → breaker 의
+    /// `get_object_bytes` 는 `NoSuchKey` 도 `UploadError::GetObject` 로 전파 → breaker 의
     /// `record_failure` 가 호출됨. 이건 manifest *first publish* 같은 *expected miss*
-    /// path 에 치명적: (a) NoSuchKey 가 `MaxRetriesExceeded` 로 wrap → typed match 가
+    /// path 에 치명적: (a) `NoSuchKey` 가 `MaxRetriesExceeded` 로 wrap → typed match 가
     /// `UploadError::GetObject` 를 못 잡음 → first publish 가 영구 실패. (b) 반복되는
     /// expected miss 가 circuit open 트리거 → 후속 정상 GET 도 차단.
     ///
-    /// 본 메서드는 NoSuchKey 를 closure *안에서* `Ok(None)` 으로 흡수 — breaker 입장에서는
+    /// 본 메서드는 `NoSuchKey` 를 closure *안에서* `Ok(None)` 으로 흡수 — breaker 입장에서는
     /// 성공이라 failure window 누적 0. 다른 모든 에러 (네트워크 / 5xx / 권한) 는 그대로
     /// 전파해서 정상 breaker 로직 유지.
     ///
@@ -192,7 +192,7 @@ impl R2Uploader {
     ///
     /// # Errors
     ///
-    /// `GetObject` API / body stream 실패 (NoSuchKey 제외) / circuit open / timeout.
+    /// `GetObject` API / body stream 실패 (`NoSuchKey` 제외) / circuit open / timeout.
     #[cfg(test)]
     #[instrument(skip(self), fields(bucket = %self.config.bucket, key = %key))]
     pub async fn try_get_object_bytes(&self, key: &str) -> Result<Option<Vec<u8>>, UploadError> {

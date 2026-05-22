@@ -172,7 +172,7 @@ async fn put_directory_rejects_zero_concurrency() {
 
 /// 회귀 테스트 — Codex stop-time review 발견 (Round 2 hotfix):
 /// breaker wrap 이 first publish promote 를 깨뜨림. `try_get_object_bytes` 가
-/// NoSuchKey 를 `Ok(None)` 으로 흡수해야 (1) typed `Option` 분기 + (2) breaker
+/// `NoSuchKey` 를 `Ok(None)` 으로 흡수해야 (1) typed `Option` 분기 + (2) breaker
 /// failure window 누적 0.
 #[tokio::test]
 async fn try_get_object_bytes_returns_none_on_no_such_key() {
@@ -199,7 +199,7 @@ async fn try_get_object_bytes_returns_none_on_no_such_key() {
     assert!(result.is_none(), "expected None for NoSuchKey, got Some");
 }
 
-/// 회귀 테스트 — NoSuchKey 가 breaker failure 로 카운트되지 않아야 함
+/// 회귀 테스트 — `NoSuchKey` 가 breaker failure 로 카운트되지 않아야 함
 /// (반복되는 expected miss 가 circuit open 트리거하면 first-publish 가 영구 차단됨).
 #[tokio::test]
 async fn try_get_object_bytes_no_such_key_does_not_open_breaker() {

@@ -8,7 +8,7 @@
 #      `docker inspect` 로 가져온 digest 를 manifest 에 기록 (L10 Data Lineage).
 #   2. `tippecanoe` — felt/tippecanoe @ release tag `2.80.0` (immutable git tag).
 #   3. `GDAL` — `gdal-bin` apt 버전 pin.
-#   4. `etl-base-layer` — `rust-toolchain.toml` 1.88 + `Cargo.lock` 결정성.
+#   4. `etl-base-layer` — `rust-toolchain.toml` 1.91.1 + `Cargo.lock` 결정성.
 #
 # Build:
 #   docker build -f services/etl-base-layer/Dockerfile.etl -t gongzzang/etl-base-layer:<git-sha> .
@@ -58,10 +58,10 @@ RUN git init -q \
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 2: Rust builder — etl-base-layer 정적 link 권장 (deploy 단순).
-# rust:1.88-slim-bookworm digest pinned (Cargo.lock + 본 digest = byte-level 결정성).
-# 갱신: `docker pull rust:1.88-slim-bookworm && docker inspect ...`.
+# rust:1.91.1-slim-bookworm digest pinned (Cargo.lock + 본 digest = byte-level 결정성).
+# 갱신: `docker pull rust:1.91.1-slim-bookworm && docker inspect ...`.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM rust:1.88-slim-bookworm@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89 AS rust-builder
+FROM rust:1.91.1-slim-bookworm@sha256:8514999d4786ef12efe89239e86b3d0a021b94b9d35108c8efe6c79ca7dc1a65 AS rust-builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \

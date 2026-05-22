@@ -80,7 +80,7 @@ pub async fn check_available(host: Host) -> Result<String, Ogr2OgrError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// ogr2ogr 실행 — SHP → GeoJSON.
+/// ogr2ogr 실행 — SHP → `GeoJSON`.
 ///
 /// # Errors
 ///

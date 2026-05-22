@@ -31,7 +31,7 @@ pub struct TransitionResponse {
     pub status: String,
 }
 
-/// `POST /listings/:id/submit-for-review` — Draft → PendingReview (Broker 전용).
+/// `POST /listings/:id/submit-for-review` — Draft → `PendingReview` (Broker 전용).
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %id))]
 pub async fn submit_for_review(
     State(state): State<ListingsState>,

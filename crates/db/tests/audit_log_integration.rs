@@ -25,7 +25,7 @@ fn make_log(action: &str, resource_id: &str, correlation_id: &str) -> AuditLog {
         resource_id,
         None,
         None,
-        Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))),
+        Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         Some("test-agent".to_owned()),
         correlation_id,
         Utc::now(),
@@ -56,10 +56,7 @@ async fn insert_persists_audit_log_with_ip_round_trip() {
         .await
         .expect("find");
     assert_eq!(logs.len(), 1);
-    assert_eq!(
-        logs[0].ip_address,
-        Some(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
-    );
+    assert_eq!(logs[0].ip_address, Some(IpAddr::V4(Ipv4Addr::LOCALHOST)));
     assert_eq!(logs[0].user_agent.as_deref(), Some("test-agent"));
     assert_eq!(logs[0].action, "create");
 }

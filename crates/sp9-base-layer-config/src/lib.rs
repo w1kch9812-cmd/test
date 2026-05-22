@@ -51,7 +51,7 @@ pub const GDAL_VERSION_PIN: &str = "3.4.1-1build4";
 
 /// Rust toolchain version — `rust-toolchain.toml` 의 channel 과 동일.
 /// workflow / Dockerfile 이 이 const 를 echo 해 base image tag (`rust:<v>-slim-bookworm`) 결정.
-pub const RUST_TOOLCHAIN_VERSION: &str = "1.88";
+pub const RUST_TOOLCHAIN_VERSION: &str = "1.91.1";
 
 /// V-World 연속지적도 dataset ID. `parcel-dtmk-<dsId>` 형 prefix segment.
 pub const DTMK_DS_ID: u32 = 30563;

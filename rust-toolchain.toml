@@ -1,6 +1,6 @@
 [toolchain]
-# 1.88 minimum: sqlx 0.8 + rustls transitive deps (home 0.5.12, icu_* 2.2.0) 요구
-# (Walking Skeleton T2 amendment 2026-05-02 — 1.85 → 1.88, sqlx 통합 시 발견)
-channel = "1.88.0"
+# 1.91.1 minimum: keeps the AWS SDK TLS dependency chain on a cargo-deny-clean line.
+# Previous floor: 1.88.0 for sqlx 0.8 + rustls transitive dependency requirements.
+channel = "1.91.1"
 components = ["rustfmt", "clippy", "rust-analyzer", "rust-src"]
 profile = "default"

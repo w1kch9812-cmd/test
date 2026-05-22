@@ -128,7 +128,7 @@ mod tests {
     /// 샘플 건물 두 개로 `Vec<Building>` 일관성 (multi-building per parcel) 검증.
     #[test]
     fn sample_supports_multi_building_per_parcel() {
-        let buildings = vec![sample_building("A동"), sample_building("B동")];
+        let buildings = [sample_building("A동"), sample_building("B동")];
         assert_eq!(buildings.len(), 2);
         assert_eq!(buildings[0].pnu, buildings[1].pnu);
         assert_ne!(buildings[0].building_name, buildings[1].building_name);

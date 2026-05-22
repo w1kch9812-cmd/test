@@ -94,7 +94,7 @@ pub trait ListingRepository: Send + Sync {
         viewer_user_id: &Id<UserMarker>,
     ) -> Result<Option<ListingDetail>, RepoError>;
 
-    /// `view_count` 1 증가. version bump X / audit_log X (빈도 높아 분리).
+    /// `view_count` 1 증가. version bump X / `audit_log` X (빈도 높아 분리).
     ///
     /// 본인 본인 매물 조회 시 skip — handler 책임.
     ///

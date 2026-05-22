@@ -2,7 +2,7 @@
 
 ## 1. 도구
 
-- **rustc**: 1.88.0 (`rust-toolchain.toml` 고정)
+- **rustc**: 1.91.1 (`rust-toolchain.toml` 고정)
 - **포맷**: rustfmt (`rustfmt.toml`)
 - **lint**: clippy pedantic + nursery (`clippy.toml` + `Cargo.toml [workspace.lints]`)
 - **공급망**: cargo-audit + cargo-deny (`deny.toml`)

@@ -98,25 +98,21 @@ gongzzang-static/bronze/<batch_label>/manifest.json        (Cache-Control: no-ca
 
 ## 의존성 핀
 
-`aws-sdk-s3 1.110+` / `aws-config 1.8.6+` / `aws-smithy-async 1.2.11+` 가 rustc 1.91 을 요구.
-workspace `[rust-toolchain.toml]` = 1.88.0 → pre-MSRV-bump 으로 핀:
+workspace `[rust-toolchain.toml]` = 1.91.1. AWS SDK crates are pinned as one matched
+line so `cargo deny check` cannot silently reintroduce legacy `rustls-webpki` 0.101.x.
 
 | crate | 핀 | 사유 |
 |---|---|---|
-| `aws-sdk-s3` | `=1.86.0` | rust-version 1.82 |
-| `aws-config` | `=1.8.5` | rust-version 1.86 |
-| `aws-credential-types` | `=1.2.5` | resolver 호환 |
-| `aws-smithy-types` | `=1.3.4` | resolver 호환 |
-| `aws-smithy-async` (Cargo.lock) | `=1.2.10` | rust-version 1.88 |
-
-workspace MSRV 가 1.91 로 올라가면 모두 latest 풀어도 됨.
-
+| `aws-sdk-s3` | `=1.133.0` | matched AWS SDK line |
+| `aws-config` | `=1.8.17` | matched AWS SDK line |
+| `aws-credential-types` | `=1.2.14` | matched AWS SDK line |
+| `aws-smithy-types` | `=1.4.8` | matched AWS SDK line |
 ## Docker (Plan D L1 Reproducibility)
 
 [Dockerfile.etl](./Dockerfile.etl) — multi-stage 결정성 빌드:
 
 - Stage 1: `tippecanoe-builder` — `felt/tippecanoe` git tag `2.80.0` (immutable)
-- Stage 2: `rust-builder` — `rust:1.88-slim-bookworm` + `cargo build --release`
+- Stage 2: `rust-builder` — `rust:1.91.1-slim-bookworm` + `cargo build --release`
 - Stage 3: `runtime` — `ubuntu:22.04` + `gdal-bin=3.4.*` + tippecanoe + etl-base-layer
 
 빌드:

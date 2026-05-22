@@ -43,7 +43,7 @@ members = [
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.88"
+rust-version = "1.91.1"
 license = "UNLICENSED"
 authors = ["공짱 <perfectoryinc@gmail.com>"]
 publish = false
@@ -69,8 +69,8 @@ print_stderr = "deny"
 # 추가 예정 (Plan 2b/2c): utoipa
 async-trait = "0.1"
 # SP-Obs T5: Sentry SDK — env-driven, silent disabled if no SENTRY_DSN
-sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
-sentry-tracing = "0.34"
+sentry = { version = "0.48.2", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
+sentry-tracing = "0.48.2"
 deadpool-redis = "0.18"
 axum = "0.7"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }

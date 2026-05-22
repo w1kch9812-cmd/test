@@ -431,7 +431,7 @@ listing 테이블 denormalize: parcel_pnu, admin_code
 
 ## 환경 체크 (다음 세션 시작 전)
 
-- `cargo --version` → 1.88.0 가 path 에 있는지 (`$env:USERPROFILE\.cargo\bin`)
+- `cargo --version` → 1.91.1 가 path 에 있는지 (`$env:USERPROFILE\.cargo\bin`)
 - `cargo clippy --workspace --all-features --all-targets -- -D warnings` 그린 (SP4-iii-a 종료 시점 검증됨)
 - `git log --oneline -5` 마지막 commit `2aaf7d9` 확인
 - push 권한: `git push origin main` 이 sandbox policy 로 차단될 수 있음 — 사용자 승인 필요

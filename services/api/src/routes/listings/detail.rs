@@ -86,7 +86,7 @@ pub struct PhotoResponse {
 /// `Rejected` / `Archived` 는 owner only — 비owner 접근은 *404* (존재 자체 leak
 /// 차단).
 ///
-/// 본인 매물 아니면 view_count 1 증가 (best-effort).
+/// 본인 매물 아니면 `view_count` 1 증가 (best-effort).
 #[allow(clippy::too_many_lines)]
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %id))]
 pub async fn get_listing_detail(

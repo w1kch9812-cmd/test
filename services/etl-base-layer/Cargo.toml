@@ -11,9 +11,9 @@ name = "etl-base-layer"
 path = "src/main.rs"
 
 [dependencies]
-sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config" }
+sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config", version = "0.1.0" }
 # T2 — R2 호출에 timeout/retry/circuit-breaker 적용 (AGENTS.md §3 Circuit Breaker).
-circuit-breaker = { path = "../../crates/circuit-breaker" }
+circuit-breaker = { path = "../../crates/circuit-breaker", version = "0.1.0" }
 # L4 Observability — Sentry SDK proper integration (curl 깨진 endpoint 제거).
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }
@@ -41,16 +41,14 @@ tracing = { workspace = true }
 # registry feature — sentry-tracing layer 가 .with() 호출에 필수.
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json", "registry"] }
 # R2 (Cloudflare R2 = S3-호환) 업로드 — SP9 T3b.1.
-# rustls 강제 (workspace 정책: reqwest/sqlx 모두 rustls-tls 사용, openssl 의존 회피).
+# AWS SDK는 `default-https-client`(rustls/aws-lc)를 사용하고 legacy `tls-rustls` feature는 켜지 않는다.
+# workspace 정책: reqwest/sqlx 모두 rustls-tls 사용, openssl 의존 회피.
 #
-# 버전 핀 사유: aws-sdk-s3 1.110+ / aws-config 1.8.6+ / aws-smithy-async 1.2.11+ 이
-# rustc 1.91 을 요구. workspace 의 [`rust-toolchain.toml`] 이 1.88 핀이라 호환 위해
-# pre-MSRV-bump 버전으로 고정. workspace MSRV 가 1.91 로 올라갈 때 모두 latest 로 풀어도 됨.
-# (Cargo.lock 의 `aws-smithy-async = "=1.2.10"` 도 같은 이유로 함께 핀)
-aws-config = { version = "=1.8.5", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-sdk-s3 = { version = "=1.86.0", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-credential-types = "=1.2.5"
-aws-smithy-types = "=1.3.4"
+# Matched AWS SDK line; keeps cargo-deny free of legacy rustls-webpki 0.101.x advisories.
+aws-config = { version = "=1.8.17", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "=1.133.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-credential-types = "=1.2.14"
+aws-smithy-types = "=1.4.8"
 
 [dev-dependencies]
 wiremock = { workspace = true }

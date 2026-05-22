@@ -70,7 +70,7 @@ pub trait PipelineRepository: Send + Sync {
         id: &Id<PipelineRunMarker>,
     ) -> Result<Option<PipelineRun>, RepoError>;
 
-    /// 특정 스케줄의 최근 실행 (started_at desc, 최대 `limit` 건).
+    /// 특정 스케줄의 최근 실행 (`started_at` desc, 최대 `limit` 건).
     ///
     /// # Errors
     ///

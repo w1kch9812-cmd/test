@@ -103,7 +103,7 @@ pub async fn readiness(
 /// `GET /healthz/db` — DB 단독 health check (debug / on-call).
 ///
 /// **SECURITY**: production 에서는 internal network 또는 admin auth 보호 필요.
-/// 1차 = 공개 (running env 내 어디서든 ping 가능). FU (SP8 IaC ALB rule 또는
+/// 1차 = 공개 (running env 내 어디서든 ping 가능). FU (SP8 `IaC` ALB rule 또는
 /// admin role 가드) 가 production 보호.
 #[tracing::instrument(skip(state))]
 pub async fn db_health(
