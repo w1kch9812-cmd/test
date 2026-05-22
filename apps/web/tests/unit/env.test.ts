@@ -15,7 +15,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
   };
 
   beforeEach(() => {
@@ -85,7 +85,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
@@ -101,7 +101,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
     delete process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL;
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
@@ -142,7 +142,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
@@ -179,6 +179,13 @@ describe("env schema (SP6-i extension)", () => {
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
 
+  it("throws on too-short INTERNAL_AUTH_SECRET in production", async () => {
+    setValidProductionEnv();
+    process.env.INTERNAL_AUTH_SECRET = "production-short-secret";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/INTERNAL_AUTH_SECRET/);
+  });
+
   it("throws on placeholder ZITADEL_CLIENT_ID in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
     process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
@@ -190,7 +197,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
@@ -206,7 +213,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
-    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });

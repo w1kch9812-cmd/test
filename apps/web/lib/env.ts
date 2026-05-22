@@ -77,6 +77,9 @@ const requiredInternalAuthSecret = z
   .string()
   .trim()
   .min(16)
+  .refine((value) => !isProduction || value.length >= 32, {
+    message: "must be at least 32 characters in production",
+  })
   .refine((value) => !isProduction || value !== devInternalAuthSecret, {
     message: "must be configured explicitly in production",
   });
