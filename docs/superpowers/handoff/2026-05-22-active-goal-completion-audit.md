@@ -5,8 +5,8 @@
 | Date | 2026-05-22 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup, `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
-| Latest platform-core commit | `b96d2b4` PNU anchor marker tile contract |
+| Latest Gongzzang commits | `d7b0085` audit evidence refresh, `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup, `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
+| Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
 
