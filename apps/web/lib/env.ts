@@ -31,11 +31,12 @@ const requiredInternalAuthSecret = z
 const publicApiBaseUrl = isProduction
   ? z.string().url()
   : z.string().url().default("http://localhost:8080");
+const platformCoreBaseUrl = isProduction ? z.string().url() : optionalUrl;
 
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: publicApiBaseUrl,
   NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: requiredPublicClientId,
-  NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: optionalUrl,
+  NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: platformCoreBaseUrl,
   NEXT_PUBLIC_TILES_MANIFEST_URL: optionalUrl,
 });
 
