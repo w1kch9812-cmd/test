@@ -22,6 +22,13 @@ describe("proxy", () => {
     expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
   });
 
+  it("redirects root to the listings app entry", async () => {
+    const req = new NextRequest("http://localhost:3000/");
+    const res = await proxy(req);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost:3000/listings");
+  });
+
   it("redirects unauthenticated to /login with returnTo", async () => {
     const req = new NextRequest("http://localhost:3000/profile");
     const res = await proxy(req);

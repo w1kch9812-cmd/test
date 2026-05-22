@@ -6,6 +6,7 @@ import { tStatic } from "@/lib/i18n/static";
 import { resolveMarkerTileAllowedOrigins } from "@/lib/map/marker-tile-contract";
 import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
 import { checkRate } from "@/lib/ratelimit";
+import { ROUTES } from "@/lib/routes";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
 import { getSession, type SessionData } from "@/lib/session/store";
 import { sanitizeReturnTo } from "@/lib/url";
@@ -19,8 +20,7 @@ import { sanitizeReturnTo } from "@/lib/url";
 // `/fonts` — Pretendard variable subset CSS + woff2 정적 자산 (모든 페이지에 필요).
 // production 빌드는 R2 직결이라 본 prefix 없음. dev 의 *X9 path 시각 검증* 용도.
 const PUBLIC_PATHS = [
-  "/",
-  "/login",
+  ROUTES.login,
   "/forbidden",
   "/api/auth",
   "/platform-core/events",
@@ -165,8 +165,14 @@ function notFoundWithSecurityHeaders(cspHeader: string): NextResponse {
   return res;
 }
 
+function redirectWithSecurityHeaders(url: URL, cspHeader: string): NextResponse {
+  const res = NextResponse.redirect(url);
+  res.headers.set("Content-Security-Policy", cspHeader);
+  return res;
+}
+
 function redirectToLogin(req: NextRequest, pathname: string): NextResponse {
-  const loginUrl = new URL("/login", req.url);
+  const loginUrl = new URL(ROUTES.login, req.url);
   loginUrl.searchParams.set("returnTo", sanitizeReturnTo(pathname));
   return NextResponse.redirect(loginUrl);
 }
@@ -194,6 +200,10 @@ export async function proxy(req: NextRequest) {
   // 3. Auth gate
   if (isProductionDevOnlyPath(url.pathname)) {
     return notFoundWithSecurityHeaders(cspHeader);
+  }
+
+  if (url.pathname === ROUTES.home) {
+    return redirectWithSecurityHeaders(new URL(ROUTES.listings.index, req.url), cspHeader);
   }
 
   if (isPublic(url.pathname)) {
