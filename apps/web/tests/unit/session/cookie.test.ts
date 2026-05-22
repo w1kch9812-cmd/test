@@ -11,6 +11,7 @@ describe("__Host- sid cookie helpers (production)", () => {
     vi.stubEnv("ZITADEL_CLIENT_ID", "production-client");
     vi.stubEnv("ZITADEL_AUDIENCE", "production-audience");
     vi.stubEnv("ZITADEL_REDIRECT_URI", "https://gongzzang.test/api/auth/callback");
+    vi.stubEnv("REDIS_URL", "rediss://redis.gongzzang.test:6379");
     vi.stubEnv("SESSION_SECRET", "production-session-secret-32-bytes-valid");
     vi.stubEnv("INTERNAL_AUTH_SECRET", "production-internal-auth-secret");
   });

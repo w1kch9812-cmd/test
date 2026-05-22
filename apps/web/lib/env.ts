@@ -37,12 +37,28 @@ const isProductionPublicUrl = (value: string) => {
 };
 
 const productionPublicUrlMessage = "must use a public https URL in production";
+const productionRedisUrlMessage = "must use a non-loopback rediss URL in production";
 
 const requiredUrl = z.string().url();
 
 const requiredProductionPublicUrl = requiredUrl.refine(isProductionPublicUrl, {
   message: productionPublicUrlMessage,
 });
+
+const requiredProductionRedisUrl = requiredUrl.refine(
+  (value) => {
+    if (!isProduction) {
+      return true;
+    }
+    const parsedUrl = new URL(value);
+    return (
+      parsedUrl.protocol === "rediss:" && !loopbackHostnames.has(parsedUrl.hostname.toLowerCase())
+    );
+  },
+  {
+    message: productionRedisUrlMessage,
+  },
+);
 
 const optionalProductionPublicUrl = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -102,7 +118,7 @@ const ServerEnvSchema = PublicEnvSchema.extend({
   ZITADEL_CLIENT_ID: requiredZitadelIdentifier,
   ZITADEL_AUDIENCE: requiredZitadelIdentifier,
   ZITADEL_REDIRECT_URI: isProduction ? requiredProductionPublicUrl : requiredUrl,
-  REDIS_URL: z.string().url(),
+  REDIS_URL: isProduction ? requiredProductionRedisUrl : requiredUrl,
   SESSION_SECRET: requiredSessionSecret,
   // audit 2026-05-08: services/api 의 /internal/auth/event shared secret. Rust API
   // 와 *동일 값* 공유 — 미설정 시 401 (audit log 누락만, 서비스 정상). production

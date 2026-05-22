@@ -10,7 +10,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -25,6 +25,7 @@ describe("env schema (SP6-i extension)", () => {
       vi.stubEnv("NODE_ENV", originalNodeEnv);
     }
     delete process.env.INTERNAL_AUTH_SECRET;
+    delete process.env.NEXT_PUBLIC_TILES_MANIFEST_URL;
   });
 
   it("parses ZITADEL_* and REDIS_URL when set", async () => {
@@ -40,6 +41,13 @@ describe("env schema (SP6-i extension)", () => {
     const { env } = await import("@/lib/env");
     expect(env.ZITADEL_ISSUER).toBe("http://localhost:8443");
     expect(env.SESSION_SECRET.length).toBeGreaterThanOrEqual(32);
+  });
+
+  it("parses valid production environment", async () => {
+    setValidProductionEnv();
+
+    const { env } = await import("@/lib/env");
+    expect(env.REDIS_URL).toBe("rediss://redis.gongzzang.test:6379");
   });
 
   it("throws on missing NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID", async () => {
@@ -74,7 +82,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
@@ -89,7 +97,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -105,7 +113,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "x";
     process.env.ZITADEL_AUDIENCE = "x";
     process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
@@ -117,7 +125,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "x";
     process.env.ZITADEL_AUDIENCE = "x";
     process.env.ZITADEL_REDIRECT_URI = "http://localhost:3000/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
 
     await expect(import("@/lib/env")).rejects.toThrow();
@@ -129,7 +137,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "change-me-to-random-32-byte-base64-string-aaaaaaaaaa";
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -145,7 +153,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -161,7 +169,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "x".repeat(32);
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -177,7 +185,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "ci-placeholder";
     process.env.ZITADEL_AUDIENCE = "production-audience";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -193,7 +201,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.ZITADEL_CLIENT_ID = "production-client";
     process.env.ZITADEL_AUDIENCE = "ci-placeholder";
     process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
-    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.REDIS_URL = "rediss://redis.gongzzang.test:6379";
     process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
     process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
@@ -236,5 +244,19 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_TILES_MANIFEST_URL = "http://localhost:18082/v1/map/tiles/manifest";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on localhost REDIS_URL in production", async () => {
+    setValidProductionEnv();
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/REDIS_URL/);
+  });
+
+  it("throws on non-TLS REDIS_URL in production", async () => {
+    setValidProductionEnv();
+    process.env.REDIS_URL = "redis://redis.gongzzang.test:6379";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/REDIS_URL/);
   });
 });
