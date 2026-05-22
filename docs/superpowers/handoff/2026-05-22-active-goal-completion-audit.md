@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `d468b74` roadmap photo upload status sync, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -55,6 +55,7 @@ For this implementation slice, the concrete deliverables are:
 | Listing photo upload confirmation lifecycle | `7964dc3` adds a storage object verifier, `POST /listings/:listing_id/photos/:photo_id/confirm`, confirmed-only photo reads, pending-photo non-exposure tests, and DB upsert coverage for upload confirmation metadata | Covered locally |
 | Listing photo signed download routing | `8946709` exposes authenticated `GET /listings/:listing_id/photos/:photo_id`, checks listing visibility, rejects pending or mismatched photos, issues short-lived R2 signed GET URLs, adds `photo_id` to listing detail projection, and moves frontend image paths to a single `listingPhotoImageSrc` helper | Covered locally |
 | Recent file-size debt from photo hardening | `2e29fde` splits `services/api/src/photo_upload.rs` tests, `services/api/src/startup.rs` tests, and bookmark detail/view-count integration tests into submodules so the recently touched code/test files are below the 500-line preferred threshold | Covered locally |
+| API contract placeholder removal | `550744e` makes `@gongzzang/api-types` generation fail when `services/api/openapi.json` is absent, removes the fake `/healthz` generated type, and adds a package test that rejects silent placeholder retention | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -222,6 +223,22 @@ line counts after split:
 # crates/db/tests/bookmark_integration.rs 462
 # crates/db/tests/bookmark_integration/detail_photo.rs 49
 # crates/db/tests/bookmark_integration/view_count.rs 42
+
+pnpm --filter @gongzzang/api-types test
+# api-types-generate-contract-ok
+
+pnpm lint
+# Checked 203 files. No fixes applied.
+
+pnpm typecheck
+# workspace-typecheck-coverage-ok packages=3; api-types/ui/web typecheck passed
+
+pnpm test
+# @gongzzang/api-types test passed; @gongzzang/web 35 files passed, 137 tests passed, 1 skipped
+
+pnpm lefthook run pre-push
+# cargo-check, cargo-clippy, catalog-m1-boundary, lefthook-no-fake-pass,
+# markdown-links, sqlx-prepare-check, and typecheck passed
 
 rg -n "MOCK://|photo\.upload\.mock|presigned URL .*mock|SP4-iii-e pending|mock presigned" \
   services/api/src/routes/listings/photos.rs services/api/src/photo_upload.rs services/api/src/startup.rs
