@@ -24,6 +24,25 @@ const forbiddenProductionZitadelIdentifiers = new Set([
   "your_zitadel_client_id_here",
 ]);
 const isProduction = process.env.NODE_ENV === "production";
+const loopbackHostnames = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);
+
+const isProductionPublicUrl = (value: string) => {
+  if (!isProduction) {
+    return true;
+  }
+  const parsedUrl = new URL(value);
+  return (
+    parsedUrl.protocol === "https:" && !loopbackHostnames.has(parsedUrl.hostname.toLowerCase())
+  );
+};
+
+const productionPublicUrlMessage = "must use a public https URL in production";
+
+const requiredUrl = z.string().url();
+
+const requiredProductionPublicUrl = requiredUrl.refine(isProductionPublicUrl, {
+  message: productionPublicUrlMessage,
+});
 
 const requiredPublicClientId = z
   .string()
@@ -58,9 +77,9 @@ const requiredZitadelIdentifier = z
   });
 
 const publicApiBaseUrl = isProduction
-  ? z.string().url()
-  : z.string().url().default("http://localhost:8080");
-const platformCoreBaseUrl = isProduction ? z.string().url() : optionalUrl;
+  ? requiredProductionPublicUrl
+  : requiredUrl.default("http://localhost:8080");
+const platformCoreBaseUrl = isProduction ? requiredProductionPublicUrl : optionalUrl;
 
 const PublicEnvSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: publicApiBaseUrl,
@@ -73,10 +92,10 @@ const PublicEnvSchema = z.object({
  * Server 전용: server-only secrets. Browser 에서 access 시 undefined.
  */
 const ServerEnvSchema = PublicEnvSchema.extend({
-  ZITADEL_ISSUER: z.string().url(),
+  ZITADEL_ISSUER: isProduction ? requiredProductionPublicUrl : requiredUrl,
   ZITADEL_CLIENT_ID: requiredZitadelIdentifier,
   ZITADEL_AUDIENCE: requiredZitadelIdentifier,
-  ZITADEL_REDIRECT_URI: z.string().url(),
+  ZITADEL_REDIRECT_URI: isProduction ? requiredProductionPublicUrl : requiredUrl,
   REDIS_URL: z.string().url(),
   SESSION_SECRET: requiredSessionSecret,
   // audit 2026-05-08: services/api 의 /internal/auth/event shared secret. Rust API

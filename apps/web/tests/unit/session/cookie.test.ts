@@ -7,8 +7,10 @@ describe("__Host- sid cookie helpers (production)", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.gongzzang.test");
     vi.stubEnv("NEXT_PUBLIC_PLATFORM_CORE_BASE_URL", "https://platform-core.gongzzang.test");
+    vi.stubEnv("ZITADEL_ISSUER", "https://auth.gongzzang.test");
     vi.stubEnv("ZITADEL_CLIENT_ID", "production-client");
     vi.stubEnv("ZITADEL_AUDIENCE", "production-audience");
+    vi.stubEnv("ZITADEL_REDIRECT_URI", "https://gongzzang.test/api/auth/callback");
     vi.stubEnv("SESSION_SECRET", "production-session-secret-32-bytes-valid");
     vi.stubEnv("INTERNAL_AUTH_SECRET", "production-internal-auth-secret");
   });

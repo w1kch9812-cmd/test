@@ -4,6 +4,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 describe("env schema (SP6-i extension)", () => {
   const originalNodeEnv = process.env.NODE_ENV;
 
+  const setValidProductionEnv = () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.ZITADEL_ISSUER = "https://auth.gongzzang.test";
+    process.env.ZITADEL_CLIENT_ID = "production-client";
+    process.env.ZITADEL_AUDIENCE = "production-audience";
+    process.env.ZITADEL_REDIRECT_URI = "https://gongzzang.test/api/auth/callback";
+    process.env.REDIS_URL = "redis://localhost:6379";
+    process.env.SESSION_SECRET = "production-session-secret-32-bytes-valid";
+    process.env.NEXT_PUBLIC_API_BASE_URL = "https://api.gongzzang.test";
+    process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
+    process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
+    process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+  };
+
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
@@ -185,6 +199,34 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
     process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on localhost NEXT_PUBLIC_API_BASE_URL in production", async () => {
+    setValidProductionEnv();
+    process.env.NEXT_PUBLIC_API_BASE_URL = "http://localhost:8080";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on localhost NEXT_PUBLIC_PLATFORM_CORE_BASE_URL in production", async () => {
+    setValidProductionEnv();
+    process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "http://127.0.0.1:18082";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on http ZITADEL_ISSUER in production", async () => {
+    setValidProductionEnv();
+    process.env.ZITADEL_ISSUER = "http://auth.gongzzang.test";
+
+    await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on http ZITADEL_REDIRECT_URI in production", async () => {
+    setValidProductionEnv();
+    process.env.ZITADEL_REDIRECT_URI = "http://gongzzang.test/api/auth/callback";
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
   });
