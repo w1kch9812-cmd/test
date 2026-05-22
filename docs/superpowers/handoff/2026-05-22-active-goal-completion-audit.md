@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `674ac08` workflow-file forbidden marker scan, `e6a8802` CI forbidden marker workflow gate, `59f5a4c` mojibake implementation marker guardrail, `eca931d` forbidden implementation marker guardrail, `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `18883bb` production-shaped frontend build environment, `674ac08` workflow-file forbidden marker scan, `e6a8802` CI forbidden marker workflow gate, `59f5a4c` mojibake implementation marker guardrail, `eca931d` forbidden implementation marker guardrail, `05d54b1` explicit auth-state cookie naming, `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -67,6 +67,7 @@ For this implementation slice, the concrete deliverables are:
 | Production public HTTPS URL fail-fast | `9be311a` rejects loopback or non-HTTPS `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_PLATFORM_CORE_BASE_URL`, `ZITADEL_ISSUER`, and `ZITADEL_REDIRECT_URI` values when `NODE_ENV=production` | Covered locally |
 | Production tile manifest URL fail-fast | `440c167` applies the same loopback/non-HTTPS rejection to optional `NEXT_PUBLIC_TILES_MANIFEST_URL` when it is set in production | Covered locally |
 | Production Redis TLS URL fail-fast | `fb7f072` requires production `REDIS_URL` to use non-loopback `rediss://` and keeps local `redis://localhost` valid for non-production tests | Covered locally |
+| Frontend production build environment alignment | `18883bb` changes the frontend workflow production build env from local/loopback placeholders to production-shaped HTTPS and `rediss://` values, and adds the production-only env keys consumed by the web build to `turbo.json` `globalEnv` | Covered locally |
 | Auth-state cookie naming clarity | `05d54b1` removes `TEMP_COOKIE_NAME`/`auth-tmp` naming from the auth flow, renames the signed OAuth state helpers to auth-state terminology, and keeps login/callback integration coverage green | Covered locally |
 | Forbidden implementation marker guardrail | `eca931d` adds a pre-commit/pre-push guardrail that blocks `TODO`/`HACK`/`XXX`/`TEMP`/`ALLOWED_FOR_FRONTEND_TEMP` markers in `apps`, `services`, `crates`, and `packages`, with tests covering allowed `ATTEMPTS` names and forbidden markers | Covered locally |
 | Mojibake implementation marker guardrail | `59f5a4c` replaces unreadable env/ETL comments and log messages, extends the same pre-commit/pre-push guardrail to reject representative mojibake fragments, and keeps web env plus `etl-base-layer` check/test/clippy evidence green | Covered locally |
@@ -292,6 +293,19 @@ bash scripts/lefthook/check-forbidden-implementation-markers.sh
 
 rg -n "Forbidden implementation marker guardrail|check-forbidden-implementation-markers" .github\workflows\ci.yml scripts\lefthook\check-forbidden-implementation-markers.sh
 # .github/workflows/ci.yml runs bash scripts/lefthook/check-forbidden-implementation-markers.sh
+
+pnpm --filter @gongzzang/web build
+# expected failure before 18883bb when run with the old frontend workflow production-build env:
+# production env validation rejected local or missing values for NEXT_PUBLIC_API_BASE_URL,
+# NEXT_PUBLIC_PLATFORM_CORE_BASE_URL, ZITADEL_ISSUER, ZITADEL_REDIRECT_URI, and REDIS_URL
+
+pnpm build
+# passed after 18883bb with production-shaped frontend workflow env values:
+# NEXT_PUBLIC_API_BASE_URL=https://api.gongzzang.example
+# NEXT_PUBLIC_PLATFORM_CORE_BASE_URL=https://platform-core.gongzzang.example
+# ZITADEL_ISSUER=https://auth.gongzzang.example
+# ZITADEL_REDIRECT_URI=https://gongzzang.example/api/auth/callback
+# REDIS_URL=rediss://redis.gongzzang.example:6379
 
 pnpm --filter @gongzzang/web test -- tests/unit/env.test.ts
 # 23 tests passed
