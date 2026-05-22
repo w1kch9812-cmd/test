@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `9a4ae24` production repeated secret rejection, `9f048a6` production internal auth secret strength, `fb7f072` production Redis TLS URL fail-fast, `440c167` production tile manifest URL fail-fast, `9be311a` production public HTTPS URL fail-fast, `ec70b94` production Zitadel identifier sentinel rejection, `f317f64` production session secret sentinel rejection, `ae9b109` production platform-core base URL fail-fast, `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -62,6 +62,7 @@ For this implementation slice, the concrete deliverables are:
 | Production platform-core base URL fail-fast | `ae9b109` requires `NEXT_PUBLIC_PLATFORM_CORE_BASE_URL` when `NODE_ENV=production` so the platform-core manifest/marker-contract consumer cannot silently lose core map layers at runtime | Covered locally |
 | Production session secret sentinel rejection | `f317f64` rejects known example/test/CI `SESSION_SECRET` sentinel values in production while retaining the 32-character minimum and local development defaults | Covered locally |
 | Production internal auth secret strength | `9f048a6` keeps the local development internal-auth default local-only, keeps explicit production configuration required, and raises production `INTERNAL_AUTH_SECRET` to at least 32 characters | Covered locally |
+| Production repeated secret rejection | `9a4ae24` rejects repeated-character `SESSION_SECRET` and `INTERNAL_AUTH_SECRET` values in production while retaining local development defaults | Covered locally |
 | Production Zitadel identifier sentinel rejection | `ec70b94` rejects known placeholder `ZITADEL_CLIENT_ID` and `ZITADEL_AUDIENCE` values in production and updates production fixtures to use production-shaped auth identifiers | Covered locally |
 | Production public HTTPS URL fail-fast | `9be311a` rejects loopback or non-HTTPS `NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_PLATFORM_CORE_BASE_URL`, `ZITADEL_ISSUER`, and `ZITADEL_REDIRECT_URI` values when `NODE_ENV=production` | Covered locally |
 | Production tile manifest URL fail-fast | `440c167` applies the same loopback/non-HTTPS rejection to optional `NEXT_PUBLIC_TILES_MANIFEST_URL` when it is set in production | Covered locally |
@@ -251,12 +252,13 @@ pnpm lefthook run pre-push
 # markdown-links, sqlx-prepare-check, and typecheck passed
 
 pnpm --filter @gongzzang/web test -- tests/unit/env.test.ts
-# 21 passed; missing/sentinel NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID, missing production
+# 23 passed; missing/sentinel NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID, missing production
 # NEXT_PUBLIC_API_BASE_URL, missing production NEXT_PUBLIC_PLATFORM_CORE_BASE_URL,
 # missing/development/too-short production INTERNAL_AUTH_SECRET, production
-# SESSION_SECRET sentinels, production ZITADEL_CLIENT_ID/ZITADEL_AUDIENCE sentinels, and production
-# localhost/non-HTTPS API/platform-core/Zitadel/tile manifest URLs plus
-# localhost/non-TLS production REDIS_URL values are rejected
+# SESSION_SECRET sentinels, repeated-character SESSION_SECRET/INTERNAL_AUTH_SECRET,
+# production ZITADEL_CLIENT_ID/ZITADEL_AUDIENCE sentinels, and production localhost/non-HTTPS
+# API/platform-core/Zitadel/tile manifest URLs plus localhost/non-TLS production REDIS_URL
+# values are rejected
 
 pnpm --filter @gongzzang/web lint
 # Checked 151 files. No fixes applied.
@@ -265,7 +267,7 @@ pnpm --filter @gongzzang/web typecheck
 # tsc --noEmit passed
 
 pnpm --filter @gongzzang/web test
-# 35 test files passed, 155 tests passed, 1 skipped
+# 35 test files passed, 157 tests passed, 1 skipped
 
 gitleaks detect --no-git --source <temporary sample with NAVER_MAPS_CLIENT_ID assignment> --config .gitleaks.toml --redact -v
 # expected failure: naver-maps-credential-assignment reported the fake sample assignment
