@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `b9a708b` production auth dev-mode guard, `648f469` workspace typecheck evidence refresh, `a4c07ed` workspace typecheck coverage enforcement, `dc9c001` guardrail hardening evidence refresh, `cc83aed` internal Markdown link enforcement |
+| Latest Gongzzang commits | `89fbc9f` listing photo mock upload URL removal, `2f95b77` auth production guard evidence refresh, `b9a708b` production auth dev-mode guard, `648f469` workspace typecheck evidence refresh, `a4c07ed` workspace typecheck coverage enforcement |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -50,6 +50,7 @@ For this implementation slice, the concrete deliverables are:
 | Rust/SQLx/web local verification gates | Fresh `cargo deny`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo sqlx prepare --workspace --check`, `pnpm lint`, `pnpm test`, and `pnpm lefthook run pre-push` evidence | Covered locally |
 | Workspace TypeScript typecheck coverage | `a4c07ed` adds `scripts/ci/check-workspace-typecheck-coverage.{py,sh,tests.sh}`, adds `typecheck` scripts to `@gongzzang/api-types` and `@gongzzang/ui`, and changes root/CI/pre-push typecheck to verify all 3 workspace packages | Covered locally |
 | Production auth mock guard | `b9a708b` passes `is_production` into `build_verifier` and rejects `AUTH_DEV_MODE=true` in production with `StartupError::ProductionConfig`; startup tests cover production rejection and non-production allowance | Covered locally |
+| Listing photo upload mock URL removal | `89fbc9f` replaces `MOCK://` presigned upload responses with an R2 presigned PUT issuer, returns required upload headers, disables photo upload honestly in unconfigured dev, and fails production startup when R2 upload config is missing | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -136,12 +137,22 @@ pnpm test
 # 34 web test files passed, 135 tests passed, 1 existing live-platform-core test skipped
 
 cargo test -p api startup::tests
-# 3 passed; 0 failed
+# 4 passed; 0 failed
+
+cargo test -p api photo_upload::tests
+# 2 passed; 0 failed
+
+cargo test -p api
+# api unit tests: 42 passed; raw_capture_sync tests: 2 passed; sp10_panel_endpoints tests: 3 passed
 
 cargo check -p api
 cargo clippy -p api --all-targets -- -D warnings
 cargo fmt --check
 git diff --check
+
+rg -n "MOCK://|photo\.upload\.mock|presigned URL .*mock|SP4-iii-e pending|mock presigned" \
+  services/api/src/routes/listings/photos.rs services/api/src/photo_upload.rs services/api/src/startup.rs
+# only the negative assertion in photo_upload::tests matched MOCK://
 
 pnpm lefthook run pre-push
 # includes cargo-check, cargo-clippy, catalog-m1-boundary, lefthook-no-fake-pass,
