@@ -5,7 +5,7 @@
 | Date | 2026-05-23 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang implementation commits | `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
+| Latest Gongzzang implementation commits | `e3e38e5` production API base URL fail-fast, `7f1646d` production internal auth secret fail-fast, `738f06c` Naver Maps public client ID fail-fast, `550744e` api-types generation fail-fast, `2e29fde` oversized API test module split, `8946709` listing photo signed download routing, `7964dc3` listing photo upload confirmation lifecycle hardening, `8c0e002` listing photo R2 config isolation |
 | Latest platform-core commit | `7651074` local prelaunch handoff evidence refresh |
 
 ## Restated Objective
@@ -58,6 +58,7 @@ For this implementation slice, the concrete deliverables are:
 | API contract placeholder removal | `550744e` makes `@gongzzang/api-types` generation fail when `services/api/openapi.json` is absent, removes the fake `/healthz` generated type, and adds a package test that rejects silent placeholder retention | Covered locally |
 | Naver Maps public client ID fail-fast | `738f06c` removes the `NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID` runtime placeholder default, rejects missing and known sentinel values in `apps/web/lib/env.ts`, keeps `.env.local.example` empty for explicit local configuration, and refines `.gitleaks.toml` so real Naver key assignments remain blocked without flagging schema identifiers | Covered locally |
 | Production internal auth secret fail-fast | `7f1646d` keeps the development `INTERNAL_AUTH_SECRET` default local-only, rejects missing or development sentinel values when `NODE_ENV=production`, and updates production cookie tests to provide an explicit production test secret | Covered locally |
+| Production API base URL fail-fast | `e3e38e5` keeps the local `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080` default development-only, requires an explicit API base URL when `NODE_ENV=production`, and updates production cookie tests to provide a production-shaped API URL | Covered locally |
 | Local hook fake-pass prevention | `d224a88` removes tool-missing echo fallbacks from `lefthook.yml` and adds `scripts/lefthook/check-no-fake-pass.{sh,tests.sh}` | Covered locally |
 | Internal Markdown link enforcement | `cc83aed` replaces the CI link-check fake-pass with deterministic internal-link verification and adds it to pre-push; latest local result: `markdown-links-ok files=96 links=301` | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
@@ -243,7 +244,8 @@ pnpm lefthook run pre-push
 # markdown-links, sqlx-prepare-check, and typecheck passed
 
 pnpm --filter @gongzzang/web test -- tests/unit/env.test.ts
-# 7 passed; missing/sentinel NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID and production INTERNAL_AUTH_SECRET are rejected
+# 8 passed; missing/sentinel NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID, missing production
+# NEXT_PUBLIC_API_BASE_URL, and unsafe production INTERNAL_AUTH_SECRET are rejected
 
 pnpm --filter @gongzzang/web lint
 # Checked 151 files. No fixes applied.
@@ -252,7 +254,7 @@ pnpm --filter @gongzzang/web typecheck
 # tsc --noEmit passed
 
 pnpm --filter @gongzzang/web test
-# 35 test files passed, 141 tests passed, 1 skipped
+# 35 test files passed, 142 tests passed, 1 skipped
 
 gitleaks detect --no-git --source <temporary sample with NAVER_MAPS_CLIENT_ID assignment> --config .gitleaks.toml --redact -v
 # expected failure: naver-maps-credential-assignment reported the fake sample assignment
