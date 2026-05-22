@@ -2,7 +2,7 @@
 
 ## 1. 도구
 
-- **rustc**: 1.85.0 (`rust-toolchain.toml` 고정)
+- **rustc**: 1.88.0 (`rust-toolchain.toml` 고정)
 - **포맷**: rustfmt (`rustfmt.toml`)
 - **lint**: clippy pedantic + nursery (`clippy.toml` + `Cargo.toml [workspace.lints]`)
 - **공급망**: cargo-audit + cargo-deny (`deny.toml`)
@@ -12,9 +12,10 @@
 
 - max_width: 100
 - tab_spaces: 4
-- imports_granularity: Crate
-- group_imports: StdExternalCrate
 - reorder_imports: true
+
+`imports_granularity`, `group_imports` 는 stable rustfmt 에서 무시되는 nightly 전용 옵션이므로
+`rustfmt.toml` 에 두지 않는다. import grouping 은 아래 §6 컨벤션을 따른다.
 
 ## 3. lint (clippy)
 
@@ -81,7 +82,7 @@ pub enum ListingError {
 - `.await` 후 lock 보유 금지 (deadlock 위험)
 - `Arc<Mutex<T>>`보다 actor 패턴 또는 channel 선호
 
-## 6. import 순서 (group_imports)
+## 6. import 순서
 
 ```rust
 // std
