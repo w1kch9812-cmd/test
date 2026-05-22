@@ -10,7 +10,7 @@ if [ -z "$rg_bin" ]; then
 fi
 
 search_roots=()
-for dir in apps services crates packages; do
+for dir in .github apps services crates packages; do
   if [ -d "${root}/${dir}" ]; then
     search_roots+=("${root}/${dir}")
   fi
@@ -48,10 +48,16 @@ matches="$(
     --glob '*.rs' \
     --glob '*.py' \
     --glob '*.sql' \
+    --glob '*.yaml' \
+    --glob '*.yml' \
     --regexp "$marker_pattern" \
     --regexp "$mojibake_pattern" \
     "${rg_roots[@]}" || true
 )"
+
+if [ -n "$matches" ]; then
+  matches="$(printf '%s\n' "$matches" | grep -v 'RUNNER_TEMP' || true)"
+fi
 
 if [ -n "$matches" ]; then
   printf 'forbidden implementation marker found:\n%s\n' "$matches" >&2

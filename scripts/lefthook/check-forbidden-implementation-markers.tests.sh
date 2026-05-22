@@ -84,3 +84,18 @@ write_file "apps/web/lib/env.ts" <<'TS'
 export const ok = true;
 TS
 assert_failure_contains "rejects mojibake comments" "forbidden implementation marker" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_file ".github/workflows/ci.yml" <<'YAML'
+name: CI
+# HACK: skip expensive jobs.
+YAML
+assert_failure_contains "checks workflow files" "forbidden implementation marker" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_file ".github/workflows/ci.yml" <<'YAML'
+name: CI
+steps:
+  - run: install_dir="${RUNNER_TEMP:-/tmp}/tool"
+YAML
+assert_success "allows GitHub RUNNER_TEMP built-in" bash "$script" "$tmp_root"
