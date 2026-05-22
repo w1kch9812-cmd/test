@@ -8,6 +8,6 @@ mod state;
 
 pub use detail::get_listing_detail;
 pub use mutation::{create_listing, patch_listing, revise, submit_for_review};
-pub use photos::{delete_photo, request_photo_upload};
+pub use photos::{confirm_photo_upload, delete_photo, request_photo_upload};
 pub use search::get_listings;
 pub use state::ListingsState;

@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -118,6 +119,60 @@ pub trait ListingPhotoUploadUrlIssuer: Send + Sync {
     ) -> Result<PhotoUploadUrl, PhotoUploadUrlError>;
 }
 
+#[derive(Debug, Clone)]
+pub struct PhotoObjectVerifyRequest {
+    pub r2_key: String,
+    pub expected_content_type: PhotoContentType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PhotoObjectMetadata {
+    pub file_size_bytes: i64,
+    pub content_type: PhotoContentType,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum PhotoObjectVerifyError {
+    #[error("listing photo upload storage is not configured")]
+    Disabled,
+    #[error("listing photo object not found")]
+    NotFound,
+    #[error("listing photo object content-length missing")]
+    MissingContentLength,
+    #[error("listing photo object content-length must be > 0 (got {actual})")]
+    InvalidContentLength { actual: i64 },
+    #[error("listing photo object content-type missing")]
+    MissingContentType,
+    #[error("listing photo object content-type mismatch: expected {expected}, got {actual}")]
+    ContentTypeMismatch {
+        expected: PhotoContentType,
+        actual: String,
+    },
+    #[error("listing photo object HEAD failed: {0}")]
+    Head(String),
+}
+
+#[async_trait]
+pub trait ListingPhotoObjectVerifier: Send + Sync {
+    async fn verify_uploaded_object(
+        &self,
+        request: PhotoObjectVerifyRequest,
+    ) -> Result<PhotoObjectMetadata, PhotoObjectVerifyError>;
+}
+
+#[derive(Debug, Default)]
+pub struct DisabledListingPhotoObjectVerifier;
+
+#[async_trait]
+impl ListingPhotoObjectVerifier for DisabledListingPhotoObjectVerifier {
+    async fn verify_uploaded_object(
+        &self,
+        _request: PhotoObjectVerifyRequest,
+    ) -> Result<PhotoObjectMetadata, PhotoObjectVerifyError> {
+        Err(PhotoObjectVerifyError::Disabled)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct DisabledListingPhotoUploadUrlIssuer;
 
@@ -136,6 +191,22 @@ pub struct R2ListingPhotoUploadUrlIssuer {
     client: S3Client,
     bucket: String,
     expires_in: Duration,
+}
+
+#[derive(Debug, Clone)]
+pub struct R2ListingPhotoObjectVerifier {
+    client: S3Client,
+    bucket: String,
+}
+
+impl R2ListingPhotoObjectVerifier {
+    #[must_use]
+    pub fn new(config: ListingPhotoUploadConfig) -> Self {
+        Self {
+            client: config.s3_client(),
+            bucket: config.bucket,
+        }
+    }
 }
 
 impl R2ListingPhotoUploadUrlIssuer {
@@ -181,14 +252,79 @@ impl ListingPhotoUploadUrlIssuer for R2ListingPhotoUploadUrlIssuer {
     }
 }
 
+#[async_trait]
+impl ListingPhotoObjectVerifier for R2ListingPhotoObjectVerifier {
+    async fn verify_uploaded_object(
+        &self,
+        request: PhotoObjectVerifyRequest,
+    ) -> Result<PhotoObjectMetadata, PhotoObjectVerifyError> {
+        let output =
+            self.client
+                .head_object()
+                .bucket(&self.bucket)
+                .key(&request.r2_key)
+                .send()
+                .await
+                .map_err(|error| {
+                    if error.as_service_error().is_some_and(
+                        aws_sdk_s3::operation::head_object::HeadObjectError::is_not_found,
+                    ) {
+                        return PhotoObjectVerifyError::NotFound;
+                    }
+                    PhotoObjectVerifyError::Head(format!(
+                        "{}",
+                        aws_sdk_s3::error::DisplayErrorContext(&error)
+                    ))
+                })?;
+
+        verified_object_metadata_from_head(
+            request.expected_content_type,
+            output.content_length(),
+            output.content_type(),
+        )
+    }
+}
+
+fn verified_object_metadata_from_head(
+    expected_content_type: PhotoContentType,
+    content_length: Option<i64>,
+    content_type: Option<&str>,
+) -> Result<PhotoObjectMetadata, PhotoObjectVerifyError> {
+    let file_size_bytes = content_length.ok_or(PhotoObjectVerifyError::MissingContentLength)?;
+    if file_size_bytes <= 0 {
+        return Err(PhotoObjectVerifyError::InvalidContentLength {
+            actual: file_size_bytes,
+        });
+    }
+    let actual_content_type = content_type.ok_or(PhotoObjectVerifyError::MissingContentType)?;
+    let actual = PhotoContentType::from_str(actual_content_type).map_err(|_| {
+        PhotoObjectVerifyError::ContentTypeMismatch {
+            expected: expected_content_type,
+            actual: actual_content_type.to_owned(),
+        }
+    })?;
+    if actual != expected_content_type {
+        return Err(PhotoObjectVerifyError::ContentTypeMismatch {
+            expected: expected_content_type,
+            actual: actual_content_type.to_owned(),
+        });
+    }
+    Ok(PhotoObjectMetadata {
+        file_size_bytes,
+        content_type: actual,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use listing_photo_domain::entity::PhotoContentType;
 
     use super::ListingPhotoUploadConfig;
     use super::{
-        DisabledListingPhotoUploadUrlIssuer, ListingPhotoUploadUrlIssuer, PhotoUploadUrlError,
-        PhotoUploadUrlRequest, R2ListingPhotoUploadUrlIssuer,
+        verified_object_metadata_from_head, DisabledListingPhotoObjectVerifier,
+        DisabledListingPhotoUploadUrlIssuer, ListingPhotoObjectVerifier,
+        ListingPhotoUploadUrlIssuer, PhotoObjectVerifyError, PhotoObjectVerifyRequest,
+        PhotoUploadUrlError, PhotoUploadUrlRequest, R2ListingPhotoUploadUrlIssuer,
     };
 
     fn r2_config() -> ListingPhotoUploadConfig {
@@ -210,6 +346,64 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(PhotoUploadUrlError::Disabled)));
+    }
+
+    #[tokio::test]
+    async fn disabled_object_verifier_fails_without_mock_success() {
+        let result = DisabledListingPhotoObjectVerifier
+            .verify_uploaded_object(PhotoObjectVerifyRequest {
+                r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+                expected_content_type: PhotoContentType::Jpeg,
+            })
+            .await;
+
+        assert!(matches!(result, Err(PhotoObjectVerifyError::Disabled)));
+    }
+
+    #[test]
+    fn verified_object_metadata_requires_positive_content_length() {
+        let result = verified_object_metadata_from_head(
+            PhotoContentType::Jpeg,
+            Some(0),
+            Some(PhotoContentType::Jpeg.as_str()),
+        );
+
+        assert!(matches!(
+            result,
+            Err(PhotoObjectVerifyError::InvalidContentLength { actual: 0 })
+        ));
+    }
+
+    #[test]
+    fn verified_object_metadata_rejects_content_type_mismatch() {
+        let result = verified_object_metadata_from_head(
+            PhotoContentType::Jpeg,
+            Some(100),
+            Some(PhotoContentType::Png.as_str()),
+        );
+
+        assert!(matches!(
+            result,
+            Err(PhotoObjectVerifyError::ContentTypeMismatch {
+                expected: PhotoContentType::Jpeg,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn verified_object_metadata_accepts_expected_metadata() {
+        let result = verified_object_metadata_from_head(
+            PhotoContentType::Webp,
+            Some(100),
+            Some(PhotoContentType::Webp.as_str()),
+        );
+
+        assert!(result.is_ok(), "expected valid metadata");
+        if let Ok(metadata) = result {
+            assert_eq!(metadata.file_size_bytes, 100);
+            assert_eq!(metadata.content_type, PhotoContentType::Webp);
+        }
     }
 
     #[tokio::test]

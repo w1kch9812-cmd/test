@@ -108,12 +108,14 @@ async fn async_main() -> Result<(), StartupError> {
 
     let parcel_lookup = build_parcel_lookup(is_production, &raw_capture)?;
     let photo_upload_issuer = build_photo_upload_issuer(is_production)?;
+    let photo_object_verifier = startup::build_photo_object_verifier(is_production)?;
 
     let listings_state = routes::listings::ListingsState {
         listing_repo,
         photo_repo,
         parcel_lookup,
         photo_upload_issuer,
+        photo_object_verifier,
     };
 
     let verifier = build_verifier(dev_mode, is_production)?;
@@ -206,6 +208,10 @@ async fn async_main() -> Result<(), StartupError> {
         .route(
             "/listings/:listing_id/photos/:photo_id",
             axum::routing::delete(routes::listings::delete_photo),
+        )
+        .route(
+            "/listings/:listing_id/photos/:photo_id/confirm",
+            axum::routing::post(routes::listings::confirm_photo_upload),
         )
         .with_state(listings_state.clone())
         .layer(middleware::from_fn_with_state(

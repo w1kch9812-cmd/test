@@ -13,7 +13,10 @@ use user_domain::entity::UserRole;
 
 use crate::http::mutation_ctx::http_user_action;
 use crate::http::problem::{problem, ProblemResponse};
-use crate::photo_upload::{PhotoUploadUrlError, PhotoUploadUrlRequest, UploadHeader};
+use crate::photo_upload::{
+    PhotoObjectVerifyError, PhotoObjectVerifyRequest, PhotoUploadUrlError, PhotoUploadUrlRequest,
+    UploadHeader,
+};
 
 use super::mutation::load_listing_for_actor;
 use super::state::ListingsState;
@@ -41,6 +44,21 @@ pub struct RequestPhotoUploadResponse {
     pub r2_key: String,
     /// URL 만료 시각.
     pub expires_at: DateTime<Utc>,
+}
+
+/// `POST /listings/:listing_id/photos/:photo_id/confirm` response.
+#[derive(Debug, Serialize)]
+pub struct ConfirmPhotoUploadResponse {
+    /// Photo ID (`lph_<26 ULID>`).
+    pub photo_id: String,
+    /// R2 object key.
+    pub r2_key: String,
+    /// Verified file size.
+    pub file_size_bytes: i64,
+    /// Verified MIME content-type.
+    pub content_type: String,
+    /// Upload confirmation timestamp.
+    pub uploaded_at: DateTime<Utc>,
 }
 
 /// `POST /listings/:id/photos` — pre-signed URL 발급 (Broker + 소유자 전용).
@@ -167,6 +185,144 @@ fn photo_upload_problem(error: &PhotoUploadUrlError) -> ProblemResponse {
 }
 
 /// `DELETE /listings/:id/photos/:photo_id` — soft-delete.
+/// `POST /listings/:listing_id/photos/:photo_id/confirm` verifies R2 object presence.
+#[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %listing_id, photo_id = %photo_id))]
+pub async fn confirm_photo_upload(
+    State(state): State<ListingsState>,
+    Extension(auth): Extension<AuthenticatedUser>,
+    Path((listing_id, photo_id)): Path<(String, String)>,
+) -> Result<Json<ConfirmPhotoUploadResponse>, ProblemResponse> {
+    require_role(&auth, UserRole::Broker).map_err(|_| {
+        problem(
+            "forbidden",
+            "broker 권한이 필요해요",
+            StatusCode::FORBIDDEN,
+            None,
+        )
+    })?;
+
+    let listing = load_listing_for_actor(&state, &auth, &listing_id).await?;
+    let pid = Id::<ListingPhotoMarker>::from_str(&photo_id).map_err(|e| {
+        problem(
+            "validation",
+            "photo_id가 유효하지 않아요",
+            StatusCode::BAD_REQUEST,
+            Some(e.to_string()),
+        )
+    })?;
+
+    let mut photo = state
+        .photo_repo
+        .find(&pid)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "photo find failed");
+            photo_repo_problem(&e)
+        })?
+        .ok_or_else(|| {
+            problem(
+                "not-found",
+                "사진을 찾을 수 없어요",
+                StatusCode::NOT_FOUND,
+                None,
+            )
+        })?;
+    if photo.listing_id != listing.id {
+        return Err(problem(
+            "not-found",
+            "사진을 찾을 수 없어요",
+            StatusCode::NOT_FOUND,
+            None,
+        ));
+    }
+
+    let metadata = state
+        .photo_object_verifier
+        .verify_uploaded_object(PhotoObjectVerifyRequest {
+            r2_key: photo.r2_key.clone(),
+            expected_content_type: photo.content_type,
+        })
+        .await
+        .map_err(|error| photo_object_verify_problem(&error))?;
+    let uploaded_at = Utc::now();
+    photo
+        .confirm_upload(None, None, metadata.file_size_bytes, uploaded_at)
+        .map_err(|e| {
+            problem(
+                "validation",
+                "사진 업로드 상태가 유효하지 않아요",
+                StatusCode::CONFLICT,
+                Some(e.to_string()),
+            )
+        })?;
+
+    let ctx = http_user_action(&auth, "confirm_photo_upload");
+    state.photo_repo.save(&photo, ctx).await.map_err(|e| {
+        tracing::error!(error = %e, "photo confirm save failed");
+        photo_repo_problem(&e)
+    })?;
+
+    Ok(Json(ConfirmPhotoUploadResponse {
+        photo_id: photo.id.as_str().to_owned(),
+        r2_key: photo.r2_key,
+        file_size_bytes: metadata.file_size_bytes,
+        content_type: metadata.content_type.as_str().to_owned(),
+        uploaded_at,
+    }))
+}
+
+fn photo_object_verify_problem(error: &PhotoObjectVerifyError) -> ProblemResponse {
+    match error {
+        PhotoObjectVerifyError::NotFound => problem(
+            "photo-object-not-found",
+            "업로드된 사진 파일을 찾을 수 없어요",
+            StatusCode::CONFLICT,
+            None,
+        ),
+        PhotoObjectVerifyError::MissingContentLength
+        | PhotoObjectVerifyError::InvalidContentLength { .. }
+        | PhotoObjectVerifyError::MissingContentType
+        | PhotoObjectVerifyError::ContentTypeMismatch { .. } => problem(
+            "photo-object-invalid",
+            "업로드된 사진 파일 정보가 유효하지 않아요",
+            StatusCode::CONFLICT,
+            Some(error.to_string()),
+        ),
+        PhotoObjectVerifyError::Disabled | PhotoObjectVerifyError::Head(_) => {
+            tracing::error!(error = %error, "photo object verify failed");
+            problem(
+                "photo-upload-unavailable",
+                "사진 업로드 확인을 지금 사용할 수 없어요",
+                StatusCode::SERVICE_UNAVAILABLE,
+                None,
+            )
+        }
+    }
+}
+
+fn photo_repo_problem(error: &listing_photo_domain::repository::RepoError) -> ProblemResponse {
+    match error {
+        listing_photo_domain::repository::RepoError::NotFound => problem(
+            "not-found",
+            "사진을 찾을 수 없어요",
+            StatusCode::NOT_FOUND,
+            None,
+        ),
+        listing_photo_domain::repository::RepoError::Conflict => problem(
+            "version-conflict",
+            "충돌이 발생했어요",
+            StatusCode::CONFLICT,
+            None,
+        ),
+        listing_photo_domain::repository::RepoError::Database(_) => problem(
+            "internal-error",
+            "내부 서버 오류",
+            StatusCode::INTERNAL_SERVER_ERROR,
+            None,
+        ),
+    }
+}
+
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %listing_id, photo_id = %photo_id))]
 pub async fn delete_photo(
     State(state): State<ListingsState>,

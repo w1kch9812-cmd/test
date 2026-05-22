@@ -45,7 +45,7 @@ pub(super) async fn find_detail_by_id(
         r"
         SELECT r2_key, thumbnail_r2_key, caption, display_order, content_type
         FROM listing_photo
-        WHERE listing_id = $1 AND deleted_at IS NULL
+        WHERE listing_id = $1 AND deleted_at IS NULL AND file_size_bytes IS NOT NULL
         ORDER BY display_order ASC
         ",
     )

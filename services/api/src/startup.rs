@@ -265,6 +265,39 @@ pub fn build_photo_upload_issuer_from_config_result(
     }
 }
 
+pub fn build_photo_object_verifier(
+    is_production: bool,
+) -> Result<Arc<dyn photo_upload::ListingPhotoObjectVerifier>, StartupError> {
+    build_photo_object_verifier_from_config_result(
+        is_production,
+        photo_upload::ListingPhotoUploadConfig::from_env(),
+    )
+}
+
+pub fn build_photo_object_verifier_from_config_result(
+    is_production: bool,
+    config_result: Result<
+        photo_upload::ListingPhotoUploadConfig,
+        photo_upload::ListingPhotoUploadConfigError,
+    >,
+) -> Result<Arc<dyn photo_upload::ListingPhotoObjectVerifier>, StartupError> {
+    match config_result {
+        Ok(config) => Ok(Arc::new(photo_upload::R2ListingPhotoObjectVerifier::new(
+            config,
+        ))),
+        Err(error) if is_production => Err(production_config_error(format!(
+            "listing photo object verifier R2 config missing: {error}"
+        ))),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "listing photo object verifier R2 config missing - upload confirmation disabled in dev"
+            );
+            Ok(Arc::new(photo_upload::DisabledListingPhotoObjectVerifier))
+        }
+    }
+}
+
 pub fn build_verifier(dev_mode: bool, is_production: bool) -> Result<Arc<Verifier>, StartupError> {
     if dev_mode {
         if is_production {
@@ -377,6 +410,7 @@ mod tests {
     use crate::photo_upload::ListingPhotoUploadConfigError;
 
     use super::{
+        build_photo_object_verifier_from_config_result,
         build_photo_upload_issuer_from_config_result, build_verifier, required_env, StartupError,
     };
 
@@ -423,5 +457,33 @@ mod tests {
                 if reason.contains("listing photo upload")
                     && reason.contains("LISTING_PHOTO_R2_BUCKET"))
         );
+    }
+
+    #[test]
+    fn production_rejects_missing_listing_photo_object_verifier_r2_config() {
+        let result = build_photo_object_verifier_from_config_result(
+            true,
+            Err(ListingPhotoUploadConfigError::MissingEnv(
+                "LISTING_PHOTO_R2_BUCKET",
+            )),
+        );
+
+        assert!(
+            matches!(result, Err(StartupError::ProductionConfig { reason })
+                if reason.contains("listing photo object verifier")
+                    && reason.contains("LISTING_PHOTO_R2_BUCKET"))
+        );
+    }
+
+    #[test]
+    fn non_production_allows_disabled_listing_photo_object_verifier() {
+        let result = build_photo_object_verifier_from_config_result(
+            false,
+            Err(ListingPhotoUploadConfigError::MissingEnv(
+                "LISTING_PHOTO_R2_BUCKET",
+            )),
+        );
+
+        assert!(result.is_ok());
     }
 }

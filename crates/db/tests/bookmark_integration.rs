@@ -20,14 +20,19 @@ use bookmark_domain::repository::{BookmarkRepository, RepoError as BmRepoError};
 use chrono::{DateTime, Utc};
 use db::bookmark::PgBookmarkRepository;
 use db::listing::PgListingRepository;
+use db::listing_photo::PgListingPhotoRepository;
 use db::user::PgUserRepository;
 use listing_domain::entity::Listing;
 use listing_domain::repository::ListingRepository;
+use listing_photo_domain::entity::{ListingPhoto, PhotoContentType};
+use listing_photo_domain::repository::ListingPhotoRepository;
 use shared_kernel::area::AreaM2;
 use shared_kernel::description::Description;
 use shared_kernel::domain_event::DomainEvent;
 use shared_kernel::email::Email;
-use shared_kernel::id::{BookmarkExternalMarker, Id, ListingMarker, UserMarker};
+use shared_kernel::id::{
+    BookmarkExternalMarker, Id, ListingMarker, ListingPhotoMarker, UserMarker,
+};
 use shared_kernel::listing_title::ListingTitle;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
@@ -383,6 +388,46 @@ async fn find_detail_nonexistent_returns_none() {
         .await
         .expect("ok");
     assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn find_detail_excludes_pending_upload_photos() {
+    use listing_domain::repository::ListingRepository as ListingRepo;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_user(&pool, "zsub-detail-pending", "detail-pending@example.com").await;
+    let viewer = seed_user(
+        &pool,
+        "zsub-detail-pending-v",
+        "detail-pending-v@example.com",
+    )
+    .await;
+    let listing_id = seed_active_listing(&pool, owner).await;
+    let l_repo = PgListingRepository::new(pool.clone());
+    let p_repo = PgListingPhotoRepository::new(pool.clone());
+    let pending = ListingPhoto::try_new(
+        Id::<ListingPhotoMarker>::new(),
+        listing_id.clone(),
+        "listings/test/pending-detail-photo.jpg",
+        None,
+        None,
+        0,
+        None,
+        None,
+        None,
+        PhotoContentType::Jpeg,
+        Utc::now(),
+    )
+    .expect("pending photo");
+    p_repo.save(&pending, test_ctx()).await.expect("save");
+
+    let detail = l_repo
+        .find_detail_by_id(&listing_id, &viewer)
+        .await
+        .expect("ok")
+        .expect("found");
+
+    assert!(detail.photos.is_empty());
 }
 
 #[tokio::test]

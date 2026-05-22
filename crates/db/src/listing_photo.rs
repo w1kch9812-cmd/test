@@ -117,6 +117,17 @@ fn row_to_photo(row: &PgRow) -> Result<ListingPhoto, RepoError> {
 
 #[async_trait]
 impl ListingPhotoRepository for PgListingPhotoRepository {
+    #[instrument(skip(self), fields(photo_id = %id.as_str()))]
+    async fn find(&self, id: &Id<ListingPhotoMarker>) -> Result<Option<ListingPhoto>, RepoError> {
+        let sql = format!("select {PHOTO_COLUMNS} from listing_photo where id = $1");
+        let row = sqlx::query(&sql)
+            .bind(id.as_str())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        row.as_ref().map(row_to_photo).transpose()
+    }
+
     #[instrument(skip(self), fields(listing_id = %listing_id.as_str()))]
     async fn find_by_listing(
         &self,
@@ -124,7 +135,7 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
     ) -> Result<Vec<ListingPhoto>, RepoError> {
         let sql = format!(
             "select {PHOTO_COLUMNS} from listing_photo \
-             where listing_id = $1 and deleted_at is null \
+             where listing_id = $1 and deleted_at is null and file_size_bytes is not null \
              order by display_order asc"
         );
         let rows = sqlx::query(&sql)
@@ -168,6 +179,7 @@ impl ListingPhotoRepository for PgListingPhotoRepository {
                 height_px = excluded.height_px,
                 file_size_bytes = excluded.file_size_bytes,
                 content_type = excluded.content_type,
+                uploaded_at = excluded.uploaded_at,
                 deleted_at = excluded.deleted_at
             ",
         )

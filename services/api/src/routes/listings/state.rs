@@ -4,7 +4,7 @@ use listing_domain::repository::ListingRepository;
 use listing_photo_domain::repository::ListingPhotoRepository;
 use parcel_lookup::ParcelInfoLookup;
 
-use crate::photo_upload::ListingPhotoUploadUrlIssuer;
+use crate::photo_upload::{ListingPhotoObjectVerifier, ListingPhotoUploadUrlIssuer};
 
 /// 핸들러 공유 상태.
 #[derive(Clone)]
@@ -18,4 +18,6 @@ pub struct ListingsState {
     pub parcel_lookup: Arc<dyn ParcelInfoLookup>,
     /// Listing photo binary upload URL issuer.
     pub photo_upload_issuer: Arc<dyn ListingPhotoUploadUrlIssuer>,
+    /// Listing photo binary object verifier.
+    pub photo_object_verifier: Arc<dyn ListingPhotoObjectVerifier>,
 }
