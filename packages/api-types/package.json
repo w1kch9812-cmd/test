@@ -6,6 +6,7 @@
   "types": "./index.ts",
   "scripts": {
     "generate": "tsx scripts/generate.ts",
+    "test": "bash scripts/generate.tests.sh",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

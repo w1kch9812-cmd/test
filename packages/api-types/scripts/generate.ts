@@ -4,14 +4,11 @@ import { fileURLToPath } from "node:url";
 import openapiTS, { astToString } from "openapi-typescript";
 
 /**
- * utoipa (services/api) 가 출력한 OpenAPI spec → TypeScript types.
+ * Generate TypeScript API contract types from the Rust API OpenAPI document.
  *
- * 사용:
- *   1) services/api 가 utoipa 로 OpenAPI spec 출력 (예: services/api/openapi.json)
- *   2) `pnpm --filter @gongzzang/api-types generate` 실행
- *   3) packages/api-types/generated/schema.ts 에 types 작성
- *
- * 본 sub-project (T3) 는 스크립트만. utoipa 미통합 시 placeholder 유지.
+ * The generator must fail when `services/api/openapi.json` is absent. Keeping a
+ * hand-written placeholder would make the frontend believe an API contract was
+ * generated when no Rust source-of-truth exists.
  */
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
@@ -22,9 +19,8 @@ async function main(): Promise<void> {
   let openapiContent: string;
   try {
     openapiContent = await readFile(OPENAPI_PATH, "utf-8");
-  } catch {
-    console.warn(`[api-types] OpenAPI spec not found at ${OPENAPI_PATH}. Keeping placeholder.`);
-    return;
+  } catch (error) {
+    throw new Error(`OpenAPI spec not found at ${OPENAPI_PATH}`, { cause: error });
   }
 
   const types = astToString(await openapiTS(JSON.parse(openapiContent)));
