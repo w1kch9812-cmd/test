@@ -6,7 +6,7 @@
 //! - `GET /healthz` — liveness (process 가 살아 있는가). 항상 200
 //! - `GET /healthz/ready` — readiness (DB ping 성공? Redis 미설정이면 skip). 다운
 //!   시 503 → load balancer 가 트래픽 cut, restart trigger X
-//! - `GET /healthz/db` — DB 단독 (debug). production internal access only — FU
+//! - `GET /healthz/db` — DB 단독 debug. non-production router only.
 //!
 //! 응답 body 는 작은 JSON `{ "status": "ok" }`. 503 시 `ProblemDetails`.
 
@@ -14,7 +14,9 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::http::StatusCode;
+use axum::routing::get;
 use axum::Json;
+use axum::Router;
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -34,6 +36,24 @@ pub struct HealthState {
 pub struct HealthResponse {
     /// 상태 라벨 (`"ok"`).
     pub status: &'static str,
+}
+
+/// Build the public health router.
+///
+/// `/healthz/db` is intentionally opt-in so production can omit the debug DB-only
+/// endpoint instead of relying on comments, ALB rules, or future network policy.
+pub fn public_router(state: HealthState, expose_db_debug_route: bool) -> Router<()> {
+    let router = Router::new()
+        .route("/healthz", get(liveness))
+        .route("/healthz/ready", get(readiness));
+
+    let router = if expose_db_debug_route {
+        router.route("/healthz/db", get(db_health))
+    } else {
+        router
+    };
+
+    router.with_state(state)
 }
 
 /// `GET /healthz` — liveness probe.
@@ -102,9 +122,8 @@ pub async fn readiness(
 
 /// `GET /healthz/db` — DB 단독 health check (debug / on-call).
 ///
-/// **SECURITY**: production 에서는 internal network 또는 admin auth 보호 필요.
-/// 1차 = 공개 (running env 내 어디서든 ping 가능). FU (SP8 `IaC` ALB rule 또는
-/// admin role 가드) 가 production 보호.
+/// **SECURITY**: production omits this route from `public_router`; `/healthz/ready`
+/// remains the production DB-aware readiness endpoint.
 #[tracing::instrument(skip(state))]
 pub async fn db_health(
     State(state): State<HealthState>,
@@ -122,4 +141,35 @@ pub async fn db_health(
             )
         })?;
     Ok(Json(HealthResponse { status: "ok" }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{public_router, HealthState};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use sqlx::postgres::PgPoolOptions;
+    use std::error::Error;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn public_router_omits_db_debug_route_when_disabled(
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let pool = PgPoolOptions::new()
+            .connect_lazy("postgres://gongzzang:gongzzang@127.0.0.1:1/gongzzang")?;
+        let app = public_router(
+            HealthState {
+                pool,
+                redis_pool: None,
+            },
+            false,
+        );
+
+        let response = app
+            .oneshot(Request::builder().uri("/healthz/db").body(Body::empty())?)
+            .await?;
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        Ok(())
+    }
 }

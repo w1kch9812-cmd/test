@@ -50,6 +50,7 @@ aws-smithy-types = "=1.4.8"
 
 [dev-dependencies]
 tempfile = "3"
+tower = "0.5"
 
 [lints]
 workspace = true

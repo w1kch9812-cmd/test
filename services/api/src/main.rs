@@ -162,11 +162,7 @@ async fn async_main() -> Result<(), StartupError> {
 
     // SP-Obs T7: K8s/ECS liveness vs readiness 분리. /healthz = liveness 으로
     // 변경 (이전 SP1 의 stateless `health()` 와 동등 — body shape 만 JSON 으로).
-    let public: Router<()> = Router::new()
-        .route("/healthz", get(routes::health::liveness))
-        .route("/healthz/ready", get(routes::health::readiness))
-        .route("/healthz/db", get(routes::health::db_health))
-        .with_state(health_state);
+    let public: Router<()> = routes::health::public_router(health_state, !is_production);
     let protected: Router<()> = Router::new()
         .route("/users/me", get(routes::users::me))
         .route("/users/:id", get(routes::users::get_user))
