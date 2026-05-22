@@ -17,29 +17,22 @@ use std::env;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use auth::jwks_cache::JwksCache;
-use auth::middleware::{auth_layer, AuthState, AuthenticatedUser};
-use auth::verifier::{JwtVerifier, Verifier};
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use auth::middleware::{auth_layer, AuthState};
 use axum::routing::get;
-use axum::{middleware, Json, Router};
+use axum::{middleware, Router};
 use db::listing::PgListingRepository;
 use db::listing_photo::PgListingPhotoRepository;
 use db::user::PgUserRepository;
-use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
 use listing_domain::repository::ListingRepository;
 use listing_photo_domain::repository::ListingPhotoRepository;
-use parcel_domain::reader::ParcelReader;
-use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup, VWorldParcelInfoLookup};
-use raw_capture_client::RawCapture;
-use serde::Serialize;
-use shared_kernel::id::{Id, UserMarker};
-use sqlx::postgres::PgPoolOptions;
 use tower_http::trace::TraceLayer;
-use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
-use vworld_client::{VWorldClient, VWorldConfig, VWorldParcelReader};
+
+use crate::startup::{
+    build_building_reader, build_internal_auth_secret, build_parcel_lookup, build_raw_capture,
+    build_redis_pool_shared, build_verifier, connect_postgres, init_tracing, is_production_env,
+    required_env, StartupError,
+};
 
 mod http {
     pub mod mutation_ctx;
@@ -52,6 +45,7 @@ mod observability;
 mod building_reader;
 mod r2_raw_capture;
 mod raw_capture_metadata;
+mod startup;
 
 mod routes {
     pub mod admin_listings;
@@ -63,398 +57,7 @@ mod routes {
     pub mod listings;
     pub mod notifications;
     pub mod parcels; // SP10 T3
-}
-
-/// SP10 T3: `NoOp` building reader — `DATA_GO_KR_API_KEY` 미설정 시 fallback (빈 list).
-/// production 은 SP4-iii-a 의 live reader 로 swap.
-struct NoOpBuildingRegisterReader;
-
-impl routes::buildings::BuildingRegisterReader for NoOpBuildingRegisterReader {
-    fn list_by_pnu<'a>(
-        &'a self,
-        _pnu: &'a shared_kernel::pnu::Pnu,
-    ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<
-                    Output = Result<
-                        Vec<building_domain::entity::Building>,
-                        routes::buildings::BuildingRegisterError,
-                    >,
-                > + Send
-                + 'a,
-        >,
-    > {
-        Box::pin(async { Ok(Vec::new()) })
-    }
-}
-
-/// `Axum` 핸들러에 주입할 공유 상태.
-#[derive(Clone)]
-struct AppState {
-    user_repo: Arc<dyn UserRepository>,
-}
-
-/// `User` 응답 직렬화 형태.
-#[derive(Serialize)]
-struct UserResponse {
-    id: String,
-    zitadel_sub: String,
-    email: String,
-    display_name: String,
-    user_kind: String,
-    roles: Vec<String>,
-    created_at: String,
-    updated_at: String,
-    version: i64,
-}
-
-impl From<User> for UserResponse {
-    fn from(u: User) -> Self {
-        Self {
-            id: u.id.as_str().to_owned(),
-            zitadel_sub: u.zitadel_sub,
-            email: u.email.as_str().to_owned(),
-            display_name: u.display_name,
-            user_kind: match u.user_kind {
-                UserKind::Individual => "individual".to_owned(),
-                UserKind::Corporation => "corporation".to_owned(),
-            },
-            roles: u.roles.iter().map(|r| r.as_str().to_owned()).collect(),
-            created_at: u.created_at.to_rfc3339(),
-            updated_at: u.updated_at.to_rfc3339(),
-            version: u.version,
-        }
-    }
-}
-
-// SP-Obs T7: 본 함수는 routes::health::liveness 가 대체. 본 stub 유지 안 함.
-
-/// `GET /users/me` — 인증된 사용자 자신 조회.
-async fn me(auth: AuthenticatedUser) -> Json<UserResponse> {
-    Json(auth.user.into())
-}
-
-/// `GET /users/:id` — `auth.user.id == path id` 인 경우만 허용 (`403` otherwise).
-///
-/// 다른 사용자 조회 권한은 후속 sub-project 에서 admin/operator 역할에 부여.
-async fn get_user(
-    State(state): State<AppState>,
-    auth: AuthenticatedUser,
-    Path(id): Path<String>,
-) -> Result<Json<UserResponse>, (StatusCode, String)> {
-    let id = Id::<UserMarker>::try_from_str(&id)
-        .map_err(|e| (StatusCode::BAD_REQUEST, format!("invalid id: {e}")))?;
-    if id.as_str() != auth.user.id.as_str() {
-        return Err((
-            StatusCode::FORBIDDEN,
-            "이 사용자 정보는 조회할 권한이 없어요".to_owned(),
-        ));
-    }
-    let user = state
-        .user_repo
-        .find_by_id(&id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("find failed: {e}"),
-            )
-        })?
-        .ok_or_else(|| (StatusCode::NOT_FOUND, "user not found".to_owned()))?;
-    Ok(Json(user.into()))
-}
-
-#[derive(Debug, thiserror::Error)]
-enum StartupError {
-    #[error("{name} must be set")]
-    MissingEnv { name: &'static str },
-    #[error("{name} must not be empty")]
-    EmptyEnv { name: &'static str },
-    #[error("connect to Postgres: {source}")]
-    PostgresConnect {
-        #[source]
-        source: Box<sqlx::Error>,
-    },
-    #[error("build JWKS HTTP client: {source}")]
-    JwksHttpClient {
-        #[source]
-        source: Box<reqwest::Error>,
-    },
-    #[error("create Redis pool: {detail}")]
-    RedisPool { detail: String },
-    #[error("bind API listener {addr}: {source}")]
-    Bind {
-        addr: String,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("serve API: {source}")]
-    Serve {
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("production startup config invalid: {reason}")]
-    ProductionConfig { reason: String },
-}
-
-fn required_env(name: &'static str) -> Result<String, StartupError> {
-    let value = env::var(name).map_err(|_| StartupError::MissingEnv { name })?;
-    let value = value.trim().to_owned();
-    if value.is_empty() {
-        return Err(StartupError::EmptyEnv { name });
-    }
-    Ok(value)
-}
-
-fn optional_env(name: &'static str) -> Option<String> {
-    env::var(name)
-        .ok()
-        .map(|value| value.trim().to_owned())
-        .filter(|value| !value.is_empty())
-}
-
-fn production_config_error(reason: impl Into<String>) -> StartupError {
-    StartupError::ProductionConfig {
-        reason: reason.into(),
-    }
-}
-
-fn create_redis_pool(url: String) -> Result<Arc<deadpool_redis::Pool>, StartupError> {
-    let pool = RedisCfg::from_url(url)
-        .create_pool(Some(RedisRt::Tokio1))
-        .map_err(|source| StartupError::RedisPool {
-            detail: source.to_string(),
-        })?;
-    Ok(Arc::new(pool))
-}
-
-fn init_tracing() {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
-}
-
-async fn connect_postgres(database_url: &str) -> Result<sqlx::PgPool, StartupError> {
-    PgPoolOptions::new()
-        .max_connections(5)
-        .connect(database_url)
-        .await
-        .map_err(|source| StartupError::PostgresConnect {
-            source: Box::new(source),
-        })
-}
-
-fn is_production_env() -> bool {
-    std::env::var("APP_ENV").as_deref() == Ok("production")
-        || std::env::var("NODE_ENV").as_deref() == Ok("production")
-}
-
-fn build_raw_capture(
-    is_production: bool,
-    pool: sqlx::PgPool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    let inner = match r2_raw_capture::R2RawCaptureConfig::from_env() {
-        Ok(cfg) => build_r2_raw_capture(cfg, is_production)?,
-        Err(error) => build_noop_raw_capture(&error, is_production)?,
-    };
-    Ok(Arc::new(raw_capture_metadata::TrackedRawCapture::new(
-        inner, pool,
-    )))
-}
-
-fn build_r2_raw_capture(
-    cfg: r2_raw_capture::R2RawCaptureConfig,
-    is_production: bool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    if is_production && cfg.fallback_dir.is_none() {
-        return Err(production_config_error(
-            "BRONZE_FALLBACK_DIR 미설정 — R2 PUT 실패 시 raw 영구 손실. \
-             production 은 ADR 0026 의 디스크 fallback 필수 \
-             (예: /var/lib/gongzzang/bronze-fallback)",
-        ));
-    }
-    if let Err(error) = cfg.ensure_fallback_writable() {
-        handle_unwritable_raw_capture_fallback(&cfg, is_production, &error)?;
-    }
-    tracing::info!(
-        "raw_capture: R2 live (bucket={}, prefix={}, fallback={:?}) — ADR 0026",
-        cfg.bucket,
-        cfg.bronze_prefix,
-        cfg.fallback_dir,
-    );
-    Ok(Arc::new(r2_raw_capture::R2RawCapture::new(cfg)))
-}
-
-fn handle_unwritable_raw_capture_fallback(
-    cfg: &r2_raw_capture::R2RawCaptureConfig,
-    is_production: bool,
-    error: &std::io::Error,
-) -> Result<(), StartupError> {
-    if is_production {
-        return Err(production_config_error(format!(
-            "BRONZE_FALLBACK_DIR ({:?}) mkdir/write probe 실패 — production 차단: {error}",
-            cfg.fallback_dir
-        )));
-    }
-    tracing::warn!(
-        error = %error,
-        fallback_dir = ?cfg.fallback_dir,
-        "BRONZE_FALLBACK_DIR not writable (dev only — production 은 fail-fast)"
-    );
-    Ok(())
-}
-
-fn build_noop_raw_capture(
-    error: &r2_raw_capture::R2ConfigError,
-    is_production: bool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    if is_production {
-        return Err(production_config_error(format!(
-            "R2 env (R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET) 미설정 — Bronze raw_response 보존 path 0 (ADR 0026): {error}"
-        )));
-    }
-    tracing::warn!(
-        error = %error,
-        "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
-    );
-    Ok(Arc::new(raw_capture_client::NoOpRawCapture::new()))
-}
-
-fn build_parcel_lookup(
-    is_production: bool,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
-    match VWorldConfig::from_env() {
-        Ok(cfg) => Ok(build_vworld_parcel_lookup(cfg, raw_capture)),
-        Err(error) => build_noop_parcel_lookup(&error, is_production),
-    }
-}
-
-fn build_vworld_parcel_lookup(
-    cfg: VWorldConfig,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Arc<dyn ParcelInfoLookup> {
-    tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
-    let client = Arc::new(VWorldClient::new(cfg));
-    let reader: Arc<dyn ParcelReader> =
-        Arc::new(VWorldParcelReader::new(client, Arc::clone(raw_capture)));
-    Arc::new(VWorldParcelInfoLookup::new(reader))
-}
-
-fn build_noop_parcel_lookup(
-    error: &vworld_client::ConfigError,
-    is_production: bool,
-) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
-    if is_production {
-        return Err(production_config_error(format!(
-            "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {error}"
-        )));
-    }
-    tracing::warn!(
-        error = %error,
-        "parcel_lookup: VWORLD env missing → NoOp fallback (dev only; production 은 fail-fast)"
-    );
-    Ok(Arc::new(NoOpParcelInfoLookup::new()))
-}
-
-fn build_verifier(dev_mode: bool) -> Result<Arc<Verifier>, StartupError> {
-    if dev_mode {
-        tracing::warn!(
-            "AUTH_DEV_MODE=true — using mock verifier (DEV.<sub> tokens). Production must NOT set this."
-        );
-        return Ok(Arc::new(Verifier::Dev));
-    }
-    let issuer = required_env("ZITADEL_ISSUER")?;
-    let audience = required_env("ZITADEL_AUDIENCE")?;
-    let jwks_url = format!("{issuer}/oauth/v2/keys");
-    let http = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|source| StartupError::JwksHttpClient {
-            source: Box::new(source),
-        })?;
-    let jwks = Arc::new(JwksCache::new(jwks_url, http));
-    Ok(Arc::new(Verifier::Real(JwtVerifier::new(
-        issuer, audience, jwks,
-    ))))
-}
-
-fn build_redis_pool_shared(
-    is_production: bool,
-) -> Result<Option<Arc<deadpool_redis::Pool>>, StartupError> {
-    let pool = optional_env("REDIS_URL")
-        .map(create_redis_pool)
-        .transpose()?;
-    if pool.is_none() {
-        if is_production {
-            return Err(production_config_error(
-                "REDIS_URL 미설정 — JTI denylist None = revoked token 통과 (fail-open). production 은 Redis 필수.",
-            ));
-        }
-        tracing::warn!(
-            "REDIS_URL not set — JTI denylist + readiness Redis check disabled (dev fail-open). production 은 fail-fast 차단됨."
-        );
-    }
-    Ok(pool)
-}
-
-fn build_internal_auth_secret(is_production: bool) -> Result<Arc<str>, StartupError> {
-    if let Some(secret) = optional_env("INTERNAL_AUTH_SECRET") {
-        return Ok(Arc::<str>::from(secret));
-    }
-    if is_production {
-        return Err(production_config_error(
-            "INTERNAL_AUTH_SECRET 미설정 — /internal/auth/event 무인증 차단 위해 필수",
-        ));
-    }
-    tracing::warn!(
-        "INTERNAL_AUTH_SECRET 미설정 (dev) — random fallback 사용. Next.js \
-         측 동일 값 설정 필요 (apps/web/.env.local)."
-    );
-    Ok(Arc::<str>::from(format!(
-        "dev-random-{}",
-        ulid::Ulid::new()
-    )))
-}
-
-fn build_building_reader(
-    is_production: bool,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Result<Arc<dyn routes::buildings::BuildingRegisterReader>, StartupError> {
-    if let Some(key) =
-        optional_env("DATA_GO_KR_API_KEY").or_else(|| optional_env("ODP_SERVICE_KEY"))
-    {
-        return Ok(build_data_go_kr_building_reader(key, raw_capture));
-    }
-    if is_production {
-        return Err(production_config_error(
-            "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
-             가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
-        ));
-    }
-    tracing::warn!("building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)");
-    Ok(Arc::new(NoOpBuildingRegisterReader))
-}
-
-fn build_data_go_kr_building_reader(
-    service_key: String,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Arc<dyn routes::buildings::BuildingRegisterReader> {
-    tracing::info!(
-        "building_register: data.go.kr live (getBrTitleInfo via DataGoKrBuildingRegisterReader)"
-    );
-    let base_url =
-        std::env::var("ODP_BASE_URL").unwrap_or_else(|_| "https://apis.data.go.kr".to_owned());
-    let client = Arc::new(data_go_kr_client::DataGoKrClient::new(
-        data_go_kr_client::DataGoKrConfig {
-            service_key,
-            base_url,
-        },
-    ));
-    Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(
-        client,
-        Arc::clone(raw_capture),
-    ))
+    pub mod users;
 }
 
 #[tokio::main]
@@ -484,7 +87,7 @@ async fn async_main() -> Result<(), StartupError> {
     let pool = connect_postgres(&database_url).await?;
 
     let user_repo: Arc<dyn UserRepository> = Arc::new(PgUserRepository::new(pool.clone()));
-    let app_state = AppState {
+    let app_state = routes::users::UsersState {
         user_repo: user_repo.clone(),
     };
 
@@ -557,8 +160,8 @@ async fn async_main() -> Result<(), StartupError> {
         .route("/healthz/db", get(routes::health::db_health))
         .with_state(health_state);
     let protected: Router<()> = Router::new()
-        .route("/users/me", get(me))
-        .route("/users/:id", get(get_user))
+        .route("/users/me", get(routes::users::me))
+        .route("/users/:id", get(routes::users::get_user))
         .with_state(app_state)
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
@@ -751,19 +354,4 @@ async fn async_main() -> Result<(), StartupError> {
     axum::serve(listener, app)
         .await
         .map_err(|source| StartupError::Serve { source })
-}
-
-#[cfg(test)]
-mod startup_tests {
-    use super::{required_env, StartupError};
-
-    #[test]
-    fn required_env_returns_typed_error_when_missing() {
-        const NAME: &str = "GONGZZANG_TEST_REQUIRED_ENV";
-        std::env::remove_var(NAME);
-
-        let result = required_env(NAME);
-
-        assert!(matches!(result, Err(StartupError::MissingEnv { name }) if name == NAME));
-    }
 }
