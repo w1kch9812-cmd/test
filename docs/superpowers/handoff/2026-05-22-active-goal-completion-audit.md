@@ -5,7 +5,7 @@
 | Date | 2026-05-22 |
 | Scope | Current Gongzzang PNU-anchor listing PBF marker-tile implementation slice |
 | Completion claim allowed | false |
-| Latest Gongzzang commits | `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
+| Latest Gongzzang commits | `906b7bd` guardrail split-repository alignment, `f953380` Rust TLS supply-chain cleanup, `47ee8df` listing PBF implementation, `9675ca8` map runtime research evidence |
 | Latest platform-core commit | `b96d2b4` PNU anchor marker tile contract |
 
 ## Restated Objective
@@ -45,7 +45,9 @@ For this implementation slice, the concrete deliverables are:
 | Public same-origin listing PBF proxy path | `apps/web/proxy.ts`, `platform-core-proxy.test.ts` | Covered |
 | Listing panel ID pattern correctness | `LISTING_ID_PATTERN`, panel codec tests rejecting UUID listing IDs | Covered |
 | Full migration chain includes anchor projection | `tests/migrations/test_v001_full.sh` | Covered |
-| Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions | Covered |
+| Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions; `906b7bd` realigned the DB evidence path to `crates/db/src/listing/marker_tile.rs` after the repository split | Covered |
+| Rust TLS supply-chain advisories | `f953380` moves the workspace to Rust `1.91.1`, pins the matched AWS SDK line, uses `default-https-client`, and removes `rustls-webpki 0.101.x` from the dependency graph | Covered locally |
+| Rust/SQLx/web local verification gates | Fresh `cargo deny`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo sqlx prepare --workspace --check`, `pnpm lint`, `pnpm test`, and `pnpm lefthook run pre-push` evidence | Covered locally |
 | Browser visual map smoke | `http://localhost:3900/listings` rendered one canvas and `Smoke marker listing`; listing PBF tile requests returned 200 | Covered for Gongzzang listing PBF |
 | Platform-core manifest/contract CORS behavior | `../platform-core/services/api/src/routes/mod.rs` now has RED/GREEN coverage for local `localhost:3900` manifest/marker-contract preflights, invalid local-origin fallback using the same default-origin SSOT, and production default origin list remaining empty; live HTTP smoke on `127.0.0.1:18082` returned `access-control-allow-origin: http://localhost:3900` for both endpoints | Covered |
 | Whole product production launch | AWS/production data/deployment are outside this local implementation slice | Not covered |
@@ -68,6 +70,35 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
 git diff --check
 ```
+
+Fresh local hardening evidence after the Rust TLS supply-chain cleanup and repository split:
+
+```powershell
+cargo deny check
+# advisories ok, bans ok, licenses ok, sources ok
+
+cargo tree -i rustls-webpki@0.101.7
+# error: package ID specification `rustls-webpki@0.101.7` did not match any packages
+
+cargo check --workspace --all-features
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+cargo test --workspace
+cargo sqlx prepare --workspace --check
+pnpm lint
+pnpm test
+pnpm lefthook run pre-push
+git diff --check
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+# pnu-anchor-pbf-marker-contract-ok files=29
+
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+# check-pnu-anchor-pbf-marker-contract-tests-ok
+```
+
+`906b7bd` is intentionally a guardrail-only follow-up: it prevents a false negative caused by the
+repository split (`crates/db/src/listing.rs` -> `crates/db/src/listing/marker_tile.rs`) and keeps the
+PNU-marker contract verifier attached to the actual SQL implementation.
 
 After the platform-core CORS fix, the cross-repo entrypoint docs and guardrail expected tokens were
 updated from the earlier review-gate wording to the current local-verification-backed state. The
