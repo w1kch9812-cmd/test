@@ -179,7 +179,7 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
-        RelativePath = "crates/db/src/listing.rs"
+        RelativePath = "crates/db/src/listing/marker_tile.rs"
         Tokens = @(
             "find_listing_marker_tile",
             "parcel_marker_anchor",

@@ -135,7 +135,7 @@ ListingMarkerFilter
 ListingMarkerTileQuery
 ListingMarkerTile
 '@
-    Write-File -Root $Root -RelativePath "crates\db\src\listing.rs" -Content @'
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_tile.rs" -Content @'
 find_listing_marker_tile
 parcel_marker_anchor
 ST_AsMVTGeom
@@ -302,14 +302,14 @@ Assert-Contains $bbox.Output "forbidden token"
 
 $legacyDbRoot = Join-Path $TempRoot "legacy-db"
 Write-ContractFiles -Root $legacyDbRoot
-Add-Content -LiteralPath (Join-Path $legacyDbRoot "crates\db\src\listing.rs") -Value "ST_MakeEnvelope"
+Add-Content -LiteralPath (Join-Path $legacyDbRoot "crates\db\src\listing\marker_tile.rs") -Value "ST_MakeEnvelope"
 $legacyDb = Invoke-Checker -Root $legacyDbRoot
 Assert-Equals $legacyDb.ExitCode 1 "Legacy bbox DB query check exit code mismatch"
 Assert-Contains $legacyDb.Output "forbidden token"
 
 $unanchoredRoot = Join-Path $TempRoot "missing-unanchored-readiness"
 Write-ContractFiles -Root $unanchoredRoot
-Write-File -Root $unanchoredRoot -RelativePath "crates\db\src\listing.rs" -Content @'
+Write-File -Root $unanchoredRoot -RelativePath "crates\db\src\listing\marker_tile.rs" -Content @'
 find_listing_marker_tile
 parcel_marker_anchor
 ST_AsMVTGeom
