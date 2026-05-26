@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import type { ListingFilters } from "@/lib/listings/filters";
 import {
+  buildListingMarkerCountUrl,
   buildListingMarkerFilterRequest,
   buildListingMarkerServerKey,
 } from "@/lib/map/listing-marker-server-state";
@@ -38,5 +39,20 @@ describe("listing marker server state", () => {
       min_price_krw: 100_000_000,
       max_price_krw: 900_000_000,
     });
+  });
+
+  it("builds count URLs from a stable filter hash without viewport coordinates", () => {
+    const url = buildListingMarkerCountUrl(
+      `lst_filter_v1_${"a".repeat(64)}`,
+      "http://localhost:3900",
+    );
+
+    expect(url).toBe(
+      `http://localhost:3900/api/proxy/map/v1/marker-counts/listing?filter_hash=lst_filter_v1_${"a".repeat(64)}`,
+    );
+    expect(url).not.toContain("bbox=");
+    expect(url).not.toContain("bounds=");
+    expect(url).not.toContain("lat=");
+    expect(url).not.toContain("lng=");
   });
 });
