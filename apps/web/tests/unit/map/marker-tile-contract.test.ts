@@ -175,6 +175,26 @@ describe("platform-core marker tile contract consumer", () => {
     expect(source.tiles[0]).not.toContain("lng=");
   });
 
+  it("accepts Gongzzang-owned registered listing marker filter hashes", () => {
+    const registeredHash = `lst_filter_v1_${"a".repeat(64)}`;
+
+    const source = buildListingMarkerTileSource({
+      filterHash: registeredHash,
+      minzoom: 8,
+      maxzoom: 18,
+      origin: "http://localhost:3900",
+    });
+
+    expect(source).toEqual({
+      type: "vector",
+      tiles: [
+        `http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=${registeredHash}`,
+      ],
+      minzoom: 8,
+      maxzoom: 18,
+    });
+  });
+
   it("rejects explicit marker sources outside the platform-core contract", () => {
     const contract = parseMarkerTileContract(contractFixture);
 

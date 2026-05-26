@@ -12,6 +12,7 @@ use listing_domain::repository::{
 use serde::Deserialize;
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::routes::listing_marker_common::{is_stable_filter_hash, resolve_listing_marker_filter};
 
 /// Shared state for listing marker tile routes.
 #[derive(Clone)]
@@ -61,14 +62,7 @@ pub async fn get_listing_marker_tile(
         ));
     }
 
-    let filter = ListingMarkerFilter::try_from_hash(filter_hash).map_err(|_| {
-        problem(
-            "map/listing-marker-filter-not-found",
-            "listing marker filter was not found",
-            StatusCode::NOT_FOUND,
-            None,
-        )
-    })?;
+    let filter = resolve_listing_marker_filter(&state.listing_repo, filter_hash).await?;
     let query = parse_listing_marker_tile_query(&z_raw, &x_raw, &y_pbf, filter)?;
 
     let tile = state
@@ -164,12 +158,6 @@ fn parse_listing_marker_tile_query(
             Some(e.to_string()),
         )
     })
-}
-
-fn is_stable_filter_hash(value: &str) -> bool {
-    value
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | ':' | '-'))
 }
 
 #[cfg(test)]

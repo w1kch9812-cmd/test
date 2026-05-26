@@ -50,7 +50,7 @@ $contracts = @(
             "Product-specific listing marker PBF tiles are a Gongzzang market-domain runtime surface",
             "find_listing_marker_tile",
             "parcel_marker_anchor",
-            "fails the request when active listings are missing anchors",
+            "Active listing saves are rejected",
             "GET /map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1",
             "approved by the user on",
             "No Gongzzang launch map/listing path may depend on viewport bounds as its public request shape"
@@ -62,6 +62,17 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "docs/adr/0038-listing-marker-serving-index-filter-mask.md"
+        Tokens = @(
+            "listing_marker_projection",
+            "listing_marker_filter_registry",
+            "PNU anchor",
+            "marker-counts/listing",
+            "marker-masks/listing",
+            "browser instant filtering"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md"
         Tokens = @(
             "Gongzzang-owned listing PBF marker tiles",
@@ -70,6 +81,27 @@ $contracts = @(
             "No listing-owned canonical coordinate",
             "No viewport-bounds public marker API",
             "No silent marker drop"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "docs/superpowers/specs/2026-05-26-listing-marker-serving-index-filter-mask-design.md"
+        Tokens = @(
+            "listing_marker_projection",
+            "filter_hash",
+            "base marker tile",
+            "browser instant filter",
+            "server marker/filter index",
+            "optional filter mask"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "docs/superpowers/plans/2026-05-26-listing-marker-serving-index-filter-mask.md"
+        Tokens = @(
+            "listing_marker_projection",
+            "listing_marker_filter_registry",
+            "buildListingMarkerLayerFilter",
+            "marker-counts/listing",
+            "marker-masks/listing"
         )
     },
     [pscustomobject]@{
@@ -160,6 +192,30 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "migrations/30013_listing_marker_projection.sql"
+        Tokens = @(
+            "create table listing_marker_projection",
+            "anchor_point geometry(Point, 4326) not null",
+            "listing_marker_projection_anchor_srid_chk",
+            "listing_marker_projection_z14_tile_idx",
+            "source_geometry_checksum_sha256"
+        )
+        Forbidden = @(
+            "listing_lng",
+            "listing_lat",
+            "geom_point"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "migrations/30014_listing_marker_filter_registry.sql"
+        Tokens = @(
+            "create table listing_marker_filter_registry",
+            "listing_marker_filter_registry_hash_chk",
+            "listing_marker_filter_registry_spec_shape_chk",
+            "all-active-v1"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/domain/core/listing/src/repository.rs"
         Tokens = @(
             "find_listing_marker_tile",
@@ -168,7 +224,10 @@ $contracts = @(
             "LISTING_MARKER_TILE_CONTENT_TYPE",
             "ListingMarkerFilter",
             "ListingMarkerTileQuery",
-            "ListingMarkerTile"
+            "ListingMarkerTile",
+            "find_listing_marker_mask",
+            "ListingMarkerMaskQuery",
+            "ListingMarkerMask"
         )
         Forbidden = @(
             "find_markers_in_bbox",
@@ -183,9 +242,11 @@ $contracts = @(
         Tokens = @(
             "find_listing_marker_tile",
             "parcel_marker_anchor",
+            "listing_marker_projection",
             "ST_AsMVTGeom",
             "ST_AsMVT",
             "unanchored_active_count",
+            "unprojected_active_count",
             "listing marker tile completeness violation",
             "eligible_count",
             "represented_count"
@@ -205,15 +266,81 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "crates/db/src/listing/marker_mask.rs"
+        Tokens = @(
+            "find_listing_marker_mask",
+            "listing_marker_projection",
+            "ListingMarkerMaskEncoding::Show",
+            "marker_id",
+            "projection_version",
+            "anchor_snapshot_id"
+        )
+        Forbidden = @(
+            "bounds=",
+            "bbox=",
+            "listing_lng",
+            "listing_lat",
+            "geom_point"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "crates/db/src/listing/marker_filter_registry.rs"
+        Tokens = @(
+            "register_listing_marker_filter",
+            "resolve_listing_marker_filter",
+            "listing_marker_filter_registry",
+            "request_count",
+            "last_used_at"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/db/tests/listing_marker_tile_integration.rs"
         Tokens = @(
             "listing_marker_tile_represents_every_active_listing_on_same_pnu",
-            "listing_marker_tile_rejects_active_listing_without_anchor",
+            "listing_marker_save_rejects_active_listing_without_anchor",
             "ListingMarkerTileQuery",
             "ListingMarkerFilter::AllActive",
-            "unanchored_active_count=1",
+            "missing PNU anchor",
             "feature_count",
-            "aggregate_count"
+            "aggregate_count",
+            "listing_marker_projection_upsert_uses_platform_core_anchor_snapshot",
+            "listing_marker_filter_registry_round_trips_normalized_filter",
+            "listing_marker_mask_returns_show_ids_for_loaded_tile"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_common.rs"
+        Tokens = @(
+            "resolve_listing_marker_filter",
+            "ALL_ACTIVE_LISTING_MARKER_FILTER_HASH",
+            "listing marker filter was not found"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_counts.rs"
+        Tokens = @(
+            "get_listing_marker_count",
+            "ListingMarkerCountsState",
+            "marker-counts/listing",
+            "count_listing_markers"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_filters.rs"
+        Tokens = @(
+            "post_listing_marker_filter",
+            "ListingMarkerFiltersState",
+            "register_listing_marker_filter",
+            "filter_hash"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_masks.rs"
+        Tokens = @(
+            "get_listing_marker_mask",
+            "ListingMarkerMasksState",
+            "find_listing_marker_mask",
+            "listing marker base tile version is stale"
         )
     },
     [pscustomobject]@{
@@ -237,9 +364,16 @@ $contracts = @(
         RelativePath = "services/api/src/main.rs"
         Tokens = @(
             "pub mod listing_marker_tiles",
+            "pub mod listing_marker_counts",
+            "pub mod listing_marker_filters",
+            "pub mod listing_marker_masks",
             "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
+            "/map/v1/marker-counts/listing",
+            "/map/v1/marker-filters/listing",
+            "/map/v1/marker-masks/listing/:z/:x/:y",
             "get(routes::listing_marker_tiles::get_listing_marker_tile)",
-            "ListingMarkerTilesState"
+            "ListingMarkerTilesState",
+            "ListingMarkerMasksState"
         )
     },
     [pscustomobject]@{
@@ -264,7 +398,8 @@ $contracts = @(
             "buildMarkerTileSource",
             "buildListingMarkerTileSource",
             "resolveSameOrigin",
-            "browser origin is required for listing marker tile URLs"
+            "browser origin is required for listing marker tile URLs",
+            "lst_filter_v1_[0-9a-f]{64}"
         )
         Forbidden = @(
             "bounds=",
@@ -295,6 +430,10 @@ $contracts = @(
         Tokens = @(
             "setupListingMarkerTileLayers",
             "buildListingMarkerLayerRegistration",
+            "buildListingMarkerLayerFilter",
+            "buildListingMarkerServerKey",
+            "listingMarkerFilters",
+            "listingMarkerCounts",
             "LISTING_MARKER_TILE_CIRCLE_LAYER_ID",
             'pushPanel({ kind: "listing", id: listingId, view: "summary" })',
             'pushPanel({ kind: "parcel", id: pnu, view: "summary" })'
@@ -309,6 +448,36 @@ $contracts = @(
             "boundsTimerRef",
             "setBounds",
             "getBounds()"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/routes.ts"
+        Tokens = @(
+            "listingMarkerCounts",
+            "listingMarkerFilters",
+            "listingMarkerMaskTemplate",
+            "marker-counts/listing",
+            "marker-filters/listing",
+            "marker-masks/listing"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/map/listing-marker-filter.ts"
+        Tokens = @(
+            "buildListingMarkerLayerFilter",
+            "listing_type",
+            "transaction_type",
+            "price_krw",
+            "area_m2"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/map/listing-marker-server-state.ts"
+        Tokens = @(
+            "buildListingMarkerFilterRequest",
+            "buildListingMarkerServerKey",
+            "min_area_m2",
+            "max_price_krw"
         )
     },
     [pscustomobject]@{
@@ -332,7 +501,7 @@ $contracts = @(
     [pscustomobject]@{
         RelativePath = "apps/web/proxy.ts"
         Tokens = @(
-            "/api/proxy/map/v1/marker-tiles/listing",
+            "API.proxy.listingMarkerTilesPrefix",
             "isLocalHostname",
             "allowLocalHttpMapRuntime",
             "PUBLIC_PATHS",
@@ -406,11 +575,24 @@ $contracts = @(
             "parcel_marker_anchor",
             "parcel_marker_anchor_srid_chk",
             "parcel_marker_anchor_point_gist_idx",
-            "must not duplicate anchor_lng/anchor_lat columns"
+            "must not duplicate anchor_lng/anchor_lat columns",
+            "listing_marker_projection",
+            "listing_marker_filter_registry",
+            "listing_marker_projection_anchor_srid_chk",
+            "listing_marker_filter_registry_spec_shape_chk"
         )
         Forbidden = @(
             "listing.geom_point SRID expected 4326",
             "f_geometry_column='geom_point'"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "docs/frontend/listings-search.md"
+        Tokens = @(
+            "Listing Marker Serving",
+            "listing_marker_projection",
+            "browser instant filter",
+            "server marker indexes"
         )
     }
 )

@@ -41,6 +41,8 @@ EXPECTED_TABLES=(
   system_alert
   parcel_external_data
   parcel_marker_anchor
+  listing_marker_projection
+  listing_marker_filter_registry
   api_health_check
   external_account
 )
@@ -146,6 +148,36 @@ fi
 PMA_LNG_LAT_COLUMNS=$(psql "$DATABASE_URL" -t -A -c "select count(*) from information_schema.columns where table_schema='public' and table_name='parcel_marker_anchor' and column_name in ('anchor_lng', 'anchor_lat');")
 if [ "$PMA_LNG_LAT_COLUMNS" != "0" ]; then
   echo "FAIL: parcel_marker_anchor must not duplicate anchor_lng/anchor_lat columns, got $PMA_LNG_LAT_COLUMNS" >&2
+  exit 1
+fi
+
+LMP_SRID_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_projection'::regclass and conname='listing_marker_projection_anchor_srid_chk';")
+if [ "$LMP_SRID_CHECK" != "1" ]; then
+  echo "FAIL: listing_marker_projection_anchor_srid_chk missing" >&2
+  exit 1
+fi
+
+LMP_TILE_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='listing_marker_projection' and indexname='listing_marker_projection_z14_tile_idx';")
+if [ "$LMP_TILE_IDX" != "1" ]; then
+  echo "FAIL: listing_marker_projection_z14_tile_idx missing" >&2
+  exit 1
+fi
+
+LMP_LNG_LAT_COLUMNS=$(psql "$DATABASE_URL" -t -A -c "select count(*) from information_schema.columns where table_schema='public' and table_name='listing_marker_projection' and column_name in ('listing_lng', 'listing_lat', 'geom_point');")
+if [ "$LMP_LNG_LAT_COLUMNS" != "0" ]; then
+  echo "FAIL: listing_marker_projection must not introduce listing-owned coordinate columns, got $LMP_LNG_LAT_COLUMNS" >&2
+  exit 1
+fi
+
+LMFR_SPEC_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_filter_registry'::regclass and conname='listing_marker_filter_registry_spec_shape_chk';")
+if [ "$LMFR_SPEC_CHECK" != "1" ]; then
+  echo "FAIL: listing_marker_filter_registry_spec_shape_chk missing" >&2
+  exit 1
+fi
+
+LMFR_HASH_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_filter_registry'::regclass and conname='listing_marker_filter_registry_hash_chk';")
+if [ "$LMFR_HASH_CHECK" != "1" ]; then
+  echo "FAIL: listing_marker_filter_registry_hash_chk missing" >&2
   exit 1
 fi
 

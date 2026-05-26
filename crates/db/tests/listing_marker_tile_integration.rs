@@ -11,7 +11,10 @@ use chrono::Utc;
 use db::listing::PgListingRepository;
 use db::user::PgUserRepository;
 use listing_domain::entity::Listing;
-use listing_domain::repository::{ListingMarkerFilter, ListingMarkerTileQuery, ListingRepository};
+use listing_domain::repository::{
+    ListingMarkerFilter, ListingMarkerFilterSpec, ListingMarkerMaskEncoding,
+    ListingMarkerMaskQuery, ListingMarkerTileQuery, ListingRepository,
+};
 use shared_kernel::area::AreaM2;
 use shared_kernel::description::Description;
 use shared_kernel::email::Email;
@@ -22,6 +25,7 @@ use shared_kernel::money::MoneyKrw;
 use shared_kernel::mutation::MutationContext;
 use shared_kernel::pnu::Pnu;
 use shared_kernel::transaction_type::TransactionType;
+use sqlx::Row;
 use user_domain::entity::{User, UserKind};
 use user_domain::repository::UserRepository;
 
@@ -54,12 +58,17 @@ async fn seed_owner(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<UserMark
     owner_id
 }
 
-fn make_listing(owner_id: Id<UserMarker>, pnu: &str, title: &str) -> Listing {
+fn make_listing_of_type(
+    owner_id: Id<UserMarker>,
+    pnu: &str,
+    title: &str,
+    listing_type: ListingType,
+) -> Listing {
     Listing::try_new_draft(
         Id::<ListingMarker>::new(),
         owner_id,
         Pnu::try_new(pnu).unwrap(),
-        ListingType::Factory,
+        listing_type,
         TransactionType::Sale,
         MoneyKrw::try_new(500_000_000).unwrap(),
         None,
@@ -70,6 +79,10 @@ fn make_listing(owner_id: Id<UserMarker>, pnu: &str, title: &str) -> Listing {
         Utc::now(),
     )
     .expect("listing")
+}
+
+fn make_listing(owner_id: Id<UserMarker>, pnu: &str, title: &str) -> Listing {
+    make_listing_of_type(owner_id, pnu, title, ListingType::Factory)
 }
 
 async fn activate_listing(
@@ -130,6 +143,344 @@ async fn seed_anchor(pool: &sqlx::PgPool, pnu: &str) {
 }
 
 #[tokio::test]
+async fn listing_marker_projection_upsert_uses_platform_core_anchor_snapshot() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-projection-1",
+        "marker-projection-1@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100090000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Projection listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+
+    repo.upsert_listing_marker_projection(&listing.id)
+        .await
+        .unwrap();
+
+    let row = sqlx::query(
+        r"
+        select
+            marker_id,
+            listing_id,
+            pnu,
+            anchor_snapshot_id,
+            source_geometry_version,
+            source_geometry_checksum_sha256,
+            source_listing_version,
+            listing_status,
+            listing_type,
+            transaction_type,
+            price_krw,
+            area_m2::text as area_m2
+        from listing_marker_projection
+        where listing_id = $1
+        ",
+    )
+    .bind(listing.id.as_str())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(
+        row.get::<String, _>("marker_id"),
+        format!("lm_{}", listing.id.as_str())
+    );
+    assert_eq!(row.get::<String, _>("listing_id"), listing.id.as_str());
+    assert_eq!(row.get::<String, _>("pnu"), pnu);
+    assert_eq!(
+        row.get::<String, _>("anchor_snapshot_id"),
+        "snapshot-test-v1"
+    );
+    assert_eq!(
+        row.get::<String, _>("source_geometry_version"),
+        "test-geometry-v1"
+    );
+    assert_eq!(
+        row.get::<String, _>("source_geometry_checksum_sha256"),
+        "a".repeat(64)
+    );
+    assert_eq!(row.get::<i64, _>("source_listing_version"), listing.version);
+    assert_eq!(row.get::<String, _>("listing_status"), "active");
+    assert_eq!(row.get::<String, _>("listing_type"), "factory");
+    assert_eq!(row.get::<String, _>("transaction_type"), "sale");
+    assert_eq!(row.get::<i64, _>("price_krw"), 500_000_000);
+    assert_eq!(row.get::<String, _>("area_m2"), "330.58");
+}
+
+#[tokio::test]
+async fn listing_marker_count_applies_price_area_and_type_filters() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-marker-count", "marker-count@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100110000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Count listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+    repo.upsert_listing_marker_projection(&listing.id)
+        .await
+        .unwrap();
+
+    let matching_filter = ListingMarkerFilterSpec {
+        types: vec![ListingType::Factory],
+        transactions: vec![TransactionType::Sale],
+        min_area_m2: Some(300),
+        max_area_m2: Some(400),
+        min_price_krw: Some(100_000_000),
+        max_price_krw: Some(900_000_000),
+    }
+    .try_normalized()
+    .expect("matching filter");
+    let count = repo.count_listing_markers(matching_filter).await.unwrap();
+    assert_eq!(count.total_count, 1);
+    assert_eq!(count.projection_version, Some(1));
+    assert_eq!(
+        count.anchor_snapshot_id.as_deref(),
+        Some("snapshot-test-v1")
+    );
+
+    let non_matching_filter = ListingMarkerFilterSpec {
+        types: vec![ListingType::Warehouse],
+        transactions: vec![TransactionType::Sale],
+        min_area_m2: Some(300),
+        max_area_m2: Some(400),
+        min_price_krw: Some(100_000_000),
+        max_price_krw: Some(900_000_000),
+    }
+    .try_normalized()
+    .expect("non-matching filter");
+    let count = repo
+        .count_listing_markers(non_matching_filter)
+        .await
+        .unwrap();
+    assert_eq!(count.total_count, 0);
+}
+
+#[tokio::test]
+async fn listing_marker_filter_registry_round_trips_normalized_filter() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let repo = PgListingRepository::new(pool);
+
+    let filter = ListingMarkerFilterSpec {
+        types: vec![ListingType::Warehouse, ListingType::Factory],
+        transactions: vec![TransactionType::Sale],
+        min_area_m2: Some(300),
+        max_area_m2: Some(1000),
+        min_price_krw: Some(100_000_000),
+        max_price_krw: Some(5_000_000_000),
+    }
+    .try_normalized()
+    .expect("normalized filter");
+
+    let registered = repo
+        .register_listing_marker_filter(filter.clone())
+        .await
+        .unwrap();
+    assert_eq!(registered.filter_hash, filter.filter_hash());
+
+    let resolved = repo
+        .resolve_listing_marker_filter(&registered.filter_hash)
+        .await
+        .unwrap()
+        .expect("registered filter");
+    assert_eq!(resolved, filter);
+}
+
+#[tokio::test]
+async fn listing_marker_projection_is_created_when_active_listing_is_saved() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-projection-auto",
+        "marker-projection-auto@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100140000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Auto projection listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+
+    let row = sqlx::query(
+        r"
+        select
+            listing_status,
+            visibility_scope,
+            source_listing_version,
+            projection_version
+        from listing_marker_projection
+        where listing_id = $1
+        ",
+    )
+    .bind(listing.id.as_str())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.get::<String, _>("listing_status"), "active");
+    assert_eq!(row.get::<String, _>("visibility_scope"), "public");
+    assert_eq!(row.get::<i64, _>("source_listing_version"), listing.version);
+    assert_eq!(row.get::<i64, _>("projection_version"), 1);
+}
+
+#[tokio::test]
+async fn listing_marker_projection_is_hidden_when_listing_leaves_active_state() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-projection-hidden",
+        "marker-projection-hidden@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100150000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Hidden projection listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+    listing.mark_sold(Utc::now()).unwrap();
+    repo.save(
+        &listing,
+        MutationContext::new_user_action(owner.clone(), "corr-marker-sold", "mark_sold"),
+    )
+    .await
+    .unwrap();
+
+    let row = sqlx::query(
+        r"
+        select
+            listing_status,
+            visibility_scope,
+            source_listing_version,
+            projection_version
+        from listing_marker_projection
+        where listing_id = $1
+        ",
+    )
+    .bind(listing.id.as_str())
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    assert_eq!(row.get::<String, _>("listing_status"), "sold");
+    assert_eq!(row.get::<String, _>("visibility_scope"), "owner_private");
+    assert_eq!(row.get::<i64, _>("source_listing_version"), listing.version);
+    assert_eq!(row.get::<i64, _>("projection_version"), 2);
+}
+
+#[tokio::test]
+async fn listing_marker_tile_applies_normalized_filter_spec() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-tile-filter",
+        "marker-tile-filter@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100120000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut factory = make_listing_of_type(
+        owner.clone(),
+        pnu,
+        "Filtered factory listing",
+        ListingType::Factory,
+    );
+    let mut warehouse = make_listing_of_type(
+        owner.clone(),
+        pnu,
+        "Filtered warehouse listing",
+        ListingType::Warehouse,
+    );
+
+    activate_listing(&repo, &mut factory, &owner).await;
+    activate_listing(&repo, &mut warehouse, &owner).await;
+    repo.upsert_listing_marker_projection(&factory.id)
+        .await
+        .unwrap();
+    repo.upsert_listing_marker_projection(&warehouse.id)
+        .await
+        .unwrap();
+
+    let warehouse_only = ListingMarkerFilterSpec {
+        types: vec![ListingType::Warehouse],
+        transactions: vec![TransactionType::Sale],
+        min_area_m2: Some(300),
+        max_area_m2: Some(400),
+        min_price_krw: Some(100_000_000),
+        max_price_krw: Some(900_000_000),
+    }
+    .try_normalized()
+    .expect("warehouse filter");
+
+    let tile = repo
+        .find_listing_marker_tile(ListingMarkerTileQuery::new(
+            0,
+            0,
+            0,
+            ListingMarkerFilter::Normalized(warehouse_only),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(tile.eligible_count, 1);
+    assert_eq!(tile.represented_count, 1);
+    assert_eq!(tile.feature_count, 1);
+}
+
+#[tokio::test]
+async fn listing_marker_mask_returns_show_ids_for_loaded_tile() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(&pool, "zsub-marker-mask", "marker-mask@example.com").await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100130000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Mask listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+    repo.upsert_listing_marker_projection(&listing.id)
+        .await
+        .unwrap();
+
+    let mask = repo
+        .find_listing_marker_mask(ListingMarkerMaskQuery {
+            z: 0,
+            x: 0,
+            y: 0,
+            filter: ListingMarkerFilter::AllActive,
+            base_version: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(mask.encoding, ListingMarkerMaskEncoding::Show);
+    assert_eq!(mask.marker_ids, vec![format!("lm_{}", listing.id.as_str())]);
+    assert_eq!(mask.projection_version, Some(1));
+    assert_eq!(mask.anchor_snapshot_id.as_deref(), Some("snapshot-test-v1"));
+}
+
+#[tokio::test]
 async fn listing_marker_tile_represents_every_active_listing_on_same_pnu() {
     let _guard = lock_marker_tile_tests().await;
     let pool = setup_test_pool().await;
@@ -145,6 +496,12 @@ async fn listing_marker_tile_represents_every_active_listing_on_same_pnu() {
 
     activate_listing(&repo, &mut first, &owner).await;
     activate_listing(&repo, &mut second, &owner).await;
+    repo.upsert_listing_marker_projection(&first.id)
+        .await
+        .unwrap();
+    repo.upsert_listing_marker_projection(&second.id)
+        .await
+        .unwrap();
     repo.save(&draft, test_ctx()).await.unwrap();
 
     let tile = repo
@@ -166,7 +523,40 @@ async fn listing_marker_tile_represents_every_active_listing_on_same_pnu() {
 }
 
 #[tokio::test]
-async fn listing_marker_tile_rejects_active_listing_without_anchor() {
+async fn listing_marker_tile_uses_auto_projection_without_manual_upsert() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-tile-no-projection",
+        "marker-tile-no-projection@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100100000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Missing projection listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+
+    let tile = repo
+        .find_listing_marker_tile(ListingMarkerTileQuery::new(
+            0,
+            0,
+            0,
+            ListingMarkerFilter::AllActive,
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(tile.eligible_count, 1);
+    assert_eq!(tile.represented_count, 1);
+    assert_eq!(tile.feature_count, 1);
+}
+
+#[tokio::test]
+async fn listing_marker_save_rejects_active_listing_without_anchor() {
     let _guard = lock_marker_tile_tests().await;
     let pool = setup_test_pool().await;
     truncate_all(&pool).await;
@@ -178,21 +568,30 @@ async fn listing_marker_tile_rejects_active_listing_without_anchor() {
         "Missing anchor listing",
     );
 
-    activate_listing(&repo, &mut listing, &owner).await;
+    repo.save(&listing, test_ctx()).await.unwrap();
+    listing.submit_for_review(Utc::now()).unwrap();
+    repo.save(
+        &listing,
+        MutationContext::new_user_action(owner.clone(), "corr-marker-submit", "submit_for_review"),
+    )
+    .await
+    .unwrap();
+    listing.approve(Utc::now()).unwrap();
 
     let err = repo
-        .find_listing_marker_tile(ListingMarkerTileQuery::new(
-            0,
-            0,
-            0,
-            ListingMarkerFilter::AllActive,
-        ))
+        .save(
+            &listing,
+            MutationContext::new_user_action(
+                owner.clone(),
+                "corr-marker-approve",
+                "approve_listing",
+            ),
+        )
         .await
         .unwrap_err();
 
     let message = err.to_string();
-    assert!(message.contains("completeness violation"));
-    assert!(message.contains("unanchored_active_count=1"));
+    assert!(message.contains("missing PNU anchor"));
 }
 
 #[tokio::test]

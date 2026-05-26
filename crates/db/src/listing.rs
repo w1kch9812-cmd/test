@@ -8,6 +8,10 @@
 
 mod card_summaries;
 mod detail;
+mod marker_count;
+mod marker_filter_registry;
+mod marker_mask;
+mod marker_projection;
 mod marker_tile;
 mod persistence;
 mod repository;

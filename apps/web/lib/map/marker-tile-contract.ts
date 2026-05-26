@@ -180,6 +180,7 @@ function assertSupportedFilterHash(contract: MarkerTileContract, filterHash: str
 
 function assertSupportedListingFilterHash(filterHash: string): void {
   if (filterHash === ALL_ACTIVE_MARKER_FILTER_HASH) return;
+  if (/^lst_filter_v1_[0-9a-f]{64}$/.test(filterHash)) return;
   throw new Error(`unsupported listing marker tile filterHash: ${filterHash}`);
 }
 

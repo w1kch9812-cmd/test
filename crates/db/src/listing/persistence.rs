@@ -34,6 +34,8 @@ pub(super) async fn save(
         bookmark_count_i64,
     )
     .await?;
+    super::marker_projection::sync_listing_marker_projection_after_save(&mut tx, &listing.id)
+        .await?;
 
     let after_state_raw = crate::audit_state::read_listing_json(&mut tx, &listing.id).await?;
     let after_state = crate::audit_state::merge_metadata(after_state_raw, ctx.metadata.as_ref());

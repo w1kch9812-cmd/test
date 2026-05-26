@@ -55,6 +55,10 @@ mod routes {
     pub mod bookmarks;
     pub mod buildings; // SP10 T3
     pub mod health;
+    pub mod listing_marker_common;
+    pub mod listing_marker_counts;
+    pub mod listing_marker_filters;
+    pub mod listing_marker_masks;
     pub mod listing_marker_tiles;
     pub mod listings;
     pub mod notifications;
@@ -180,6 +184,30 @@ async fn async_main() -> Result<(), StartupError> {
             get(routes::listing_marker_tiles::get_listing_marker_tile),
         )
         .with_state(routes::listing_marker_tiles::ListingMarkerTilesState {
+            listing_repo: listings_state.listing_repo.clone(),
+        });
+    let listing_marker_counts_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-counts/listing",
+            get(routes::listing_marker_counts::get_listing_marker_count),
+        )
+        .with_state(routes::listing_marker_counts::ListingMarkerCountsState {
+            listing_repo: listings_state.listing_repo.clone(),
+        });
+    let listing_marker_filters_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-filters/listing",
+            axum::routing::post(routes::listing_marker_filters::post_listing_marker_filter),
+        )
+        .with_state(routes::listing_marker_filters::ListingMarkerFiltersState {
+            listing_repo: listings_state.listing_repo.clone(),
+        });
+    let listing_marker_masks_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-masks/listing/:z/:x/:y",
+            get(routes::listing_marker_masks::get_listing_marker_mask),
+        )
+        .with_state(routes::listing_marker_masks::ListingMarkerMasksState {
             listing_repo: listings_state.listing_repo.clone(),
         });
 
@@ -338,6 +366,9 @@ async fn async_main() -> Result<(), StartupError> {
     let app = public
         .merge(protected)
         .merge(listing_marker_tiles_router)
+        .merge(listing_marker_counts_router)
+        .merge(listing_marker_filters_router)
+        .merge(listing_marker_masks_router)
         .merge(listings_router)
         .merge(parcels_router) // SP10 T3
         .merge(buildings_router) // SP10 T3

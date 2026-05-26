@@ -7,7 +7,10 @@
 > **Current SSOT**:
 > [ADR 0018](../adr/0018-pnu-first-identity-no-coordinates.md),
 > [ADR 0037](../adr/0037-pnu-anchor-pbf-marker-tiles.md),
+> [ADR 0038](../adr/0038-listing-marker-serving-index-filter-mask.md),
 > [listing PBF design spec](./specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md).
+> Filter/index spec:
+> [2026-05-26 listing marker serving index/filter mask design](./specs/2026-05-26-listing-marker-serving-index-filter-mask-design.md).
 > Handoff: [2026-05-22 listing PBF review gate](./handoff/2026-05-22-listing-pbf-review-gate.md).
 > Completion audit:
 > [2026-05-22 active goal completion audit](./handoff/2026-05-22-active-goal-completion-audit.md).

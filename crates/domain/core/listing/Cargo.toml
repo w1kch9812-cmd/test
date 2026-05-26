@@ -10,6 +10,7 @@ description = "공짱 Listing Aggregate (Core BC, RDS 동적)"
 shared-kernel = { path = "../shared-kernel", version = "0.1.0" }
 chrono = { workspace = true }
 serde = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
 

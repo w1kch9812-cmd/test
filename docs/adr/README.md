@@ -84,3 +84,4 @@
 | [0035](./0035-legacy-r2-removal-and-atomic-namespace.md) | Legacy `R2_*` + `ETL_BUILD_ENV` 완전 제거 + atomic namespace 강제 (ADR 0029 backward-compat 제거) | Accepted |
 | [0036](./0036-static-vector-tile-runtime-contract.md) | Static vector tile runtime contract - platform-core-owned manifest, Gongzzang consumer only | Accepted |
 | [0037](./0037-pnu-anchor-pbf-marker-tiles.md) | PNU Anchor PBF Marker Tiles - platform-core anchor positions, Gongzzang PBF marker runtime | Accepted |
+| [0038](./0038-listing-marker-serving-index-filter-mask.md) | Listing Marker Serving Index And Filter Mask - scalable dynamic listing marker/filter serving | Accepted |

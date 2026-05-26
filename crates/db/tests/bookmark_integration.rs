@@ -440,10 +440,12 @@ mod view_count;
 async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingMarker> {
     let repo = PgListingRepository::new(pool.clone());
     let now = Utc::now();
+    let pnu = "1111010100100090000";
+    seed_listing_anchor(pool, pnu).await;
     let mut listing = Listing::try_new_draft(
         Id::new(),
         owner,
-        Pnu::try_new("1111010100100090000").unwrap(),
+        Pnu::try_new(pnu).unwrap(),
         ListingType::Factory,
         TransactionType::Sale,
         MoneyKrw::try_new(200_000_000).unwrap(),
@@ -460,4 +462,38 @@ async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<L
     let listing_id = listing.id.clone();
     repo.save(&listing, test_ctx()).await.expect("save");
     listing_id
+}
+
+async fn seed_listing_anchor(pool: &sqlx::PgPool, pnu: &str) {
+    sqlx::query(
+        r"
+        insert into parcel_marker_anchor (
+            pnu,
+            anchor_point,
+            algorithm,
+            algorithm_version,
+            anchor_snapshot_id,
+            source_geometry_version,
+            source_geometry_checksum_sha256,
+            platform_core_updated_at,
+            synced_at
+        )
+        values (
+            $1,
+            ST_SetSRID(ST_MakePoint(126.9780, 37.5665), 4326),
+            'polylabel',
+            '1',
+            'snapshot-bookmark-v1',
+            'bookmark-geometry-v1',
+            repeat('b', 64),
+            now(),
+            now()
+        )
+        on conflict (pnu) do nothing
+        ",
+    )
+    .bind(pnu)
+    .execute(pool)
+    .await
+    .expect("seed listing anchor");
 }

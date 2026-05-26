@@ -19,6 +19,10 @@ use shared_kernel::zoning::Zoning;
 use thiserror::Error;
 
 use crate::entity::Listing;
+pub use crate::marker_filter::{
+    ListingMarkerFilter, ListingMarkerFilterError, ListingMarkerFilterSpec,
+    NormalizedListingMarkerFilterSpec, ALL_ACTIVE_LISTING_MARKER_FILTER_HASH,
+};
 
 /// `Listing` 저장/조회 포트.
 #[async_trait]
@@ -56,6 +60,62 @@ pub trait ListingRepository: Send + Sync {
         &self,
         query: ListingMarkerTileQuery,
     ) -> Result<ListingMarkerTile, RepoError>;
+
+    /// Return marker ids matching a filter for a loaded listing marker tile.
+    ///
+    /// The mask is a serving optimization and must not expose canonical coordinates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the projection index query fails.
+    async fn find_listing_marker_mask(
+        &self,
+        query: ListingMarkerMaskQuery,
+    ) -> Result<ListingMarkerMask, RepoError>;
+
+    /// Upsert the listing marker serving projection from listing semantics and PNU anchor data.
+    ///
+    /// The projection is not a coordinate source of truth. Marker position must be copied from
+    /// the platform-core-owned `parcel_marker_anchor` read model.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::NotFound`] when the listing is absent, and [`RepoError::Database`]
+    /// when the listing has no PNU anchor.
+    async fn upsert_listing_marker_projection(
+        &self,
+        id: &Id<ListingIdMarker>,
+    ) -> Result<(), RepoError>;
+
+    /// Count public listing markers from the marker serving projection/index.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the projection index query fails.
+    async fn count_listing_markers(
+        &self,
+        filter: NormalizedListingMarkerFilterSpec,
+    ) -> Result<ListingMarkerCount, RepoError>;
+
+    /// Register a normalized marker filter and return its stable hash.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the registry write fails.
+    async fn register_listing_marker_filter(
+        &self,
+        filter: NormalizedListingMarkerFilterSpec,
+    ) -> Result<ListingMarkerRegisteredFilter, RepoError>;
+
+    /// Resolve a registered marker filter hash to its normalized payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the registry read fails.
+    async fn resolve_listing_marker_filter(
+        &self,
+        filter_hash: &str,
+    ) -> Result<Option<NormalizedListingMarkerFilterSpec>, RepoError>;
 
     /// 소유자별 매물 조회. `status`가 `Some`이면 해당 상태만.
     ///
@@ -207,54 +267,14 @@ pub struct ListingCardSummary {
 /// Gongzzang listing marker vector-tile layer name.
 pub const LISTING_MARKER_TILE_LAYER: &str = "listing";
 
-/// Initial public listing marker filter hash.
-pub const ALL_ACTIVE_LISTING_MARKER_FILTER_HASH: &str = "all-active-v1";
-
 /// Marker tile response content type.
 pub const LISTING_MARKER_TILE_CONTENT_TYPE: &str = "application/vnd.mapbox-vector-tile";
 
 /// Maximum zoom accepted by the listing marker tile API.
 pub const LISTING_MARKER_TILE_MAX_ZOOM: u8 = 24;
 
-/// Supported listing marker filters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ListingMarkerFilter {
-    /// Public active listings only.
-    AllActive,
-}
-
-impl ListingMarkerFilter {
-    /// Stable cache identity for this filter.
-    #[must_use]
-    pub const fn hash(self) -> &'static str {
-        match self {
-            Self::AllActive => ALL_ACTIVE_LISTING_MARKER_FILTER_HASH,
-        }
-    }
-
-    /// Parse a public filter hash into a typed marker filter.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ListingMarkerFilterError::UnsupportedHash`] when `hash` is not registered.
-    pub fn try_from_hash(hash: &str) -> Result<Self, ListingMarkerFilterError> {
-        match hash {
-            ALL_ACTIVE_LISTING_MARKER_FILTER_HASH => Ok(Self::AllActive),
-            other => Err(ListingMarkerFilterError::UnsupportedHash(other.to_owned())),
-        }
-    }
-}
-
-/// Listing marker filter parse error.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum ListingMarkerFilterError {
-    /// The filter hash is not registered or supported.
-    #[error("unsupported listing marker filter hash: {0}")]
-    UnsupportedHash(String),
-}
-
 /// Validated tile query for the listing marker PBF surface.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListingMarkerTileQuery {
     /// Web mercator zoom.
     pub z: u8,
@@ -269,7 +289,7 @@ pub struct ListingMarkerTileQuery {
 impl ListingMarkerTileQuery {
     /// Build a query without validation. Use only when inputs are already trusted.
     #[must_use]
-    pub const fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
+    pub fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
         Self { z, x, y, filter }
     }
 
@@ -343,6 +363,72 @@ pub struct ListingMarkerTile {
     pub aggregate_count: i64,
     /// Anchor snapshot identity used by represented features.
     pub anchor_snapshot_id: Option<String>,
+}
+
+/// Listing marker mask request for a loaded tile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerMaskQuery {
+    /// Web mercator zoom.
+    pub z: u8,
+    /// Web mercator x coordinate.
+    pub x: u32,
+    /// Web mercator y coordinate.
+    pub y: u32,
+    /// Typed marker filter.
+    pub filter: ListingMarkerFilter,
+    /// Projection version of the already loaded base tile.
+    pub base_version: Option<i64>,
+}
+
+/// Listing marker mask encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ListingMarkerMaskEncoding {
+    /// `marker_ids` are the ids that should remain visible.
+    Show,
+    /// `marker_ids` are the ids that should be hidden.
+    Hide,
+}
+
+impl ListingMarkerMaskEncoding {
+    /// Stable JSON/API value.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Show => "show",
+            Self::Hide => "hide",
+        }
+    }
+}
+
+/// Listing marker mask response.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerMask {
+    /// Compact mask encoding.
+    pub encoding: ListingMarkerMaskEncoding,
+    /// Marker ids selected by the mask. Coordinates are intentionally absent.
+    pub marker_ids: Vec<String>,
+    /// Highest projection version included in this mask.
+    pub projection_version: Option<i64>,
+    /// Highest anchor snapshot identity included in this mask.
+    pub anchor_snapshot_id: Option<String>,
+}
+
+/// Exact listing marker count and projection metadata for a normalized filter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerCount {
+    /// Exact public marker count for the filter.
+    pub total_count: i64,
+    /// Highest projection version included in the count result.
+    pub projection_version: Option<i64>,
+    /// Highest anchor snapshot identity included in the count result.
+    pub anchor_snapshot_id: Option<String>,
+}
+
+/// Registered listing marker filter identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerRegisteredFilter {
+    /// Stable filter hash used by public tile/count/mask routes.
+    pub filter_hash: String,
 }
 
 /// 카드 list 검색 조건 (모두 optional, default 는 "전체").

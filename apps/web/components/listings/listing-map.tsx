@@ -1,7 +1,15 @@
 ﻿"use client";
 import { MAP_LAYER_COLORS } from "@gongzzang/ui/tokens.js";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ListingFilters } from "@/lib/listings/filters";
+import { buildListingMarkerLayerFilter } from "@/lib/map/listing-marker-filter";
+import {
+  buildListingMarkerFilterRequest,
+  buildListingMarkerServerKey,
+  type ListingMarkerCountResponse,
+  type ListingMarkerFilterRegistrationResponse,
+} from "@/lib/map/listing-marker-server-state";
 import {
   ALL_ACTIVE_MARKER_FILTER_HASH,
   fetchMarkerTileContract,
@@ -20,6 +28,8 @@ import {
 } from "@/lib/map/vector-tile-manifest";
 import { loadNaverMaps } from "@/lib/naver-maps";
 import { usePanelStack } from "@/lib/panel/use-panel-stack";
+import { API } from "@/lib/routes";
+import { useListingsStore } from "@/stores/listings";
 
 async function setupMarkerTileLayers(
   mb: MapboxGLLike,
@@ -146,12 +156,21 @@ type MapboxGLLike = {
   on?: (event: string, layer: string, handler: (e: unknown) => void) => void;
   isStyleLoaded?: () => boolean;
   once?: (event: string, handler: () => void) => void;
+  setFilter?: (layerId: string, filter: unknown[]) => void;
 };
 
 // Polling constants for the private mapbox-gl bridge.
 const MAPBOX_POLL_INTERVAL_MS = 100;
 const MAPBOX_POLL_TIMEOUT_MS = 6_000;
 const MAPBOX_MAX_ATTEMPTS = MAPBOX_POLL_TIMEOUT_MS / MAPBOX_POLL_INTERVAL_MS;
+
+type ListingMarkerServerState = {
+  filterHash: string;
+  totalCount: number | undefined;
+  projectionVersion: number | undefined;
+  anchorSnapshotId: string | undefined;
+  requestKey: string;
+};
 
 async function waitForMapbox(naverMap: naver.maps.Map): Promise<MapboxGLLike> {
   for (let i = 0; i < MAPBOX_MAX_ATTEMPTS; i++) {
@@ -175,6 +194,7 @@ async function setupMapboxRuntime(
   isCancelled: () => boolean,
   onParcelClick: (pnu: string) => void,
   onListingClick: (listingId: string) => void,
+  onMapboxReady: (mb: MapboxGLLike) => void,
 ): Promise<void> {
   const mb = await waitForMapbox(map);
   if (isCancelled()) return;
@@ -190,6 +210,8 @@ async function setupMapboxRuntime(
   await setupPolygonLayers(mb, onParcelClick);
   await setupMarkerTileLayers(mb, onParcelClick);
   await setupListingMarkerTileLayers(mb, onListingClick);
+  if (isCancelled()) return;
+  onMapboxReady(mb);
   const recovery = setupWebGlRecovery(mb);
   if (recovery) cleanups.push(recovery);
 }
@@ -360,10 +382,115 @@ function logMapLayerFailure(
   }
 }
 
+function isAbortError(err: unknown): boolean {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+async function loadListingMarkerServerState(
+  filters: ListingFilters,
+  signal: AbortSignal,
+): Promise<ListingMarkerServerState> {
+  const registered = await registerListingMarkerFilter(filters, signal);
+  const count = await fetchListingMarkerCount(registered.filter_hash, signal);
+  return toListingMarkerServerState(registered.filter_hash, count);
+}
+
+async function registerListingMarkerFilter(
+  filters: ListingFilters,
+  signal: AbortSignal,
+): Promise<ListingMarkerFilterRegistrationResponse> {
+  const response = await fetch(API.proxy.listingMarkerFilters, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(buildListingMarkerFilterRequest(filters)),
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`listing marker filter registration failed: ${response.status}`);
+  }
+  return (await response.json()) as ListingMarkerFilterRegistrationResponse;
+}
+
+async function fetchListingMarkerCount(
+  filterHash: string,
+  signal: AbortSignal,
+): Promise<ListingMarkerCountResponse> {
+  const countUrl = new URL(API.proxy.listingMarkerCounts, window.location.origin);
+  countUrl.searchParams.set("filter_hash", filterHash);
+
+  const response = await fetch(countUrl, {
+    headers: { accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new Error(`listing marker count fetch failed: ${response.status}`);
+  }
+  return (await response.json()) as ListingMarkerCountResponse;
+}
+
+function toListingMarkerServerState(
+  filterHash: string,
+  count: ListingMarkerCountResponse,
+): ListingMarkerServerState {
+  const projectionVersion = count.projection_version ?? undefined;
+  const anchorSnapshotId = count.anchor_snapshot_id ?? undefined;
+  return {
+    filterHash,
+    totalCount: count.total_count,
+    projectionVersion,
+    anchorSnapshotId,
+    requestKey: buildListingMarkerServerKey({
+      filterHash,
+      projectionVersion,
+      anchorSnapshotId,
+    }),
+  };
+}
+
 export function ListingMap() {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<naver.maps.Map | null>(null);
+  const [mapboxInstance, setMapboxInstance] = useState<MapboxGLLike | null>(null);
+  const [, setMarkerServerState] = useState<ListingMarkerServerState>({
+    filterHash: ALL_ACTIVE_MARKER_FILTER_HASH,
+    totalCount: undefined,
+    projectionVersion: undefined,
+    anchorSnapshotId: undefined,
+    requestKey: buildListingMarkerServerKey({
+      filterHash: ALL_ACTIVE_MARKER_FILTER_HASH,
+      projectionVersion: undefined,
+      anchorSnapshotId: undefined,
+    }),
+  });
+  const filters = useListingsStore((state) => state.filters);
   const { push: pushPanel } = usePanelStack();
+
+  useEffect(() => {
+    const mb = mapboxInstance;
+    if (!mb?.setFilter || !mb.getLayer?.(LISTING_MARKER_TILE_CIRCLE_LAYER_ID)) return;
+    mb.setFilter(LISTING_MARKER_TILE_CIRCLE_LAYER_ID, buildListingMarkerLayerFilter(filters));
+  }, [filters, mapboxInstance]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    loadListingMarkerServerState(filters, controller.signal)
+      .then(setMarkerServerState)
+      .catch((err: unknown) => {
+        if (isAbortError(err)) return;
+        console.warn(
+          "[ListingMap] listing marker server state unavailable",
+          err instanceof Error ? err.message : String(err),
+        );
+      });
+
+    return () => {
+      controller.abort();
+    };
+  }, [filters]);
 
   // Initialize Naver GL runtime plus Platform Core polygon and marker PBF layers.
   useEffect(() => {
@@ -399,6 +526,9 @@ export function ListingMap() {
         () => cancelled,
         (pnu) => pushPanel({ kind: "parcel", id: pnu, view: "summary" }),
         (listingId) => pushPanel({ kind: "listing", id: listingId, view: "summary" }),
+        (mb) => {
+          setMapboxInstance(mb);
+        },
       ).catch((e: unknown) => {
         if (!cancelled) {
           console.warn(
@@ -410,6 +540,7 @@ export function ListingMap() {
     });
     return () => {
       cancelled = true;
+      setMapboxInstance(null);
       for (const fn of cleanups) fn();
     };
   }, [pushPanel]);

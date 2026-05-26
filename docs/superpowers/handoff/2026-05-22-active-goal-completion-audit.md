@@ -37,7 +37,7 @@ For this implementation slice, the concrete deliverables are:
 | No silent marker drop | DB implementation checks `unanchored_active_count == 0` and `eligible_count == represented_count` | Covered |
 | Active listings on same PNU are both represented | `listing_marker_tile_represents_every_active_listing_on_same_pnu` | Covered |
 | Draft listings are excluded from marker tiles | Same integration test asserts `eligible_count == 2` after seeding two active listings and one draft | Covered |
-| Active listing without anchor fails readiness | `listing_marker_tile_rejects_active_listing_without_anchor` | Covered |
+| Active listing without anchor fails readiness | `listing_marker_save_rejects_active_listing_without_anchor` | Covered |
 | Tile coordinate validation | `listing_marker_tile_validation_rejects_out_of_range_coordinates`, API route tests | Covered |
 | API PBF route and content type | `services/api/src/routes/listing_marker_tiles.rs`, `cargo test -p api listing_marker_tile` | Covered |
 | Frontend listing PBF source and layer | `marker-tile-contract.ts`, `marker-tile-style.ts`, `listing-map.tsx`, focused web unit tests | Covered |

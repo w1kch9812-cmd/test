@@ -68,10 +68,18 @@ dynamic PBF generated from listing rows joined to platform-core anchors by PNU
 Product-specific listing marker PBF tiles are a Gongzzang market-domain runtime surface
 find_listing_marker_tile
 parcel_marker_anchor
-fails the request when active listings are missing anchors
+Active listing saves are rejected
 GET /map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1
 approved by the user on 2026-05-22
 No Gongzzang launch map/listing path may depend on viewport bounds as its public request shape
+'@
+    Write-File -Root $Root -RelativePath "docs\adr\0038-listing-marker-serving-index-filter-mask.md" -Content @'
+listing_marker_projection
+listing_marker_filter_registry
+PNU anchor
+marker-counts/listing
+marker-masks/listing
+browser instant filtering
 '@
     Write-File -Root $Root -RelativePath "docs\superpowers\specs\2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md" -Content @'
 Gongzzang-owned listing PBF marker tiles
@@ -80,6 +88,21 @@ Gongzzang owns listing semantics
 No listing-owned canonical coordinate
 No viewport-bounds public marker API
 No silent marker drop
+'@
+    Write-File -Root $Root -RelativePath "docs\superpowers\specs\2026-05-26-listing-marker-serving-index-filter-mask-design.md" -Content @'
+listing_marker_projection
+filter_hash
+base marker tile
+browser instant filter
+server marker/filter index
+optional filter mask
+'@
+    Write-File -Root $Root -RelativePath "docs\superpowers\plans\2026-05-26-listing-marker-serving-index-filter-mask.md" -Content @'
+listing_marker_projection
+listing_marker_filter_registry
+buildListingMarkerLayerFilter
+marker-counts/listing
+marker-masks/listing
 '@
     Write-File -Root $Root -RelativePath "docs\superpowers\plans\2026-05-22-gongzzang-owned-listing-pbf-marker-tiles.md" -Content @'
 Serve Gongzzang-owned active listing marker tiles as MVT/PBF
@@ -126,6 +149,19 @@ platform_core_updated_at
 parcel_marker_anchor_srid_chk
 parcel_marker_anchor_point_gist_idx
 '@
+    Write-File -Root $Root -RelativePath "migrations\30013_listing_marker_projection.sql" -Content @'
+create table listing_marker_projection
+anchor_point geometry(Point, 4326) not null
+listing_marker_projection_anchor_srid_chk
+listing_marker_projection_z14_tile_idx
+source_geometry_checksum_sha256
+'@
+    Write-File -Root $Root -RelativePath "migrations\30014_listing_marker_filter_registry.sql" -Content @'
+create table listing_marker_filter_registry
+listing_marker_filter_registry_hash_chk
+listing_marker_filter_registry_spec_shape_chk
+all-active-v1
+'@
     Write-File -Root $Root -RelativePath "crates\domain\core\listing\src\repository.rs" -Content @'
 find_listing_marker_tile
 LISTING_MARKER_TILE_LAYER
@@ -134,25 +170,71 @@ LISTING_MARKER_TILE_CONTENT_TYPE
 ListingMarkerFilter
 ListingMarkerTileQuery
 ListingMarkerTile
+find_listing_marker_mask
+ListingMarkerMaskQuery
+ListingMarkerMask
 '@
     Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_tile.rs" -Content @'
 find_listing_marker_tile
 parcel_marker_anchor
+listing_marker_projection
 ST_AsMVTGeom
 ST_AsMVT
 unanchored_active_count
+unprojected_active_count
 listing marker tile completeness violation
 eligible_count
 represented_count
 '@
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_mask.rs" -Content @'
+find_listing_marker_mask
+listing_marker_projection
+ListingMarkerMaskEncoding::Show
+marker_id
+projection_version
+anchor_snapshot_id
+'@
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_filter_registry.rs" -Content @'
+register_listing_marker_filter
+resolve_listing_marker_filter
+listing_marker_filter_registry
+request_count
+last_used_at
+'@
     Write-File -Root $Root -RelativePath "crates\db\tests\listing_marker_tile_integration.rs" -Content @'
 listing_marker_tile_represents_every_active_listing_on_same_pnu
-listing_marker_tile_rejects_active_listing_without_anchor
+listing_marker_save_rejects_active_listing_without_anchor
 ListingMarkerTileQuery
 ListingMarkerFilter::AllActive
-unanchored_active_count=1
+missing PNU anchor
 feature_count
 aggregate_count
+listing_marker_projection_upsert_uses_platform_core_anchor_snapshot
+listing_marker_filter_registry_round_trips_normalized_filter
+listing_marker_mask_returns_show_ids_for_loaded_tile
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_common.rs" -Content @'
+resolve_listing_marker_filter
+ALL_ACTIVE_LISTING_MARKER_FILTER_HASH
+listing marker filter was not found
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_counts.rs" -Content @'
+get_listing_marker_count
+ListingMarkerCountsState
+marker-counts/listing
+count_listing_markers
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_filters.rs" -Content @'
+post_listing_marker_filter
+ListingMarkerFiltersState
+register_listing_marker_filter
+filter_hash
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_masks.rs" -Content @'
+get_listing_marker_mask
+ListingMarkerMasksState
+find_listing_marker_mask
+listing marker base tile version is stale
 '@
     Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_tiles.rs" -Content @'
 get_listing_marker_tile
@@ -164,9 +246,16 @@ public, max-age=30
 '@
     Write-File -Root $Root -RelativePath "services\api\src\main.rs" -Content @'
 pub mod listing_marker_tiles
+pub mod listing_marker_counts
+pub mod listing_marker_filters
+pub mod listing_marker_masks
 /map/v1/marker-tiles/listing/:z/:x/:y_pbf
+/map/v1/marker-counts/listing
+/map/v1/marker-filters/listing
+/map/v1/marker-masks/listing/:z/:x/:y
 get(routes::listing_marker_tiles::get_listing_marker_tile)
 ListingMarkerTilesState
+ListingMarkerMasksState
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\identity\patterns.ts" -Content @'
 PNU_PATTERN
@@ -186,6 +275,7 @@ buildMarkerTileSource
 buildListingMarkerTileSource
 resolveSameOrigin
 browser origin is required for listing marker tile URLs
+lst_filter_v1_[0-9a-f]{64}
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\map\marker-tile-style.ts" -Content @'
 buildParcelAnchorMarkerLayerRegistration
@@ -198,9 +288,34 @@ LISTING_MARKER_TILE_SOURCE_ID
     Write-File -Root $Root -RelativePath "apps\web\components\listings\listing-map.tsx" -Content @'
 setupListingMarkerTileLayers
 buildListingMarkerLayerRegistration
+buildListingMarkerLayerFilter
+buildListingMarkerServerKey
+listingMarkerFilters
+listingMarkerCounts
 LISTING_MARKER_TILE_CIRCLE_LAYER_ID
 pushPanel({ kind: "listing", id: listingId, view: "summary" })
 pushPanel({ kind: "parcel", id: pnu, view: "summary" })
+'@
+    Write-File -Root $Root -RelativePath "apps\web\lib\routes.ts" -Content @'
+listingMarkerCounts
+listingMarkerFilters
+listingMarkerMaskTemplate
+marker-counts/listing
+marker-filters/listing
+marker-masks/listing
+'@
+    Write-File -Root $Root -RelativePath "apps\web\lib\map\listing-marker-filter.ts" -Content @'
+buildListingMarkerLayerFilter
+listing_type
+transaction_type
+price_krw
+area_m2
+'@
+    Write-File -Root $Root -RelativePath "apps\web\lib\map\listing-marker-server-state.ts" -Content @'
+buildListingMarkerFilterRequest
+buildListingMarkerServerKey
+min_area_m2
+max_price_krw
 '@
     Write-File -Root $Root -RelativePath "apps\web\app\api\proxy\[...path]\route.ts" -Content @'
 isBinaryProxyResponse
@@ -215,7 +330,7 @@ arrayBuffer()
 map/v1/marker-tiles/listing/0/0/0.pbf
 '@
     Write-File -Root $Root -RelativePath "apps\web\proxy.ts" -Content @'
-/api/proxy/map/v1/marker-tiles/listing
+API.proxy.listingMarkerTilesPrefix
 isLocalHostname
 allowLocalHttpMapRuntime
 PUBLIC_PATHS
@@ -261,6 +376,16 @@ parcel_marker_anchor
 parcel_marker_anchor_srid_chk
 parcel_marker_anchor_point_gist_idx
 must not duplicate anchor_lng/anchor_lat columns
+listing_marker_projection
+listing_marker_filter_registry
+listing_marker_projection_anchor_srid_chk
+listing_marker_filter_registry_spec_shape_chk
+'@
+    Write-File -Root $Root -RelativePath "docs\frontend\listings-search.md" -Content @'
+Listing Marker Serving
+listing_marker_projection
+browser instant filter
+server marker indexes
 '@
 }
 

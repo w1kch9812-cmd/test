@@ -12,6 +12,7 @@
 
 pub mod entity;
 pub mod errors;
+pub mod marker_filter;
 pub mod repository;
 
 pub use repository::{CardSearchQuery, CardSearchSort, ListingCardSummary};

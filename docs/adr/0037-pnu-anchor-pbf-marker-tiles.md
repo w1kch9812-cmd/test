@@ -124,9 +124,10 @@ Known transitional areas:
   marker PBF source/layer and the Gongzzang-owned `listing` marker PBF source/layer. It rejects
   legacy per-listing Naver marker placement and viewport `bounds` request wiring through CI.
 - `crates/domain/core/listing/src/repository.rs` and `crates/db/src/listing.rs` no longer expose
-  `find_markers_in_bbox` or the `ListingMarker` lightweight marker projection. They expose
-  `find_listing_marker_tile`, which joins active Gongzzang listings to `parcel_marker_anchor` by
-  PNU and fails the request when active listings are missing anchors.
+  `find_markers_in_bbox` or the `ListingMarker` lightweight marker projection. Active listing saves
+  are rejected when PNU anchors are missing. Guardrail wording: Active listing saves are rejected
+  when PNU anchors are missing. `find_listing_marker_tile` keeps a defensive completeness check for
+  stale projection gaps.
 - `services/api/src/routes/listings.rs` no longer accepts public `bounds` query input.
 - `services/api/src/routes/listing_marker_tiles.rs` exposes the Gongzzang listing PBF endpoint:
   `GET /map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1`.

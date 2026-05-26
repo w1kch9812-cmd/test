@@ -16,6 +16,16 @@
 Map marker placement is not owned by listing cards. The map consumes the platform-core
 PNU-anchor PBF marker contract and opens parcel/listing panels by PNU or object ID.
 
+## Listing Marker Serving
+
+Listing map markers use the Gongzzang `listing_marker_projection` read model. The `listing` table
+remains the write-model SSOT for listing semantics, while marker serving reads projection rows that
+copy platform-core PNU anchor positions with source lineage.
+
+The browser instant filter applies fast filters such as asset type, deal type, price, and area to
+already loaded listing marker tiles. Exact nationwide counts, unseen-tile results, and optional
+marker masks come from server marker indexes, not from viewport `bbox` requests.
+
 ## Environment
 
 ```text

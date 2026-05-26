@@ -3,8 +3,10 @@
 use async_trait::async_trait;
 use listing_domain::entity::Listing;
 use listing_domain::repository::{
-    CardSearchQuery, ListingCardSummary, ListingDetail, ListingMarkerTile, ListingMarkerTileQuery,
-    ListingParcelDenormalize, ListingRepository, RepoError,
+    CardSearchQuery, ListingCardSummary, ListingDetail, ListingMarkerCount, ListingMarkerMask,
+    ListingMarkerMaskQuery, ListingMarkerRegisteredFilter, ListingMarkerTile,
+    ListingMarkerTileQuery, ListingParcelDenormalize, ListingRepository,
+    NormalizedListingMarkerFilterSpec, RepoError,
 };
 use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
 use shared_kernel::listing_status::ListingStatus;
@@ -12,7 +14,10 @@ use shared_kernel::mutation::MutationContext;
 use tracing::instrument;
 
 use super::rows::{row_to_listing, LISTING_FULL_COLUMNS};
-use super::{card_summaries, detail, marker_tile, persistence, PgListingRepository};
+use super::{
+    card_summaries, detail, marker_count, marker_filter_registry, marker_mask, marker_projection,
+    marker_tile, persistence, PgListingRepository,
+};
 use crate::error_map::map_sqlx_err;
 
 #[async_trait]
@@ -47,6 +52,52 @@ impl ListingRepository for PgListingRepository {
         query: ListingMarkerTileQuery,
     ) -> Result<ListingMarkerTile, RepoError> {
         marker_tile::find_listing_marker_tile(&self.pool, query).await
+    }
+
+    #[instrument(skip(self), fields(
+        z = query.z,
+        x = query.x,
+        y = query.y,
+        filter_hash = query.filter.hash(),
+        base_version = ?query.base_version,
+    ))]
+    async fn find_listing_marker_mask(
+        &self,
+        query: ListingMarkerMaskQuery,
+    ) -> Result<ListingMarkerMask, RepoError> {
+        marker_mask::find_listing_marker_mask(&self.pool, query).await
+    }
+
+    #[instrument(skip(self), fields(listing_id = %id.as_str()))]
+    async fn upsert_listing_marker_projection(
+        &self,
+        id: &Id<ListingIdMarker>,
+    ) -> Result<(), RepoError> {
+        marker_projection::upsert_listing_marker_projection(&self.pool, id).await
+    }
+
+    #[instrument(skip(self, filter), fields(filter_hash = %filter.filter_hash()))]
+    async fn count_listing_markers(
+        &self,
+        filter: NormalizedListingMarkerFilterSpec,
+    ) -> Result<ListingMarkerCount, RepoError> {
+        marker_count::count_listing_markers(&self.pool, filter).await
+    }
+
+    #[instrument(skip(self, filter), fields(filter_hash = %filter.filter_hash()))]
+    async fn register_listing_marker_filter(
+        &self,
+        filter: NormalizedListingMarkerFilterSpec,
+    ) -> Result<ListingMarkerRegisteredFilter, RepoError> {
+        marker_filter_registry::register_listing_marker_filter(&self.pool, filter).await
+    }
+
+    #[instrument(skip(self), fields(filter_hash = %filter_hash))]
+    async fn resolve_listing_marker_filter(
+        &self,
+        filter_hash: &str,
+    ) -> Result<Option<NormalizedListingMarkerFilterSpec>, RepoError> {
+        marker_filter_registry::resolve_listing_marker_filter(&self.pool, filter_hash).await
     }
 
     #[instrument(skip(self), fields(owner_id = %owner_id.as_str()))]
