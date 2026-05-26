@@ -1,66 +1,114 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { parseMarkerTileContract } from "@/lib/map/marker-tile-contract";
 import {
   buildListingMarkerLayerRegistration,
-  buildParcelAnchorMarkerLayerRegistration,
+  buildParcelAnchorMarkerLayerRegistrations,
   LISTING_MARKER_TILE_CIRCLE_LAYER_ID,
   LISTING_MARKER_TILE_SOURCE_ID,
+  PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_CIRCLE_LAYER_ID,
+  PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_SOURCE_ID,
   PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID,
   PARCEL_ANCHOR_MARKER_TILE_SOURCE_ID,
 } from "@/lib/map/marker-tile-style";
+import { parseVectorTileManifest } from "@/lib/map/vector-tile-manifest";
 
-const contractFixture = {
-  response_format: "mvt_pbf",
-  position_source: "pnu_anchor",
-  bbox_marker_runtime_forbidden: true,
-  dropped_marker_success_forbidden: true,
-  endpoint_template: "/map/v1/marker-tiles/{layer}/{z}/{x}/{y}.pbf?filter_hash={hash}",
-  supported_layers: ["parcel_anchor"],
-  default_filter_hash: "all-active-v1",
+const lineageFixture = {
+  source_record_id: "018f0000-0000-7000-8000-000000000001",
+  manifest_file_asset_id: "018f0000-0000-7000-8000-000000000002",
+  tilejson_file_asset_id: "018f0000-0000-7000-8000-000000000003",
+  source_file_asset_ids: ["018f0000-0000-7000-8000-000000000004"],
+};
+
+const anchorManifestFixture = {
+  schema_version: 1,
+  current_version: "019e5f6f-1e74-74f3-b5e4-3add804b4bae",
+  previous_version: "019e5e71-c352-7c40-9621-4b34475c79eb",
+  tiles_url_template: "https://static.example.com/{object_key_prefix}/{z}/{x}/{y}.pbf",
+  published_at: "2026-05-27T00:00:00Z",
+  artifacts: {
+    parcel_anchor_aggregate: {
+      source_layer: "parcel_anchor_aggregate",
+      tile_min_zoom: 0,
+      tile_max_zoom: 11,
+      render_min_zoom: 0,
+      render_max_zoom: 11,
+      tilejson_object_key:
+        "gold/parcel-marker-anchor-aggregate-pbf/019e649e-88b5-7f91-8574-3a35bcce84e4/tilejson.json",
+      object_key_prefix:
+        "gold/parcel-marker-anchor-aggregate-pbf/019e649e-88b5-7f91-8574-3a35bcce84e4",
+      flat_tile_count: 914,
+      flat_tile_total_bytes: 303565,
+      lineage: lineageFixture,
+    },
+    parcel_anchor: {
+      source_layer: "parcel_anchor",
+      tile_min_zoom: 12,
+      tile_max_zoom: 12,
+      render_min_zoom: 12,
+      render_max_zoom: 22,
+      tilejson_object_key:
+        "gold/parcel-marker-anchor-pbf/019e5f6f-1e74-74f3-b5e4-3add804b4bae/tilejson.json",
+      object_key_prefix: "gold/parcel-marker-anchor-pbf/019e5f6f-1e74-74f3-b5e4-3add804b4bae",
+      flat_tile_count: 2119,
+      flat_tile_total_bytes: 2318455415,
+      lineage: lineageFixture,
+    },
+  },
 };
 
 describe("parcel anchor marker tile map style", () => {
-  it("registers a PNU-anchor PBF vector source and circle layer without bbox inputs", () => {
-    const registration = buildParcelAnchorMarkerLayerRegistration({
-      contract: parseMarkerTileContract(contractFixture),
-      platformCoreBaseUrl: "https://platform-core.example.com/",
-      minzoom: 8,
-      maxzoom: 18,
+  it("registers aggregate and exact PNU-anchor layers from the platform-core manifest", () => {
+    const registrations = buildParcelAnchorMarkerLayerRegistrations({
+      manifest: parseVectorTileManifest(anchorManifestFixture),
     });
 
-    expect(registration.sourceId).toBe(PARCEL_ANCHOR_MARKER_TILE_SOURCE_ID);
-    expect(registration.source).toEqual({
-      type: "vector",
-      tiles: [
-        "https://platform-core.example.com/map/v1/marker-tiles/parcel_anchor/{z}/{x}/{y}.pbf?filter_hash=all-active-v1",
-      ],
-      minzoom: 8,
-      maxzoom: 18,
-    });
-    expect(registration.source.tiles[0]).not.toContain("bbox=");
-    expect(registration.source.tiles[0]).not.toContain("bounds=");
-    expect(registration.source.tiles[0]).not.toContain("lat=");
-    expect(registration.source.tiles[0]).not.toContain("lng=");
-
-    expect(registration.layers).toEqual([
-      {
-        id: PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID,
-        type: "circle",
-        source: PARCEL_ANCHOR_MARKER_TILE_SOURCE_ID,
-        "source-layer": "parcel_anchor",
-        minzoom: 8,
-        maxzoom: 18,
-        paint: {
-          "circle-color": "#10b981",
-          "circle-opacity": 0.92,
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3, 14, 5, 18, 7],
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-opacity": 0.95,
-          "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 8, 0.75, 14, 1, 18, 1.5],
-        },
+    expect(registrations).toHaveLength(2);
+    expect(registrations[0]).toMatchObject({
+      sourceId: PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_SOURCE_ID,
+      source: {
+        type: "vector",
+        tiles: [
+          "https://static.example.com/gold/parcel-marker-anchor-aggregate-pbf/019e649e-88b5-7f91-8574-3a35bcce84e4/{z}/{x}/{y}.pbf",
+        ],
+        minzoom: 0,
+        maxzoom: 11,
       },
-    ]);
+      layers: [
+        {
+          id: PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_CIRCLE_LAYER_ID,
+          type: "circle",
+          source: PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_SOURCE_ID,
+          "source-layer": "parcel_anchor_aggregate",
+          minzoom: 0,
+          maxzoom: 11,
+        },
+      ],
+    });
+    expect(registrations[1]).toMatchObject({
+      sourceId: PARCEL_ANCHOR_MARKER_TILE_SOURCE_ID,
+      source: {
+        type: "vector",
+        tiles: [
+          "https://static.example.com/gold/parcel-marker-anchor-pbf/019e5f6f-1e74-74f3-b5e4-3add804b4bae/{z}/{x}/{y}.pbf",
+        ],
+        minzoom: 12,
+        maxzoom: 12,
+      },
+      layers: [
+        {
+          id: PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID,
+          type: "circle",
+          source: PARCEL_ANCHOR_MARKER_TILE_SOURCE_ID,
+          "source-layer": "parcel_anchor",
+          minzoom: 12,
+          maxzoom: 22,
+        },
+      ],
+    });
+    expect(JSON.stringify(registrations)).not.toContain("bbox=");
+    expect(JSON.stringify(registrations)).not.toContain("bounds=");
+    expect(JSON.stringify(registrations)).not.toContain("lat=");
+    expect(JSON.stringify(registrations)).not.toContain("lng=");
   });
 
   it("registers Gongzzang listing marker source and circle layer without coordinate inputs", () => {

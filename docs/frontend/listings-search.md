@@ -14,7 +14,7 @@
 ```
 
 Map marker placement is not owned by listing cards. The map consumes the platform-core
-PNU-anchor PBF marker contract and opens parcel/listing panels by PNU or object ID.
+vector tile manifest for PNU-anchor PBF layers and opens parcel/listing panels by PNU or object ID.
 
 ## Listing Marker Serving
 
@@ -38,7 +38,7 @@ NEXT_PUBLIC_PLATFORM_CORE_BASE_URL=<platform-core origin>
 | Symptom | Likely Cause | Check |
 |---|---|---|
 | Map is blank | Naver client ID missing or SDK blocked | Browser console for Naver SDK load errors |
-| Marker layer absent | Platform-core marker contract unavailable | Network request to `/map/v1/marker-tiles/contract` |
+| Marker layer absent | Platform-core vector tile manifest unavailable or missing anchor artifacts | Network request to `/catalog/v1/vector-tiles/manifest` or configured `NEXT_PUBLIC_TILES_MANIFEST_URL` |
 | Listing count is zero | No active listings or filters too narrow | `SELECT count(*) FROM listing WHERE status='active'` |
 | Filters ignored | URL query and store diverged | Network request query string |
 
@@ -54,8 +54,9 @@ NEXT_PUBLIC_PLATFORM_CORE_BASE_URL=<platform-core origin>
 | File | Role |
 |---|---|
 | `apps/web/components/listings/listing-map.tsx` | Naver map runtime and PBF source/layer setup |
-| `apps/web/lib/map/marker-tile-contract.ts` | Platform-core marker tile contract client |
-| `apps/web/lib/map/marker-tile-style.ts` | Vector source and layer registration |
+| `apps/web/lib/map/vector-tile-manifest.ts` | Platform-core vector tile manifest client |
+| `apps/web/lib/map/marker-tile-contract.ts` | Gongzzang listing marker tile source contract |
+| `apps/web/lib/map/marker-tile-style.ts` | Platform-core anchor and Gongzzang listing layer registration |
 | `apps/web/lib/listings/use-listings-query.ts` | Listing card query hook |
 | `apps/web/stores/listings.ts` | Listing filters and selected listing state |
 

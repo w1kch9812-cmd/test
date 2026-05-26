@@ -12,11 +12,7 @@ vi.mock("@/lib/session/store", () => ({
 }));
 
 vi.mock("@/lib/map/vector-tile-manifest", () => ({
-  resolveVectorTileAllowedOrigins: () => [],
-}));
-
-vi.mock("@/lib/map/marker-tile-contract", () => ({
-  resolveMarkerTileAllowedOrigins: () => ["https://platform-core.example.com"],
+  resolveVectorTileAllowedOrigins: () => ["https://platform-core.example.com"],
 }));
 
 const { proxy } = await import("@/proxy");
@@ -55,7 +51,7 @@ describe("proxy platform-core receiver public access", () => {
     }
   });
 
-  it("allows platform-core PBF marker tile origin in production CSP", async () => {
+  it("allows platform-core vector tile manifest origin in production CSP", async () => {
     vi.stubEnv("NODE_ENV", "production");
     try {
       const req = new NextRequest("http://localhost:3000/login");

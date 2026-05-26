@@ -3,7 +3,6 @@ import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { tStatic } from "@/lib/i18n/static";
-import { resolveMarkerTileAllowedOrigins } from "@/lib/map/marker-tile-contract";
 import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
 import { checkRate } from "@/lib/ratelimit";
 import { API, AUTH_PATH_PREFIX, ROUTES } from "@/lib/routes";
@@ -122,11 +121,7 @@ function buildCspHeader(hostname: string, nonce: string): string {
   // ADR 0036 / platform-core ADR 0004: Gongzzang은 manifest consumer only.
   // Manifest는 platform-core Catalog 또는 public R2/CDN manifest URL에서 읽고,
   // 실제 tile URL은 manifest.tiles_url_template이 결정한다.
-  const tileOrigins = [
-    ...new Set([...resolveVectorTileAllowedOrigins(), ...resolveMarkerTileAllowedOrigins()]),
-  ]
-    .sort()
-    .join(" ");
+  const tileOrigins = resolveVectorTileAllowedOrigins().join(" ");
   const tileConnectSrc = tileOrigins ? ` ${tileOrigins}` : "";
   const connectSrc = allowLocalHttpMapRuntime
     ? `'self' ${env.NEXT_PUBLIC_API_BASE_URL} ${env.ZITADEL_ISSUER} http: https:${tileConnectSrc}`

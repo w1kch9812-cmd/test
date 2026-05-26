@@ -1,12 +1,8 @@
 import { MAP_LAYER_COLORS } from "@gongzzang/ui/tokens.js";
-import {
-  ALL_ACTIVE_MARKER_FILTER_HASH,
-  fetchMarkerTileContract,
-  resolveMarkerTileRuntimeEnv,
-} from "@/lib/map/marker-tile-contract";
+import { ALL_ACTIVE_MARKER_FILTER_HASH } from "@/lib/map/marker-tile-contract";
 import {
   buildListingMarkerLayerRegistration,
-  buildParcelAnchorMarkerLayerRegistration,
+  buildParcelAnchorMarkerLayerRegistrations,
   LISTING_MARKER_TILE_CIRCLE_LAYER_ID,
   PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID,
 } from "@/lib/map/marker-tile-style";
@@ -14,6 +10,7 @@ import {
   buildVectorTileSource,
   fetchVectorTileManifest,
   getVectorTileArtifact,
+  type VectorTileManifest,
 } from "@/lib/map/vector-tile-manifest";
 
 export type MapboxGLLike = {
@@ -49,8 +46,9 @@ export async function setupMapboxRuntime(
   await waitForMapboxStyle(mb, isCancelled);
   if (isCancelled()) return;
 
-  await setupPolygonLayers(mb, onParcelClick);
-  await setupMarkerTileLayers(mb, onParcelClick);
+  const manifest = await loadPlatformCoreVectorTileManifest();
+  await setupPolygonLayers(mb, onParcelClick, manifest);
+  await setupMarkerTileLayers(mb, onParcelClick, manifest);
   await setupListingMarkerTileLayers(mb, onListingClick);
   if (isCancelled()) return;
   onMapboxReady(mb);
@@ -77,27 +75,17 @@ async function waitForMapboxStyle(mb: MapboxGLLike, isCancelled: () => boolean):
 async function setupPolygonLayers(
   mb: MapboxGLLike,
   onParcelClick: (pnu: string) => void,
+  manifest: VectorTileManifest | null,
 ): Promise<void> {
   if (typeof mb.addSource !== "function" || typeof mb.addLayer !== "function") {
     console.warn("[ListingMap] mapbox addSource/addLayer unavailable; polygon layer setup skipped");
     return;
   }
-
-  const manifest = await fetchVectorTileManifest().catch((err: unknown) => {
-    logMapLayerFailure("vector-tile-manifest", err, {
-      kind: "core",
-      source: "platform-core",
-    });
-    return null;
-  });
   if (!manifest) return;
 
   try {
-    if (!mb.getSource?.("parcels")) {
-      const artifact = getVectorTileArtifact(manifest, "parcels");
-      if (!artifact) {
-        throw new Error("platform-core manifest missing parcels artifact");
-      }
+    const artifact = getVectorTileArtifact(manifest, "parcels");
+    if (artifact && !mb.getSource?.("parcels")) {
       mb.addSource("parcels", buildVectorTileSource(manifest, "parcels", { promoteId: "PNU" }));
       mb.addLayer({
         id: "parcels-fill",
@@ -175,45 +163,25 @@ async function setupPolygonLayers(
 async function setupMarkerTileLayers(
   mb: MapboxGLLike,
   onParcelClick: (pnu: string) => void,
+  manifest: VectorTileManifest | null,
 ): Promise<void> {
   if (typeof mb.addSource !== "function" || typeof mb.addLayer !== "function") {
     console.warn("[ListingMap] mapbox addSource/addLayer unavailable; marker tile setup skipped");
     return;
   }
-
-  const contract = await fetchMarkerTileContract().catch((err: unknown) => {
-    logMapLayerFailure("parcel-anchor-markers", err, {
-      kind: "core",
-      source: "platform-core-marker-contract",
-    });
-    return null;
-  });
-  if (!contract) return;
-
-  const platformCoreBaseUrl = resolveMarkerTileRuntimeEnv().NEXT_PUBLIC_PLATFORM_CORE_BASE_URL;
-  if (!platformCoreBaseUrl) {
-    logMapLayerFailure(
-      "parcel-anchor-markers",
-      new Error("NEXT_PUBLIC_PLATFORM_CORE_BASE_URL is required for marker tiles"),
-      { kind: "core", source: "platform-core-marker-contract" },
-    );
-    return;
-  }
+  if (!manifest) return;
 
   try {
-    const registration = buildParcelAnchorMarkerLayerRegistration({
-      contract,
-      platformCoreBaseUrl,
-      minzoom: 8,
-      maxzoom: 18,
-    });
+    const registrations = buildParcelAnchorMarkerLayerRegistrations({ manifest });
 
-    if (!mb.getSource?.(registration.sourceId)) {
-      mb.addSource(registration.sourceId, registration.source);
-    }
-    for (const layer of registration.layers) {
-      if (!mb.getLayer?.(layer.id)) {
-        mb.addLayer(layer);
+    for (const registration of registrations) {
+      if (!mb.getSource?.(registration.sourceId)) {
+        mb.addSource(registration.sourceId, registration.source);
+      }
+      for (const layer of registration.layers) {
+        if (!mb.getLayer?.(layer.id)) {
+          mb.addLayer(layer);
+        }
       }
     }
     if (typeof mb.on === "function") {
@@ -231,7 +199,7 @@ async function setupMarkerTileLayers(
   } catch (err) {
     logMapLayerFailure("parcel-anchor-markers", err, {
       kind: "core",
-      source: "parcel_anchor",
+      source: "platform-core-vector-tile-manifest",
     });
   }
 }
@@ -305,6 +273,16 @@ function setupWebGlRecovery(mb: MapboxGLLike): (() => void) | undefined {
     glCanvas.removeEventListener("webglcontextlost", onLost);
     glCanvas.removeEventListener("webglcontextrestored", onRestored);
   };
+}
+
+async function loadPlatformCoreVectorTileManifest(): Promise<VectorTileManifest | null> {
+  return fetchVectorTileManifest().catch((err: unknown) => {
+    logMapLayerFailure("vector-tile-manifest", err, {
+      kind: "core",
+      source: "platform-core",
+    });
+    return null;
+  });
 }
 
 function logMapLayerFailure(
