@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "scrapling==0.4.7",
     "curl_cffi==0.15.0",
-    "boto3==1.43.0",
+    "boto3==1.43.16",
     # Round 3 P0 — V-World HTTP 호출에 retry / circuit-breaker 격 wrap.
     # tenacity 는 DSL 이 명시적이고 typed exception 분류 지원 — `circuit-breaker` Rust crate 와
     # 동등한 retry policy (timeout / max_retries / exponential backoff).

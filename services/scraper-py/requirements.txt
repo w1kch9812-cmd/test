@@ -3,5 +3,5 @@
 # pyproject.toml 과 동기화 (mypy/ruff dev tool 은 pyproject 만).
 scrapling==0.4.7
 curl_cffi==0.15.0
-boto3==1.43.0
+boto3==1.43.16
 tenacity==9.0.0
