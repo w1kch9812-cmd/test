@@ -28,6 +28,7 @@ function Write-MinimalLoadAssets(
     [switch] $UnsafeProductionTarget,
     [switch] $EmptyScenarios,
     [switch] $MissingSafetyRule,
+    [switch] $MissingOperatorControls,
     [switch] $MissingCiGuardrail,
     [switch] $UnsafeBboxScenario,
     [switch] $MissingWebhookSigning
@@ -55,8 +56,16 @@ function Write-MinimalLoadAssets(
     if ($MissingSafetyRule) {
         $safetyRules = @($safetyRules | Where-Object { $_ -notmatch "production PII" })
     }
+    $operatorControls = @(
+        "LOAD_APPROVED_TARGET_HOSTS",
+        "LOAD_AUTH_BEARER_TOKEN",
+        "maxSafeRps"
+    )
+    if ($MissingOperatorControls) {
+        $operatorControls = @($operatorControls | Where-Object { $_ -ne "LOAD_AUTH_BEARER_TOKEN" })
+    }
 
-    Write-File $Root "docs\testing\load.md" "# Load Testing`n`n## Safety Rules`n`n$($safetyRules -join "`n")`n"
+    Write-File $Root "docs\testing\load.md" "# Load Testing`n`n## Safety Rules`n`n$($safetyRules -join "`n")`n`n## Enterprise Gates`n`n$($operatorControls -join "`n")`n"
     Write-File $Root "tests\load\README.md" "# Load Scenarios`n"
     Write-File $Root "tests\load\scenarios.v1.json" @"
 {
@@ -124,6 +133,14 @@ try {
     if ($missingSafety.ExitCode -eq 0) { throw "expected missing safety rule fixture to fail" }
     if (!$missingSafety.Output.Contains("missing load testing safety rule")) {
         throw "expected safety rule error, got: $($missingSafety.Output)"
+    }
+
+    $missingOperatorControlsRoot = Join-Path $TempRoot "missing-operator-controls"
+    Write-MinimalLoadAssets $missingOperatorControlsRoot -MissingOperatorControls
+    $missingOperatorControls = Invoke-Checker $missingOperatorControlsRoot
+    if ($missingOperatorControls.ExitCode -eq 0) { throw "expected missing operator controls fixture to fail" }
+    if (!$missingOperatorControls.Output.Contains("load testing manual missing operator control")) {
+        throw "expected operator control error, got: $($missingOperatorControls.Output)"
     }
 
     $missingCiRoot = Join-Path $TempRoot "missing-ci"

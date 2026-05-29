@@ -84,6 +84,11 @@ foreach ($rule in $requiredSafetyRules) {
         throw "missing load testing safety rule"
     }
 }
+foreach ($operatorControl in @("LOAD_APPROVED_TARGET_HOSTS", "LOAD_AUTH_BEARER_TOKEN", "maxSafeRps")) {
+    if (!$loadManual.Contains($operatorControl)) {
+        throw "load testing manual missing operator control: $operatorControl"
+    }
+}
 
 Assert-Contains `
     -RelativePath ".github/workflows/ci.yml" `
