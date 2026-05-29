@@ -1,8 +1,7 @@
 import { check } from "k6";
-import crypto from "k6/crypto";
 import exec from "k6/execution";
 import http from "k6/http";
-import { profile, requireEnv, runTags, targetBaseUrl } from "../lib/env.js";
+import { profile, runTags, targetBaseUrl } from "../lib/env.js";
 import { safePostJson, sanitizeTags } from "../lib/http.js";
 
 const scenarioName = "platform-core-events";
@@ -28,12 +27,6 @@ export const options = {
     "http_req_duration{event_case:duplicate}": ["p(95)<500", "p(99)<1500"],
   },
 };
-
-export function setup() {
-  return {
-    secret: requireEnv("PLATFORM_CORE_WEBHOOK_SECRET"),
-  };
-}
 
 function baseTags(eventCase, priority = "normal") {
   return {
@@ -77,16 +70,11 @@ function eventBody(eventCase) {
   };
 }
 
-function signedHeaders(secret, timestamp, payload, body) {
-  const signedPayload = `${timestamp}.${payload}`;
-  const signature = crypto.hmac("sha256", secret, signedPayload, "hex");
-
+function eventHeaders(body) {
   return {
     "x-platform-core-event-id": body.event_id,
     "x-platform-core-event-type": body.event_type,
     "x-platform-core-outbox-scope": body.scope,
-    "x-platform-core-timestamp": timestamp,
-    "x-platform-core-signature": `v1=${signature}`,
   };
 }
 
@@ -112,15 +100,13 @@ function postPoisonEvent(url, body, tags, headers) {
   return response;
 }
 
-export default function (data) {
+export default function () {
   const baseUrl = targetBaseUrl();
   const currentCase = eventCaseForIteration();
   const body = eventBody(currentCase);
-  const payload = JSON.stringify(body);
-  const timestamp = String(Math.floor(Date.now() / 1000));
   const url = `${baseUrl}/platform-core/events`;
   const tags = baseTags(currentCase, currentCase === "valid" ? "high" : "normal");
-  const headers = signedHeaders(data.secret, timestamp, payload, body);
+  const headers = eventHeaders(body);
 
   if (currentCase === "poison") {
     postPoisonEvent(url, body, tags, headers);

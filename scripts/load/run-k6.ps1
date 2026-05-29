@@ -73,7 +73,10 @@ function Resolve-TargetBaseUrl([string] $Url) {
     $portForUrl = if ($uri.IsDefaultPort) { "" } else { ":$($uri.Port)" }
     return [pscustomobject]@{
         Host = $safeHost
+        IsDefaultPort = $uri.IsDefaultPort
         NormalizedUrl = "$($uri.Scheme)://$hostForUrl$portForUrl"
+        Port = $uri.Port
+        Scheme = $uri.Scheme
     }
 }
 
@@ -104,8 +107,16 @@ function Get-ApprovedTargetHosts([string] $EnvironmentName) {
     return $approved
 }
 
-function Assert-ApprovedTarget([string] $SafeHost, [string] $EnvironmentName) {
-    $safeHost = $SafeHost
+function Assert-ApprovedTarget([object] $TargetInfo, [string] $EnvironmentName) {
+    $safeHost = [string] $TargetInfo.Host
+    $isLocalEnvironment = $EnvironmentName -eq "local" -or $EnvironmentName -eq "ci"
+    if (!$isLocalEnvironment -and [string] $TargetInfo.Scheme -ne "https") {
+        throw "non-local load-test targets must use https"
+    }
+    if (!$isLocalEnvironment -and !$TargetInfo.IsDefaultPort) {
+        throw "non-local load-test targets must use the default https port"
+    }
+
     if ($safeHost -eq "perf.gongzzang.internal") {
         return
     }
@@ -254,7 +265,7 @@ if ([string]::IsNullOrWhiteSpace($Environment)) {
     $targetHost = $targetInfo.Host
     $Environment = if ($targetHost -eq "localhost" -or $targetHost -eq "127.0.0.1" -or $targetHost -eq "::1") { "local" } else { "perf" }
 }
-Assert-ApprovedTarget $targetInfo.Host $Environment
+Assert-ApprovedTarget $targetInfo $Environment
 
 $matchingScenarios = @($registry.scenarios | Where-Object { [string] $_.id -eq $Scenario })
 if ($matchingScenarios.Count -ne 1) {
@@ -346,7 +357,7 @@ foreach ($key in $profileConfig.Keys) {
 if ($AllowStress) {
     $envValues["ALLOW_STRESS"] = "true"
 }
-foreach ($approvedSecretName in @("LOAD_AUTH_BEARER_TOKEN", "PLATFORM_CORE_WEBHOOK_SECRET")) {
+foreach ($approvedSecretName in @("LOAD_AUTH_BEARER_TOKEN")) {
     $approvedSecretValue = [Environment]::GetEnvironmentVariable($approvedSecretName, "Process")
     if (![string]::IsNullOrEmpty($approvedSecretValue)) {
         $envValues[$approvedSecretName] = $approvedSecretValue

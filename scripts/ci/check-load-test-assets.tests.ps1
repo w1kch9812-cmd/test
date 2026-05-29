@@ -85,14 +85,14 @@ function Write-MinimalLoadAssets(
     Write-File $Root "tests\load\scenarios\map-marker-mix.js" $mapScenario
     Write-File $Root "tests\load\scenarios\capacity-stress.js" "ALLOW_STRESS`n/listings`nLOAD_AUTH_BEARER_TOKEN`n50`n100`n200`n300`n400`n600`n800`n"
     $webhookScenario = if ($MissingWebhookSigning) {
-        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`n"
+        "/platform-core/events`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`n"
     } else {
-        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`ncrypto.hmac`nx-platform-core-signature`n"
+        "/platform-core/events`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`nx-platform-core-event-id`nx-platform-core-event-type`nx-platform-core-outbox-scope`n"
     }
     Write-File $Root "tests\load\scenarios\platform-core-events.js" $webhookScenario
-    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nsummary-export`nnormalize-k6-summary.ps1`n"
+    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nIsDefaultPort`nnon-local load-test targets must use the default https port`nsummary-export`nnormalize-k6-summary.ps1`n"
     Write-File $Root "scripts\load\normalize-k6-summary.ps1" "bottleneck.md`nrecommendation.md`nbaseline-comparison.md`nhealthy`nlatency breakpoint`nerror breakpoint`nexit 1`n"
-    Write-File $Root ".github\workflows\load-test-capacity.yml" "workflow_dispatch`nruns-on: [self-hosted, load-test]`nupload-artifact`ntarget/audit/load-tests`n"
+    Write-File $Root ".github\workflows\load-test-capacity.yml" "workflow_dispatch`nruns-on: [self-hosted, load-test]`nupload-artifact`ntarget/audit/load-tests`nLOAD_INPUT_TARGET`n`$env:LOAD_INPUT_TARGET`nLOAD_INPUT_SCENARIO`n`$env:LOAD_INPUT_SCENARIO`n"
     $ciContent = if ($MissingCiGuardrail) {
         "name: CI`n"
     } else {
@@ -159,12 +159,12 @@ try {
         throw "expected bbox guardrail error, got: $($unsafeBbox.Output)"
     }
 
-    $missingWebhookSigningRoot = Join-Path $TempRoot "missing-webhook-signing"
-    Write-MinimalLoadAssets $missingWebhookSigningRoot -MissingWebhookSigning
-    $missingWebhookSigning = Invoke-Checker $missingWebhookSigningRoot
-    if ($missingWebhookSigning.ExitCode -eq 0) { throw "expected missing webhook signing fixture to fail" }
-    if (!$missingWebhookSigning.Output.Contains("platform-core event scenario must sign webhook")) {
-        throw "expected webhook signing error, got: $($missingWebhookSigning.Output)"
+    $missingWebhookHeadersRoot = Join-Path $TempRoot "missing-webhook-headers"
+    Write-MinimalLoadAssets $missingWebhookHeadersRoot -MissingWebhookSigning
+    $missingWebhookHeaders = Invoke-Checker $missingWebhookHeadersRoot
+    if ($missingWebhookHeaders.ExitCode -eq 0) { throw "expected missing webhook headers fixture to fail" }
+    if (!$missingWebhookHeaders.Output.Contains("platform-core event scenario missing required token")) {
+        throw "expected webhook header error, got: $($missingWebhookHeaders.Output)"
     }
 
     Write-Output "check-load-test-assets-tests-ok"

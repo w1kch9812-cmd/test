@@ -57,14 +57,20 @@ jobs:
 
       - name: Run load test
         shell: pwsh
+        env:
+          LOAD_INPUT_ALLOW_STRESS: ${{ inputs.allow_stress }}
+          LOAD_INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          LOAD_INPUT_PROFILE: ${{ inputs.profile }}
+          LOAD_INPUT_SCENARIO: ${{ inputs.scenario }}
+          LOAD_INPUT_TARGET: ${{ inputs.target }}
         run: |
           $runArgs = @(
-            "-Scenario", "${{ inputs.scenario }}",
-            "-Profile", "${{ inputs.profile }}",
-            "-TargetBaseUrl", "${{ inputs.target }}",
-            "-Environment", "${{ inputs.environment }}"
+            "-Scenario", $env:LOAD_INPUT_SCENARIO,
+            "-Profile", $env:LOAD_INPUT_PROFILE,
+            "-TargetBaseUrl", $env:LOAD_INPUT_TARGET,
+            "-Environment", $env:LOAD_INPUT_ENVIRONMENT
           )
-          if ([System.Convert]::ToBoolean("${{ inputs.allow_stress }}")) {
+          if ([System.Convert]::ToBoolean($env:LOAD_INPUT_ALLOW_STRESS)) {
             $runArgs += "-AllowStress"
           }
 

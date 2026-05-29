@@ -108,6 +108,14 @@ foreach ($needle in @("workflow_dispatch", "self-hosted", "load-test", "upload-a
 if ($manualWorkflow.Contains('${{ secrets.')) {
     throw "load-test workflow must not reference GitHub secrets"
 }
+foreach ($needle in @("LOAD_INPUT_TARGET", '$env:LOAD_INPUT_TARGET', "LOAD_INPUT_SCENARIO", '$env:LOAD_INPUT_SCENARIO')) {
+    if (!$manualWorkflow.Contains($needle)) {
+        throw "load-test workflow must pass dispatch inputs through environment data: $needle"
+    }
+}
+if ($manualWorkflow.Contains('"-TargetBaseUrl", "${{ inputs.target }}"')) {
+    throw "load-test workflow must not interpolate target input directly into PowerShell"
+}
 
 $envLib = Read-Text "tests/load/lib/env.js"
 foreach ($needle in @("TARGET_BASE_URL", "production targets are forbidden for load tests")) {
@@ -153,29 +161,34 @@ foreach ($needle in @("ALLOW_STRESS", "/listings", "LOAD_AUTH_BEARER_TOKEN", "50
 $eventScenario = Read-Text "tests/load/scenarios/platform-core-events.js"
 foreach ($needle in @(
     "/platform-core/events",
-    "PLATFORM_CORE_WEBHOOK_SECRET",
     "catalog.industrial_complex.gold_pointer.published.v1",
     "complex_id",
     "current_version",
     "source_snapshot_id",
-    "iceberg_snapshot_id"
+    "iceberg_snapshot_id",
+    "x-platform-core-event-id",
+    "x-platform-core-event-type",
+    "x-platform-core-outbox-scope"
 )) {
     if (!$eventScenario.Contains($needle)) {
         throw "platform-core event scenario missing required token: $needle"
     }
 }
-if (!$eventScenario.Contains("x-platform-core-signature") -or $eventScenario -notmatch "crypto\.hmac|hmac\(") {
-    throw "platform-core event scenario must sign webhook requests"
+if ($eventScenario.Contains("PLATFORM_CORE_WEBHOOK_SECRET") -or $eventScenario.Contains("x-platform-core-signature") -or $eventScenario -match "crypto\.hmac|hmac\(") {
+    throw "platform-core event scenario must match committed unsigned event receiver contract"
 }
 
 $launcher = Read-Text "scripts/load/run-k6.ps1"
-foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "summary-export", "normalize-k6-summary.ps1")) {
+foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "normalize-k6-summary.ps1")) {
     if (!$launcher.Contains($needle)) {
         throw "load-test launcher missing required token: $needle"
     }
 }
 if (!$launcher.Contains("LOAD_AUTH_BEARER_TOKEN")) {
     throw "load-test launcher must pass approved auth bearer token env only"
+}
+if ($launcher.Contains("PLATFORM_CORE_WEBHOOK_SECRET")) {
+    throw "load-test launcher must not pass unused webhook secrets"
 }
 
 $normalizer = Read-Text "scripts/load/normalize-k6-summary.ps1"
