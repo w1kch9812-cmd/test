@@ -6,7 +6,7 @@ import { profile, requireEnv, runTags, targetBaseUrl } from "../lib/env.js";
 import { safePostJson, sanitizeTags } from "../lib/http.js";
 
 const scenarioName = "platform-core-events";
-const parcelAnchorEventType = "catalog.parcel_marker_anchor.snapshot.published.v1";
+const goldPointerEventType = "catalog.industrial_complex.gold_pointer.published.v1";
 const poisonEventType = "catalog.unsupported.v1";
 const duplicateEventId = "00000000-0000-4000-8000-000000000001";
 
@@ -58,7 +58,7 @@ function uuidForIteration(eventCase) {
 }
 
 function eventBody(eventCase) {
-  const eventType = eventCase === "poison" ? poisonEventType : parcelAnchorEventType;
+  const eventType = eventCase === "poison" ? poisonEventType : goldPointerEventType;
   const timestamp = new Date().toISOString();
 
   return {
@@ -69,13 +69,10 @@ function eventBody(eventCase) {
     payload: {
       type: eventType,
       schema_version: 1,
-      anchor_snapshot_id: `load-anchor-snapshot-${exec.scenario.iterationInTest}`,
-      source_geometry_version: "silver.parcel_boundaries@load",
-      artifact_manifest_url:
-        "https://platform-core.example.com/artifacts/load-anchor-snapshot.json",
-      artifact_checksum_sha256: "a".repeat(64),
-      row_count: 1,
-      published_at: timestamp,
+      complex_id: "load-industrial-complex-001",
+      current_version: `gold-pointer-load-${exec.scenario.iterationInTest}`,
+      source_snapshot_id: "industrial-complex-source-load",
+      iceberg_snapshot_id: "industrial-complex-iceberg-load",
     },
   };
 }

@@ -23,6 +23,19 @@ profiles, scripts, and evidence schema files stay in the approved locations.
 Launch readiness requires the scenario registry, generated evidence, result
 classification, and SLO comparison to agree. Missing evidence is a failed gate.
 
+Targets are allowlisted, not just denylisted. The wrapper accepts only
+`perf.gongzzang.internal`, `staging.gongzzang.internal`, local loopback hosts for
+`local` and `ci`, plus explicit hostnames supplied by the load-test runner through
+`LOAD_APPROVED_TARGET_HOSTS`. The wrapper rejects URL paths, credentials, query
+strings, fragments, and production `gongzzang.com` hosts before k6 starts.
+
+The scenario registry `maxSafeRps` is an executable cap. A selected profile whose
+`LOAD_RPS` exceeds the scenario cap fails before k6 starts.
+
+Authenticated read scenarios use `LOAD_AUTH_BEARER_TOKEN` from the runner
+environment when present. The wrapper passes this value to k6 but does not write
+it to `run.json`, `spec.json`, logs, or generated reports.
+
 ## Run Types
 
 - `smoke`: short validation that the scenario, target, credentials, and evidence

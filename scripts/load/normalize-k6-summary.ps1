@@ -261,3 +261,6 @@ Write-Lines $BaselinePath (@(
 ) + $metricLines)
 
 Write-Output "normalize-k6-summary-ok classification=$classification"
+if ($classification -eq "error breakpoint") {
+    exit 1
+}

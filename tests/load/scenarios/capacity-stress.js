@@ -46,14 +46,20 @@ function baseTags(routeGroup, requestKind, priority = "normal") {
   };
 }
 
+function authenticatedHeaders() {
+  const token = __ENV.LOAD_AUTH_BEARER_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export default function () {
   const baseUrl = targetBaseUrl();
   const listingId = encodeURIComponent(__ENV.LOAD_LISTING_ID || defaultListingId);
+  const headers = authenticatedHeaders();
 
   if (Math.random() < 0.7) {
-    safeGet(`${baseUrl}/v1/listings`, baseTags("listing", "list", "high"));
+    safeGet(`${baseUrl}/listings`, baseTags("listing", "list", "high"), headers);
     return;
   }
 
-  safeGet(`${baseUrl}/v1/listings/${listingId}`, baseTags("listing", "detail"));
+  safeGet(`${baseUrl}/listings/${listingId}`, baseTags("listing", "detail"), headers);
 }

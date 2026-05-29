@@ -33,31 +33,39 @@ function baseTags(routeGroup, requestKind, priority = "normal") {
   };
 }
 
+function authenticatedHeaders() {
+  const token = __ENV.LOAD_AUTH_BEARER_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function weightedRequest(baseUrl, selector) {
   const listingId = __ENV.LOAD_LISTING_ID || defaultListingId;
   const pnu = __ENV.LOAD_PNU || defaultPnu;
+  const headers = authenticatedHeaders();
 
   if (selector < 0.2) {
-    safeGet(`${baseUrl}/health`, baseTags("health", "health", "high"));
+    safeGet(`${baseUrl}/healthz`, baseTags("health", "health", "high"));
     return;
   }
 
   if (selector < 0.65) {
-    safeGet(`${baseUrl}/v1/listings`, baseTags("listing", "list", "high"));
+    safeGet(`${baseUrl}/listings`, baseTags("listing", "list", "high"), headers);
     return;
   }
 
   if (selector < 0.9) {
     safeGet(
-      `${baseUrl}/v1/listings/${encodeURIComponent(listingId)}`,
+      `${baseUrl}/listings/${encodeURIComponent(listingId)}`,
       baseTags("listing", "detail"),
+      headers,
     );
     return;
   }
 
   safeGet(
-    `${baseUrl}/api/proxy/catalog/v1/parcels/by-pnu/${encodeURIComponent(pnu)}`,
+    `${baseUrl}/api/parcels/${encodeURIComponent(pnu)}`,
     baseTags("platform_core_catalog", "parcel_by_pnu"),
+    headers,
   );
 }
 

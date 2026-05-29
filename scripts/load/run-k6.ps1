@@ -77,13 +77,52 @@ function Resolve-TargetBaseUrl([string] $Url) {
     }
 }
 
-function Assert-NonProductionTarget([string] $SafeHost) {
+function Get-ApprovedTargetHosts([string] $EnvironmentName) {
+    $approved = New-Object System.Collections.Generic.HashSet[string]
+    [void] $approved.Add("perf.gongzzang.internal")
+    [void] $approved.Add("staging.gongzzang.internal")
+    if ($EnvironmentName -eq "local" -or $EnvironmentName -eq "ci") {
+        [void] $approved.Add("localhost")
+        [void] $approved.Add("127.0.0.1")
+        [void] $approved.Add("::1")
+    }
+
+    $extraHosts = [Environment]::GetEnvironmentVariable("LOAD_APPROVED_TARGET_HOSTS", "Process")
+    if (![string]::IsNullOrWhiteSpace($extraHosts)) {
+        foreach ($entry in $extraHosts.Split(",")) {
+            $host = $entry.Trim().ToLowerInvariant().TrimEnd(".")
+            if ([string]::IsNullOrWhiteSpace($host)) {
+                continue
+            }
+            if ($host.Contains("/") -or $host.Contains("@") -or $host.Contains(":")) {
+                throw "LOAD_APPROVED_TARGET_HOSTS must contain hostnames only"
+            }
+            [void] $approved.Add($host)
+        }
+    }
+
+    return $approved
+}
+
+function Assert-ApprovedTarget([string] $SafeHost, [string] $EnvironmentName) {
     $safeHost = $SafeHost
     if ($safeHost -eq "perf.gongzzang.internal") {
         return
     }
     if ($safeHost -eq "gongzzang.com" -or $safeHost -eq "www.gongzzang.com" -or $safeHost.EndsWith(".gongzzang.com")) {
         throw "production targets are forbidden for load tests"
+    }
+    $approvedHosts = Get-ApprovedTargetHosts $EnvironmentName
+    if (!$approvedHosts.Contains($safeHost)) {
+        throw "target host is not approved for load tests: $safeHost"
+    }
+}
+
+function Assert-MaxSafeRps([object] $ScenarioSpec, [hashtable] $ProfileConfig) {
+    $maxSafeRps = [int] $ScenarioSpec.maxSafeRps
+    $requestedRps = [int] $ProfileConfig["LOAD_RPS"]
+    if ($requestedRps -gt $maxSafeRps) {
+        throw "profile LOAD_RPS exceeds scenario maxSafeRps: requested=$requestedRps max=$maxSafeRps"
     }
 }
 
@@ -146,8 +185,8 @@ function Invoke-K6WithEnvironment([string] $Executable, [string[]] $Arguments, [
     $startInfo.Arguments = ($Arguments | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join " "
     $startInfo.WorkingDirectory = $WorkingDirectory
     $startInfo.UseShellExecute = $false
-    $startInfo.RedirectStandardOutput = $false
-    $startInfo.RedirectStandardError = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
     $startInfo.EnvironmentVariables.Clear()
 
@@ -164,11 +203,13 @@ function Invoke-K6WithEnvironment([string] $Executable, [string[]] $Arguments, [
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
     [void] $process.Start()
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
     $process.WaitForExit()
 
     return [pscustomobject]@{
         ExitCode = [int] $process.ExitCode
-        Output = ""
+        Output = "$($stdoutTask.Result)$($stderrTask.Result)"
     }
 }
 
@@ -207,13 +248,13 @@ if ([string]::IsNullOrWhiteSpace($TargetBaseUrl)) {
     $TargetBaseUrl = [string] $registry.defaultTargetBaseUrl
 }
 $targetInfo = Resolve-TargetBaseUrl $TargetBaseUrl
-Assert-NonProductionTarget $targetInfo.Host
 $TargetBaseUrl = $targetInfo.NormalizedUrl
 
 if ([string]::IsNullOrWhiteSpace($Environment)) {
     $targetHost = $targetInfo.Host
     $Environment = if ($targetHost -eq "localhost" -or $targetHost -eq "127.0.0.1" -or $targetHost -eq "::1") { "local" } else { "perf" }
 }
+Assert-ApprovedTarget $targetInfo.Host $Environment
 
 $matchingScenarios = @($registry.scenarios | Where-Object { [string] $_.id -eq $Scenario })
 if ($matchingScenarios.Count -ne 1) {
@@ -242,6 +283,7 @@ New-Item -ItemType Directory -Force -Path $runDir | Out-Null
 
 $gitSha = Get-GitSha
 $profileConfig = Get-ProfileConfig $Profile
+Assert-MaxSafeRps $scenarioSpec $profileConfig
 $slo = $registry.slo
 
 $runPath = Join-Path $runDir "run.json"
@@ -304,7 +346,7 @@ foreach ($key in $profileConfig.Keys) {
 if ($AllowStress) {
     $envValues["ALLOW_STRESS"] = "true"
 }
-foreach ($approvedSecretName in @("PLATFORM_CORE_WEBHOOK_SECRET")) {
+foreach ($approvedSecretName in @("LOAD_AUTH_BEARER_TOKEN", "PLATFORM_CORE_WEBHOOK_SECRET")) {
     $approvedSecretValue = [Environment]::GetEnvironmentVariable($approvedSecretName, "Process")
     if (![string]::IsNullOrEmpty($approvedSecretValue)) {
         $envValues[$approvedSecretName] = $approvedSecretValue

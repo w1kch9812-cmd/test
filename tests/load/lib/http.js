@@ -16,7 +16,7 @@ const allowedTagKeys = new Set([
 const maxTagValueLength = 80;
 
 if (typeof http.setResponseCallback === "function" && typeof http.expectedStatuses === "function") {
-  http.setResponseCallback(http.expectedStatuses({ min: 200, max: 299 }, 404, 409, 429));
+  http.setResponseCallback(http.expectedStatuses({ min: 200, max: 299 }, 409, 429));
 }
 
 function sanitizeTagValue(value) {
@@ -37,14 +37,11 @@ export function sanitizeTags(tags = {}) {
   return safeTags;
 }
 
-export function safeGet(url, tags) {
-  const response = http.get(url, { tags: sanitizeTags(tags) });
+export function safeGet(url, tags, headers = {}) {
+  const response = http.get(url, { headers, tags: sanitizeTags(tags) });
   check(response, {
     "status is 2xx or controlled 4xx": (r) =>
-      (r.status >= 200 && r.status < 300) ||
-      r.status === 404 ||
-      r.status === 409 ||
-      r.status === 429,
+      (r.status >= 200 && r.status < 300) || r.status === 409 || r.status === 429,
   });
   return response;
 }

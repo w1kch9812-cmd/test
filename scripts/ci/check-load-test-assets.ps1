@@ -89,6 +89,10 @@ Assert-Contains `
     -RelativePath ".github/workflows/ci.yml" `
     -Needle "check-load-test-assets.ps1" `
     -Message "CI workflow must run check-load-test-assets.ps1"
+Assert-Contains `
+    -RelativePath ".github/workflows/ci.yml" `
+    -Needle "check-load-test-assets.tests.ps1" `
+    -Message "CI workflow must run check-load-test-assets.tests.ps1"
 
 $manualWorkflow = Read-Text ".github/workflows/load-test-capacity.yml"
 foreach ($needle in @("workflow_dispatch", "self-hosted", "load-test", "upload-artifact", "target/audit/load-tests")) {
@@ -113,9 +117,12 @@ foreach ($needle in @("allowedTagKeys", "maxTagValueLength", "sanitizeTags")) {
         throw "load http helper missing redaction-safe token: $needle"
     }
 }
+if ($httpLib -match "expectedStatuses[^\r\n]*404" -or $httpLib -match "status\s*===\s*404") {
+    throw "load http helper must not count 404 as success"
+}
 
 $apiScenario = Read-Text "tests/load/scenarios/api-read-mix.js"
-foreach ($needle in @("/health", "/v1/listings", "/api/proxy/catalog/v1/parcels/by-pnu/")) {
+foreach ($needle in @("/healthz", "/listings", "/api/parcels/", "LOAD_AUTH_BEARER_TOKEN")) {
     if (!$apiScenario.Contains($needle)) {
         throw "api-read-mix scenario missing required route: $needle"
     }
@@ -132,14 +139,22 @@ foreach ($needle in @("marker-tiles/listing", "marker-counts/listing", "marker-f
 }
 
 $stressScenario = Read-Text "tests/load/scenarios/capacity-stress.js"
-foreach ($needle in @("ALLOW_STRESS", "50", "100", "200", "300", "400", "600", "800")) {
+foreach ($needle in @("ALLOW_STRESS", "/listings", "LOAD_AUTH_BEARER_TOKEN", "50", "100", "200", "300", "400", "600", "800")) {
     if (!$stressScenario.Contains($needle)) {
         throw "capacity-stress scenario missing required token: $needle"
     }
 }
 
 $eventScenario = Read-Text "tests/load/scenarios/platform-core-events.js"
-foreach ($needle in @("/platform-core/events", "PLATFORM_CORE_WEBHOOK_SECRET")) {
+foreach ($needle in @(
+    "/platform-core/events",
+    "PLATFORM_CORE_WEBHOOK_SECRET",
+    "catalog.industrial_complex.gold_pointer.published.v1",
+    "complex_id",
+    "current_version",
+    "source_snapshot_id",
+    "iceberg_snapshot_id"
+)) {
     if (!$eventScenario.Contains($needle)) {
         throw "platform-core event scenario missing required token: $needle"
     }
@@ -149,14 +164,17 @@ if (!$eventScenario.Contains("x-platform-core-signature") -or $eventScenario -no
 }
 
 $launcher = Read-Text "scripts/load/run-k6.ps1"
-foreach ($needle in @("target\audit\load-tests", "Assert-NonProductionTarget", "summary-export", "normalize-k6-summary.ps1")) {
+foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "summary-export", "normalize-k6-summary.ps1")) {
     if (!$launcher.Contains($needle)) {
         throw "load-test launcher missing required token: $needle"
     }
 }
+if (!$launcher.Contains("LOAD_AUTH_BEARER_TOKEN")) {
+    throw "load-test launcher must pass approved auth bearer token env only"
+}
 
 $normalizer = Read-Text "scripts/load/normalize-k6-summary.ps1"
-foreach ($needle in @("bottleneck.md", "recommendation.md", "baseline-comparison.md", "healthy", "latency breakpoint", "error breakpoint")) {
+foreach ($needle in @("bottleneck.md", "recommendation.md", "baseline-comparison.md", "healthy", "latency breakpoint", "error breakpoint", "exit 1")) {
     if (!$normalizer.Contains($needle)) {
         throw "load-test normalizer missing required token: $needle"
     }

@@ -66,28 +66,28 @@ function Write-MinimalLoadAssets(
 }
 "@
     Write-File $Root "tests\load\lib\env.js" "production targets are forbidden for load tests`nTARGET_BASE_URL`n"
-    Write-File $Root "tests\load\lib\http.js" "allowedTagKeys`nmaxTagValueLength`nsanitizeTags`n"
-    Write-File $Root "tests\load\scenarios\api-read-mix.js" "/health`n/v1/listings`n/api/proxy/catalog/v1/parcels/by-pnu/`n"
+    Write-File $Root "tests\load\lib\http.js" "allowedTagKeys`nmaxTagValueLength`nsanitizeTags`nexpectedStatuses`n409`n429`n"
+    Write-File $Root "tests\load\scenarios\api-read-mix.js" "/healthz`n/listings`n/api/parcels/`nLOAD_AUTH_BEARER_TOKEN`n"
     $mapScenario = if ($UnsafeBboxScenario) {
         "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?bbox=unsafe`n"
     } else {
         "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf`n/api/proxy/map/v1/marker-counts/listing`n/api/proxy/map/v1/marker-filters/listing`n/api/proxy/map/v1/marker-masks/listing`n"
     }
     Write-File $Root "tests\load\scenarios\map-marker-mix.js" $mapScenario
-    Write-File $Root "tests\load\scenarios\capacity-stress.js" "ALLOW_STRESS`n50`n100`n200`n300`n400`n600`n800`n"
+    Write-File $Root "tests\load\scenarios\capacity-stress.js" "ALLOW_STRESS`n/listings`nLOAD_AUTH_BEARER_TOKEN`n50`n100`n200`n300`n400`n600`n800`n"
     $webhookScenario = if ($MissingWebhookSigning) {
-        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`n"
+        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`n"
     } else {
-        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`ncrypto.hmac`nx-platform-core-signature`n"
+        "/platform-core/events`nPLATFORM_CORE_WEBHOOK_SECRET`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`ncrypto.hmac`nx-platform-core-signature`n"
     }
     Write-File $Root "tests\load\scenarios\platform-core-events.js" $webhookScenario
-    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-NonProductionTarget`nsummary-export`nnormalize-k6-summary.ps1`n"
-    Write-File $Root "scripts\load\normalize-k6-summary.ps1" "bottleneck.md`nrecommendation.md`nbaseline-comparison.md`nhealthy`nlatency breakpoint`nerror breakpoint`n"
+    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nsummary-export`nnormalize-k6-summary.ps1`n"
+    Write-File $Root "scripts\load\normalize-k6-summary.ps1" "bottleneck.md`nrecommendation.md`nbaseline-comparison.md`nhealthy`nlatency breakpoint`nerror breakpoint`nexit 1`n"
     Write-File $Root ".github\workflows\load-test-capacity.yml" "workflow_dispatch`nruns-on: [self-hosted, load-test]`nupload-artifact`ntarget/audit/load-tests`n"
     $ciContent = if ($MissingCiGuardrail) {
         "name: CI`n"
     } else {
-        "name: CI`nrun: ./scripts/ci/check-load-test-assets.ps1`n"
+        "name: CI`nrun: ./scripts/ci/check-load-test-assets.ps1`nrun: ./scripts/ci/check-load-test-assets.tests.ps1`n"
     }
     Write-File $Root ".github\workflows\ci.yml" $ciContent
 }
