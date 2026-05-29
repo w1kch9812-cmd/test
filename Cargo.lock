@@ -90,7 +90,7 @@ dependencies = [
  "sentry-tracing",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "shared-kernel",
  "sqlx",
  "subtle",
@@ -2078,7 +2078,7 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
- "sha2 0.10.9",
+ "sha2 0.11.0",
  "shared-kernel",
  "thiserror 1.0.69",
 ]
