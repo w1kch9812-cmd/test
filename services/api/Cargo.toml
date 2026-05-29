@@ -38,7 +38,7 @@ subtle = "2"
 # Used by listing photo upload/download presigning.
 aws-config = { version = "=1.8.17", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
 aws-credential-types = "=1.2.14"
-aws-sdk-s3 = { version = "=1.133.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "=1.134.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
 aws-smithy-types = "=1.4.8"
 
 [dev-dependencies]
