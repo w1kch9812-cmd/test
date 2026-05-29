@@ -42,25 +42,18 @@ const LOCAL_TYPES = new Set([
   "living_street",
   "track",
 ]);
+
+const writeLine = (message = "") => {
+  process.stdout.write(`${message}\n`);
+};
+
 function buildQuery(lat, lng) {
   const D = 0.0018;
   const s = (lat - D).toFixed(6),
     n = (lat + D).toFixed(6),
     w = (lng - D).toFixed(6),
     e = (lng + D).toFixed(6);
-  return (
-    "[out:json][timeout:25];way[" +
-    JSON.stringify("highway") +
-    "](" +
-    s +
-    "," +
-    w +
-    "," +
-    n +
-    "," +
-    e +
-    ");out tags;"
-  );
+  return `[out:json][timeout:25];way[${JSON.stringify("highway")}](${s},${w},${n},${e});out tags;`;
 }
 
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
@@ -75,10 +68,10 @@ async function queryOverpass(lat, lng) {
           "Content-Type": "application/x-www-form-urlencoded",
           "User-Agent": "osm-spike-hgv-research/1.0 (industrial-realestate-study)",
         },
-        body: "data=" + encodeURIComponent(qs),
+        body: `data=${encodeURIComponent(qs)}`,
         signal: AbortSignal.timeout(30000),
       });
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       return (await resp.json()).elements ?? [];
     } catch (err) {
       if (attempt === 3) throw err;
@@ -96,7 +89,7 @@ function emptyStats() {
 }
 
 function classifyRoad(tags) {
-  const hw = tags["highway"] ?? "";
+  const hw = tags.highway ?? "";
   if (MAJOR_TYPES.has(hw)) return "major";
   if (LOCAL_TYPES.has(hw)) return "local";
   return "other";
@@ -121,22 +114,22 @@ function processSample(elements, name) {
 
 function pct(count, total) {
   if (total === 0) return "  N/A";
-  return String(((count / total) * 100).toFixed(1)).padStart(5) + "%";
+  return `${String(((count / total) * 100).toFixed(1)).padStart(5)}%`;
 }
 
 function printTable(results) {
-  console.log("\n=== Fill-rate per sample (M=major, L=local roads) ===");
-  console.log(["Sample".padEnd(20), "Cat", "N", ...ALL_TAGS].join("\t"));
+  writeLine("\n=== Fill-rate per sample (M=major, L=local roads) ===");
+  writeLine(["Sample".padEnd(20), "Cat", "N", ...ALL_TAGS].join("\t"));
   for (const r of results) {
     if (r.failed) {
-      console.log([r.name.padEnd(20), "FAILED", "-", ...ALL_TAGS.map(() => "  N/A")].join("\t"));
+      writeLine([r.name.padEnd(20), "FAILED", "-", ...ALL_TAGS.map(() => "  N/A")].join("\t"));
       continue;
     }
     for (const [label, stats] of [
       ["M", r.major],
       ["L", r.local],
     ]) {
-      console.log(
+      writeLine(
         [
           r.name.padEnd(20),
           label,
@@ -170,41 +163,29 @@ function aggregate(results) {
 }
 
 function decisionTrigger(s) {
-  const hgv = s.total > 0 ? (s.tagCounts["hgv"] / s.total) * 100 : 0;
-  const wt = s.total > 0 ? (s.tagCounts["maxweight"] / s.total) * 100 : 0;
+  const hgv = s.total > 0 ? (s.tagCounts.hgv / s.total) * 100 : 0;
+  const wt = s.total > 0 ? (s.tagCounts.maxweight / s.total) * 100 : 0;
   const avg = (hgv + wt) / 2;
   if (avg >= 50)
-    return (
-      "avg hgv+maxweight fill = " + avg.toFixed(1) + "% -> ADR-0029: OSM ETL pipeline 추가 진행"
-    );
+    return `avg hgv+maxweight fill = ${avg.toFixed(1)}% -> ADR-0029: OSM ETL pipeline 추가 진행`;
   if (avg >= 20)
-    return (
-      "avg hgv+maxweight fill = " +
-      avg.toFixed(1) +
-      "% -> ADR-0030: hybrid (OSM + V-World 도로 + broker 입력)"
-    );
-  return (
-    "avg hgv+maxweight fill = " +
-    avg.toFixed(1) +
-    "% -> OSM 직접 활용 보류 - broker 입력 + TMAP for Business API 검토"
-  );
+    return `avg hgv+maxweight fill = ${avg.toFixed(1)}% -> ADR-0030: hybrid (OSM + V-World 도로 + broker 입력)`;
+  return `avg hgv+maxweight fill = ${avg.toFixed(1)}% -> OSM 직접 활용 보류 - broker 입력 + TMAP for Business API 검토`;
 }
 async function main() {
-  console.log("[osm-spike] Start - " + new Date().toISOString());
-  console.log("[osm-spike] " + SAMPLES.length + " sites, Overpass API, ODbL: statistics only");
+  writeLine(`[osm-spike] Start - ${new Date().toISOString()}`);
+  writeLine(`[osm-spike] ${SAMPLES.length} sites, Overpass API, ODbL: statistics only`);
   const results = [];
   for (let i = 0; i < SAMPLES.length; i++) {
     const s = SAMPLES[i];
-    process.stdout.write(
-      "[osm-spike] [" + (i + 1) + "/" + SAMPLES.length + "] " + s.name + " ... ",
-    );
+    process.stdout.write(`[osm-spike] [${i + 1}/${SAMPLES.length}] ${s.name} ... `);
     try {
       const els = await queryOverpass(s.lat, s.lng);
       const r = processSample(els, s.name);
       results.push(r);
-      console.log(els.length + " ways (M:" + r.major.total + " L:" + r.local.total + ")");
+      writeLine(`${els.length} ways (M:${r.major.total} L:${r.local.total})`);
     } catch (err) {
-      console.log("ERROR: " + err);
+      writeLine(`ERROR: ${err}`);
       results.push({
         name: s.name,
         major: emptyStats(),
@@ -217,36 +198,32 @@ async function main() {
   }
   printTable(results);
   const agg = aggregate(results);
-  console.log(
-    "\n=== Sample success/failure ===\n  succeeded: " +
-      agg.succeeded +
-      " / failed: " +
-      agg.failed +
-      " (failed samples EXCLUDED from aggregate)",
+  writeLine(
+    `\n=== Sample success/failure ===\n  succeeded: ${agg.succeeded} / failed: ${agg.failed} (failed samples EXCLUDED from aggregate)`,
   );
   if (agg.succeeded === 0) {
-    console.log("[osm-spike] All samples failed — aggregate is meaningless. Abort.");
+    writeLine("[osm-spike] All samples failed — aggregate is meaningless. Abort.");
     process.exit(2);
   }
-  console.log("\n=== Aggregate fill rate (succeeded samples only) ===");
-  console.log(["Cat".padEnd(8), "N", ...ALL_TAGS].join("	"));
-  console.log(
+  writeLine("\n=== Aggregate fill rate (succeeded samples only) ===");
+  writeLine(["Cat".padEnd(8), "N", ...ALL_TAGS].join("\t"));
+  writeLine(
     [
       "MAJOR".padEnd(8),
       String(agg.major.total).padStart(4),
       ...ALL_TAGS.map((t) => pct(agg.major.tagCounts[t], agg.major.total)),
-    ].join("	"),
+    ].join("\t"),
   );
-  console.log(
+  writeLine(
     [
       "LOCAL".padEnd(8),
       String(agg.local.total).padStart(4),
       ...ALL_TAGS.map((t) => pct(agg.local.tagCounts[t], agg.local.total)),
-    ].join("	"),
+    ].join("\t"),
   );
-  console.log("\n=== Decision trigger (local roads - industrial access priority) ===");
-  console.log(decisionTrigger(agg.local));
-  console.log("\n[osm-spike] Done - " + new Date().toISOString());
+  writeLine("\n=== Decision trigger (local roads - industrial access priority) ===");
+  writeLine(decisionTrigger(agg.local));
+  writeLine(`\n[osm-spike] Done - ${new Date().toISOString()}`);
 }
 
 main().catch((err) => {

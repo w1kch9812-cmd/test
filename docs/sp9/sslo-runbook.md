@@ -2,7 +2,9 @@
 
 > **갱신일**: 2026-05-08 (Round 4 enterprise audit — secret rotation / backup retention / compliance / DR 박제)
 > **Owner**: Platform / SP9
-> **연계**: [sp9-base-layer-etl.yml](../../.github/workflows/sp9-base-layer-etl.yml) · [sp9-base-layer-rollback.yml](../../.github/workflows/sp9-base-layer-rollback.yml) · [crates/sp9-base-layer-config](../../crates/sp9-base-layer-config/) (SSOT)
+> **연계**: historical Gongzzang paths `sp9-base-layer-etl.yml`,
+> `sp9-base-layer-rollback.yml`, and `crates/sp9-base-layer-config`
+> are Platform Core-owned after handover.
 >
 > **Platform-core handover**: `gold/manifest.json` promote, rollback, and manifest
 > backup cleanup are no longer operated from Gongzzang. Gongzzang is a manifest

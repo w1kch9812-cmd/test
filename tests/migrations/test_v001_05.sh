@@ -8,10 +8,11 @@ fi
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL not set" >&2; exit 1
 fi
+SQLX_BIN="${SQLX_BIN:-sqlx}"
 
-sqlx database drop -y >/dev/null 2>&1 || true
-sqlx database create
-sqlx migrate run --source migrations
+"$SQLX_BIN" database drop -y >/dev/null 2>&1 || true
+"$SQLX_BIN" database create
+"$SQLX_BIN" migrate run --source migrations
 
 # All 6 Operations tables must exist per spec § 5.5
 EXPECTED=(admin_action business_verification_queue listing_review_queue listing_report featured_content system_alert)
@@ -34,7 +35,7 @@ for s in pending approved rejected needs_more_info; do
 done
 
 # business_verification_queue partial index on pending entries per spec § 5.5
-if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_indexes where tablename='business_verification_queue' and indexdef ilike '%submitted_at%' and indexdef ilike '%where (status = ''pending''::text)%';" | grep -q '^1$'; then
+if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_index i join pg_class idx on idx.oid=i.indexrelid join pg_class tbl on tbl.oid=i.indrelid where tbl.relname='business_verification_queue' and idx.relname='bvq_pending_idx' and pg_get_indexdef(i.indexrelid) ilike '%submitted_at%' and pg_get_expr(i.indpred, i.indrelid) ilike '%status%' and pg_get_expr(i.indpred, i.indrelid) ilike '%pending%';" | grep -q '^1$'; then
   echo "FAIL: business_verification_queue missing partial index on submitted_at WHERE status='pending'" >&2; exit 1
 fi
 

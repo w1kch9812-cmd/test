@@ -127,7 +127,7 @@ export function PanelEntryView({
       })}
       empty={createElement(def.emptyComponent, { entry: entry as never })}
       authRequired={
-        <div className="p-6 text-center text-[var(--color-muted)]">로그인이 필요해요</div>
+        <div className="p-6 text-center text-[var(--color-muted)]">{t("authRequired")}</div>
       }
     >
       <PanelErrorBoundary

@@ -13,6 +13,8 @@ interface RangeSliderProps {
   step?: number;
   value: [number, number];
   onValueChange: (next: [number, number]) => void;
+  minAriaLabel: string;
+  maxAriaLabel: string;
   formatValue?: (v: number) => string;
   className?: string;
 }
@@ -23,6 +25,8 @@ export function RangeSlider({
   step = 1,
   value,
   onValueChange,
+  minAriaLabel,
+  maxAriaLabel,
   formatValue,
   className,
 }: RangeSliderProps) {
@@ -41,11 +45,11 @@ export function RangeSlider({
         </SliderPrimitive.Track>
         <SliderPrimitive.Thumb
           className="block h-4 w-4 rounded-full border border-[var(--color-hairline)] bg-[var(--color-canvas)] shadow-[var(--shadow-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-          aria-label="최소값"
+          aria-label={minAriaLabel}
         />
         <SliderPrimitive.Thumb
           className="block h-4 w-4 rounded-full border border-[var(--color-hairline)] bg-[var(--color-canvas)] shadow-[var(--shadow-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/30"
-          aria-label="최대값"
+          aria-label={maxAriaLabel}
         />
       </SliderPrimitive.Root>
       <div className="flex justify-between text-[length:var(--text-caption-uppercase)] text-[var(--color-muted)]">

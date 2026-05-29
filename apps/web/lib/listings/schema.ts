@@ -15,6 +15,7 @@
  */
 
 import { z } from "zod";
+import { LISTING_ID_PATTERN } from "@/lib/identity/patterns";
 
 export const LISTING_TYPES = [
   "factory",
@@ -53,13 +54,6 @@ const baseListingFields = z.object({
   // 폼 default 는 react-hook-form 의 defaultValues 가 셋팅 — schema 의 default
   // 는 input/output type 불일치 (zod 4) 로 react-hook-form Resolver 와 충돌.
   contact_visibility: z.enum(CONTACT_VISIBILITIES),
-  geom_point: z
-    .object({
-      lng: z.number().gte(-180).lte(180),
-      lat: z.number().gte(-90).lte(90),
-    })
-    .nullable()
-    .optional(),
 });
 
 /**
@@ -124,7 +118,7 @@ export const createListingSchema = baseListingFields.superRefine(refineTransacti
 export type CreateListingFormValues = z.infer<typeof createListingSchema>;
 
 export const CreateListingResponseSchema = z.object({
-  id: z.string().regex(/^lst_[0-9A-HJKMNP-TV-Z]{26}$/),
+  id: z.string().regex(LISTING_ID_PATTERN),
   version: z.number().int().positive(),
 });
 

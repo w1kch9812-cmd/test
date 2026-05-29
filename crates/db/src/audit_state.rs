@@ -1,8 +1,6 @@
 //! `audit_log.before_state` / `after_state` 캡처 헬퍼 (SP-Obs T4).
 //!
-//! DB-native JSON 직렬화 (`to_jsonb(t.*)`) 로 row 를 JSON 으로 추출. `PostGIS`
-//! `geometry` 컬럼은 binary `EWKB` 라 raw 출력이 비실용 — `ST_AsGeoJSON` 으로
-//! 변환 후 merge.
+//! DB-native JSON serialization (`to_jsonb(t.*)`) extracts rows as JSON.
 //!
 //! Pattern (`PgRepository::save`):
 //!
@@ -30,7 +28,7 @@ use shared_kernel::id::{
 };
 use user_domain::repository::RepoError as UserRepoError;
 
-/// `User` row → JSON. `to_jsonb(t.*)` (`PostGIS` 미사용 — 단순).
+/// `User` row → JSON.
 pub async fn read_user_json(
     tx: &mut Transaction<'_, Postgres>,
     id: &Id<UserMarker>,
@@ -43,35 +41,20 @@ pub async fn read_user_json(
     Ok(row.and_then(|r| r.try_get::<Option<Value>, _>("snap").ok().flatten()))
 }
 
-/// `Listing` row → JSON. `geom_point` 는 `ST_AsGeoJSON` 으로 변환 후 merge —
-/// audit reader 가 좌표 읽을 수 있도록 (raw EWKB 비실용).
+/// `Listing` row → JSON.
 pub async fn read_listing_json(
     tx: &mut Transaction<'_, Postgres>,
     id: &Id<ListingMarker>,
 ) -> Result<Option<Value>, ListingRepoError> {
-    // to_jsonb 에서 geom_point 제거 후 GeoJSON 형태로 다시 추가.
-    let row = sqlx::query(
-        r"
-        select (
-            to_jsonb(t.*) - 'geom_point'
-            || jsonb_build_object(
-                'geom_point',
-                case when t.geom_point is null then null
-                else ST_AsGeoJSON(t.geom_point)::jsonb end
-            )
-        ) as snap
-        from listing t
-        where id = $1
-        ",
-    )
-    .bind(id.as_str())
-    .fetch_optional(&mut **tx)
-    .await
-    .map_err(map_sqlx_err::<ListingRepoError>)?;
+    let row = sqlx::query(r"select to_jsonb(t.*) as snap from listing t where id = $1")
+        .bind(id.as_str())
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(map_sqlx_err::<ListingRepoError>)?;
     Ok(row.and_then(|r| r.try_get::<Option<Value>, _>("snap").ok().flatten()))
 }
 
-/// `ListingPhoto` row → JSON. `PostGIS` 미사용.
+/// `ListingPhoto` row → JSON.
 pub async fn read_listing_photo_json(
     tx: &mut Transaction<'_, Postgres>,
     id: &Id<ListingPhotoMarker>,

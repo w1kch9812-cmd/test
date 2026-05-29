@@ -13,6 +13,13 @@ use crate::entity::ListingPhoto;
 /// `ListingPhoto` 저장/조회 포트.
 #[async_trait]
 pub trait ListingPhotoRepository: Send + Sync {
+    /// Find one photo by id. Internal lifecycle handling can read pending rows.
+    ///
+    /// # Errors
+    ///
+    /// DB communication failure returns [`RepoError::Database`].
+    async fn find(&self, id: &Id<ListingPhotoMarker>) -> Result<Option<ListingPhoto>, RepoError>;
+
     /// 매물의 활성 사진을 `display_order` 순으로 조회해요.
     /// (soft-deleted 제외, partial index 활용.)
     ///

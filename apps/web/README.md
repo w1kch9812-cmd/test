@@ -1,23 +1,22 @@
 # apps/web
 
-메인 사용자용 데이터 플랫폼 (옵션 A).
+Gongzzang web client.
 
-- 프레임워크: Next.js 16 (App Router)
-- 사용자: 일반 사용자, 인증된 회원
-- 의존: `@gongzzang/core`, `@gongzzang/data-clients`, `@gongzzang/ui`, `@gongzzang/db`
-- LLM/MCP 의존성: **금지** ([AGENTS.md §3](../../AGENTS.md))
+## Scope
 
-## 화면 (계획)
+- Framework: Next.js App Router
+- Role: browser UI and same-origin BFF proxy surface
+- User-facing copy: typed i18n only
+- LLM/MCP dependencies: forbidden in the runtime path
 
-- `/` 랜딩
-- `/map` 지도 + 필지 검색
-- `/parcel/[pnu]` 필지 상세 (용도지역, 지구단위계획, 도시계획시설)
-- `/law` 법령 검색·열람
-- `/dashboard` 사용자 대시보드 (저장한 필지)
+## Current Routes
 
-## 부트스트랩 (TODO)
+- `/listings`: listing search/map surface
+- `/api/proxy/*`: same-origin proxy to the Rust API
+- `/api/auth/*`: authentication callback/session endpoints
 
-```bash
-# 다음 작업 세션에 진행
-pnpm dlx create-next-app@latest apps/web --typescript --tailwind --app --src-dir
-```
+## Boundaries
+
+- Business rules stay in Rust domain crates and API services.
+- Listing marker rendering uses the Gongzzang listing PBF source.
+- PNU/parcel anchor ownership stays in `platform-core`.

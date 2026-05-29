@@ -5,7 +5,9 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "scripts": {
-    "generate": "tsx scripts/generate.ts"
+    "generate": "tsx scripts/generate.ts",
+    "test": "bash scripts/generate.tests.sh",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "openapi-typescript": "^7.13.0",

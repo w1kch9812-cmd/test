@@ -23,6 +23,7 @@ pub struct ProblemDetails {
 }
 
 /// RFC 7807 응답 wrapper — `application/problem+json` content-type 강제.
+#[derive(Debug)]
 pub struct ProblemResponse {
     /// HTTP 상태.
     pub status: StatusCode,
@@ -134,14 +135,14 @@ mod tests {
     #[test]
     fn problem_details_serializes_with_type_field() {
         let p = problem(
-            "listings/invalid-bounds",
-            "잘못된 bounds",
+            "listings/invalid-filter",
+            "잘못된 필터",
             StatusCode::BAD_REQUEST,
             None,
         );
         let json = serde_json::to_string(&p.body).unwrap();
         assert!(
-            json.contains("\"type\":\"https://gongzzang.com/errors/listings/invalid-bounds\""),
+            json.contains("\"type\":\"https://gongzzang.com/errors/listings/invalid-filter\""),
             "type field missing: {json}"
         );
         assert!(

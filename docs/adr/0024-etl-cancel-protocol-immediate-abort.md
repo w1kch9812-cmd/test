@@ -4,7 +4,7 @@
 |---|---|
 | 작성일 | 2026-05-08 |
 | 상태 | Accepted |
-| 선행 | [ADR 0021](./0021-static-vector-tile-decomposition.md) (X9 PMTiles 분해), [ADR 0023](./0023-pgrawcapture-wire.md) (Round 1 audit) |
+| 선행 | [ADR 0021](./0021-static-vector-tile-decomposition.md) (X9 PMTiles 분해), [ADR 0023](./0023-audit-2026-05-08-hardening.md) (Round 1 audit) |
 | 관련 | [ADR 0016](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) (Medallion + L3 atomicity) |
 
 ## 결정

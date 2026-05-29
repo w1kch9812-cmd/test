@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { buildAuthorizationUrl, generatePkceParams } from "@/lib/oidc";
-import { setTempCookie, signTempPayload } from "@/lib/session/cookie";
+import { setAuthStateCookie, signAuthStatePayload } from "@/lib/session/cookie";
 import { sanitizeReturnTo } from "@/lib/url";
 
 export async function POST(req: NextRequest) {
@@ -20,20 +20,20 @@ export async function POST(req: NextRequest) {
     nonce: pkce.nonce,
   });
 
-  // C2: HMAC-sign the temp cookie payload (tamper prevention)
+  // C2: HMAC-sign the auth-state cookie payload (tamper prevention)
   const payload = JSON.stringify({
     code_verifier: pkce.code_verifier,
     state: pkce.state,
     nonce: pkce.nonce,
     return_to: returnTo,
   });
-  const signed = signTempPayload(payload);
+  const signed = signAuthStatePayload(payload);
 
   return new NextResponse(null, {
     status: 302,
     headers: {
       Location: authUrl,
-      "Set-Cookie": setTempCookie(signed, 600),
+      "Set-Cookie": setAuthStateCookie(signed, 600),
     },
   });
 }

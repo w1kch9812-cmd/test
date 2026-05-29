@@ -1,18 +1,21 @@
 # https://lefthook.dev/configuration/
-# pre-commit: 빠른 lint + 포맷 + 시크릿 스캔 (단일 라인 명령)
-# pre-push: 깊은 검증 (typecheck, cargo)
-# commit-msg: Conventional Commits 강제
+# pre-commit: fast local checks for staged changes.
+# pre-push: full local verification gates.
 
 pre-commit:
   parallel: true
   commands:
+    lefthook-no-fake-pass:
+      run: bash scripts/lefthook/check-no-fake-pass.sh
+    forbidden-implementation-markers:
+      run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
     biome:
       glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
       run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
     rustfmt:
       glob: "*.rs"
-      run: command -v cargo >/dev/null 2>&1 && cargo fmt -- {staged_files} || echo "cargo not installed - CI enforces"
+      run: cargo fmt -- {staged_files}
       stage_fixed: true
       skip:
         - merge
@@ -21,58 +24,129 @@ pre-commit:
       glob: "*.md"
       run: pnpm markdownlint-cli2 {staged_files}
     gitleaks:
-      run: command -v gitleaks >/dev/null 2>&1 && gitleaks protect --staged --redact -v || echo "gitleaks not installed locally - CI enforces"
+      run: gitleaks protect --staged --redact -v
+      skip:
+        - merge
+        - rebase
+    file-line-limit:
+      run: bash scripts/lefthook/file-line-limit.sh
       skip:
         - merge
         - rebase
     panel-no-framework-import-kind:
-      # SP10 spec § 9 #5: lib/panel/** 는 components/panels/** 에 의존 금지.
-      # 프레임워크 → kind 단방향. 위반 시 commit 차단.
       glob: "apps/web/lib/panel/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-framework-import-kind.sh
     panel-no-direct-codec:
-      # SP10 spec § 5.2: codec 외부에서 ad-hoc split('>') 금지 (URL grammar 우회 방지).
       glob: "apps/web/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-direct-codec.sh
     panel-no-state-without-router:
-      # SP10 spec § 5.4: zustand store 가 panelStack 보유 금지 — URL 이 SSOT.
       glob: "apps/web/stores/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-state-without-router.sh
     catalog-m1-boundary:
       run: bash scripts/lefthook/catalog-m1-boundary.sh
+    pnu-anchor-pbf-marker-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+    platform-core-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
+    platform-core-event-receiver-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
+    platform-core-catalog-api-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
+    platform-core-dependency-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
+    migration-version-prefixes:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+    platform-core-anchor-inbox-db-approval:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
 
 pre-push:
   parallel: false
   commands:
+    lefthook-no-fake-pass:
+      run: bash scripts/lefthook/check-no-fake-pass.sh
+      skip:
+        - merge
+        - rebase
+    forbidden-implementation-markers:
+      run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
+      skip:
+        - merge
+        - rebase
     catalog-m1-boundary:
       run: bash scripts/lefthook/catalog-m1-boundary.sh
       skip:
         - merge
         - rebase
+    platform-core-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
+      skip:
+        - merge
+        - rebase
+    pnu-anchor-pbf-marker-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+      skip:
+        - merge
+        - rebase
+    traffic-auth-policy-registry:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-traffic-auth-policy-registry.ps1
+      skip:
+        - merge
+        - rebase
+    platform-integration-policy:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-event-receiver-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-catalog-api-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-dependency-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
+      skip:
+        - merge
+        - rebase
+    migration-version-prefixes:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-anchor-inbox-db-approval:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
+      skip:
+        - merge
+        - rebase
     typecheck:
-      # SSS § 2 자동강제: node_modules 누락 / lockfile drift 시 자가복구.
-      # `pnpm install --frozen-lockfile` 은 idempotent — sync 상태면 no-op (수 초),
-      # 누락/drift 면 full install. fresh checkout / dirty workspace 어디서든 안전.
-      run: pnpm install --frozen-lockfile --reporter=silent && pnpm turbo run typecheck
+      run: pnpm install --frozen-lockfile --reporter=silent && pnpm typecheck
       skip:
         - merge
         - rebase
     cargo-check:
-      run: command -v cargo >/dev/null 2>&1 && cargo check --workspace --all-features || echo "cargo not installed - CI enforces"
+      run: cargo check --workspace --all-features
       skip:
         - merge
         - rebase
     cargo-clippy:
-      run: command -v cargo >/dev/null 2>&1 && cargo clippy --workspace --all-features -- -D warnings || echo "cargo not installed - CI enforces"
+      run: cargo clippy --workspace --all-features --all-targets -- -D warnings
       skip:
         - merge
         - rebase
     sqlx-prepare-check:
-      run: command -v cargo >/dev/null 2>&1 && command -v sqlx >/dev/null 2>&1 && cargo sqlx prepare --workspace --check
+      run: cargo sqlx prepare --workspace --check
       skip:
         - merge
         - rebase
-    # markdown-links는 CI에서만 강제 (외부 URL 인터넷 의존이라 로컬 push에선 skip)
+    markdown-links:
+      run: bash scripts/ci/check-markdown-links.sh
+      skip:
+        - merge
+        - rebase
 
-# commit-msg hook은 CI(Spectral 또는 별도 룰)에서 강제 — Windows bash regex 호환 이슈로 로컬 hook 제거
-# Conventional Commits 형식: docs/conventions/git-and-pr.md 참조
+# commit-msg is enforced by CI/Spectral or a separate rule.
+# Conventional Commits format: docs/conventions/git-and-pr.md

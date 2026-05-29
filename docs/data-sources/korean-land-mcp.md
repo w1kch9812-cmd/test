@@ -2,8 +2,10 @@
 
 - 소스: https://github.com/UrbanWatcherKr/korean-land-mcp
 - 라이선스: MIT
-- 역할: **V-World API를 MCP로 래핑** (개발/운영/관리자 조회용)
+- 역할: **V-World API를 MCP로 래핑** (AI 에이전트의 개발 탐색용)
 - 프로덕션 사용 금지 — [AGENTS.md §3](../../AGENTS.md)
+- Catalog facts and source ingestion remain Platform Core-owned. This MCP is
+  not a Gongzzang runtime data source, admin lookup backend, or SSOT.
 
 ## 제공 도구 (7 + discover)
 

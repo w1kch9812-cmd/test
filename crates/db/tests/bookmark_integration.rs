@@ -20,14 +20,19 @@ use bookmark_domain::repository::{BookmarkRepository, RepoError as BmRepoError};
 use chrono::{DateTime, Utc};
 use db::bookmark::PgBookmarkRepository;
 use db::listing::PgListingRepository;
+use db::listing_photo::PgListingPhotoRepository;
 use db::user::PgUserRepository;
 use listing_domain::entity::Listing;
 use listing_domain::repository::ListingRepository;
+use listing_photo_domain::entity::{ListingPhoto, PhotoContentType};
+use listing_photo_domain::repository::ListingPhotoRepository;
 use shared_kernel::area::AreaM2;
 use shared_kernel::description::Description;
 use shared_kernel::domain_event::DomainEvent;
 use shared_kernel::email::Email;
-use shared_kernel::id::{BookmarkExternalMarker, Id, ListingMarker, UserMarker};
+use shared_kernel::id::{
+    BookmarkExternalMarker, Id, ListingMarker, ListingPhotoMarker, UserMarker,
+};
 use shared_kernel::listing_title::ListingTitle;
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::money::MoneyKrw;
@@ -95,7 +100,6 @@ async fn seed_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingM
         AreaM2::try_new(100.00).unwrap(),
         ListingTitle::try_new("bookmark test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");
@@ -387,50 +391,61 @@ async fn find_detail_nonexistent_returns_none() {
 }
 
 #[tokio::test]
-async fn increment_view_count_increments_value() {
+async fn find_detail_excludes_pending_upload_photos() {
     use listing_domain::repository::ListingRepository as ListingRepo;
     let pool = setup_test_pool().await;
     truncate_all(&pool).await;
-    let owner = seed_user(&pool, "zsub-detail-5", "detail5@example.com").await;
-    let viewer = seed_user(&pool, "zsub-detail-5v", "detail5v@example.com").await;
+    let owner = seed_user(&pool, "zsub-detail-pending", "detail-pending@example.com").await;
+    let viewer = seed_user(
+        &pool,
+        "zsub-detail-pending-v",
+        "detail-pending-v@example.com",
+    )
+    .await;
     let listing_id = seed_active_listing(&pool, owner).await;
     let l_repo = PgListingRepository::new(pool.clone());
-
-    l_repo.increment_view_count(&listing_id).await.expect("ok");
-    l_repo.increment_view_count(&listing_id).await.expect("ok");
+    let p_repo = PgListingPhotoRepository::new(pool.clone());
+    let pending = ListingPhoto::try_new(
+        Id::<ListingPhotoMarker>::new(),
+        listing_id.clone(),
+        "listings/test/pending-detail-photo.jpg",
+        None,
+        None,
+        0,
+        None,
+        None,
+        None,
+        PhotoContentType::Jpeg,
+        Utc::now(),
+    )
+    .expect("pending photo");
+    p_repo.save(&pending, test_ctx()).await.expect("save");
 
     let detail = l_repo
         .find_detail_by_id(&listing_id, &viewer)
         .await
         .expect("ok")
         .expect("found");
-    assert_eq!(detail.listing.view_count, 2);
+
+    assert!(detail.photos.is_empty());
 }
 
-#[tokio::test]
-async fn increment_view_count_nonexistent_returns_not_found() {
-    use listing_domain::repository::ListingRepository as ListingRepo;
-    use listing_domain::repository::RepoError as ListingRepoError;
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let l_repo = PgListingRepository::new(pool);
+#[path = "bookmark_integration/detail_photo.rs"]
+mod detail_photo;
 
-    let fake_id = Id::<ListingMarker>::new();
-    let err = l_repo
-        .increment_view_count(&fake_id)
-        .await
-        .expect_err("not found");
-    assert!(matches!(err, ListingRepoError::NotFound));
-}
+#[path = "bookmark_integration/view_count.rs"]
+mod view_count;
 
 /// 도우미 — Active 상태 매물 시드 (`find_detail` RBAC 테스트용).
 async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<ListingMarker> {
     let repo = PgListingRepository::new(pool.clone());
     let now = Utc::now();
+    let pnu = "1111010100100090000";
+    seed_listing_anchor(pool, pnu).await;
     let mut listing = Listing::try_new_draft(
         Id::new(),
         owner,
-        Pnu::try_new("1111010100100090000").unwrap(),
+        Pnu::try_new(pnu).unwrap(),
         ListingType::Factory,
         TransactionType::Sale,
         MoneyKrw::try_new(200_000_000).unwrap(),
@@ -439,7 +454,6 @@ async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<L
         AreaM2::try_new(150.0).unwrap(),
         ListingTitle::try_new("active listing for detail test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");
@@ -448,4 +462,38 @@ async fn seed_active_listing(pool: &sqlx::PgPool, owner: Id<UserMarker>) -> Id<L
     let listing_id = listing.id.clone();
     repo.save(&listing, test_ctx()).await.expect("save");
     listing_id
+}
+
+async fn seed_listing_anchor(pool: &sqlx::PgPool, pnu: &str) {
+    sqlx::query(
+        r"
+        insert into parcel_marker_anchor (
+            pnu,
+            anchor_point,
+            algorithm,
+            algorithm_version,
+            anchor_snapshot_id,
+            source_geometry_version,
+            source_geometry_checksum_sha256,
+            platform_core_updated_at,
+            synced_at
+        )
+        values (
+            $1,
+            ST_SetSRID(ST_MakePoint(126.9780, 37.5665), 4326),
+            'polylabel',
+            '1',
+            'snapshot-bookmark-v1',
+            'bookmark-geometry-v1',
+            repeat('b', 64),
+            now(),
+            now()
+        )
+        on conflict (pnu) do nothing
+        ",
+    )
+    .bind(pnu)
+    .execute(pool)
+    .await
+    .expect("seed listing anchor");
 }

@@ -1,7 +1,19 @@
 # 공짱 Sub-project Roadmap
 
-> **갱신일**: 2026-05-06 (SP-Obs 1차 종료 직후)
-> **현재 main**: `56e222e` (SP-Obs T7 — health liveness/readiness/db)
+> **Current supersession**: 2026-05-22 — listing marker placement and map-marker data flow are
+> governed by [ADR 0018](../adr/0018-pnu-first-identity-no-coordinates.md),
+> [ADR 0037](../adr/0037-pnu-anchor-pbf-marker-tiles.md), and the
+> [Gongzzang-owned listing PBF design spec](./specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md).
+> Older roadmap entries mentioning `listing.geom_point`, bbox/bounds marker requests, or
+> listing marker placement outside PNU anchors are historical only and must be revalidated against
+> those documents before implementation.
+>
+> **Current gate**: the Gongzzang-owned listing PBF marker implementation slice has local
+> verification evidence. This is not a whole-product launch completion claim; re-run the linked
+> handoff/audit verification before changing or claiming this slice.
+>
+> **갱신일**: 2026-05-23 (listing photo upload confirmation and signed download hardening)
+> **현재 구현 커밋**: `8946709` (listing photo downloads route through authenticated photo_id paths and R2 signed GET URLs)
 > **SSOT**: 본 문서 — 다음 sub-project 결정/진행 시 *먼저* 갱신.
 
 ---
@@ -30,7 +42,7 @@
 | **FU-i** | 누적 spec 부채 일괄 정리 (6 FU) | T1 (FU 12 prefix `lph_` + FU 13 spec mock SQL ↔ schema + FU 17 trait rustdoc, ac4036a) / T2 (FU 18 already closed by FU 34) / T3 (FU 26 clippy.toml `disallowed-types reqwest::Client`, 30515ae) / T4 (FU 41 Cd primary 매핑 + endpoint URL drift fix + 숫자/문자열 dual 파싱 + 5 fixture + 25 신규 테스트, bae883c) | ✅ |
 | **7-iii** | 정부 API drift 자동 검출 시스템 | crates/operations/api-health (도메인) + crates/db/src/api_health.rs (PgImpl, 8 통합 테스트) + 2 smoke test crate (data.go.kr + V-World, feature-gated `real-api`) + crates/api-health-recorder (octocrab binary, Issue orchestration) + .github/workflows/api-drift-smoke-test.yml (nightly cron 04:00 KST + workflow_dispatch + simulate_failure) + docs/observability/api-drift-smoke-test.md. FU 45/46 closed. SSS 7기둥 모두 ◎ | ✅ |
 | **6-foundation** | Frontend 인프라 (Next.js 16 + shadcn + tokens + i18n + UX) | apps/web (Next.js 16.2 + React 19 + Tailwind 4) + packages/ui (shadcn 6 primitives + Pretendard tokens, swap-able) + packages/api-types (utoipa → TS) + 한국어 helper + error/not-found/loading + ky API client + TanStack Query + proxy skeleton + instrumentation.ts (Sentry 자리) + Vitest + Playwright + @axe-core/playwright (WCAG 2.1 AA) + size-limit (bundle < 200KB) + .github/workflows/frontend.yml. SSS 7기둥 모두 ◎ | ✅ |
-| **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / 5 신규 endpoint (POST /listings + PATCH /listings/:id `if-match` OCC + transitions 2 + photo presigned mock + DELETE photo soft-delete) / 4 신규 db integration test (audit_log action 검증) / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
+| **6-iv** | 매물 등록 (broker mutation 화면) | `Listing::update_editable_fields` + `ListingError::ImmutableState` (8 신규 unit tests) / `services/api/src/http/{mutation_ctx,problem}.rs` (`http_user_action` helper + `from_listing_error`/`from_listing_repo_error` 7 매핑) / POST/PATCH/transitions + photo R2 presigned PUT + `POST /listings/:listing_id/photos/:photo_id/confirm` R2 HEAD verification + confirmed-only photo exposure + authenticated `GET /listings/:listing_id/photos/:photo_id` signed R2 download redirect + `LISTING_PHOTO_R2_*` config SSOT + DELETE photo soft-delete / db integration tests for audit, pending-photo non-exposure, and photo_id detail projection / `/listings/new` 폼 (react-hook-form + zod + ProblemDetails toast) / proxy.ts BROKER_PATHS gate / 10 Vitest cross-field unit tests. PhotoUploader/edit page 는 FU 56. | ✅ |
 | **4-iii-e** (1차) | R2 PMTiles Reader foundation | `Policy::r2_default` (8s/retry 1/60s cooldown) + `crates/data-clients/r2-public-data` 신규 lib (R2Client get_object_bytes/json + reqwest+Breaker) + PMTiles v3 magic+version 파서 + R2ParcelReader (architecture wire-up + FU 60 honest failure stub). 12 unit tests. **R2BuildingReader (FU 40 close) / BuildingFootprintSource 추상화 / R2IndustrialComplexReader / PMTiles tile_at + MVT decode 는 FU 60 후속** (ETL 빌더 + production fixture 필요). [ADR-0014 보류 — base layer 자체 SSS 부적합](../adr/0014-base-layer-defer-pmtiles.md). | 🟡 (foundation only) |
 | **6-iii** | 매물 상세 + 북마크 | `ListingRepository::find_detail_by_id` + `increment_view_count` + `is_bookmarked` JOIN. `Listing.bookmark_count` denormalized 필드 deprecated -- bookmark_listing JOIN COUNT 가 응답 SSOT (FU 70 schema 제거 예정). GET /listings/:id (RBAC: 비공개 상태는 owner only -> 404 leak 차단) + POST/DELETE /listings/:id/bookmark (멱등) + GET /me/bookmarks. Frontend `/listings/[id]` server component + ListingDetail / BookmarkButton (optimistic toggle). 6 db integration test. ADR-0015 V-World ACL 재설계 직전 commit 묶음. | ✅ |
 | **6-v** | 알림 (Notifications) | `NotificationKind` 도메인 enum (4 variants + Other forward-compat). PgImpl enum round-trip + `mark_all_read_by_kind` 시그니처 변경. `auth::role_guard::require_one_of_roles` (OR 매칭). admin endpoints (`POST /admin/listings/:id/{approve,reject}` -- Admin/Operator + reason) + `Notification` trigger (best-effort multi-tx). bookmark trigger (owner != bookmarker -> ListingBookmarked 알림). `/me/notifications` 4 endpoints (list / unread-count / read 멱등 / mark-all-read by kind). Frontend `/me/notifications` 페이지 + NotificationBell 헤더 badge (1분 polling). 9 DB integration test (enum round-trip / Other fallback / user isolation / bulk filter). | ✅ |
@@ -46,56 +58,36 @@
 
 ## 다음 sub-project (사용자 결정)
 
-### A. SP4-iii — data.go.kr + 법제처 + R2 Reader 6 (남은 분해)
+### A. Platform Core 경계 안정화
 
-**목표**: SP4-iii-d (RawCapture infra) + SP4-iii-a (data.go.kr 건축물대장)
-완료. 남은 sub-task:
+**목표**: Gongzzang은 Platform Core Catalog/Workforce의 published contract만
+소비하고, Catalog source ingestion/raw lineage/public spatial lifecycle은 다시
+공짱 작업으로 돌아오지 않게 한다.
 
-| Sub | 영역 | 상태 |
-|---|---|---|
-| 4-iii-d | RawCapture trait + PgRawCapture | ✅ (2026-05-04) |
-| 4-iii-a | data.go.kr 건축물대장 + DataGoKrBuildingReader | ✅ (2026-05-04) |
-| 4-iii-b | data.go.kr 실거래가 + RealTransactionReader | 미착수 (1-2일) |
-| 4-iii-c | 법제처 (도시계획 텍스트) | 미착수 (1-2일) |
-| 4-iii-e (1차) | R2 PMTiles foundation (R2Client + Policy + magic header + R2ParcelReader stub) | 🟡 2026-05-06 (foundation only — FU 60 가 tile_at + readers 완성) |
-| 4-iii-e (2차 = FU 60) | ETL 빌더 + production fixture + R2BuildingReader (FU 40) + BuildingFootprintSource + ICReader | 미착수 (3-5일, 별도 SP) |
+**작업**:
+- Platform Core boundary, dependency, Catalog API, event receiver gate를 계속 CI
+  필수 경로로 유지
+- Platform Core pin 파일 변경 시 local consumer adapter만 갱신
+- legacy ETL/raw/API health schema drop migration은 사용자 승인 후 별도 작업
+- active docs가 Catalog source client, raw capture, public data reader 작업을
+  다시 추천하지 않도록 section guard 유지
 
-**미해소 follow-up (SP4-ii 잔여)**:
-- ~~FU 26: `clippy::disallowed_types` reqwest::Client 직접 호출 차단~~ → ✅ closed by SP-FU-i T3 (`30515ae`)
-- FU 28: Redis 캐시 (TTL 24h)
-- FU 29: Sentry alert on Breaker open
-- FU 30: `fetch_markers_in_bbox` PMTiles 또는 V-World BBOX WFS (SP4-iii-e)
+### B. Gongzzang-owned product work
 
-**SP4-iii-a 발견 follow-up**:
-- FU 40: `Building.geom` 정확한 footprint (V-World AL_D194 또는 R2 PMTiles)
-- ~~FU 41: 한글 라벨 매핑표 확장 (28+ 케이스)~~ → ✅ closed by SP-FU-i T4 (`bae883c`) — Cd primary + CdNm fallback 하이브리드, 5 실 fixture
-- FU 42: `BuildingReader::fetch_by_id` (mgmBldrgstPk endpoint)
-- FU 43: 캐시 정책 (`expires_at = fetched_at + 30 days`)
-- FU 44: 토지대장 endpoint
+**목표**: Listing, listing photo, bookmark, notification, broker/admin UX,
+listing marker serving처럼 공짱이 영구 owner인 영역만 다음 제품 작업으로 분해한다.
 
-**SP-FU-i T4 발견 follow-up (2026-05-04)**:
-- ~~**FU 45 (제안)**: 정부 API endpoint URL drift 정기 검증 — staging-only smoke test 또는 weekly cron 으로 deprecated endpoint 자동 검출~~ → ✅ closed by SP7-iii (`<T6 commit>`)
-- ~~**FU 46 (제안)**: 정부 API JSON Number vs String 응답 schema drift 모니터링~~ → ✅ closed by SP7-iii (`<T6 commit>`)
-- **FU 47 (제안)**: V-World 지오코딩 (주소 → PNU) 통합 — 이번 검증에서 추정 PNU 4건 0 응답 → 시간 낭비. `resolve_parcel(addr)` 도구가 있으면 다음 검증에서 절약. 또는 [korean-land-mcp](https://github.com/UrbanWatcherKr/korean-land-mcp) 같은 외부 도구를 dev session 한정 활용 (메인 시스템 import 금지 — AGENTS.md § 3)
+**작업 후보**:
+- listing marker serving hardening과 frontend PBF 전환 검증
+- listing edit/photo upload UX
+- broker/admin review workflow UX
+- auth user provisioning hardening
 
-### B. SP6 — Frontend (Next.js + React 19)
+### C. 잔여 FU 일괄 정리
 
-**목표**: 인증/매물/북마크/알림 핸들러가 SP5-* 의 PgRepository 를 사용하는 첫 사용자 화면.
-
-**작업**: Next.js 16 + React 19 + Naver Maps SDK + Zitadel OIDC 클라이언트. `services/api` 의 핸들러 추가 + `apps/web` 화면. `MutationContext::new_user_action(...)` helper (`services/api`) 도입.
-
-**추정**: 분해 진행 — SP6-foundation ✅ + SP6-i ~ v 미착수.
-**Spec status**: SP6-foundation 작성 완료 (`docs/superpowers/specs/2026-05-05-sub-project-6-foundation-design.md`). SP6-i ~ v 미작성.
-
-### C. 잔여 FU 일괄 정리 (Medium / Large 영역)
-
-SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
-- **FU 4 / 6 / 8** (BusinessNumber NTS 체크섬 / D₃D₄ / KsicCode A-U) — 외부 데이터 + 인프라 (별도 SP-FU-IdValidation 권장)
-- **FU 14 / 15 / 16** (BVQ/LRQ updated_at / OCC API / find_by_listing UNIQUE INDEX) — DB schema 변경 (별도 SP-FU-OCC 권장)
-- **FU 28 / 29 / 30** (Redis 캐시 / Sentry alert / PMTiles markers) — 인프라 (SP4-iii-e + SP7 관측성)
-- **FU 40 / 42 / 43 / 44** (Building.geom / fetch_by_id / 캐시 정책 / 토지대장) — SP4-iii-a 후속 (SP4-iii-b/e)
-- ~~**FU 45 / 46**~~ (endpoint drift smoke test / schema drift) → ✅ closed by SP7-iii
-- **FU 47** (V-World 지오코딩) — dev session 가속, 미해소
+남은 FU는 Gongzzang-owned 여부를 먼저 판정한다. Platform Core Catalog 입력,
+raw lineage, public/reference spatial lifecycle에 속하는 FU는 이 repo에서 구현하지
+않고 Platform Core issue/ADR로 넘긴다.
 
 ---
 
@@ -130,16 +122,14 @@ SP-FU-i 가 Trivial 6 FU 닫음. 남은 FU:
 ## 추천 순서
 
 ```text
-SP-FU-i (Trivial 6 FU, 2026-05-04 ✅)
-  ↓ FU 12/13/17/18/26/41 일괄 정리 + endpoint URL/schema drift 2 critical bug
-SP7-iii (정부 API drift 자동 검출, 2026-05-05 ✅)
-  ↓ FU 45/46 closed, api_health_check 테이블 + nightly cron + GitHub Issue alert
-A (SP4-iii 분해, 3-5일)
-  ↓ SP4-iii-b 실거래가, SP4-iii-c 법제처, SP4-iii-e R2 PMTiles + FU 40/42/43/44
-B (SP6 분해, 4-7일) 또는 C (SP-FU-OCC / SP-FU-IdValidation 등)
-  ↓ B: 첫 사용자 화면 — SP5-* 모든 Repository 활용
-  ↓ C: Medium/Large FU 영역별 닫기
-SP7-i / SP7-ii (Sentry + Grafana — production 알림 + 시계열 metrics)
+Platform Core boundary verification
+  ↓ 경계/의존성/계약/pin 가드 유지
+DB cleanup approval
+  ↓ legacy ETL/raw/API health schema drop migration은 승인 후 별도
+Gongzzang-owned product work
+  ↓ listing marker serving, listing edit/photo UX, broker/admin UX
+Observability and IaC
+  ↓ Gongzzang runtime metrics, Sentry, Pulumi
 SP8 (IaC — Pulumi)
 ```
 
@@ -185,3 +175,8 @@ SP8 (IaC — Pulumi)
 - **CI 5 workflow**: CI (7 jobs) / db-migrations / walking-skeleton (mock JWT mode + integration tests + DB reset) / api-drift-smoke-test (nightly cron 04:00 KST + workflow_dispatch) / frontend (lint/typecheck/test/build/bundle/e2e+a11y, paths-filtered)
 - **마지막 commit**: `<T4 commit>` (SP6-foundation T4 — smoke + Playwright + axe + size-limit + frontend CI + docs + roadmap)
 - **다음 commit 시 항상**: 본 문서 갱신 → SP 진행 상태 SSOT 유지
+> Current status (2026-05-28): This roadmap contains historical sub-project
+> entries. Catalog/data-source/ETL/API-drift rows that mention local
+> `crates/data-clients/*`, `raw-capture`, `api-health`, or SP9 base-layer assets
+> are superseded by ADR 0034 and Platform Core M3.2 physical extraction. The
+> current ownership SSOT is `docs/architecture/platform-core-boundary.v1.json`.

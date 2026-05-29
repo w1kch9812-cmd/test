@@ -1,0 +1,29 @@
+{
+  "schema_version": "gongzzang.platform_integration.exception_policy.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "default_exception_decision": "deny",
+  "exception_contract": {
+    "max_ttl_days": 90,
+    "required_fields": [
+      "id",
+      "owner",
+      "reason",
+      "risk_level",
+      "expires_at",
+      "approval_reference",
+      "compensating_controls"
+    ],
+    "allowed_risk_levels": ["low", "medium", "high"],
+    "forbidden_risk_levels": ["critical"],
+    "expired_exception_policy": "block"
+  },
+  "active_exceptions": [],
+  "forbidden_exception_types": [
+    "direct_platform_core_database_access",
+    "anonymous_platform_core_service_call_in_production",
+    "unsigned_platform_core_webhook_in_production",
+    "unattested_production_artifact_deploy"
+  ]
+}

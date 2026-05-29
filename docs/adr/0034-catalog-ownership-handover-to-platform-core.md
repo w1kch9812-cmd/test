@@ -6,6 +6,56 @@
 | 상태 | Accepted |
 | 선행 | [ADR 0030](./0030-three-service-architecture.md), [ADR 0031](./0031-platform-core-bounded-contexts.md), [ADR 0032](./0032-eventual-consistency-strategy.md) |
 
+## 구현 상태 (2026-05-28)
+
+M3.2 physical extraction 이 gongzzang workspace 에 강제되었다.
+`industrial-complex`, `parcel`, `building`, `manufacturer`, `vworld`, `data-go-kr`,
+`raw-capture`, `data-pipeline-control` crate 는 gongzzang workspace 에 존재하면 안 된다.
+`docs/architecture/platform-core-boundary.v1.json` 이 현재 phase 와 path ownership 의 SSOT 이며,
+`scripts/ci/check-platform-core-boundary.ps1` 와
+`scripts/ci/check-platform-core-dependency-boundary.ps1` 가 재도입을 차단한다.
+`docs/architecture/platform-core-catalog-api-contract.v1.pin.json` pins the Gongzzang
+Catalog API consumer surface, and `scripts/ci/check-platform-core-catalog-api-contract.ps1`
+ checks it against local clients and Platform Core OpenAPI when the sibling repo is present.
+The `parcel-lookup` crate is only the Gongzzang port/projection crate; Platform Core
+HTTP adapters live in `services/api` and must use `Policy::platform_core_default()`
+through `circuit_breaker::execute`.
+Platform Core-owned ETL service scaffolds (`services/data-pipeline`, `services/scraper-py`)
+are also extracted from Gongzzang and guarded by the same boundary SSOT.
+Public/reference vector tile ETL configuration, workflows, Docker/tooling, and
+Catalog public API drift observability are also Platform Core-owned. Therefore
+`crates/sp9-base-layer-config`, SP9 GitHub workflows, tippecanoe setup tooling,
+`services/etl-base-layer/Dockerfile.etl`, `services/etl-base-layer/scripts`,
+`.github/workflows/api-drift-smoke-test.yml`, `crates/operations/api-health`,
+`crates/api-health-recorder`, `crates/db/src/api_health.rs`, and
+`docs/observability/api-drift-smoke-test.md` must not exist in Gongzzang.
+Boundary enforcement also scans GitHub workflow YAML for Catalog source API
+tokens, so the same jobs cannot be reintroduced under a new filename.
+DB migration history 에 남은 `parcel_external_data`, `api_health_check`,
+`pipeline_schedule`, `pipeline_run` 계열은 `allowed_legacy_schema_tokens` ledger 로만
+허용된다. 사용자 승인 후 추가된 Gongzzang DB cleanup migration
+`migrations/30015_drop_platform_core_legacy_schema.sql` 이 runtime table 을 drop 하며,
+Platform Core DB 는 건드리지 않는다.
+Gongzzang-owned `db-migrations.yml` must keep running `tests/migrations/test_v001_full.sh`
+against disposable PostGIS, and the boundary gate verifies that smoke expects the
+legacy Platform Core tables to be absent after the cleanup migration.
+`forbidden_canonical_catalog_tables` 는 `industrial_complex`, `parcel`, `building`,
+`manufacturer` 의 직접 SQL DDL/DML/query 사용을 차단한다. Gongzzang 의 bookmark,
+featured content 같은 product-owned 기능은 이들을 외부 target kind 로 참조할 수 있지만,
+canonical Catalog table 을 로컬에 만들거나 읽거나 쓰면 안 된다.
+Boundary enforcement blocks both unqualified and schema-qualified table references
+such as `building` and `catalog.parcel`. It also rejects direct Platform Core
+database connection aliases such as `PLATFORM_CORE_DB_URL`; Gongzzang must use
+published HTTP/event/artifact contracts only.
+Root env examples must document only HTTP Platform Core contracts
+(`PLATFORM_CORE_API_BASE_URL`, `NEXT_PUBLIC_PLATFORM_CORE_BASE_URL`) and must not
+expose Platform Core-owned Catalog source, ETL, or generic raw-data R2 settings.
+Local Gongzzang Postgres defaults to host port `15432`; `5500` is not used because
+it can be reserved by Windows excluded port ranges.
+M1 시절 Gongzzang shared-kernel 에 남아 있던 Catalog event schema module 도 제거되었고,
+재도입 시 boundary gate 가 차단한다. Catalog event schema 의 owner 는 Platform Core 이며,
+Gongzzang 은 webhook receiver/pinned contract copy 만 보유한다.
+
 ## 결정
 
 gongzzang 의 `crates/domain/core/{industrial-complex, parcel, building, manufacturer}` 와

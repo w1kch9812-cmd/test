@@ -8,10 +8,11 @@ fi
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL not set" >&2; exit 1
 fi
+SQLX_BIN="${SQLX_BIN:-sqlx}"
 
-sqlx database drop -y >/dev/null 2>&1 || true
-sqlx database create
-sqlx migrate run --source migrations
+"$SQLX_BIN" database drop -y >/dev/null 2>&1 || true
+"$SQLX_BIN" database create
+"$SQLX_BIN" migrate run --source migrations
 
 # 1. All 3 roles exist
 for r in gongzzang_app_writer gongzzang_app_reader gongzzang_audit_archiver; do

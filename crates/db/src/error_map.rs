@@ -91,16 +91,6 @@ impl MapFromSqlx for outbox_event_domain::repository::RepoError {
     }
 }
 
-// Pipeline domain `RepoError` — has `Conflict` variant
-impl MapFromSqlx for data_pipeline_control::repository::RepoError {
-    fn conflict() -> Self {
-        Self::Conflict
-    }
-    fn database(msg: String) -> Self {
-        Self::Database(msg)
-    }
-}
-
 // `AdminAction` domain `RepoError` — no `Conflict` variant
 impl MapFromSqlx for admin_action_domain::repository::RepoError {
     fn conflict() -> Self {

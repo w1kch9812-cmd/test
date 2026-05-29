@@ -70,7 +70,6 @@ async fn seed_listing_with_owner(
         AreaM2::try_new(100.00).unwrap(),
         ListingTitle::try_new("lrq test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");

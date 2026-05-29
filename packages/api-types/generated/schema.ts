@@ -1,22 +1,11 @@
 /**
- * Placeholder — utoipa OpenAPI 통합 시점에 자동 생성.
+ * Empty contract sentinel.
  *
- * `pnpm --filter @gongzzang/api-types generate` 실행으로 갱신.
- * 본 sub-project (SP6-foundation T3) 는 minimal stub.
+ * Do not hand-write API paths in this file. Replace this file only by running
+ * `pnpm --filter @gongzzang/api-types generate` after the Rust API exports
+ * `services/api/openapi.json`.
  */
 
-export interface paths {
-  "/healthz": {
-    get: {
-      responses: {
-        200: {
-          content: {
-            "text/plain": string;
-          };
-        };
-      };
-    };
-  };
-}
+export type paths = Record<string, never>;
 
 export type components = Record<string, never>;

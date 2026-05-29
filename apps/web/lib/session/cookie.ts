@@ -4,15 +4,15 @@ import { env } from "@/lib/env";
 const isProd = process.env.NODE_ENV === "production";
 
 // Production: __Host-/__Secure- prefix + Secure flag (HTTPS strict).
-// Dev (localhost HTTP): prefix + Secure 제거 (browser 가 HTTP 에서 거부).
+// Dev runs on localhost HTTP, so the Secure-only prefixes are disabled there.
 export const SID_COOKIE_NAME = isProd ? "__Host-sid" : "sid";
-export const TEMP_COOKIE_NAME = isProd ? "__Secure-auth-tmp" : "auth-tmp";
+export const AUTH_STATE_COOKIE_NAME = isProd ? "__Secure-auth-state" : "auth-state";
 
 /**
- * Temp cookie payload 를 HMAC-SHA256 sign + base64url encode.
+ * HMAC-SHA256 sign and base64url encode the OAuth auth-state cookie payload.
  * Format: "<base64url(payload)>.<base64url(hmac)>"
  */
-export function signTempPayload(payload: string): string {
+export function signAuthStatePayload(payload: string): string {
   const payloadB64 = Buffer.from(payload).toString("base64url");
   const mac = createHmac("sha256", env.SESSION_SECRET).update(payloadB64).digest();
   const macB64 = mac.toString("base64url");
@@ -20,9 +20,9 @@ export function signTempPayload(payload: string): string {
 }
 
 /**
- * HMAC 검증 후 payload 반환. tampering 시 null.
+ * Verify the HMAC signature and return the payload, or null when tampered.
  */
-export function verifyTempPayload(signed: string): string | null {
+export function verifyAuthStatePayload(signed: string): string | null {
   const dot = signed.indexOf(".");
   if (dot === -1) return null;
   const payloadB64 = signed.slice(0, dot);
@@ -54,24 +54,24 @@ export function deleteSidCookie(): string {
   return buildSidCookie("", 0);
 }
 
-export interface TempAuthState {
+export interface AuthStateCookiePayload {
   code_verifier: string;
   state: string;
   nonce: string;
   return_to: string;
 }
 
-function buildTempCookie(value: string, maxAgeSec: number): string {
-  const parts = [`${TEMP_COOKIE_NAME}=${value}`];
+function buildAuthStateCookie(value: string, maxAgeSec: number): string {
+  const parts = [`${AUTH_STATE_COOKIE_NAME}=${value}`];
   if (isProd) parts.push("Secure");
   parts.push("HttpOnly", "SameSite=Lax", "Path=/api/auth/", `Max-Age=${maxAgeSec}`);
   return parts.join("; ");
 }
 
-export function setTempCookie(payload: string, maxAgeSec: number): string {
-  return buildTempCookie(payload, maxAgeSec);
+export function setAuthStateCookie(payload: string, maxAgeSec: number): string {
+  return buildAuthStateCookie(payload, maxAgeSec);
 }
 
-export function deleteTempCookie(): string {
-  return buildTempCookie("", 0);
+export function deleteAuthStateCookie(): string {
+  return buildAuthStateCookie("", 0);
 }

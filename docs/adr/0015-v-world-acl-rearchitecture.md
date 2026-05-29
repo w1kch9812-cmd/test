@@ -139,5 +139,9 @@ SSS § 3 (추적성) + § 4 (안전성) 위반.
 ## 참고
 
 - 옛 spec: [docs/superpowers/specs/2026-05-04-sub-project-4-ii-vworld-parcel-reader-design.md](../superpowers/specs/2026-05-04-sub-project-4-ii-vworld-parcel-reader-design.md) — 본 ADR 로 일부 supersede
-- raw 응답 캡처 fixture: [crates/data-clients/vworld/tests/fixtures/](../../crates/data-clients/vworld/tests/fixtures/)
-- 검증 패턴 baseline: [crates/data-clients/data-go-kr/tests/real_response_fixtures.rs](../../crates/data-clients/data-go-kr/tests/real_response_fixtures.rs)
+- raw 응답 캡처 fixture: `crates/data-clients/vworld/tests/fixtures/` (historical; Platform Core-owned after ADR 0034)
+- 검증 패턴 baseline: `crates/data-clients/data-go-kr/tests/real_response_fixtures.rs` (historical; Platform Core-owned after ADR 0034)
+> Current status (2026-05-28): Historical. V-World Catalog ingestion is now
+> owned by Platform Core under ADR 0034. Do not recreate the local Gongzzang
+> V-World client paths described below; Gongzzang consumes Platform Core
+> published contracts only.

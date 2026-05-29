@@ -2,11 +2,16 @@ import { z } from "zod";
 
 export const CORE_VECTOR_TILE_LAYER = "parcels" as const;
 export const OPTIONAL_VECTOR_TILE_LAYERS = ["admin", "complex"] as const;
+export const PARCEL_ANCHOR_AGGREGATE_VECTOR_TILE_LAYER = "parcel_anchor_aggregate" as const;
+export const PARCEL_ANCHOR_VECTOR_TILE_LAYER = "parcel_anchor" as const;
 export type VectorTileLayerId =
   | typeof CORE_VECTOR_TILE_LAYER
-  | (typeof OPTIONAL_VECTOR_TILE_LAYERS)[number];
+  | (typeof OPTIONAL_VECTOR_TILE_LAYERS)[number]
+  | typeof PARCEL_ANCHOR_AGGREGATE_VECTOR_TILE_LAYER
+  | typeof PARCEL_ANCHOR_VECTOR_TILE_LAYER;
 
 type EnvLike = Record<string, string | undefined>;
+const manifestUrlSymbol: unique symbol = Symbol("gongzzang.vectorTileManifestUrl");
 
 const uuidSchema = z.string().uuid();
 
@@ -51,34 +56,27 @@ const VectorTileArtifactSchema = z
 
 const tilesTemplateSchema = z
   .string()
-  .url()
-  .refine(
-    (value) => ["{version}", "{layer}", "{z}", "{x}", "{y}"].every((p) => value.includes(p)),
-    {
-      message: "tiles_url_template must contain {version}, {layer}, {z}, {x}, and {y}",
-    },
-  );
-
-const VectorTileManifestSchema = z
-  .object({
-    schema_version: z.number().int().min(1),
-    current_version: z.string().min(1),
-    previous_version: z.string().min(1),
-    tiles_url_template: tilesTemplateSchema,
-    published_at: z.string().datetime({ offset: true }),
-    artifacts: z.record(z.string(), VectorTileArtifactSchema),
-  })
-  .superRefine((manifest, ctx) => {
-    if (!manifest.artifacts[CORE_VECTOR_TILE_LAYER]) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "platform-core vector tile manifest must include parcels artifact",
-        path: ["artifacts", CORE_VECTOR_TILE_LAYER],
-      });
-    }
+  .min(1)
+  .refine((value) => ["{object_key_prefix}", "{z}", "{x}", "{y}"].every((p) => value.includes(p)), {
+    message: "tiles_url_template must contain {object_key_prefix}, {z}, {x}, and {y}",
   });
 
-export type VectorTileManifest = z.infer<typeof VectorTileManifestSchema>;
+const VectorTileManifestSchema = z.object({
+  schema_version: z.number().int().min(1),
+  current_version: z.string().min(1),
+  previous_version: z.string().min(1),
+  tiles_url_template: tilesTemplateSchema,
+  published_at: z.string().datetime({ offset: true }),
+  artifacts: z
+    .record(z.string(), VectorTileArtifactSchema)
+    .refine((artifacts) => Object.keys(artifacts).length > 0, {
+      message: "platform-core vector tile manifest must include at least one artifact",
+    }),
+});
+
+export type VectorTileManifest = z.infer<typeof VectorTileManifestSchema> & {
+  readonly [manifestUrlSymbol]?: string;
+};
 export type VectorTileArtifact = z.infer<typeof VectorTileArtifactSchema>;
 
 export type VectorTileSource = {
@@ -152,13 +150,13 @@ export async function fetchVectorTileManifest(
   if (!response.ok) {
     throw new Error(`vector tile manifest fetch failed: ${response.status}`);
   }
-  return parseVectorTileManifest(await response.json());
+  return attachManifestUrl(parseVectorTileManifest(await response.json()), manifestUrl);
 }
 
 export function buildVectorTileSource(
   manifest: VectorTileManifest,
   layer: VectorTileLayerId,
-  options: { promoteId?: string } = {},
+  options: { promoteId?: string; tileUrlBaseUrl?: string } = {},
 ): VectorTileSource {
   const artifact = manifest.artifacts[layer];
   if (!artifact) {
@@ -166,7 +164,12 @@ export function buildVectorTileSource(
   }
   const source: VectorTileSource = {
     type: "vector",
-    tiles: [materializeTilesUrl(manifest.tiles_url_template, manifest.current_version, layer)],
+    tiles: [
+      materializeTilesUrl(manifest.tiles_url_template, artifact, {
+        manifestUrl: manifest[manifestUrlSymbol],
+        tileUrlBaseUrl: options.tileUrlBaseUrl,
+      }),
+    ],
     minzoom: artifact.tile_min_zoom,
     maxzoom: artifact.tile_max_zoom,
   };
@@ -181,8 +184,41 @@ export function getVectorTileArtifact(
   return manifest.artifacts[layer];
 }
 
-function materializeTilesUrl(template: string, version: string, layer: string): string {
-  return template.replaceAll("{version}", version).replaceAll("{layer}", layer);
+function attachManifestUrl(manifest: VectorTileManifest, manifestUrl: string): VectorTileManifest {
+  return Object.defineProperty(manifest, manifestUrlSymbol, {
+    value: manifestUrl,
+    enumerable: false,
+  });
+}
+
+function materializeTilesUrl(
+  template: string,
+  artifact: VectorTileArtifact,
+  runtime: { manifestUrl?: string; tileUrlBaseUrl?: string },
+): string {
+  const materialized = template.replaceAll("{object_key_prefix}", artifact.object_key_prefix);
+  if (isAbsoluteHttpUrl(materialized)) return materialized;
+
+  const origin = resolveTileUrlOrigin(runtime);
+  if (materialized.startsWith("/")) return `${origin}${materialized}`;
+  return `${origin}/${materialized}`;
+}
+
+function resolveTileUrlOrigin(runtime: { manifestUrl?: string; tileUrlBaseUrl?: string }): string {
+  const baseUrl = runtime.tileUrlBaseUrl ?? runtime.manifestUrl;
+  if (!baseUrl) {
+    throw new Error("relative tiles_url_template requires a manifest URL or tileUrlBaseUrl");
+  }
+  return new URL(baseUrl).origin;
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function nonempty(value: string | undefined): string | undefined {

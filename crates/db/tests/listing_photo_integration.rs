@@ -86,7 +86,6 @@ async fn seed_listing(pool: &sqlx::PgPool, zsub: &str, email: &str) -> Id<Listin
         AreaM2::try_new(100.00).unwrap(),
         ListingTitle::try_new("photo test").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");
@@ -111,6 +110,24 @@ fn make_photo(listing_id: Id<ListingMarker>, order: i32) -> ListingPhoto {
         now,
     )
     .expect("photo")
+}
+
+fn make_pending_photo(listing_id: Id<ListingMarker>, order: i32) -> ListingPhoto {
+    let now = Utc::now();
+    ListingPhoto::try_new(
+        Id::new(),
+        listing_id,
+        &format!("listings/test/pending-photo-{order}.jpg"),
+        None,
+        None,
+        order,
+        None,
+        None,
+        None,
+        PhotoContentType::Jpeg,
+        now,
+    )
+    .expect("pending photo")
 }
 
 #[tokio::test]
@@ -176,6 +193,64 @@ async fn soft_deleted_photo_excluded_from_find() {
 
     let photos = repo.find_by_listing(&listing_id).await.unwrap();
     assert_eq!(photos.len(), 0);
+}
+
+#[tokio::test]
+async fn pending_upload_photo_excluded_from_find_by_listing() {
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let listing_id = seed_listing(&pool, "zsub-photo-pending-1", "pending1@example.com").await;
+    let repo = PgListingPhotoRepository::new(pool);
+
+    let confirmed = make_photo(listing_id.clone(), 0);
+    let pending = make_pending_photo(listing_id.clone(), 1);
+    repo.save(&confirmed, test_ctx()).await.unwrap();
+    repo.save(&pending, test_ctx()).await.unwrap();
+
+    let photos = repo.find_by_listing(&listing_id).await.unwrap();
+    assert_eq!(photos.len(), 1);
+    assert_eq!(photos[0].id, confirmed.id);
+    assert!(photos[0].is_upload_confirmed());
+}
+
+#[tokio::test]
+async fn find_returns_pending_photo_for_upload_confirmation() {
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let listing_id = seed_listing(&pool, "zsub-photo-pending-2", "pending2@example.com").await;
+    let repo = PgListingPhotoRepository::new(pool);
+
+    let pending = make_pending_photo(listing_id, 0);
+    repo.save(&pending, test_ctx()).await.unwrap();
+
+    let found = repo.find(&pending.id).await.expect("find").expect("found");
+    assert_eq!(found.id, pending.id);
+    assert!(!found.is_upload_confirmed());
+}
+
+#[tokio::test]
+async fn save_updates_upload_confirmation_metadata() {
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let listing_id = seed_listing(&pool, "zsub-photo-pending-3", "pending3@example.com").await;
+    let repo = PgListingPhotoRepository::new(pool);
+
+    let mut pending = make_pending_photo(listing_id, 0);
+    let requested_at = pending.uploaded_at;
+    repo.save(&pending, test_ctx()).await.unwrap();
+
+    let confirmed_at = DateTime::<Utc>::from_timestamp_micros(
+        (requested_at + chrono::Duration::minutes(5)).timestamp_micros(),
+    )
+    .expect("microsecond timestamp");
+    pending
+        .confirm_upload(None, None, 100, confirmed_at)
+        .expect("confirm");
+    repo.save(&pending, test_ctx()).await.unwrap();
+
+    let found = repo.find(&pending.id).await.expect("find").expect("found");
+    assert_eq!(found.file_size_bytes, Some(100));
+    assert_eq!(found.uploaded_at, confirmed_at);
 }
 
 #[tokio::test]

@@ -1,0 +1,109 @@
+{
+  "schema_version": "gongzzang.platform_integration.operations_policy.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "telemetry": {
+    "required_span_attributes": [
+      "service.name",
+      "peer.service",
+      "http.request.method",
+      "url.path",
+      "platform_integration.call_id",
+      "platform_integration.policy_id",
+      "platform_integration.direction",
+      "platform_integration.decision",
+      "platform_core.event_id",
+      "platform_core.event_type",
+      "correlation_id"
+    ],
+    "forbidden_attributes": [
+      "authorization",
+      "cookie",
+      "set-cookie",
+      "platform_core_service_token",
+      "platform_core_webhook_secret"
+    ]
+  },
+  "slos": [
+    {
+      "id": "gongzzang_api_to_platform_core_catalog_read",
+      "surface": "platform-core catalog read",
+      "availability_percent": 99.9,
+      "p95_latency_ms": 300,
+      "p99_latency_ms": 1000,
+      "timeout_ms": 5000,
+      "alert_policy": "platform_core_catalog_read_slo_burn",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    },
+    {
+      "id": "platform_core_outbox_to_gongzzang_webhook",
+      "surface": "platform-core webhook receiver",
+      "availability_percent": 99.9,
+      "p95_latency_ms": 250,
+      "p99_latency_ms": 1000,
+      "duplicate_ack_success_percent": 100,
+      "dead_letter_alert_after_count": 1,
+      "alert_policy": "platform_core_webhook_dead_letter_or_latency",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    }
+  ],
+  "alerts": [
+    {
+      "id": "platform_core_catalog_read_slo_burn",
+      "signal": "latency_or_error_budget_burn",
+      "severity": "page",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    },
+    {
+      "id": "platform_core_catalog_circuit_open",
+      "signal": "circuit_breaker_open",
+      "severity": "page",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    },
+    {
+      "id": "platform_core_webhook_dead_letter_or_latency",
+      "signal": "dead_letter_count_or_handler_latency",
+      "severity": "page",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    },
+    {
+      "id": "platform_core_webhook_replay_surge",
+      "signal": "duplicate_event_rate",
+      "severity": "ticket",
+      "runbook": "docs/runbooks/platform-core-integration-operations.md"
+    }
+  ],
+  "load_fault_tests": [
+    {
+      "id": "webhook_duplicate_burst_ack",
+      "test_file": "apps/web/tests/unit/platform-core-events.test.ts",
+      "evidence": "acknowledges duplicate platform-core event bursts without repeated side effects",
+      "required": true
+    },
+    {
+      "id": "webhook_dead_letter_poison_event",
+      "test_file": "apps/web/tests/unit/platform-core-events.test.ts",
+      "evidence": "dead_letter",
+      "required": true
+    },
+    {
+      "id": "anchor_import_processing_reclaim",
+      "test_file": "crates/db/tests/platform_core_anchor_import_integration.rs",
+      "evidence": "processing_inbox_event_can_be_reclaimed_for_retry_after_worker_exit",
+      "required": true
+    },
+    {
+      "id": "catalog_circuit_breaker_timeout_fault",
+      "test_file": "crates/circuit-breaker/src/execute.rs",
+      "evidence": "execute_timeout_records_failure",
+      "required": true
+    },
+    {
+      "id": "catalog_circuit_breaker_open_fault",
+      "test_file": "crates/circuit-breaker/src/execute.rs",
+      "evidence": "execute_returns_open_when_breaker_open",
+      "required": true
+    }
+  ]
+}

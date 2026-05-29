@@ -170,10 +170,57 @@ impl ListingPhoto {
         Ok(())
     }
 
+    /// Mark the R2 object as present after storage verification.
+    ///
+    /// `width_px` and `height_px` can stay `None` when the storage confirmation path only has
+    /// object metadata. `file_size_bytes` is required because it proves a concrete object was
+    /// observed instead of only a pre-signed URL being issued.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ListingPhotoError`] when the photo was deleted or supplied metadata is invalid.
+    pub const fn confirm_upload(
+        &mut self,
+        width_px: Option<i32>,
+        height_px: Option<i32>,
+        file_size_bytes: i64,
+        confirmed_at: DateTime<Utc>,
+    ) -> Result<(), ListingPhotoError> {
+        if self.deleted_at.is_some() {
+            return Err(ListingPhotoError::DeletedCannotConfirm);
+        }
+        if let Some(width) = width_px {
+            if width <= 0 {
+                return Err(ListingPhotoError::InvalidWidthPx { actual: width });
+            }
+        }
+        if let Some(height) = height_px {
+            if height <= 0 {
+                return Err(ListingPhotoError::InvalidHeightPx { actual: height });
+            }
+        }
+        if file_size_bytes <= 0 {
+            return Err(ListingPhotoError::InvalidFileSizeBytes {
+                actual: file_size_bytes,
+            });
+        }
+        self.width_px = width_px;
+        self.height_px = height_px;
+        self.file_size_bytes = Some(file_size_bytes);
+        self.uploaded_at = confirmed_at;
+        Ok(())
+    }
+
     /// 활성 여부 (soft-delete 안 됨).
     #[must_use]
     pub const fn is_active(&self) -> bool {
         self.deleted_at.is_none()
+    }
+
+    /// Whether a storage object has been verified for this photo.
+    #[must_use]
+    pub const fn is_upload_confirmed(&self) -> bool {
+        self.file_size_bytes.is_some()
     }
 }
 

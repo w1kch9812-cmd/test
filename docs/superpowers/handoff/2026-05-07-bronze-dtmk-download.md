@@ -74,7 +74,7 @@ cargo run -p etl-base-layer -- gold \
 
 사용자 정신: *정적 데이터는 우리 저장, runtime API 호출 0*.
 
-현재 [crates/parcel-lookup/src/vworld_lookup.rs](../../../crates/parcel-lookup/src/vworld_lookup.rs) = runtime V-World API 호출. 폐기 path:
+현재 `crates/parcel-lookup/src/vworld_lookup.rs` = runtime V-World API 호출. 폐기 path:
 
 1. ETL Silver — `parcel` 테이블 적재 (PNU + 지번 + 좌표 + jiga + geom)
    - `services/etl-base-layer/src/silver/parcel.rs` 신규
@@ -130,4 +130,4 @@ cd crates/parcel-lookup
 - [ADR 0016](../../adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) — Bronze/Gold medallion
 - [ADR 0021](../../adr/0021-static-vector-tile-decomposition.md) — flat .pbf SSS path
 - [ADR 0022](../../adr/0022-bronze-scraping-isolated-python-service.md) — scraping 격리 Python
-- [services/scraper-py/README.md](../../../services/scraper-py/README.md) — Python 운영 가이드
+- `services/scraper-py/README.md` — historical Python 운영 가이드 path; Platform Core-owned after ADR 0034

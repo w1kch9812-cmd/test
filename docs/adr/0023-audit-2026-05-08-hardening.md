@@ -6,6 +6,13 @@
 | 상태 | Accepted (partial — 잔여 항목 handoff) |
 | 선행 | Codex `/codex:rescue` audit 2026-05-08 (session `019e0525`) |
 
+## 후속 상태 (2026-05-28)
+
+Raw-capture 관련 handoff 는 ADR 0034 및 Platform Core M3.2 physical extraction 으로
+superseded 되었다. `PgRawCapture`, `R2RawCapture`, `raw_capture_sync`,
+`raw-capture-client` 는 gongzzang workspace 에 존재하면 안 되며, Catalog raw lineage 는
+Platform Core 책임이다.
+
 ## 결정
 
 Codex audit (2026-05-08) 의 **15 finding 중 7건 즉시 fix + 8건 박제 후 handoff**. 즉시 fix = 보안 critical + observability major + 안전한 minor. handoff = 큰 refactor (file split, startup `Result<>` 패턴) + 외부 작업 (`.env` rotation, infra OIDC).
@@ -84,3 +91,7 @@ Codex sandbox = read-only → 직접 fix 불가 → Claude 가 verify-then-fix p
 - Codex session: `019e0525-dbfa-7f22-84fe-9fbccee36f3f` (read-only audit)
 - audit findings dump: `node codex-companion.mjs result task-mow81q9n-36jgec`
 - handoff doc: `docs/superpowers/handoff/2026-05-08-codex-audit-handoff.md` (작성 예정)
+> Current status (2026-05-28): Historical raw-capture and Catalog observability
+> findings are superseded by ADR 0034 and Platform Core M3.2 extraction. Do not
+> implement `PgRawCapture`, `R2RawCapture`, `raw_capture_sync`, or local Catalog
+> API health paths in Gongzzang.

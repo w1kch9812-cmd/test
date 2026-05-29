@@ -12,8 +12,6 @@ describe("ListingCardSchema (zod)", () => {
       price_krw: 8_000_000_000,
       // deposit_krw, monthly_rent_krw, thumbnail_url 키 자체 없음
       area_m2: 3960,
-      lat: 37.5,
-      lng: 127.0,
       view_count: 0,
       bookmark_count: 0,
       is_bookmarked: false,
@@ -35,8 +33,6 @@ describe("ListingCardSchema (zod)", () => {
       monthly_rent_krw: 1_000_000,
       thumbnail_url: null, // null 도 OK
       area_m2: 100,
-      lat: 37.5,
-      lng: 127.0,
       view_count: 0,
       bookmark_count: 0,
       is_bookmarked: false,

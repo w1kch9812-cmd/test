@@ -9,10 +9,12 @@
 | 정보 종류 | 진짜 SSOT | 사본 (재구성 가능) | 위반 자동 차단 |
 |---------|---------|---------|---------|
 | **사용자 데이터** | PostgreSQL `user` 테이블 | Redis 세션, 검색 인덱스 | DB 외 직접 변경 금지 (linter) |
-| **공공 API raw 응답** | DB의 `raw_response JSONB` | Redis 캐시, 분석 마트 | 컬럼 누락 검증 (sqlx 스키마) |
-| **비즈니스 규칙** | `crates/domain/*` Rust 코드 | 문서, 테스트 (둘 다 코드 따라옴) | 도메인 외부 비즈니스 로직 = clippy lint |
+| **Catalog 공공 API raw 응답** | Platform Core object lake / lineage store | Gongzzang legacy migration ledger only | `check-platform-core-boundary.ps1` |
+| **Gongzzang-owned 외부 API raw 응답** | 소유 서비스별 archive/lineage contract | Redis 캐시, 분석 마트 | 소유권 ADR + boundary gate |
+| **비즈니스 규칙** | Gongzzang-owned `crates/domain/*` Rust 코드 | 문서, 테스트 (둘 다 코드 따라옴) | 도메인 외부 비즈니스 로직 = clippy lint |
 | **API 계약** | Rust 코드 + utoipa 매크로 | `openapi.json` (자동), TS 타입 (자동) | TS 타입 수동 작성 차단 (dependency-cruiser) |
-| **DB 스키마** | `migrations/*.sql` (`<MMmmm>_<snake_case>.sql`) | Rust 타입 + `.sqlx/` prepare metadata | 수동 ALTER TABLE 금지 |
+| **DB 스키마** | `migrations/*.sql` (`<MMmmm>_<snake_case>.sql`) | Rust 타입 + `.sqlx/` prepare metadata | 수동 ALTER TABLE 금지 + Platform Core legacy schema ledger |
+| **Gongzzang DB migration smoke** | `.github/workflows/db-migrations.yml` + `tests/migrations/test_v001_full.sh` | disposable PostGIS verification output | `check-platform-core-boundary.ps1` |
 | **인프라 설정** | Pulumi TypeScript 코드 | AWS 콘솔 (절대 수동 변경 금지) | Pulumi `refresh` drift 감지 → 알림 |
 | **시크릿** | AWS Secrets Manager / Vault | `.env.example`은 placeholder만 | gitleaks |
 | **도메인 용어** | `docs/glossary.md` | 모든 코드/UI/문서 사용 | grep CI 룰 |
@@ -23,6 +25,18 @@
 | **사용자 권한** | Zitadel + DB `user_role` | 클라이언트 캐시 | JWT scope 검증 |
 | **에러 코드** | `crates/api-types/error.rs` enum | OpenAPI spec, TS 타입 | enum exhaustive match |
 | **컨벤션** | `docs/conventions/*.md` | 도구 설정 (biome.json, clippy.toml) | 도구가 자동 강제 |
+| **Platform Core/Gongzzang 경계** | `docs/architecture/platform-core-boundary.v1.json` | ADR 0034, AGENTS.md 요약 | boundary CI gates |
+| **Platform Core canonical Catalog tables** | Platform Core database | Gongzzang product references only | `forbidden_canonical_catalog_tables` + boundary CI gates |
+| **Platform Core database connection** | Platform Core service runtime only | Gongzzang has no DB connection copy | direct DB reference regex + boundary CI gates |
+| **Platform Core HTTP env contract** | `.env.example` + `docs/architecture/platform-core-boundary.v1.json` | runtime env values | root env example guard |
+| **Platform Core service auth contract** | `docs/architecture/platform-core-boundary.v1.json` + `PLATFORM_CORE_SERVICE_TOKEN` / `PLATFORM_CORE_WEBHOOK_SECRET` runtime secrets | `.env.example` placeholders only | boundary guard + env schema + focused auth tests |
+| **Platform Integration Policy** | `docs/architecture/platform-integration/index.v1.json` + folder policies | traffic-auth registry, Platform Core boundary, runtime code, CI gates | `check-platform-integration-policy.ps1` |
+| **Gongzzang local Postgres port** | `infrastructure/docker/docker-compose.yml` + `infrastructure/docker/.env.example` | local `.env` `DATABASE_URL` | local Postgres port contract in `check-platform-core-boundary.ps1` |
+| **Platform Core Catalog API consumer contract** | `docs/architecture/platform-core-catalog-api-contract.v1.pin.json` | `../platform-core/docs/openapi/catalog.v1.yaml` | `check-platform-core-catalog-api-contract.ps1` |
+| **Platform Core Catalog HTTP adapter placement** | `services/api/src/platform_core_*` | `parcel-lookup` exposes port/projection only | `check-platform-core-dependency-boundary.ps1` + `check-platform-core-catalog-api-contract.ps1` |
+| **Platform Core public/reference vector tile lifecycle** | Platform Core Catalog | Gongzzang `etl-base-layer` handover stub only | `check-platform-core-boundary.ps1` + `cargo test -p etl-base-layer` |
+| **Platform Core Catalog public API drift observability** | Platform Core observability pipeline | Gongzzang legacy migration ledger only | `check-platform-core-boundary.ps1` |
+| **Platform Core Catalog workflow ownership** | Platform Core GitHub workflows / scheduler | Gongzzang has no Catalog source refresh workflow copy | workflow token scan in `check-platform-core-boundary.ps1` |
 | **결정 이력** | `docs/adr/NNNN-*.md` | (다른 곳 인용은 링크) | 새 결정은 코드 작성 *전* ADR 필수 |
 | **메모리 (자동)** | `memory/*.md` (MEMORY.md 인덱스) | (없음 — 컨텍스트별 동적) | 직접 수정 OK, 인덱스만 |
 | **SSS 헌법** | `docs/sss-charter.md` | (다른 곳 인용은 링크) | (헌법 자체) |
@@ -65,10 +79,10 @@ docs/
 
 ```
 crates/
-├── domain/                  ← 비즈니스 규칙 SSOT
+├── domain/                  ← Gongzzang-owned 비즈니스 규칙 SSOT
 ├── shared-kernel/           ← 공유 값 객체 SSOT (Pnu, Money, Geometry 등)
 ├── api-types/               ← API 계약 + 에러 코드 SSOT
-├── data-clients/            ← 외부 API HTTP 클라이언트 (각 API 1폴더)
+├── data-clients/            ← Gongzzang-owned 외부 API HTTP 클라이언트만
 └── db/                      ← Repository 구현 (도메인 trait 위임)
 
 services/                    ← 실행 가능 (API/Worker/Pipeline)
@@ -94,6 +108,11 @@ packages/                    ← TS 라이브러리 (UI/api-client/map)
 | 8 | 파일 ≤500 / 1500 위반 | 자체 file-size hook + CI | pre-commit + CI |
 | 9 | 글로서리 외 도메인 용어 | CI grep 룰 (`Property`, `Land`, `Realtor` 등) | CI |
 | 10 | TODO/HACK/XXX/`_TEMP` 코드 | clippy `todo` deny + Biome 자체 룰 | pre-commit + CI |
+| 11 | Platform Core 소유 Catalog/ETL/raw crate 재도입 | `check-platform-core-dependency-boundary.ps1` | pre-push + CI |
+| 12 | Platform Core legacy schema token 신규 사용 | `allowed_legacy_schema_tokens` ledger | pre-push + CI |
+| 13 | Platform Core Catalog API consumer drift | `check-platform-core-catalog-api-contract.ps1` | pre-push + CI |
+| 14 | Platform Core vector tile ETL/tooling/workflow 재도입 | `check-platform-core-boundary.ps1` + `etl-base-layer` handover tests | pre-push + CI |
+| 15 | Platform Core Catalog API drift observability 재도입 | `check-platform-core-boundary.ps1` | pre-push + CI |
 
 ---
 

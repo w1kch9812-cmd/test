@@ -183,7 +183,7 @@ pub struct MarkAllResponse {
 /// `POST /me/notifications/mark-all-read?kind=...` — bulk 읽음.
 ///
 /// `kind` 미지원 코드 = `Other` fallback (forward-compat — 알 수 없는 kind 도
-/// 안전하게 NotificationKind::Other 매칭. SP6-v 1차 = 알려진 3 kind 만 의미
+/// 안전하게 `NotificationKind::Other` 매칭. SP6-v 1차 = 알려진 3 kind 만 의미
 /// 있음).
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, kind = %q.kind))]
 pub async fn mark_all_read(

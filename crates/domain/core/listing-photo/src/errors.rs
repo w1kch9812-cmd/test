@@ -20,4 +20,25 @@ pub enum ListingPhotoError {
         /// 실제 길이.
         actual: usize,
     },
+    /// Confirming a soft-deleted photo is not allowed.
+    #[error("deleted photo cannot be confirmed")]
+    DeletedCannotConfirm,
+    /// `width_px` must be positive when present.
+    #[error("width_px must be > 0 (got {actual})")]
+    InvalidWidthPx {
+        /// Actual value.
+        actual: i32,
+    },
+    /// `height_px` must be positive when present.
+    #[error("height_px must be > 0 (got {actual})")]
+    InvalidHeightPx {
+        /// Actual value.
+        actual: i32,
+    },
+    /// `file_size_bytes` must be positive after storage confirmation.
+    #[error("file_size_bytes must be > 0 (got {actual})")]
+    InvalidFileSizeBytes {
+        /// Actual value.
+        actual: i64,
+    },
 }

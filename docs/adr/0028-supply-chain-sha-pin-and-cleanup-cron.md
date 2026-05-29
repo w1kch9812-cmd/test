@@ -31,7 +31,7 @@ best practice 의 *Pin to immutable identifier*).
 ```
 
 **예외 — `dtolnay/rust-toolchain`**: 본 action 은 *release tag* 가 없음
-(`@stable` / `@nightly` / `@1.88` 가 *channel* 형식 — 의도된 floating ref).
+(`@stable` / `@nightly` / `@1.91.1` 가 *channel* 형식 — 의도된 floating ref).
 SHA pin + `# @<channel>` 주석 형식 허용 (e.g. `@21dc36...  # @stable`):
 
 ```yaml

@@ -1,5 +1,5 @@
-//! `PgListingRepository` 통합 테스트 — 21 필드 round-trip, `PostGIS`, `OCC`,
-//! `ListingMarker` projection, SP5-iv transactional `audit_log` /
+//! `PgListingRepository` integration tests: aggregate round-trip, `OCC`,
+//! listing repository projections, SP5-iv transactional `audit_log` /
 //! `outbox_event` 검증.
 
 #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -15,11 +15,9 @@ use db::user::PgUserRepository;
 use listing_domain::entity::Listing;
 use listing_domain::repository::{ListingRepository, RepoError};
 use shared_kernel::area::AreaM2;
-use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::description::Description;
 use shared_kernel::domain_event::DomainEvent;
 use shared_kernel::email::Email;
-use shared_kernel::geometry::PointSrid;
 use shared_kernel::id::{Id, UserMarker};
 use shared_kernel::listing_status::ListingStatus;
 use shared_kernel::listing_title::ListingTitle;
@@ -88,14 +86,13 @@ fn make_listing_sale(owner_id: Id<UserMarker>) -> Listing {
         AreaM2::try_new(330.58).unwrap(),
         ListingTitle::try_new("강남 공장 매물 (테스트)").unwrap(),
         Description::try_new("샘플 설명").unwrap(),
-        Some(PointSrid::try_new_wgs84(127.0276, 37.4979).unwrap()),
         now,
     )
     .expect("listing")
 }
 
 #[tokio::test]
-async fn round_trip_listing_with_postgis() {
+async fn round_trip_listing_without_product_coordinate() {
     let pool = setup_test_pool().await;
     truncate_all(&pool).await;
     let owner = seed_owner(&pool, "zsub-listing-1", "owner1@example.com").await;
@@ -116,24 +113,6 @@ async fn round_trip_listing_with_postgis() {
     assert_eq!(fetched.title.as_str(), listing.title.as_str());
     assert_eq!(fetched.description.as_str(), listing.description.as_str());
     assert!((fetched.area.as_f64() - listing.area.as_f64()).abs() < 0.01);
-
-    let p = fetched.geom_point.expect("geom present");
-    assert!((p.lng - 127.0276).abs() < 1e-9);
-    assert!((p.lat - 37.4979).abs() < 1e-9);
-}
-
-#[tokio::test]
-async fn save_without_geom_point() {
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let owner = seed_owner(&pool, "zsub-listing-2", "owner2@example.com").await;
-    let repo = PgListingRepository::new(pool);
-
-    let mut listing = make_listing_sale(owner);
-    listing.geom_point = None;
-    repo.save(&listing, test_ctx()).await.expect("save");
-    let fetched = repo.find(&listing.id).await.unwrap().unwrap();
-    assert!(fetched.geom_point.is_none());
 }
 
 #[tokio::test]
@@ -239,7 +218,6 @@ async fn save_monthly_rent_with_deposit_and_rent() {
         AreaM2::try_new(50.00).unwrap(),
         ListingTitle::try_new("월세 사무실").unwrap(),
         Description::try_new("").unwrap(),
-        None,
         now,
     )
     .expect("listing");
@@ -249,33 +227,6 @@ async fn save_monthly_rent_with_deposit_and_rent() {
     assert_eq!(fetched.deposit, listing.deposit);
     assert_eq!(fetched.monthly_rent, listing.monthly_rent);
     assert_eq!(fetched.transaction_type, TransactionType::MonthlyRent);
-}
-
-#[tokio::test]
-async fn find_markers_in_bbox_returns_active_only() {
-    let pool = setup_test_pool().await;
-    truncate_all(&pool).await;
-    let owner = seed_owner(&pool, "zsub-listing-8", "owner8@example.com").await;
-    let repo = PgListingRepository::new(pool.clone());
-
-    // Draft 매물 — bbox 안 — markers 에 안 잡힘 (status='active' 필터).
-    let l1 = make_listing_sale(owner.clone());
-    repo.save(&l1, test_ctx()).await.unwrap();
-
-    let bbox = BoundingBox::try_new_wgs84(126.9, 37.4, 127.1, 37.6).unwrap();
-    let markers = repo.find_markers_in_bbox(bbox).await.expect("ok");
-    assert_eq!(markers.len(), 0); // Draft 라 active 필터 통과 안 함.
-
-    // 직접 SQL 로 status 'active' 변경.
-    sqlx::query("update listing set status = 'active' where id = $1")
-        .bind(l1.id.as_str())
-        .execute(&pool)
-        .await
-        .unwrap();
-
-    let markers = repo.find_markers_in_bbox(bbox).await.expect("ok");
-    assert_eq!(markers.len(), 1);
-    assert_eq!(markers[0].id.as_str(), l1.id.as_str());
 }
 
 // ---- SP5-iv: transactional audit_log + outbox_event 검증 ----

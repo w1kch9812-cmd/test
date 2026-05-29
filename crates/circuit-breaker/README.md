@@ -17,14 +17,14 @@
 
 ## 정책
 - 모든 외부 API 호출은 *반드시* 이 crate 미들웨어 통과
-- 각 외부 API별 정책 = `crates/data-clients/<api>/policy.rs`에 명시
+- 각 외부 API별 정책은 owning adapter 또는 service boundary에 명시
 - Open 상태 진입 = Sentry alert + Slack 알림
 - 직접 reqwest 호출 = lint 차단 (sub-project 5+)
 
-## 정책 예시 (V-World)
-- timeout: 10초
-- retry: 1회 (1s, 2s 지수)
-- circuit open: 5초 내 5회 실패 → 30초 차단
-- fallback: cached response (TTL 24h)
+## 정책 예시 (Platform Core published API)
+- timeout: 5초
+- retry: 1회 (500ms base 지수 백오프)
+- circuit open: 10초 내 5회 실패 → 30초 차단
+- fallback: 호출 adapter가 명시적으로 소유할 때만 허용
 
-→ @docs/backend/circuit-breaker.md, → @docs/data-sources/v-world.md
+→ @docs/backend/circuit-breaker.md

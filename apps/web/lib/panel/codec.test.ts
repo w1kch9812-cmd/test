@@ -17,11 +17,11 @@ describe("g1Codec", () => {
       v: 1,
       entries: [
         { kind: "parcel", id: "1168010100107370000", view: "summary" },
-        { kind: "listing", id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", view: "summary" },
+        { kind: "listing", id: "lst_01HXY3NK0Z9F6S1B2C3D4E5F6G", view: "summary" },
       ],
     };
     expect(g1Codec.serialize(stack)).toBe(
-      "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary",
+      "parcel:1168010100107370000.summary>listing:lst_01HXY3NK0Z9F6S1B2C3D4E5F6G.summary",
     );
   });
 
@@ -30,8 +30,7 @@ describe("g1Codec", () => {
   });
 
   it("round-trips a 2-entry stack", () => {
-    const s =
-      "parcel:1168010100107370000.summary>listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary";
+    const s = "parcel:1168010100107370000.summary>listing:lst_01HXY3NK0Z9F6S1B2C3D4E5F6G.summary";
     const parsed = g1Codec.deserialize(s);
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(g1Codec.serialize(parsed.value)).toBe(s);
@@ -51,6 +50,12 @@ describe("g1Codec", () => {
 
   it("rejects PNU pattern violation", () => {
     const r = g1Codec.deserialize("parcel:notapnu.summary");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toBe(ParseError.IdPatternViolation);
+  });
+
+  it("rejects UUID listing ids because Listing ids are lst-prefixed ULIDs", () => {
+    const r = g1Codec.deserialize("listing:aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.summary");
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toBe(ParseError.IdPatternViolation);
   });

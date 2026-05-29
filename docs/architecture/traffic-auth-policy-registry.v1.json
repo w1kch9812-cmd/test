@@ -1,0 +1,841 @@
+{
+  "schema_version": "gongzzang.traffic_auth_policy_registry.v1",
+  "repo_slug": "gongzzang",
+  "decision_sources": [
+    "docs/adr/0037-pnu-anchor-pbf-marker-tiles.md",
+    "docs/adr/0038-listing-marker-serving-index-filter-mask.md",
+    "docs/architecture/platform-core-boundary.v1.json",
+    "../platform-core/docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md"
+  ],
+  "policy_principles": [
+    "Policy definition is centralized in this registry; enforcement can happen at edge, proxy, API, mesh, and data layers.",
+    "mTLS or service identity answers who may call; rate, concurrency, cache, and budget policies answer how much work the system may accept.",
+    "Public anonymous routes are never confidential surfaces; they may expose only minimized derived data and must not expose raw, private, business-verified, contact, or bulk-export data.",
+    "Browse/read paths may use derived serving indexes and short cache TTLs; authoritative write, permission, and payment decisions must not rely on stale cache.",
+    "Public map routes must not expose bbox or bounds request shapes."
+  ],
+  "exposure_classes": [
+    {
+      "class": "public_derived",
+      "description": "Browser-visible public surface for minimized data that is safe to treat as non-confidential.",
+      "browser_visible": true,
+      "direct_browser_access": "allowed",
+      "confidentiality_guarantee": "none",
+      "required_controls": [
+        "data_minimization",
+        "rate_limit",
+        "response_budget_or_aggregate_only",
+        "abuse_telemetry"
+      ],
+      "forbidden_data_classes": [
+        "raw_listing_detail",
+        "private_listing",
+        "business_verified_listing_detail",
+        "contact_data",
+        "raw_platform_core_catalog",
+        "bulk_listing_export"
+      ]
+    },
+    {
+      "class": "authenticated_user",
+      "description": "Browser-visible user API that requires a valid session and per-request authorization.",
+      "browser_visible": true,
+      "direct_browser_access": "session_required",
+      "confidentiality_guarantee": "authorization_enforced_per_request",
+      "required_controls": ["session", "authorization", "audit_log", "rate_limit"],
+      "forbidden_for_anonymous": true
+    },
+    {
+      "class": "privileged",
+      "description": "Staff, broker, owner, or business-verified workflow surface requiring stronger role or entitlement checks.",
+      "browser_visible": true,
+      "direct_browser_access": "session_and_role_required",
+      "confidentiality_guarantee": "authorization_enforced_per_request",
+      "required_controls": ["session", "role_or_entitlement", "audit_log", "abuse_detection"]
+    },
+    {
+      "class": "service_to_service",
+      "description": "Internal service API surface that must not be callable by arbitrary browsers.",
+      "browser_visible": false,
+      "direct_browser_access": "forbidden",
+      "required_controls": ["service_identity", "allow_list", "audit_log"],
+      "target_required_controls": ["mtls_or_short_lived_service_identity"]
+    }
+  ],
+  "public_route_policies": [
+    {
+      "id": "gongzzang.public_map.listing_marker_tile",
+      "description": "Anonymous browser access to Gongzzang-owned listing marker MVT/PBF tiles.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerTilesPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-tiles/listing",
+      "backend_route": "/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-tile",
+        "limit": 600,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["layer", "z", "x", "y", "filter_hash"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "response_budget": {
+        "max_tile_bytes": 262144,
+        "max_features": 10000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["derived_marker_tile"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_count",
+      "description": "Anonymous browser access to exact listing marker count for a registered filter hash.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "exact",
+      "proxy_path_source": "API.proxy.listingMarkerCounts",
+      "proxy_path": "/api/proxy/map/v1/marker-counts/listing",
+      "backend_route": "/map/v1/marker-counts/listing",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-count",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["filter_hash"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["aggregate_count"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_filter",
+      "description": "Anonymous browser registration of normalized listing marker filters.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "exact",
+      "proxy_path_source": "API.proxy.listingMarkerFilters",
+      "proxy_path": "/api/proxy/map/v1/marker-filters/listing",
+      "backend_route": "/map/v1/marker-filters/listing",
+      "methods": ["POST"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-filter",
+        "limit": 60,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "filter_policy": {
+        "normalized_hash_required": true,
+        "idempotent_upsert_required": true
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["opaque_filter_hash"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_mask",
+      "description": "Anonymous browser access to marker id masks for a loaded listing marker tile.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "LISTING_MARKER_MASK_PREFIX",
+      "proxy_path": "/api/proxy/map/v1/marker-masks/listing",
+      "backend_route": "/map/v1/marker-masks/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-mask",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["z", "x", "y", "filter_hash", "base_version"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "response_budget": {
+        "max_mask_ids": 20000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["marker_id_mask"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    }
+  ],
+  "auth_route_policies": [
+    {
+      "id": "gongzzang.auth.login",
+      "description": "Browser login start endpoint rate policy.",
+      "path_source": "API.auth.login",
+      "methods": ["POST"],
+      "rate_policy": {
+        "key_prefix": "auth:login",
+        "key_strategy": "client_ip",
+        "limit": 5,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "id": "gongzzang.auth.callback",
+      "description": "OIDC callback endpoint rate policy.",
+      "path_source": "API.auth.callback",
+      "methods": ["GET"],
+      "rate_policy": {
+        "key_prefix": "auth:callback",
+        "key_strategy": "client_ip",
+        "limit": 10,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "id": "gongzzang.auth.refresh",
+      "description": "Session refresh endpoint rate policy.",
+      "path_source": "API.auth.refresh",
+      "methods": ["POST"],
+      "rate_policy": {
+        "key_prefix": "auth:refresh",
+        "key_strategy": "session_or_anon",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    }
+  ],
+  "route_rate_profiles": [
+    {
+      "id": "api_proxy.authenticated_read",
+      "description": "Per-user read budget for authenticated API proxy routes.",
+      "key_prefix": "api-proxy:authenticated-read",
+      "key_strategy": "session_sub",
+      "limit": 240,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    },
+    {
+      "id": "api_proxy.authenticated_write",
+      "description": "Per-user mutation budget for authenticated API proxy routes.",
+      "key_prefix": "api-proxy:authenticated-write",
+      "key_strategy": "session_sub",
+      "limit": 120,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    },
+    {
+      "id": "api_proxy.privileged_write",
+      "description": "Per-user mutation budget for role-gated broker/operator API proxy routes.",
+      "key_prefix": "api-proxy:privileged-write",
+      "key_strategy": "session_sub",
+      "limit": 60,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    }
+  ],
+  "page_route_policies": [
+    {
+      "id": "gongzzang.page.admin",
+      "description": "Admin console page gate.",
+      "path_kind": "prefix",
+      "path": "/admin",
+      "required_roles": ["Admin", "Broker", "Operator"]
+    },
+    {
+      "id": "gongzzang.page.listing_create",
+      "description": "Listing creation page gate.",
+      "path_kind": "exact",
+      "path_source": "ROUTES.listings.new",
+      "required_roles": ["Broker"]
+    },
+    {
+      "id": "gongzzang.page.listing_edit",
+      "description": "Listing edit page gate.",
+      "path_kind": "prefix_suffix",
+      "prefix_source": "ROUTES.listings.index",
+      "suffix": "/edit",
+      "required_roles": ["Broker"]
+    }
+  ],
+  "api_proxy_route_policies": [
+    {
+      "id": "gongzzang.api_proxy.public_marker_tiles",
+      "target_path_kind": "template",
+      "target_path": "map/v1/marker-tiles/listing/:z/:x/:y_pbf",
+      "methods": ["GET"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.public_marker_counts",
+      "target_path_kind": "exact",
+      "target_path": "map/v1/marker-counts/listing",
+      "methods": ["GET"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.public_marker_filters",
+      "target_path_kind": "exact",
+      "target_path": "map/v1/marker-filters/listing",
+      "methods": ["POST"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.public_marker_masks",
+      "target_path_kind": "template",
+      "target_path": "map/v1/marker-masks/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.listings_collection_read",
+      "target_path_kind": "exact",
+      "target_path": "listings",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.listings_collection_create",
+      "target_path_kind": "exact",
+      "target_path": "listings",
+      "methods": ["POST"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_detail_read",
+      "target_path_kind": "template",
+      "target_path": "listings/:id",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_detail_update",
+      "target_path_kind": "template",
+      "target_path": "listings/:id",
+      "methods": ["PATCH"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_submit_for_review",
+      "target_path_kind": "template",
+      "target_path": "listings/:id/submit-for-review",
+      "methods": ["POST"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_revise",
+      "target_path_kind": "template",
+      "target_path": "listings/:id/revise",
+      "methods": ["POST"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_bookmark",
+      "target_path_kind": "template",
+      "target_path": "listings/:id/bookmark",
+      "methods": ["POST", "DELETE"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_photos_collection",
+      "target_path_kind": "template",
+      "target_path": "listings/:id/photos",
+      "methods": ["POST"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_photo_read_delete",
+      "target_path_kind": "template",
+      "target_path": "listings/:listing_id/photos/:photo_id",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_photo_delete",
+      "target_path_kind": "template",
+      "target_path": "listings/:listing_id/photos/:photo_id",
+      "methods": ["DELETE"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.listing_photo_confirm",
+      "target_path_kind": "template",
+      "target_path": "listings/:listing_id/photos/:photo_id/confirm",
+      "methods": ["POST"],
+      "exposure_class": "privileged",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.notifications_unread_count",
+      "target_path_kind": "exact",
+      "target_path": "me/notifications/unread-count",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.notification_mark_read",
+      "target_path_kind": "template",
+      "target_path": "me/notifications/:id/read",
+      "methods": ["PATCH"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.notifications_mark_all_read",
+      "target_path_kind": "exact",
+      "target_path": "me/notifications/mark-all-read",
+      "methods": ["POST"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.api_proxy.my_bookmarks",
+      "target_path_kind": "exact",
+      "target_path": "me/bookmarks",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.parcel_read",
+      "target_path_kind": "template",
+      "target_path": "api/parcels/:pnu",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.api_proxy.buildings_read",
+      "target_path_kind": "exact",
+      "target_path": "api/buildings",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    }
+  ],
+  "backend_route_policies": [
+    {
+      "id": "gongzzang.backend.health_liveness",
+      "path": "/healthz",
+      "methods": ["GET"],
+      "router_group": "public_health",
+      "exposure_class": "public_health",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.health_readiness",
+      "path": "/healthz/ready",
+      "methods": ["GET"],
+      "router_group": "public_health",
+      "exposure_class": "public_health",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_tiles",
+      "path": "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
+      "methods": ["GET"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_counts",
+      "path": "/map/v1/marker-counts/listing",
+      "methods": ["GET"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_filters",
+      "path": "/map/v1/marker-filters/listing",
+      "methods": ["POST"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_masks",
+      "path": "/map/v1/marker-masks/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.users_me",
+      "path": "/users/me",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.users_by_id",
+      "path": "/users/:id",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.listings_collection",
+      "path": "/listings",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.listings_create",
+      "path": "/listings",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_detail",
+      "path": "/listings/:id",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.listing_update",
+      "path": "/listings/:id",
+      "methods": ["PATCH"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_submit_for_review",
+      "path": "/listings/:id/submit-for-review",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_revise",
+      "path": "/listings/:id/revise",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_photos_collection",
+      "path": "/listings/:id/photos",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_photo_read",
+      "path": "/listings/:listing_id/photos/:photo_id",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.listing_photo_delete",
+      "path": "/listings/:listing_id/photos/:photo_id",
+      "methods": ["DELETE"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_photo_confirm",
+      "path": "/listings/:listing_id/photos/:photo_id/confirm",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Broker"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.listing_bookmark",
+      "path": "/listings/:id/bookmark",
+      "methods": ["POST", "DELETE"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.backend.my_bookmarks",
+      "path": "/me/bookmarks",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.parcel_read",
+      "path": "/api/parcels/:pnu",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.buildings_read",
+      "path": "/api/buildings",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.admin_listing_approve",
+      "path": "/admin/listings/:id/approve",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Admin", "Operator"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.admin_listing_reject",
+      "path": "/admin/listings/:id/reject",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "privileged",
+      "auth_policy": "bearer_jwt",
+      "required_roles": ["Admin", "Operator"],
+      "rate_profile": "api_proxy.privileged_write"
+    },
+    {
+      "id": "gongzzang.backend.notifications_list",
+      "path": "/me/notifications",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.notifications_unread_count",
+      "path": "/me/notifications/unread-count",
+      "methods": ["GET"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
+      "id": "gongzzang.backend.notification_mark_read",
+      "path": "/me/notifications/:id/read",
+      "methods": ["PATCH"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.backend.notifications_mark_all_read",
+      "path": "/me/notifications/mark-all-read",
+      "methods": ["POST"],
+      "router_group": "protected",
+      "exposure_class": "authenticated_user",
+      "auth_policy": "bearer_jwt",
+      "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.backend.internal_auth_event",
+      "path": "/internal/auth/event",
+      "methods": ["POST"],
+      "router_group": "internal",
+      "exposure_class": "service_to_service",
+      "auth_policy": "internal_shared_secret"
+    }
+  ],
+  "service_call_policies": [
+    {
+      "id": "gongzzang_to_platform_core_catalog",
+      "source_service": "gongzzang-api",
+      "target_service": "platform-core-api",
+      "purpose": "Catalog published contract consumption without direct Platform Core database access.",
+      "current_auth_policy": {
+        "method": "service_token",
+        "env": "PLATFORM_CORE_SERVICE_TOKEN"
+      },
+      "target_auth_policy": {
+        "method": "mtls_or_short_lived_service_identity",
+        "service_identity": "gongzzang-api"
+      },
+      "allowed_contracts": [
+        "platform-core.catalog.parcel_by_pnu",
+        "platform-core.catalog.vector_tile_manifest",
+        "platform-core.catalog.marker_tile_contract"
+      ],
+      "required_resilience": {
+        "timeout_required": true,
+        "circuit_breaker_required": true,
+        "quota_policy_required": true
+      }
+    },
+    {
+      "id": "platform_core_to_gongzzang_events",
+      "source_service": "platform-core-outbox-publisher",
+      "target_service": "gongzzang-web",
+      "purpose": "Consumer cache invalidation and PNU anchor projection import events.",
+      "current_auth_policy": {
+        "method": "shared_webhook_secret",
+        "env": "PLATFORM_CORE_WEBHOOK_SECRET"
+      },
+      "target_auth_policy": {
+        "method": "mtls_or_signed_event_envelope",
+        "service_identity": "platform-core-outbox-publisher"
+      },
+      "allowed_contracts": [
+        "catalog.industrial_complex.gold_pointer.published.v1",
+        "catalog.parcel_marker_anchor.snapshot.published.v1"
+      ],
+      "required_resilience": {
+        "idempotency_required": true,
+        "ack_contract_required": true,
+        "cache_invalidation_effect_required": true
+      }
+    }
+  ]
+}

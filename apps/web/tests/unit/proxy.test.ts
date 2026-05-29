@@ -7,6 +7,21 @@ import { __resetRedisForTest, getRedis } from "@/lib/session/redis";
 import { createSession } from "@/lib/session/store";
 import { proxy } from "@/proxy";
 
+async function createRoleSession(role: "Admin" | "Broker" | "Buyer" | "Operator"): Promise<string> {
+  return createSession(
+    {
+      sub: `u_${role}`,
+      jti: `j_${role}`,
+      role,
+      access_token: "at",
+      refresh_token: "rt",
+      id_token: "it",
+      exp: Math.floor(Date.now() / 1000) + 300,
+    },
+    300,
+  );
+}
+
 describe("proxy", () => {
   beforeEach(async () => {
     await getRedis().select(4); // proxy (Next.js 16) 전용 db
@@ -22,6 +37,13 @@ describe("proxy", () => {
     expect(res.headers.get("content-security-policy")).toContain("default-src 'self'");
   });
 
+  it("redirects root to the listings app entry", async () => {
+    const req = new NextRequest("http://localhost:3000/");
+    const res = await proxy(req);
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("http://localhost:3000/listings");
+  });
+
   it("redirects unauthenticated to /login with returnTo", async () => {
     const req = new NextRequest("http://localhost:3000/profile");
     const res = await proxy(req);
@@ -30,24 +52,36 @@ describe("proxy", () => {
   });
 
   it("redirects to /forbidden when role mismatch on /admin", async () => {
-    const sid = await createSession(
-      {
-        sub: "u1",
-        jti: "j1",
-        role: "Buyer",
-        access_token: "at",
-        refresh_token: "rt",
-        id_token: "it",
-        exp: Math.floor(Date.now() / 1000) + 300,
-      },
-      300,
-    );
+    const sid = await createRoleSession("Buyer");
     const req = new NextRequest("http://localhost:3000/admin/users", {
       headers: { cookie: `${SID_COOKIE_NAME}=${sid}` },
     });
     const res = await proxy(req);
     expect(res.status).toBe(307);
     expect(res.headers.get("location")).toContain("/forbidden");
+  });
+
+  it("redirects admin away from broker-only listing mutation pages", async () => {
+    const sid = await createRoleSession("Admin");
+    const req = new NextRequest("http://localhost:3000/listings/new", {
+      headers: { cookie: `${SID_COOKIE_NAME}=${sid}` },
+    });
+
+    const res = await proxy(req);
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("/forbidden");
+  });
+
+  it("allows broker listing mutation pages", async () => {
+    const sid = await createRoleSession("Broker");
+    const req = new NextRequest("http://localhost:3000/listings/listing_1/edit", {
+      headers: { cookie: `${SID_COOKIE_NAME}=${sid}` },
+    });
+
+    const res = await proxy(req);
+
+    expect(res.status).toBe(200);
   });
 
   it("rate limits /api/auth/login", async () => {

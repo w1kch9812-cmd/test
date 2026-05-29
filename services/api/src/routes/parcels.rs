@@ -1,6 +1,6 @@
 //! `GET /api/parcels/:pnu` — PNU 19 자리로 필지 정보 조회 (SP10 panel.parcel.summary 의 backing).
 //!
-//! `parcel-lookup` crate 의 [`ParcelInfoLookup::lookup_by_pnu`] 호출 → V-World 또는 `NoOp` 응답.
+//! `parcel-lookup` crate 의 [`ParcelInfoLookup::lookup_by_pnu`] 호출 → Platform Core 또는 `NoOp` 응답.
 //! 본 핸들러는 "panel" 단어를 모름 — pure REST resource (spec § 7 F1).
 
 use std::sync::Arc;
@@ -41,7 +41,7 @@ pub struct ParcelInfoResponse {
     pub eupmyeondong_name: String,
     /// 지목 (`factory_site` / `warehouse_site` / ...).
     pub land_use_type: String,
-    /// 용도지역 (`residential` / `commercial` / ...). V-World 미제공 시 `None`.
+    /// 용도지역 (`residential` / `commercial` / ...). Platform Core 미제공 시 `None`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zoning: Option<String>,
     /// 공시지가 (KRW/m²). 미고시 → `None`.

@@ -4,19 +4,16 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
-description = "PNU → 행정구역/지목/용도지역 lookup port + V-World 구현 (SP9 T4, ADR 0018)"
+description = "PNU parcel info lookup port backed by the Platform Core Catalog API"
 
 [dependencies]
-parcel-domain = { path = "../domain/core/parcel", version = "0.1.0" }
 shared-kernel = { path = "../domain/core/shared-kernel", version = "0.1.0" }
 async-trait = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-chrono = { workspace = true }
-geo-types = { workspace = true }
 
 [lints]
 workspace = true

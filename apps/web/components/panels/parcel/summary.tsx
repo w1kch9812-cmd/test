@@ -46,7 +46,9 @@ export function ParcelSummaryCard({
           <>
             <dt className="text-[var(--color-muted)]">{t("officialPrice")}</dt>
             <dd className="text-[var(--color-ink)]">
-              {data.official_land_price_per_m2.toLocaleString("ko-KR")} 원/㎡
+              {t("officialPricePerM2", {
+                value: data.official_land_price_per_m2.toLocaleString("ko-KR"),
+              })}
             </dd>
           </>
         )}

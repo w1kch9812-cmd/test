@@ -4,57 +4,19 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "Apache-2.0"
-description = "공짱 PMTiles base layer ETL — Bronze SHP fetch + tippecanoe + R2 업로드 (SP9 T3)"
+description = "Gongzzang static vector tile handover stub after platform-core Catalog ownership transfer"
 
 [[bin]]
 name = "etl-base-layer"
 path = "src/main.rs"
 
 [dependencies]
-sp9-base-layer-config = { path = "../../crates/sp9-base-layer-config" }
-# T2 — R2 호출에 timeout/retry/circuit-breaker 적용 (AGENTS.md §3 Circuit Breaker).
-circuit-breaker = { path = "../../crates/circuit-breaker" }
-# L4 Observability — Sentry SDK proper integration (curl 깨진 endpoint 제거).
+dotenvy = "0.15"
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }
-chrono = { workspace = true }
-reqwest = { workspace = true, features = ["stream"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
-sha2 = "0.10"
-hex = "0.4"
-thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread", "fs", "io-util", "process", "signal", "sync"] }
-tokio-util = { version = "0.7", features = ["io"] }
-futures-util = "0.3"
-# ADR 0021 decompose — `<gold>/<layer>/{z}/{x}/{y}.pbf` 산출물 walk + R2 batch upload.
-walkdir = "2"
-# Bronze dtmk — 273 시군구 SHP zip (~5-10GB) 압축 해제. zip 2.x 는 sync,
-# tokio::task::spawn_blocking 으로 thread-pool 에 offload (OOM 안전).
-# `default-features = false` + `deflate` only — 우리 V-World zip 의 압축 방식이
-# DEFLATE 라 그것만 활성. bzip2/lzma/zstd/aes 등 외부 deps 회피.
-zip = { version = "2", default-features = false, features = ["deflate"] }
-# dev convenience — `.env` 자동 로드 (production 은 ECS task environment 가 직접 inject).
-dotenvy = "0.15"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
 tracing = { workspace = true }
-# json feature — L4 prod 에서 ETL_LOG_FORMAT=json (CloudWatch / Datadog 자동 파싱).
-# registry feature — sentry-tracing layer 가 .with() 호출에 필수.
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt", "json", "registry"] }
-# R2 (Cloudflare R2 = S3-호환) 업로드 — SP9 T3b.1.
-# rustls 강제 (workspace 정책: reqwest/sqlx 모두 rustls-tls 사용, openssl 의존 회피).
-#
-# 버전 핀 사유: aws-sdk-s3 1.110+ / aws-config 1.8.6+ / aws-smithy-async 1.2.11+ 이
-# rustc 1.91 을 요구. workspace 의 [`rust-toolchain.toml`] 이 1.88 핀이라 호환 위해
-# pre-MSRV-bump 버전으로 고정. workspace MSRV 가 1.91 로 올라갈 때 모두 latest 로 풀어도 됨.
-# (Cargo.lock 의 `aws-smithy-async = "=1.2.10"` 도 같은 이유로 함께 핀)
-aws-config = { version = "=1.8.5", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-sdk-s3 = { version = "=1.86.0", default-features = false, features = ["behavior-version-latest", "rustls", "rt-tokio"] }
-aws-credential-types = "=1.2.5"
-aws-smithy-types = "=1.3.4"
-
-[dev-dependencies]
-wiremock = { workspace = true }
-tempfile = "3"
 
 [lints]
 workspace = true

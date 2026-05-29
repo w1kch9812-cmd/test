@@ -1,0 +1,39 @@
+{
+  "schema_version": "gongzzang.platform_core_catalog_api_contract_pin.v1",
+  "source_repo": "platform-core",
+  "source_path": "docs/openapi/catalog.v1.yaml",
+  "source_schema_version": "platform-core.openapi.catalog.v1",
+  "consumer_slug": "gongzzang",
+  "base_env": "PLATFORM_CORE_API_BASE_URL",
+  "allowed_reference_modules": ["services/api/src/startup.rs"],
+  "endpoints": [
+    {
+      "operation_id": "getParcelByPnu",
+      "client_module": "services/api/src/platform_core_parcel_lookup.rs",
+      "method": "GET",
+      "path_template": "/catalog/v1/parcels/by-pnu/{pnu}",
+      "path_pattern_literal": "catalog/v1/parcels/by-pnu/",
+      "success_shape": "object",
+      "not_found_behavior": "none",
+      "required_response_fields": ["pnu", "kind"]
+    },
+    {
+      "operation_id": "listParcelBuildingsByPnu",
+      "client_module": "services/api/src/building_reader.rs",
+      "method": "GET",
+      "path_template": "/catalog/v1/parcels/by-pnu/{pnu}/buildings",
+      "path_pattern_literal": "catalog/v1/parcels/by-pnu/{}/buildings",
+      "success_shape": "array",
+      "required_response_fields": [
+        "id",
+        "parcel_id",
+        "purpose_code",
+        "structure_code",
+        "floor_area_m2",
+        "stories",
+        "built_year",
+        "updated_at"
+      ]
+    }
+  ]
+}

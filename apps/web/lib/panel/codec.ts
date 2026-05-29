@@ -1,4 +1,6 @@
 // apps/web/lib/panel/codec.ts
+
+import { LISTING_ID_PATTERN, PNU_PATTERN } from "@/lib/identity/patterns";
 import type { PanelKind, PanelStack, PanelStackEntry, PanelView } from "./types";
 import { PANEL_DEPTH_MAX } from "./types";
 
@@ -27,11 +29,11 @@ interface KindMeta {
 const KINDS: Record<PanelKind, KindMeta> = {
   parcel: {
     views: new Set(["summary", "buildings", "listings"]),
-    idPattern: /^\d{19}$/,
+    idPattern: PNU_PATTERN,
   },
   listing: {
     views: new Set(["summary"]),
-    idPattern: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    idPattern: LISTING_ID_PATTERN,
   },
 };
 

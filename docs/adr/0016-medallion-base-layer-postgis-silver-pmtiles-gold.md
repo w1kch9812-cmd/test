@@ -355,7 +355,7 @@ WHERE admin_code = '1168010100'  -- 역삼동
 **즉시**:
 - ADR 0014 → status: Superseded by ADR 0016
 - SP9 sub-project: SHP 다운로드 → tippecanoe → R2 업로드 + 프론트 PMTiles layer + listing denormalize 컬럼
-- [crates/data-clients/r2-public-data/](../../crates/data-clients/r2-public-data/) PMTiles header parser 활성화 (정적 호스팅 직접 fetch + 클라이언트 필터링 검증용)
+- `crates/data-clients/r2-public-data/` PMTiles header parser 활성화 (historical; Platform Core-owned after ADR 0034)
 
 **조건부 추가 (Phase 3+)**:
 - 분석 dashboard needs 발생 시 PostGIS polygon 테이블 점진 도입 → 별도 ADR

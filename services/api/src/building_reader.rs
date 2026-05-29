@@ -1,202 +1,450 @@
-//! `DataGoKrBuildingRegisterReader` — `routes::buildings::BuildingRegisterReader` 의
-//! data.go.kr 라이브 구현체.
+//! Platform Core Catalog-backed building reader.
 //!
-//! `getBrTitleInfo` JSON 응답을 `data_go_kr_client::building_register::parser` 에
-//! delegate → `building_domain::Building` Silver entity. panel-only 호출이라 V-World
-//! 폴리곤 합성 안 함 → `geom = None`.
-//!
-//! # SSOT (2026-05-08 unification)
-//!
-//! 이전 panel-only `BuildingItem` (21 필드) 폐기. 이제 `Building` 엔티티 단일 source.
-//! enum mapping (purpose/structure Cd primary + label fallback) 도 data-go-kr 의
-//! `parse_building_title` SSOT 재사용 — 본 파일은 *delegate + geom 비활성화* 만.
+//! Gongzzang owns the `/api/buildings` route shape, but Platform Core owns
+//! canonical catalog building data. This adapter is the only translation layer
+//! between the Platform Core public Catalog API and the Gongzzang route-facing
+//! `BuildingRegisterRecord`.
+
+#![allow(clippy::disallowed_types, clippy::module_name_repetitions)]
 
 use std::sync::Arc;
 
-use building_domain::entity::Building;
-use chrono::Utc;
-use data_go_kr_client::building_register::{parser::parse_building_title, BuildingRegisterClient};
-use data_go_kr_client::{pnu_split, DataGoKrClient};
-use geo_types::{Coord, LineString, Polygon as GeoPolygon};
-use raw_capture_client::RawCapture;
-use shared_kernel::geometry::PolygonSrid;
+use circuit_breaker::{execute, Breaker, Policy};
+use serde::Deserialize;
 use shared_kernel::pnu::Pnu;
-use tracing::warn;
+use thiserror::Error;
 
-use crate::routes::buildings::{BuildingRegisterError, BuildingRegisterReader};
+use crate::platform_core_auth::PlatformCoreServiceAuth;
+use crate::routes::buildings::{
+    BuildingRegisterError, BuildingRegisterReader, BuildingRegisterRecord,
+};
 
-/// `parcel_external_data.source` CHECK 라벨.
-const RAW_CAPTURE_SOURCE: &str = "data_go_kr_building";
-
-/// `BuildingRegisterReader` 의 data.go.kr 라이브 구현체.
-///
-/// `getBrTitleInfo` raw JSON 을 `RawCapture` (R2 Bronze) 에 best-effort 보존 → 모든 시점
-/// 영구 archive. 보존 실패는 warn 로그 + 응답 정상 진행 (raw 손실은 R2 + 디스크 둘 다
-/// 죽어야 발생, ADR 0026).
-pub struct DataGoKrBuildingRegisterReader {
-    client: Arc<DataGoKrClient>,
-    raw_capture: Arc<dyn RawCapture>,
+/// Configuration error for the Platform Core building reader.
+#[derive(Debug, Error)]
+pub enum PlatformCoreBuildingReaderConfigError {
+    /// `PLATFORM_CORE_API_BASE_URL` was set to an empty string.
+    #[error("PLATFORM_CORE_API_BASE_URL must not be empty")]
+    EmptyBaseUrl,
+    /// The HTTP client could not be built.
+    #[error("build Platform Core HTTP client: {source}")]
+    HttpClient {
+        /// Underlying HTTP client construction error.
+        source: reqwest::Error,
+    },
 }
 
-impl DataGoKrBuildingRegisterReader {
-    /// 새 [`DataGoKrBuildingRegisterReader`].
-    #[must_use]
-    pub const fn new(client: Arc<DataGoKrClient>, raw_capture: Arc<dyn RawCapture>) -> Self {
-        Self {
+#[derive(Debug, Error)]
+enum PlatformCoreBuildingReaderError {
+    #[error("Platform Core building lookup HTTP request failed: {source}")]
+    Request {
+        #[source]
+        source: reqwest::Error,
+    },
+    #[error("Platform Core building lookup returned status {status}")]
+    Status { status: reqwest::StatusCode },
+    #[error("Platform Core building lookup returned retriable status {status}")]
+    RetriableStatus { status: reqwest::StatusCode },
+    #[error("Platform Core building lookup service auth failed: {source}")]
+    ServiceAuth {
+        #[source]
+        source: crate::platform_core_auth::PlatformCoreServiceAuthConfigError,
+    },
+    #[error(
+        "Platform Core building stories value is outside Gongzzang route contract: id={id} stories={stories}"
+    )]
+    InvalidStories { id: String, stories: i16 },
+}
+
+/// Building reader that consumes Platform Core Catalog's public HTTP API.
+pub struct PlatformCoreBuildingRegisterReader {
+    client: reqwest::Client,
+    breaker: Breaker,
+    policy: Policy,
+    auth: Option<PlatformCoreServiceAuth>,
+    base_url: String,
+}
+
+impl PlatformCoreBuildingRegisterReader {
+    /// Creates a Platform Core HTTP-backed building reader.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `base_url` is empty or the HTTP client cannot be
+    /// constructed.
+    pub fn new(
+        base_url: &str,
+        auth: Option<PlatformCoreServiceAuth>,
+    ) -> Result<Self, PlatformCoreBuildingReaderConfigError> {
+        let base_url = normalize_base_url(base_url)?;
+        let client = reqwest::Client::builder()
+            .build()
+            .map_err(|source| PlatformCoreBuildingReaderConfigError::HttpClient { source })?;
+        Ok(Self {
             client,
-            raw_capture,
-        }
+            breaker: Breaker::new(),
+            policy: Policy::platform_core_default(),
+            auth,
+            base_url,
+        })
     }
 }
 
-impl BuildingRegisterReader for DataGoKrBuildingRegisterReader {
+impl BuildingRegisterReader for PlatformCoreBuildingRegisterReader {
     fn list_by_pnu<'a>(
         &'a self,
         pnu: &'a Pnu,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<Output = Result<Vec<Building>, BuildingRegisterError>>
-                + Send
+            dyn std::future::Future<
+                    Output = Result<Vec<BuildingRegisterRecord>, BuildingRegisterError>,
+                > + Send
                 + 'a,
         >,
     > {
         Box::pin(async move {
-            let parts = pnu_split::split(pnu);
-            let br = BuildingRegisterClient::new(&self.client);
-            let raw = br
-                .fetch_title_info(parts)
-                .await
-                .map_err(|e| Box::new(e) as BuildingRegisterError)?;
-
-            // raw_capture best-effort — R2 Bronze 영구 archive (ADR 0026). 실패는 warn 만.
-            let now = Utc::now();
-            if let Err(capture_err) = self
-                .raw_capture
-                .capture(pnu.as_str(), RAW_CAPTURE_SOURCE, &raw, now)
-                .await
-            {
-                warn!(
-                    pnu = %pnu.as_str(),
-                    source = RAW_CAPTURE_SOURCE,
-                    error = %capture_err,
-                    "raw_capture failed — proceeding with parsed result"
-                );
+            let url = format!(
+                "{}/catalog/v1/parcels/by-pnu/{}/buildings",
+                self.base_url,
+                pnu.as_str()
+            );
+            let response = execute(
+                &self.breaker,
+                &self.policy,
+                "platform_core.catalog.list_parcel_buildings_by_pnu",
+                || {
+                    let client = self.client.clone();
+                    let url = url.clone();
+                    let auth = self.auth.clone();
+                    async move { send_platform_core_get(&client, &url, auth.as_ref()).await }
+                },
+            )
+            .await
+            .map_err(|source| Box::new(source) as BuildingRegisterError)?;
+            let status = response.status();
+            if !status.is_success() {
+                return Err(Box::new(PlatformCoreBuildingReaderError::Status { status })
+                    as BuildingRegisterError);
             }
 
-            // SSOT delegate: data-go-kr 의 parser 가 enum mapping (Cd primary + label
-            // fallback) + 모든 수치 필드 처리. dummy polygon 은 parse 시그니처 만족용,
-            // 결과에서 geom = None 으로 mutate (panel reader 는 V-World 폴리곤 합성 X).
-            let mut buildings = parse_building_title(&raw, pnu, &dummy_polygon(), now)
-                .map_err(|e| Box::new(e) as BuildingRegisterError)?;
-            for b in &mut buildings {
-                b.geom = None;
-            }
-            Ok(buildings)
+            let buildings = response
+                .json::<Vec<PlatformCoreBuildingResponse>>()
+                .await
+                .map_err(|source| {
+                    Box::new(PlatformCoreBuildingReaderError::Request { source })
+                        as BuildingRegisterError
+                })?;
+
+            buildings
+                .into_iter()
+                .map(BuildingRegisterRecord::try_from)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|source| Box::new(source) as BuildingRegisterError)
         })
     }
 }
 
-/// parse 시그니처 만족용 dummy polygon — 결과에서 geom = None 으로 mutate 되므로
-/// 실제 사용 안 됨. unwrap 안전 (constant WGS84 polygon).
-fn dummy_polygon() -> PolygonSrid {
-    let exterior = LineString(vec![
-        Coord { x: 126.0, y: 37.0 },
-        Coord { x: 127.0, y: 37.0 },
-        Coord { x: 127.0, y: 38.0 },
-        Coord { x: 126.0, y: 38.0 },
-        Coord { x: 126.0, y: 37.0 },
-    ]);
-    PolygonSrid::try_new_wgs84(GeoPolygon::new(exterior, vec![]))
-        .unwrap_or_else(|_| unreachable!("constant polygon always valid WGS84"))
+/// Builds the Platform Core Catalog-backed building reader.
+///
+/// # Errors
+///
+/// Returns an error when `base_url` is invalid for reader construction.
+pub fn build_platform_core_building_register_reader(
+    base_url: &str,
+    auth: Option<PlatformCoreServiceAuth>,
+) -> Result<Arc<dyn BuildingRegisterReader>, PlatformCoreBuildingReaderConfigError> {
+    Ok(Arc::new(PlatformCoreBuildingRegisterReader::new(
+        base_url, auth,
+    )?))
+}
+
+#[derive(Debug, Deserialize)]
+struct PlatformCoreBuildingResponse {
+    id: String,
+    #[allow(dead_code)]
+    parcel_id: String,
+    purpose_code: String,
+    structure_code: String,
+    floor_area_m2: f64,
+    stories: i16,
+    #[allow(dead_code)]
+    built_year: i32,
+    #[allow(dead_code)]
+    updated_at: String,
+}
+
+impl TryFrom<PlatformCoreBuildingResponse> for BuildingRegisterRecord {
+    type Error = PlatformCoreBuildingReaderError;
+
+    fn try_from(value: PlatformCoreBuildingResponse) -> Result<Self, Self::Error> {
+        let above_ground_floors =
+            u8::try_from(value.stories).map_err(|_| Self::Error::InvalidStories {
+                id: value.id.clone(),
+                stories: value.stories,
+            })?;
+
+        Ok(Self {
+            id: value.id,
+            name: String::new(),
+            address: None,
+            purpose: value.purpose_code,
+            structure: value.structure_code,
+            plot_area_m2: None,
+            building_area_m2: None,
+            building_coverage_ratio: None,
+            total_area_m2: value.floor_area_m2,
+            floor_area_ratio: None,
+            above_ground_floors,
+            below_ground_floors: 0,
+            height_m: None,
+            passenger_elevators: None,
+            emergency_elevators: None,
+            indoor_self_parking: None,
+            outdoor_self_parking: None,
+            annex_building_count: None,
+            annex_building_area_m2: None,
+            permitted_at: None,
+            started_at: None,
+            approved_at: None,
+        })
+    }
+}
+
+async fn send_platform_core_get(
+    client: &reqwest::Client,
+    url: &str,
+    auth: Option<&PlatformCoreServiceAuth>,
+) -> Result<reqwest::Response, PlatformCoreBuildingReaderError> {
+    let request = client.get(url);
+    let request = if let Some(auth) = auth {
+        auth.apply(request)
+            .map_err(|source| PlatformCoreBuildingReaderError::ServiceAuth { source })?
+    } else {
+        request
+    };
+    let response = request
+        .send()
+        .await
+        .map_err(|source| PlatformCoreBuildingReaderError::Request { source })?;
+    let status = response.status();
+    if status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return Err(PlatformCoreBuildingReaderError::RetriableStatus { status });
+    }
+    Ok(response)
+}
+
+fn normalize_base_url(base_url: &str) -> Result<String, PlatformCoreBuildingReaderConfigError> {
+    let normalized = base_url.trim().trim_end_matches('/').to_owned();
+    if normalized.is_empty() {
+        return Err(PlatformCoreBuildingReaderConfigError::EmptyBaseUrl);
+    }
+    Ok(normalized)
 }
 
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
-    use super::*;
-    use building_domain::purpose_code::BuildingPurposeCode;
-    use building_domain::structure_code::BuildingStructureCode;
-    use serde_json::Value;
-    use shared_kernel::area::AreaM2;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::mpsc::{self, Receiver};
+    use std::thread;
+    use std::time::Duration;
 
-    /// data-go-kr parser 가 Building Silver 로 매핑되는지 (delegate path 검증) — 실 fixture.
-    #[test]
-    #[allow(clippy::cognitive_complexity)] // fixture 의 다수 필드 검증 — 분해 시 fixture I/O 중복.
-    fn parses_live_fixture_to_building_silver() {
-        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("crates/data-clients/data-go-kr/tests/fixtures/live_2026-05-08_gangnam_yeoksam_737.json");
-        let raw_str = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read fixture {}: {}", path.display(), e));
-        let raw: Value = serde_json::from_str(&raw_str).expect("valid JSON");
+    use crate::platform_core_auth::PlatformCoreServiceAuth;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn reads_buildings_from_platform_core_catalog_by_pnu() {
+        let body = r#"
+[
+  {
+    "id": "building-01",
+    "parcel_id": "parcel-01",
+    "purpose_code": "factory",
+    "structure_code": "steel",
+    "floor_area_m2": 1234.5,
+    "stories": 7,
+    "built_year": 2020,
+    "updated_at": "2026-05-28T00:00:00Z"
+  }
+]
+"#;
+        let (base_url, request_line) = spawn_platform_core_response("HTTP/1.1 200 OK", body);
+        let reader = PlatformCoreBuildingRegisterReader::new(&base_url, None).expect("reader");
         let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
 
-        let mut buildings =
-            parse_building_title(&raw, &pnu, &dummy_polygon(), Utc::now()).expect("parse ok");
-        for b in &mut buildings {
-            b.geom = None;
-        }
+        let records = reader.list_by_pnu(&pnu).await.expect("records");
 
-        assert_eq!(buildings.len(), 1);
-        let b = &buildings[0];
-
-        // 식별자
-        assert_eq!(b.mgm_bldrgst_pk, "1024112777");
-        assert_eq!(b.building_name.as_deref(), Some("강남파이낸스센터"));
-        assert!(b.plat_plc.is_some());
-
-        // enum mapping (Cd primary + label fallback)
-        assert_eq!(b.main_purpose_code, BuildingPurposeCode::Office); // mainPurpsCd "14000"
         assert_eq!(
-            b.structure_code,
-            BuildingStructureCode::SteelReinforcedConcrete
-        ); // strctCd "42"
-
-        // 면적 / 비율 — Codex round 8 fix: parser 가 모든 panel 필드 채움
-        assert!(b.total_floor_area_m2.as_f64() > 200_000.0); // 212615.29
-        assert!(b.total_floor_area_m2 == AreaM2::try_new(212_615.29).unwrap());
-        assert!(b.plat_area_m2.is_some_and(|a| a.as_f64() > 13_000.0)); // platArea 13156.7
-        assert!(b.arch_area_m2.is_some_and(|a| a.as_f64() > 5_000.0)); // archArea 5600.51
-        assert!(b
-            .building_coverage_ratio
-            .is_some_and(|v| (40.0..50.0).contains(&v))); // bcRat 42.5677%
-        assert!(b.floor_area_ratio.is_some_and(|v| v > 900.0)); // vlRat 995.1887%
-
-        // 층/높이
-        assert_eq!(b.ground_floors, 45);
-        assert_eq!(b.underground_floors, 8);
-        assert!(b.height_m.is_some_and(|v| v > 200.0));
-
-        // 승강기
-        assert_eq!(b.passenger_elevators, Some(29)); // rideUseElvtCnt
-        assert_eq!(b.emergency_elevators, Some(2)); // emgenUseElvtCnt
-
-        // 주차장 (산업/물류 매물 critical)
-        assert_eq!(b.indoor_self_parking, Some(1300)); // indrAutoUtcnt
-        assert_eq!(b.outdoor_self_parking, Some(12)); // oudrAutoUtcnt
-
-        // 부속건축물
-        assert_eq!(b.annex_building_count, Some(0));
-
-        // 날짜
-        assert_eq!(
-            b.permit_date.map(|d| d.format("%Y-%m-%d").to_string()),
-            Some("1995-05-04".to_owned())
+            request_line
+                .recv_timeout(Duration::from_secs(2))
+                .expect("request line"),
+            "GET /catalog/v1/parcels/by-pnu/1168010100107370000/buildings HTTP/1.1"
         );
         assert_eq!(
-            b.construction_start_date
-                .map(|d| d.format("%Y-%m-%d").to_string()),
-            Some("1995-05-13".to_owned())
+            records,
+            vec![BuildingRegisterRecord {
+                id: "building-01".to_owned(),
+                name: String::new(),
+                address: None,
+                purpose: "factory".to_owned(),
+                structure: "steel".to_owned(),
+                plot_area_m2: None,
+                building_area_m2: None,
+                building_coverage_ratio: None,
+                total_area_m2: 1234.5,
+                floor_area_ratio: None,
+                above_ground_floors: 7,
+                below_ground_floors: 0,
+                height_m: None,
+                passenger_elevators: None,
+                emergency_elevators: None,
+                indoor_self_parking: None,
+                outdoor_self_parking: None,
+                annex_building_count: None,
+                annex_building_area_m2: None,
+                permitted_at: None,
+                started_at: None,
+                approved_at: None,
+            }]
         );
-        assert_eq!(
-            b.use_approval_date
-                .map(|d| d.format("%Y-%m-%d").to_string()),
-            Some("2001-07-31".to_owned())
-        );
+    }
 
-        // panel-only path 라 geom None
-        assert!(b.geom.is_none());
+    #[tokio::test]
+    async fn returns_error_for_platform_core_non_success_status() {
+        let (base_url, _request_line) =
+            spawn_platform_core_responses("HTTP/1.1 503 Service Unavailable", "{}", 2);
+        let reader = PlatformCoreBuildingRegisterReader::new(&base_url, None).expect("reader");
+        let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
+
+        let error = reader.list_by_pnu(&pnu).await.expect_err("status error");
+
+        assert!(error.to_string().contains("503"));
+    }
+
+    #[tokio::test]
+    async fn rejects_platform_core_building_story_count_outside_route_contract() {
+        let body = r#"
+[
+  {
+    "id": "building-01",
+    "parcel_id": "parcel-01",
+    "purpose_code": "factory",
+    "structure_code": "steel",
+    "floor_area_m2": 1234.5,
+    "stories": -1,
+    "built_year": 2020,
+    "updated_at": "2026-05-28T00:00:00Z"
+  }
+]
+"#;
+        let (base_url, _request_line) = spawn_platform_core_response("HTTP/1.1 200 OK", body);
+        let reader = PlatformCoreBuildingRegisterReader::new(&base_url, None).expect("reader");
+        let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
+
+        let error = reader.list_by_pnu(&pnu).await.expect_err("invalid stories");
+
+        assert!(error.to_string().contains("stories"));
+    }
+
+    #[tokio::test]
+    async fn sends_platform_core_service_bearer_token() {
+        let body = r#"
+[
+  {
+    "id": "building-01",
+    "parcel_id": "parcel-01",
+    "purpose_code": "factory",
+    "structure_code": "steel",
+    "floor_area_m2": 1234.5,
+    "stories": 7,
+    "built_year": 2020,
+    "updated_at": "2026-05-28T00:00:00Z"
+  }
+]
+"#;
+        let (base_url, requests) = spawn_platform_core_request_capture("HTTP/1.1 200 OK", body);
+        let auth = PlatformCoreServiceAuth::new("platform-core-service-token-32-valid")
+            .expect("service auth");
+        let reader =
+            PlatformCoreBuildingRegisterReader::new(&base_url, Some(auth)).expect("reader");
+        let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
+
+        reader.list_by_pnu(&pnu).await.expect("records");
+
+        let request = requests
+            .recv_timeout(Duration::from_secs(2))
+            .expect("captured request");
+        assert!(
+            request.contains("\r\nauthorization: Bearer platform-core-service-token-32-valid\r\n")
+                || request
+                    .contains("\r\nAuthorization: Bearer platform-core-service-token-32-valid\r\n"),
+            "request missing service bearer token: {request}"
+        );
+    }
+
+    fn spawn_platform_core_response(status_line: &str, body: &str) -> (String, Receiver<String>) {
+        spawn_platform_core_responses(status_line, body, 1)
+    }
+
+    fn spawn_platform_core_responses(
+        status_line: &str,
+        body: &str,
+        request_count: usize,
+    ) -> (String, Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("local addr");
+        let status_line = status_line.to_owned();
+        let body = body.to_owned();
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            for _ in 0..request_count {
+                let (mut stream, _) = listener.accept().expect("accept request");
+                let mut request = [0_u8; 2048];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                tx.send(request.lines().next().unwrap_or_default().to_owned())
+                    .expect("send request line");
+                let response = format!(
+                    "{status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write response");
+            }
+        });
+
+        (format!("http://{addr}"), rx)
+    }
+
+    fn spawn_platform_core_request_capture(
+        status_line: &str,
+        body: &str,
+    ) -> (String, Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("local addr");
+        let status_line = status_line.to_owned();
+        let body = body.to_owned();
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept request");
+            let mut request = [0_u8; 2048];
+            let read = stream.read(&mut request).expect("read request");
+            let request = String::from_utf8_lossy(&request[..read]);
+            tx.send(request.to_string()).expect("send request");
+            let response = format!(
+                "{status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream
+                .write_all(response.as_bytes())
+                .expect("write response");
+        });
+
+        (format!("http://{addr}"), rx)
     }
 }

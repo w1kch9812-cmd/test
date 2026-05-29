@@ -8,6 +8,12 @@
 | 선행 | [0016 Medallion Base Layer (PMTiles)](./0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) |
 | Supersedes (부분) | `parcel_external_data.raw_response JSONB` 컬럼 사용 (migration 30006 의 일부) |
 
+## 후속 상태 (2026-05-28)
+
+본 ADR 의 Catalog raw archive 구현 책임은 ADR 0034 및 Platform Core M3.2 physical
+extraction 으로 Platform Core 로 이관되었다. gongzzang 에 `R2RawCapture`,
+`PgRawCapture`, `raw_capture_sync`, `raw-capture-client` 를 재도입하지 않는다.
+
 ## 결정
 
 외부 API raw 응답 (V-World, data.go.kr 등) 의 **Bronze 보존을 Postgres jsonb 가 아닌 R2 (S3-호환 객체 저장소) 로 이전**.
@@ -93,3 +99,7 @@
 - → `crates/data-clients/raw-capture/src/lib.rs` (`RawCapture` trait)
 - → `services/etl-base-layer/src/r2_upload.rs` (S3 client + R2 endpoint pattern)
 - → `migrations/30006_parcel_external_data.sql` (deprecate 대상)
+> Current status (2026-05-28): Historical for Gongzzang implementation. Catalog
+> raw archive responsibility moved to Platform Core under ADR 0034 and M3.2
+> physical extraction. Gongzzang must not recreate local raw-capture crates,
+> binaries, or storage writers.

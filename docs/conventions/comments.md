@@ -11,7 +11,7 @@
 listing.status = ListingStatus::Active;
 
 // ✅ Why
-// V-World API 검증 후 자동 Active 전환 (운영자 검수 미요구 — ADR-0010)
+// 소유자 검증 이벤트 수신 후 자동 Active 전환 (운영자 검수 미요구 — ADR-0010)
 listing.status = ListingStatus::Active;
 
 // 또는 더 좋게: 이름이 말하게
@@ -59,8 +59,8 @@ const description = listing.descriptionFromUser; // NOT generated
 ## 5. 외부 참조
 
 ```rust
-// V-World layer ID: https://www.vworld.kr/dev/v4dv_2ddataguide2_s002.do
-const LAYER_ZONING: &str = "LT_C_UQ111";
+// Provider schema reference: https://example.com/provider/schema/v1
+const PROVIDER_SCHEMA_VERSION: &str = "2026-05-28";
 ```
 
 링크는 *영구 식별자* (commit SHA, archive.org) 또는 공식 문서 표준 URL.

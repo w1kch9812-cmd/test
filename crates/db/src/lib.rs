@@ -8,7 +8,6 @@
 
 pub mod admin_action;
 pub mod analysis_report;
-pub mod api_health;
 pub mod audit_log;
 mod audit_state;
 pub mod bookmark;
@@ -21,7 +20,6 @@ pub mod lrq;
 pub mod notification;
 pub mod operations_meta;
 pub mod outbox;
-pub mod pipeline;
-pub mod raw_capture;
+pub mod platform_core_anchor;
 pub mod search_history;
 pub mod user;

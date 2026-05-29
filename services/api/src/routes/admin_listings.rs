@@ -48,8 +48,8 @@ pub struct AdminTransitionResponse {
 /// `POST /admin/listings/:id/approve` — 매물 승인 (Admin / Operator 전용).
 ///
 /// 1. RBAC: Admin 또는 Operator
-/// 2. listing find + `Listing::approve(now)` (도메인 가드: PendingReview only)
-/// 3. listing_repo.save (audit + outbox 같은 tx)
+/// 2. listing find + `Listing::approve(now)` (도메인 가드: `PendingReview` only)
+/// 3. `listing_repo.save` (audit + outbox 같은 tx)
 /// 4. notification.insert (`listing_approved`, broker 수신, best-effort)
 #[tracing::instrument(skip(state, auth), fields(actor = %auth.user.id, listing_id = %id))]
 pub async fn approve_listing(

@@ -52,6 +52,23 @@ fn build_full() -> ListingPhoto {
     .expect("full happy path valid")
 }
 
+fn build_pending() -> ListingPhoto {
+    ListingPhoto::try_new(
+        sample_id(),
+        sample_listing_id(),
+        SAMPLE_R2_KEY,
+        None,
+        None,
+        0,
+        None,
+        None,
+        None,
+        PhotoContentType::Jpeg,
+        sample_now(),
+    )
+    .expect("pending photo metadata valid")
+}
+
 // ── try_new happy paths ────────────────────────────────────────────────────
 
 #[test]
@@ -91,6 +108,12 @@ fn try_new_all_optionals_none_succeeds() {
     assert!(photo.height_px.is_none());
     assert!(photo.file_size_bytes.is_none());
     assert_eq!(photo.display_order, 5);
+}
+
+#[test]
+fn all_optionals_none_is_pending_upload() {
+    let photo = build_pending();
+    assert!(!photo.is_upload_confirmed());
 }
 
 #[test]
@@ -263,6 +286,86 @@ fn soft_delete_preserves_uploaded_at() {
     let original_uploaded = photo.uploaded_at;
     photo.soft_delete(later_now());
     assert_eq!(photo.uploaded_at, original_uploaded);
+}
+
+// -- upload confirmation -----------------------------------------------------
+
+#[test]
+fn confirm_upload_sets_metadata_and_marks_confirmed() {
+    let mut photo = build_pending();
+
+    photo
+        .confirm_upload(Some(1280), Some(720), 1_250_000, later_now())
+        .expect("valid upload confirmation");
+
+    assert!(photo.is_upload_confirmed());
+    assert_eq!(photo.width_px, Some(1280));
+    assert_eq!(photo.height_px, Some(720));
+    assert_eq!(photo.file_size_bytes, Some(1_250_000));
+    assert_eq!(photo.uploaded_at, later_now());
+}
+
+#[test]
+fn confirm_upload_allows_missing_dimensions_when_storage_has_no_image_probe() {
+    let mut photo = build_pending();
+
+    photo
+        .confirm_upload(None, None, 1_250_000, later_now())
+        .expect("file size confirms object existence");
+
+    assert!(photo.is_upload_confirmed());
+    assert_eq!(photo.width_px, None);
+    assert_eq!(photo.height_px, None);
+    assert_eq!(photo.file_size_bytes, Some(1_250_000));
+}
+
+#[test]
+fn confirm_upload_rejects_zero_file_size() {
+    let mut photo = build_pending();
+
+    let err = photo
+        .confirm_upload(Some(1280), Some(720), 0, later_now())
+        .unwrap_err();
+
+    assert_eq!(err, ListingPhotoError::InvalidFileSizeBytes { actual: 0 });
+    assert!(!photo.is_upload_confirmed());
+}
+
+#[test]
+fn confirm_upload_rejects_non_positive_dimensions() {
+    let mut photo = build_pending();
+
+    let err = photo
+        .confirm_upload(Some(0), Some(720), 1_250_000, later_now())
+        .unwrap_err();
+
+    assert_eq!(err, ListingPhotoError::InvalidWidthPx { actual: 0 });
+    assert!(!photo.is_upload_confirmed());
+}
+
+#[test]
+fn confirm_upload_rejects_non_positive_height() {
+    let mut photo = build_pending();
+
+    let err = photo
+        .confirm_upload(Some(1280), Some(-1), 1_250_000, later_now())
+        .unwrap_err();
+
+    assert_eq!(err, ListingPhotoError::InvalidHeightPx { actual: -1 });
+    assert!(!photo.is_upload_confirmed());
+}
+
+#[test]
+fn confirm_upload_rejects_deleted_photo() {
+    let mut photo = build_pending();
+    photo.soft_delete(later_now());
+
+    let err = photo
+        .confirm_upload(Some(1280), Some(720), 1_250_000, later_now())
+        .unwrap_err();
+
+    assert_eq!(err, ListingPhotoError::DeletedCannotConfirm);
+    assert!(!photo.is_upload_confirmed());
 }
 
 // ── reorder ────────────────────────────────────────────────────────────────

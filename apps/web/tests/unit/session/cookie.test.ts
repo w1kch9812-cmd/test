@@ -5,6 +5,15 @@ describe("__Host- sid cookie helpers (production)", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", "https://api.gongzzang.test");
+    vi.stubEnv("NEXT_PUBLIC_PLATFORM_CORE_BASE_URL", "https://platform-core.gongzzang.test");
+    vi.stubEnv("ZITADEL_ISSUER", "https://auth.gongzzang.test");
+    vi.stubEnv("ZITADEL_CLIENT_ID", "production-client");
+    vi.stubEnv("ZITADEL_AUDIENCE", "production-audience");
+    vi.stubEnv("ZITADEL_REDIRECT_URI", "https://gongzzang.test/api/auth/callback");
+    vi.stubEnv("REDIS_URL", "rediss://redis.gongzzang.test:6379");
+    vi.stubEnv("SESSION_SECRET", "production-session-secret-32-bytes-valid");
+    vi.stubEnv("INTERNAL_AUTH_SECRET", "production-internal-auth-secret-32-valid");
   });
 
   afterEach(() => {
@@ -51,9 +60,9 @@ describe("dev cookie helpers (no prefix, localhost HTTP 호환)", () => {
     expect(SID_COOKIE_NAME).toBe("sid");
   });
 
-  it("uses 'auth-tmp' (no __Secure- prefix) in dev", async () => {
-    const { TEMP_COOKIE_NAME } = await import("@/lib/session/cookie");
-    expect(TEMP_COOKIE_NAME).toBe("auth-tmp");
+  it("uses 'auth-state' (no __Secure- prefix) in dev", async () => {
+    const { AUTH_STATE_COOKIE_NAME } = await import("@/lib/session/cookie");
+    expect(AUTH_STATE_COOKIE_NAME).toBe("auth-state");
   });
 
   it("setSidCookie omits Secure + Partitioned in dev", async () => {
@@ -68,32 +77,32 @@ describe("dev cookie helpers (no prefix, localhost HTTP 호환)", () => {
   });
 });
 
-describe("signTempPayload / verifyTempPayload", () => {
+describe("signAuthStatePayload / verifyAuthStatePayload", () => {
   it("roundtrips correctly", async () => {
-    const { signTempPayload, verifyTempPayload } = await import("@/lib/session/cookie");
+    const { signAuthStatePayload, verifyAuthStatePayload } = await import("@/lib/session/cookie");
     const original = JSON.stringify({ x: 1 });
-    const signed = signTempPayload(original);
-    expect(verifyTempPayload(signed)).toBe(original);
+    const signed = signAuthStatePayload(original);
+    expect(verifyAuthStatePayload(signed)).toBe(original);
   });
 
   it("returns null on tampered MAC", async () => {
-    const { signTempPayload, verifyTempPayload } = await import("@/lib/session/cookie");
-    const signed = signTempPayload("data");
+    const { signAuthStatePayload, verifyAuthStatePayload } = await import("@/lib/session/cookie");
+    const signed = signAuthStatePayload("data");
     const tampered = `${signed.slice(0, -2)}XX`;
-    expect(verifyTempPayload(tampered)).toBe(null);
+    expect(verifyAuthStatePayload(tampered)).toBe(null);
   });
 
   it("returns null on tampered payload", async () => {
-    const { signTempPayload, verifyTempPayload } = await import("@/lib/session/cookie");
-    const signed = signTempPayload("data");
+    const { signAuthStatePayload, verifyAuthStatePayload } = await import("@/lib/session/cookie");
+    const signed = signAuthStatePayload("data");
     const dot = signed.indexOf(".");
     const originalMac = signed.slice(dot);
     const tampered = `ZXZpbA${originalMac}`;
-    expect(verifyTempPayload(tampered)).toBe(null);
+    expect(verifyAuthStatePayload(tampered)).toBe(null);
   });
 
   it("returns null when no dot separator", async () => {
-    const { verifyTempPayload } = await import("@/lib/session/cookie");
-    expect(verifyTempPayload("nodothere")).toBe(null);
+    const { verifyAuthStatePayload } = await import("@/lib/session/cookie");
+    expect(verifyAuthStatePayload("nodothere")).toBe(null);
   });
 });
