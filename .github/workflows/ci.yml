@@ -66,6 +66,10 @@ jobs:
       - name: PNU anchor PBF marker contract guardrail
         shell: pwsh
         run: ./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+      - name: Install ripgrep for repository guardrails
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ripgrep
       - name: Forbidden implementation marker guardrail
         run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
       - name: markdownlint
@@ -149,7 +153,10 @@ jobs:
           tar -czf target/supply-chain/gongzzang-web-next-build.tgz -C target/supply-chain gongzzang-web-next-build
 
       - name: Build API release candidate
-        run: cargo build -p api --release --locked
+        run: |
+          cargo build -p api --release --locked
+          mkdir -p target/supply-chain/gongzzang-api-release
+          cp target/release/api target/supply-chain/gongzzang-api-release/api
 
       - name: Generate Node workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
@@ -161,7 +168,7 @@ jobs:
       - name: Generate Rust workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
         with:
-          path: target/release/api
+          path: target/supply-chain/gongzzang-api-release
           format: cyclonedx-json
           output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 

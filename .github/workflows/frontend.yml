@@ -98,12 +98,16 @@ jobs:
         run: pnpm --filter=@gongzzang/web test:e2e
         env:
           NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+          NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: http://localhost:18082
+          NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: ci-e2e-naver-client
           ZITADEL_ISSUER: http://localhost:8443
           ZITADEL_CLIENT_ID: ci-placeholder
           ZITADEL_AUDIENCE: ci-placeholder
           ZITADEL_REDIRECT_URI: http://localhost:3000/api/auth/callback
           REDIS_URL: redis://localhost:6379
           SESSION_SECRET: ci-test-secret-32-bytes-or-more-padding-padding
+          INTERNAL_AUTH_SECRET: ci-e2e-internal-auth-secret-32-valid
+          PLATFORM_CORE_WEBHOOK_SECRET: ci-e2e-platform-core-webhook-secret-32
           # ZITADEL_E2E_REAL 미설정 → auth.spec.ts 의 Zitadel-dependent test (시나리오 4-5) 는
           # test.skip(ZITADEL_E2E_REAL !== "true") 으로 graceful skip.
           # 시나리오 1-3 (login UI / 미인증 redirect / forbidden) 는 placeholder env 로 Next.js
