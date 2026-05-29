@@ -11,6 +11,26 @@ load, stress, spike, soak, and fault tests against that specimen, identify the
 first bottleneck, then derive a launch spec with explicit headroom and upgrade
 triggers.
 
+## Enterprise Reference Patterns
+
+This design follows patterns from public large-scale reliability and cloud
+engineering references:
+
+| Source | Pattern to adopt |
+|---|---|
+| [Google SRE Book: Introduction](https://sre.google/sre-book/introduction/) | Capacity planning must include regular load testing that maps raw capacity, such as servers and disks, to service capacity. Demand planning must include both organic product growth and inorganic events such as launches or campaigns. |
+| [Google SRE Book: Cascading Failures](https://sre.google/sre-book/addressing-cascading-failures/) | Preventing overload starts with testing server capacity limits and overload failure modes. Capacity planning should be coupled with performance testing to find the load at which a service fails. |
+| [AWS Distributed Load Testing on AWS](https://docs.aws.amazon.com/solutions/distributed-load-testing-on-aws/) | Enterprise load testing needs distributed runners, downloadable raw results, latency/error analysis, baseline comparison across runs, and visibility into RDS, CloudFront/CDN, ECS/EKS, and other resource bottlenecks. |
+| [AWS DLT customer examples](https://docs.aws.amazon.com/solutions/distributed-load-testing-on-aws/) | Major launch tests can run at multiples of expected traffic; AWS publishes a customer example of testing at six times expected traffic before launch. Gongzzang treats 6x as an event-rehearsal option, not a default always-on target. |
+| [Microsoft Azure Well-Architected: Performance Testing](https://learn.microsoft.com/en-us/azure/well-architected/performance-efficiency/performance-test) | Define acceptance criteria, establish baselines, use hypothesis-driven experiments, compare future runs against baselines, and collect live resource metrics during tests. |
+| [Microsoft Azure Well-Architected: Reliability Testing](https://learn.microsoft.com/en-us/azure/well-architected/reliability/testing-strategy) | Reliability tests should validate load spikes, dependency failures, self-healing, self-preservation, graceful degradation, and blast-radius controls. |
+| [Netflix Tech Blog: Performance Under Load](https://netflixtechblog.medium.com/performance-under-load-3e6fa9a60581) | Static concurrency limits become stale as topology and latency change. Under overload, unbounded queues raise latency, trigger timeouts, and can cascade. Gongzzang must test bounded queues, rejection, and circuit behavior explicitly. |
+
+These references change the design from "run k6 and read p95" to a controlled
+capacity engineering loop: hypothesis, production-like test specimen, staged
+load, bottleneck evidence, overload behavior, mitigation, repeat, and baseline
+comparison.
+
 ## Decision
 
 Use the research document's realistic launch candidate as the first perf
@@ -36,6 +56,28 @@ The test order is:
 5. Re-run the same scenario.
 6. Set launch spec at a conservative fraction of the verified breakpoint.
 
+## Enterprise Quality Bar
+
+Every load test is an experiment, not an ad hoc traffic blast. Each experiment
+must declare:
+
+| Field | Requirement |
+|---|---|
+| hypothesis | What should happen and what might fail first |
+| scenario | Exact workload mix and route groups |
+| specimen | Exact AWS/container/database/cache/CDN settings |
+| data shape | Listing count, marker tile state, cache warm/cold state |
+| SLO gates | Latency, error, resource, and recovery gates |
+| stop condition | When the test must stop before damaging shared systems |
+| evidence path | Immutable output directory under `target/audit/load-tests` |
+| decision owner | Person or team responsible for accepting the sizing result |
+| follow-up action | Tune query/cache/config/spec, then re-run same scenario |
+
+The perf environment should be production-like for the components under test:
+same runtime build, same schema, same migrations, same connection pool policy,
+same route/auth controls, and representative data volume. Production data must
+be scrubbed or synthetically generated; production PII is not allowed.
+
 ## SLO Gates
 
 The following gates decide whether a load level is healthy:
@@ -57,6 +99,8 @@ The following gates decide whether a load level is healthy:
 | DB CPU | No sustained saturation at launch target |
 | Slow queries | No repeated hot endpoint slow query |
 | CircuitBreaker | Opens only for injected dependency failure, not normal load |
+| Recovery after stress | Returns to baseline latency/error without restart |
+| Queue/concurrency guard | Rejects or sheds before unbounded latency growth |
 
 Any exceeded gate creates a breakpoint candidate. A breakpoint is accepted only
 after telemetry identifies the first bottleneck.
@@ -179,6 +223,20 @@ Capacity discovery extends those levels:
 | S6 | 600 RPS mixed |
 | S7 | 800 RPS mixed, only if earlier steps remain healthy |
 
+Major launch or campaign rehearsal adds explicit traffic multipliers:
+
+| Rehearsal | Target |
+|---|---:|
+| expected peak | 1x forecast peak traffic |
+| elevated peak | 2x forecast peak traffic |
+| severe peak | 4x forecast peak traffic |
+| executive launch gate | 6x forecast peak traffic, only for high-risk launch events |
+
+The 6x gate is not a permanent sizing target. It is a one-time confidence test
+for campaign or launch risk, inspired by public AWS Distributed Load Testing
+customer examples. The launch spec is still sized from verified breakpoint,
+business forecast, SLO headroom, and cost.
+
 Each step holds long enough to stabilize p95/p99, DB metrics, cache metrics, and
 service CPU/memory. Stress tests stop when an SLO gate fails, error rate exceeds
 threshold, or a shared dependency approaches unsafe saturation.
@@ -193,6 +251,40 @@ threshold, or a shared dependency approaches unsafe saturation.
 | spike | 1-5 minute bursts | test sudden map/search bursts |
 | soak | 6-12 hours first, 24 hours before launch | find leaks and connection churn |
 | fault | targeted windows | verify dependency failure behavior |
+
+## Overload And Self-Preservation
+
+Enterprise-grade testing must prove how the system behaves when it cannot serve
+all traffic. A test that only records latency until the service falls over is not
+sufficient.
+
+Gongzzang should verify these overload controls:
+
+| Control | Expected behavior |
+|---|---|
+| bounded request concurrency | in-flight requests stay within a known limit |
+| bounded queueing | excess requests are rejected cheaply instead of waiting until timeout |
+| route priority | interactive read traffic is protected before background or low-value traffic |
+| CircuitBreaker | failing dependencies stop consuming request capacity |
+| retry discipline | retries do not create a self-amplifying storm |
+| graceful degradation | non-critical data can be omitted or served stale when policy allows |
+| recovery | latency and error rate return to baseline after overload is removed |
+
+Route priority for overload tests:
+
+| Priority | Route class |
+|---|---|
+| P0 | health/readiness, auth/session safety, critical Listing read |
+| P1 | Listing detail, panel read, marker tile cache hit |
+| P2 | marker tile cache miss, expensive filter/mask reads |
+| P3 | writes that can return retryable errors without data loss |
+| P4 | diagnostics, non-critical background refresh, bulk maintenance |
+
+This follows the Netflix-style lesson that protecting the service is often
+better than accepting every request and allowing queues to cascade into
+timeouts. Gongzzang does not need Netflix's adaptive implementation on day one,
+but it must measure queueing, in-flight request count, rejection rate, and
+recovery behavior.
 
 ## Sizing Algorithm
 
@@ -221,6 +313,24 @@ Example:
 | 400 RPS fails only during marker miss burst | strengthen marker cache/precompute |
 | 600 RPS healthy after fixes | set launch target near 250-350 RPS |
 
+## Result Classification
+
+Each run must classify the result before making a sizing recommendation:
+
+| Classification | Meaning | Default action |
+|---|---|---|
+| healthy | all SLO and resource gates pass | keep as candidate baseline |
+| latency breakpoint | p95/p99 fails before resource saturation is clear | inspect queueing, slow spans, DB queries |
+| resource breakpoint | CPU, memory, connection, IOPS, or cache saturation appears first | tune resource owner or scale the constrained layer |
+| dependency breakpoint | Platform Core, R2/CDN, Valkey, or another dependency dominates latency | enforce timeout/circuit/cache behavior before scaling API |
+| data-shape breakpoint | only a region, tile, filter, or hot partition fails | fix index/projection/precompute/data distribution |
+| overload-safe | some requests are rejected or degraded, but core route SLO recovers | document guard limits and autoscaling trigger |
+| overload-unsafe | queue growth, retry storm, or cascading errors continue after load stops | block launch sizing until fixed |
+
+The final launch spec can be accepted only from `healthy` or `overload-safe`
+results. `overload-safe` requires explicit product acceptance of degraded or
+rejected lower-priority behavior.
+
 ## Evidence
 
 Every run writes immutable local evidence before any sizing claim:
@@ -241,6 +351,7 @@ Required files:
 | `otel.json` | route latency and dependency spans |
 | `bottleneck.md` | first bottleneck analysis |
 | `recommendation.md` | recommended launch spec and upgrade triggers |
+| `baseline-comparison.md` | comparison against the previous accepted baseline |
 
 The final human-readable report lives under:
 
