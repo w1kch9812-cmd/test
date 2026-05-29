@@ -1,12 +1,9 @@
-import { check } from "k6";
 import exec from "k6/execution";
-import http from "k6/http";
 import { profile, runTags, targetBaseUrl } from "../lib/env.js";
-import { safePostJson, sanitizeTags } from "../lib/http.js";
+import { safePostJson } from "../lib/http.js";
 
 const scenarioName = "platform-core-events";
 const goldPointerEventType = "catalog.industrial_complex.gold_pointer.published.v1";
-const poisonEventType = "catalog.unsupported.v1";
 const duplicateEventId = "00000000-0000-4000-8000-000000000001";
 
 export const options = {
@@ -46,21 +43,19 @@ function uuidForIteration(eventCase) {
 
   const sequence = exec.scenario.iterationInTest + 1;
   const hex = sequence.toString(16).padStart(12, "0").slice(-12);
-  const casePrefix = eventCase === "poison" ? "10000000" : "20000000";
-  return `${casePrefix}-0000-4000-8000-${hex}`;
+  return `20000000-0000-4000-8000-${hex}`;
 }
 
 function eventBody(eventCase) {
-  const eventType = eventCase === "poison" ? poisonEventType : goldPointerEventType;
   const timestamp = new Date().toISOString();
 
   return {
     event_id: uuidForIteration(eventCase),
-    event_type: eventType,
+    event_type: goldPointerEventType,
     occurred_at: timestamp,
     scope: "catalog",
     payload: {
-      type: eventType,
+      type: goldPointerEventType,
       schema_version: 1,
       complex_id: "load-industrial-complex-001",
       current_version: `gold-pointer-load-${exec.scenario.iterationInTest}`,
@@ -80,24 +75,10 @@ function eventHeaders(body) {
 
 function eventCaseForIteration() {
   const iteration = exec.scenario.iterationInTest;
-  if (iteration % 10 === 0) {
-    return "poison";
-  }
   if (iteration % 4 === 0) {
     return "duplicate";
   }
   return "valid";
-}
-
-function postPoisonEvent(url, body, tags, headers) {
-  const response = http.post(url, JSON.stringify(body), {
-    headers: { "Content-Type": "application/json", ...headers },
-    tags: sanitizeTags(tags),
-  });
-  check(response, {
-    "poison event is rejected": (r) => r.status === 400,
-  });
-  return response;
 }
 
 export default function () {
@@ -107,11 +88,6 @@ export default function () {
   const url = `${baseUrl}/platform-core/events`;
   const tags = baseTags(currentCase, currentCase === "valid" ? "high" : "normal");
   const headers = eventHeaders(body);
-
-  if (currentCase === "poison") {
-    postPoisonEvent(url, body, tags, headers);
-    return;
-  }
 
   safePostJson(url, body, tags, headers);
 }

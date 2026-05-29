@@ -185,6 +185,9 @@ foreach ($needle in @(
 if ($eventScenario.Contains("PLATFORM_CORE_WEBHOOK_SECRET") -or $eventScenario.Contains("x-platform-core-signature") -or $eventScenario -match "crypto\.hmac|hmac\(") {
     throw "platform-core event scenario must match committed unsigned event receiver contract"
 }
+if ($eventScenario.Contains("poison") -or $eventScenario.Contains("unsupported")) {
+    throw "platform-core event capacity scenario must not include intentional poison events"
+}
 
 $launcher = Read-Text "scripts/load/run-k6.ps1"
 foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "LOAD_FILTER_HASH_MISS", "LOAD_MARKER_MISS_X", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "normalize-k6-summary.ps1")) {
