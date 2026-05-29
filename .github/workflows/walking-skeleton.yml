@@ -100,8 +100,9 @@ jobs:
       - name: E2E [1/6] — public /healthz no auth
         run: |
           BODY=$(curl -sf http://localhost:8080/healthz)
-          if [ "$BODY" != "ok" ]; then echo "FAIL: /healthz expected 'ok', got '$BODY'"; exit 1; fi
-          echo "PASS: /healthz=ok"
+          STATUS=$(echo "$BODY" | python3 -c "import json,sys;print(json.load(sys.stdin).get('status', ''))")
+          if [ "$STATUS" != "ok" ]; then echo "FAIL: /healthz expected status=ok, got '$BODY'"; exit 1; fi
+          echo "PASS: /healthz.status=ok"
 
       - name: E2E [2/6] — protected without token returns 401
         run: |
