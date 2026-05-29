@@ -113,7 +113,13 @@
     "proxy": {
       "backendUnavailableTitle": "백엔드 서버에 연결할 수 없어요",
       "retryLaterDetail": "잠시 후 다시 시도해 주세요.",
-      "rateLimitedTitle": "요청이 너무 많아요"
+      "rateLimitedTitle": "요청이 너무 많아요",
+      "routeNotAllowedTitle": "요청할 수 없는 경로예요",
+      "routeNotAllowedDetail": "허용된 API 경로인지 확인해 주세요.",
+      "sessionRequiredTitle": "로그인이 필요해요",
+      "sessionRequiredDetail": "로그인 후 다시 시도해 주세요.",
+      "insufficientRoleTitle": "권한이 부족해요",
+      "insufficientRoleDetail": "이 작업을 수행할 권한이 있는 계정으로 다시 시도해 주세요."
     }
   },
   "notifications": {

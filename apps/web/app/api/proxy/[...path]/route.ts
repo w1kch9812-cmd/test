@@ -3,17 +3,18 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { createServerApi } from "@/lib/api";
 import { problem } from "@/lib/http/problem";
+import { GENERATED_API_PROXY_ROUTE_POLICIES } from "@/lib/policies/traffic-auth-policy.generated";
+import { checkRate } from "@/lib/ratelimit";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
-import { getSession } from "@/lib/session/store";
+import { getSession, type SessionData } from "@/lib/session/store";
 
 const BODY_METHODS = new Set(["POST", "PUT", "PATCH"]);
 
-async function resolveBearer(req: NextRequest): Promise<string | undefined> {
+async function resolveSession(req: NextRequest): Promise<SessionData | null> {
   const sid = req.cookies.get(SID_COOKIE_NAME)?.value;
-  if (!sid) return undefined;
+  if (!sid) return null;
 
-  const session = await getSession(sid);
-  return session?.access_token;
+  return getSession(sid);
 }
 
 function createRequestId(req: NextRequest): string {
@@ -72,16 +73,158 @@ async function readProxyBody(
   return isBinaryProxyResponse(contentType) ? response.arrayBuffer() : response.text();
 }
 
+function isTemplateSegment(segment: string): boolean {
+  return segment.startsWith(":") && segment.length > 1;
+}
+
+function matchesTemplatePath(template: string, path: string): boolean {
+  const templateSegments = template.split("/");
+  const pathSegments = path.split("/");
+  if (templateSegments.length !== pathSegments.length) return false;
+
+  return templateSegments.every((segment, index) => {
+    const pathSegment = pathSegments[index];
+    if (pathSegment === undefined) return false;
+    if (isTemplateSegment(segment)) return pathSegment.length > 0;
+    return segment === pathSegment;
+  });
+}
+
+function matchesApiProxyRoutePolicy(
+  policy: (typeof GENERATED_API_PROXY_ROUTE_POLICIES)[number],
+  method: string,
+  path: string,
+): boolean {
+  if (!(policy.methods as readonly string[]).includes(method)) return false;
+
+  if (policy.kind === "exact") return path === policy.targetPath;
+  if (policy.kind === "prefix") {
+    return path === policy.targetPath || path.startsWith(`${policy.targetPath}/`);
+  }
+  return matchesTemplatePath(policy.targetPath, path);
+}
+
+function getApiProxyRoutePolicy(method: string, path: string) {
+  return GENERATED_API_PROXY_ROUTE_POLICIES.find((policy) =>
+    matchesApiProxyRoutePolicy(policy, method, path),
+  );
+}
+
+function sessionRequiredProblem(req: NextRequest, t: (key: string) => string): NextResponse {
+  return problem({
+    type: "proxy/session-required",
+    title: t("sessionRequiredTitle"),
+    status: 401,
+    detail: t("sessionRequiredDetail"),
+    instance: req.url,
+  }).toResponse() as unknown as NextResponse;
+}
+
+function insufficientRoleProblem(req: NextRequest, t: (key: string) => string): NextResponse {
+  return problem({
+    type: "proxy/insufficient-role",
+    title: t("insufficientRoleTitle"),
+    status: 403,
+    detail: t("insufficientRoleDetail"),
+    instance: req.url,
+  }).toResponse() as unknown as NextResponse;
+}
+
+function rateLimitedProblem(
+  req: NextRequest,
+  t: (key: string) => string,
+  type: string,
+): NextResponse {
+  return problem({
+    type,
+    title: t("rateLimitedTitle"),
+    status: 429,
+    detail: t("retryLaterDetail"),
+    instance: req.url,
+  }).toResponse() as unknown as NextResponse;
+}
+
+async function enforceApiProxyExposure(
+  req: NextRequest,
+  policy: (typeof GENERATED_API_PROXY_ROUTE_POLICIES)[number],
+  t: (key: string) => string,
+): Promise<{ session: SessionData | null; response: NextResponse | null }> {
+  if (policy.exposureClass === "public_derived") {
+    return { session: null, response: null };
+  }
+
+  const session = await resolveSession(req);
+  if (!session) {
+    return { session, response: sessionRequiredProblem(req, t) };
+  }
+
+  if (policy.exposureClass === "privileged" && !policy.requiredRoles.includes(session.role)) {
+    return { session, response: insufficientRoleProblem(req, t) };
+  }
+
+  return { session, response: null };
+}
+
+function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+}
+
+function resolveApiProxyRateKey(
+  req: NextRequest,
+  policy: (typeof GENERATED_API_PROXY_ROUTE_POLICIES)[number],
+  session: SessionData | null,
+): string {
+  if (!policy.rate) {
+    throw new Error(`API proxy route policy has no rate profile: ${policy.targetPath}`);
+  }
+
+  const subject = session?.sub ?? clientIp(req);
+  return `${policy.rate.keyPrefix}:${subject}`;
+}
+
+async function checkApiProxyRateLimit(
+  req: NextRequest,
+  policy: (typeof GENERATED_API_PROXY_ROUTE_POLICIES)[number],
+  session: SessionData | null,
+  t: (key: string) => string,
+): Promise<NextResponse | null> {
+  if (!policy.rate) return null;
+
+  const result = await checkRate(
+    resolveApiProxyRateKey(req, policy, session),
+    policy.rate.limit,
+    policy.rate.windowSec,
+  );
+  if (result.allowed) return null;
+
+  return rateLimitedProblem(req, t, policy.rate.problemType);
+}
+
 async function forward(req: NextRequest, params: { path: string[] }): Promise<NextResponse> {
   const t = await getTranslations("server.proxy");
   const path = params.path.join("/");
+  const routePolicy = getApiProxyRoutePolicy(req.method, path);
+  if (!routePolicy) {
+    return problem({
+      type: "proxy/route-not-allowed",
+      title: t("routeNotAllowedTitle"),
+      status: 404,
+      detail: t("routeNotAllowedDetail"),
+      instance: req.url,
+    }).toResponse() as unknown as NextResponse;
+  }
+  const exposureGate = await enforceApiProxyExposure(req, routePolicy, t);
+  if (exposureGate.response) return exposureGate.response;
+  const rateLimitGate = await checkApiProxyRateLimit(req, routePolicy, exposureGate.session, t);
+  if (rateLimitGate) return rateLimitGate;
+
   const api = createServerApi();
   // SP-Obs T2: X-Request-Id propagation -- 프론트가 보낸 ID 또는 자동 생성.
   // backend Axum middleware 가 동일 ID 를 응답 echo + tracing span 에 attach.
   const requestId = createRequestId(req);
 
   try {
-    const bearer = await resolveBearer(req);
+    const bearer = exposureGate.session?.access_token;
     const requestInit = await buildProxyRequestOptions(req, requestId, bearer);
     const response = await api(path, requestInit);
     const contentType = response.headers.get("content-type") ?? "text/plain";

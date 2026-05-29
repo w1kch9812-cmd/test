@@ -45,6 +45,7 @@ export const API = {
     base: API_PROXY_BASE,
     listingMarkerCounts: `${API_PROXY_BASE}/map/v1/marker-counts/listing`,
     listingMarkerFilters: `${API_PROXY_BASE}/map/v1/marker-filters/listing`,
+    listingMarkerMasksPrefix: `${API_PROXY_BASE}/map/v1/marker-masks/listing`,
     listingMarkerMaskTemplate: `${API_PROXY_BASE}/map/v1/marker-masks/listing/{z}/{x}/{y}?filter_hash={hash}&base_version={baseVersion}`,
     listingMarkerTilesPrefix: `${API_PROXY_BASE}/map/v1/marker-tiles/listing`,
     listingMarkerTileTemplate: `${API_PROXY_BASE}/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash={hash}`,

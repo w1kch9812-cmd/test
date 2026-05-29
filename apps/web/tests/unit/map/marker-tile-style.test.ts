@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { GONGZZANG_MAP_ZOOM_POLICY } from "@/lib/map/map-zoom-policy";
 import {
   buildListingMarkerLayerRegistration,
   buildParcelAnchorMarkerLayerRegistrations,
@@ -114,8 +115,8 @@ describe("parcel anchor marker tile map style", () => {
   it("registers Gongzzang listing marker source and circle layer without coordinate inputs", () => {
     const registration = buildListingMarkerLayerRegistration({
       filterHash: "all-active-v1",
-      minzoom: 8,
-      maxzoom: 18,
+      minzoom: GONGZZANG_MAP_ZOOM_POLICY.markers.listing.minZoom,
+      maxzoom: GONGZZANG_MAP_ZOOM_POLICY.markers.listing.maxZoom,
       origin: "http://localhost:3900",
     });
 
@@ -125,11 +126,13 @@ describe("parcel anchor marker tile map style", () => {
       tiles: [
         "http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1",
       ],
-      minzoom: 8,
-      maxzoom: 18,
+      minzoom: 14,
+      maxzoom: 22,
     });
     expect(registration.layers[0].id).toBe(LISTING_MARKER_TILE_CIRCLE_LAYER_ID);
     expect(registration.layers[0]["source-layer"]).toBe("listing");
+    expect(registration.layers[0].minzoom).toBe(14);
+    expect(registration.layers[0].maxzoom).toBe(22);
     expect(registration.source.tiles[0]).not.toContain("bbox=");
     expect(registration.source.tiles[0]).not.toContain("bounds=");
     expect(registration.source.tiles[0]).not.toContain("lat=");

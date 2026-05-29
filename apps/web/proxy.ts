@@ -4,6 +4,11 @@ import { env } from "@/lib/env";
 import { problem } from "@/lib/http/problem";
 import { tStatic } from "@/lib/i18n/static";
 import { resolveVectorTileAllowedOrigins } from "@/lib/map/vector-tile-manifest";
+import {
+  GENERATED_AUTH_RATE_ROUTE_POLICIES,
+  GENERATED_PAGE_ROUTE_POLICIES,
+  GENERATED_PUBLIC_MAP_ROUTE_POLICIES,
+} from "@/lib/policies/traffic-auth-policy.generated";
 import { checkRate } from "@/lib/ratelimit";
 import { API, AUTH_PATH_PREFIX, ROUTES } from "@/lib/routes";
 import { SID_COOKIE_NAME } from "@/lib/session/cookie";
@@ -23,29 +28,160 @@ const PUBLIC_PATHS = [
   ROUTES.forbidden,
   AUTH_PATH_PREFIX,
   API.platformCore.events,
-  API.proxy.listingMarkerTilesPrefix,
   "/fonts",
 ];
+const LISTING_MARKER_MASK_PREFIX = API.proxy.listingMarkerMasksPrefix;
 const DEV_ONLY_PUBLIC_PATHS = ["/dev-tiles", "/dev-x9-test"];
-const ADMIN_PATHS = ["/admin"];
-const ADMIN_ROLES = new Set(["Admin", "Broker", "Operator"]);
-// SP6-iv: 매물 등록/수정 = Broker 전용 (admin 도 허용 — 운영 세부 결정).
-//
-// audit 2026-05-08 round 2 (P4 — Codex 발견): BROKER 게이트 SSOT.
-// `/listings/new` exact + `/listings/<id>/edit` (dynamic id) 두 패턴.
-// 새 broker-gated path 추가 시 본 배열 한 곳만 수정 → `isBrokerGated` 자동 반영.
-type BrokerRule =
-  | { kind: "exact"; path: string }
-  | { kind: "prefix-suffix"; prefix: string; suffix: string };
-const BROKER_GATED_RULES: readonly BrokerRule[] = [
-  { kind: "exact", path: ROUTES.listings.new },
-  { kind: "prefix-suffix", prefix: `${ROUTES.listings.index}/`, suffix: "/edit" },
-];
-const BROKER_ALLOWED_ROLES = new Set(["Broker", "Admin"]);
+
+type PublicMapRoutePolicy = {
+  kind: "exact" | "prefix";
+  path: string;
+  exposure: {
+    class: "public_derived";
+    allowedDataClasses: readonly string[];
+    rawRecordAccess: "forbidden";
+    bulkExport: "forbidden";
+  };
+  rate: {
+    keyPrefix: string;
+    limit: number;
+    windowSec: number;
+  };
+};
+
+type AuthRateRoutePolicy = {
+  path: string;
+  methods: readonly string[];
+  rate: {
+    keyPrefix: string;
+    keyStrategy: "client_ip" | "session_or_anon";
+    limit: number;
+    windowSec: number;
+    problemType: string;
+  };
+};
+
+type PageRoutePolicy =
+  | {
+      kind: "exact";
+      path: string;
+      requiredRoles: readonly string[];
+    }
+  | {
+      kind: "prefix";
+      path: string;
+      requiredRoles: readonly string[];
+    }
+  | {
+      kind: "prefix_suffix";
+      prefix: string;
+      suffix: string;
+      requiredRoles: readonly string[];
+    };
+
+function resolveAuthPath(pathSource: string): string {
+  switch (pathSource) {
+    case "API.auth.login":
+      return API.auth.login;
+    case "API.auth.callback":
+      return API.auth.callback;
+    case "API.auth.refresh":
+      return API.auth.refresh;
+    default:
+      throw new Error(`Unknown auth rate route policy path source: ${pathSource}`);
+  }
+}
+
+function resolvePagePathSource(pathSource: string): string {
+  switch (pathSource) {
+    case "ROUTES.listings.new":
+      return ROUTES.listings.new;
+    case "ROUTES.listings.index":
+      return ROUTES.listings.index;
+    default:
+      throw new Error(`Unknown page route policy path source: ${pathSource}`);
+  }
+}
+
+function resolvePublicMapPath(pathSource: string): string {
+  switch (pathSource) {
+    case "API.proxy.listingMarkerTilesPrefix":
+      return API.proxy.listingMarkerTilesPrefix;
+    case "API.proxy.listingMarkerCounts":
+      return API.proxy.listingMarkerCounts;
+    case "API.proxy.listingMarkerFilters":
+      return API.proxy.listingMarkerFilters;
+    case "LISTING_MARKER_MASK_PREFIX":
+      return LISTING_MARKER_MASK_PREFIX;
+    default:
+      throw new Error(`Unknown public map route policy path source: ${pathSource}`);
+  }
+}
+
+const AUTH_RATE_ROUTE_POLICIES: readonly AuthRateRoutePolicy[] =
+  GENERATED_AUTH_RATE_ROUTE_POLICIES.map((policy) => ({
+    path: resolveAuthPath(policy.pathSource),
+    methods: policy.methods,
+    rate: policy.rate,
+  }));
+
+const PAGE_ROUTE_POLICIES: readonly PageRoutePolicy[] = GENERATED_PAGE_ROUTE_POLICIES.map(
+  (policy) => {
+    if (policy.kind === "prefix_suffix") {
+      const prefix = policy.prefix ?? resolvePagePathSource(policy.prefixSource ?? "");
+      return {
+        kind: policy.kind,
+        prefix: `${prefix}/`,
+        suffix: policy.suffix ?? "",
+        requiredRoles: policy.requiredRoles,
+      };
+    }
+
+    return {
+      kind: policy.kind,
+      path: policy.path ?? resolvePagePathSource(policy.pathSource ?? ""),
+      requiredRoles: policy.requiredRoles,
+    };
+  },
+);
+
+const PUBLIC_MAP_ROUTE_POLICIES: readonly PublicMapRoutePolicy[] =
+  GENERATED_PUBLIC_MAP_ROUTE_POLICIES.map((policy) => ({
+    kind: policy.kind,
+    path: resolvePublicMapPath(policy.pathSource),
+    exposure: policy.exposure,
+    rate: policy.rate,
+  }));
+
+function getPublicMapRoutePolicy(pathname: string): PublicMapRoutePolicy | undefined {
+  return PUBLIC_MAP_ROUTE_POLICIES.find((policy) => {
+    if (policy.kind === "exact") return pathname === policy.path;
+    return pathname === policy.path || pathname.startsWith(`${policy.path}/`);
+  });
+}
+
+function getAuthRateRoutePolicy(pathname: string, method: string): AuthRateRoutePolicy | undefined {
+  return AUTH_RATE_ROUTE_POLICIES.find(
+    (policy) => pathname === policy.path && policy.methods.includes(method),
+  );
+}
+
+function getPageRoutePolicy(pathname: string): PageRoutePolicy | undefined {
+  return PAGE_ROUTE_POLICIES.find((policy) => {
+    if (policy.kind === "exact") return pathname === policy.path;
+    if (policy.kind === "prefix") {
+      return pathname === policy.path || pathname.startsWith(`${policy.path}/`);
+    }
+    return pathname.startsWith(policy.prefix) && pathname.endsWith(policy.suffix);
+  });
+}
 
 function isPublic(pathname: string): boolean {
-  return [...PUBLIC_PATHS, ...DEV_ONLY_PUBLIC_PATHS].some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  return (
+    getPublicMapRoutePolicy(pathname) !== undefined ||
+    [...PUBLIC_PATHS, ...DEV_ONLY_PUBLIC_PATHS].some(
+      (p) => pathname === p || pathname.startsWith(`${p}/`),
+    )
   );
 }
 
@@ -60,53 +196,54 @@ function isLocalHostname(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-function isAdmin(pathname: string): boolean {
-  return ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function clientIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 }
 
-function isBrokerGated(pathname: string): boolean {
-  return BROKER_GATED_RULES.some((rule) => {
-    if (rule.kind === "exact") return pathname === rule.path;
-    return pathname.startsWith(rule.prefix) && pathname.endsWith(rule.suffix);
-  });
+function rateLimitedProblem(req: NextRequest, type: string): NextResponse {
+  return problem({
+    type,
+    title: tStatic("server.proxy.rateLimitedTitle"),
+    status: 429,
+    detail: tStatic("server.proxy.retryLaterDetail"),
+    instance: req.url,
+  }).toResponse() as unknown as NextResponse;
 }
 
 async function checkAuthRateLimit(req: NextRequest): Promise<NextResponse | null> {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  if (req.nextUrl.pathname === API.auth.login) {
-    const r = await checkRate(`login:${ip}`, 5, 60);
-    if (!r.allowed) {
-      return problem({
-        type: "auth/too-many-requests",
-        title: tStatic("server.proxy.rateLimitedTitle"),
-        status: 429,
-        detail: tStatic("server.proxy.retryLaterDetail"),
-        instance: req.url,
-      }).toResponse() as unknown as NextResponse;
-    }
-  } else if (req.nextUrl.pathname === API.auth.callback) {
-    const r = await checkRate(`callback:${ip}`, 10, 60);
-    if (!r.allowed) {
-      return problem({
-        type: "auth/too-many-requests",
-        title: tStatic("server.proxy.rateLimitedTitle"),
-        status: 429,
-        instance: req.url,
-      }).toResponse() as unknown as NextResponse;
-    }
-  } else if (req.nextUrl.pathname === API.auth.refresh) {
-    const sid = req.cookies.get(SID_COOKIE_NAME)?.value ?? "anon";
-    const r = await checkRate(`refresh:${sid}`, 30, 60);
-    if (!r.allowed) {
-      return problem({
-        type: "auth/too-many-requests",
-        title: tStatic("server.proxy.rateLimitedTitle"),
-        status: 429,
-        instance: req.url,
-      }).toResponse() as unknown as NextResponse;
-    }
-  }
-  return null;
+  const policy = getAuthRateRoutePolicy(req.nextUrl.pathname, req.method);
+  if (!policy) return null;
+
+  const r = await checkRate(
+    resolveAuthRateKey(req, policy),
+    policy.rate.limit,
+    policy.rate.windowSec,
+  );
+  if (r.allowed) return null;
+
+  return rateLimitedProblem(req, policy.rate.problemType);
+}
+
+function resolveAuthRateKey(req: NextRequest, policy: AuthRateRoutePolicy): string {
+  const subject =
+    policy.rate.keyStrategy === "session_or_anon"
+      ? (req.cookies.get(SID_COOKIE_NAME)?.value ?? "anon")
+      : clientIp(req);
+  return `${policy.rate.keyPrefix}:${subject}`;
+}
+
+async function checkPublicMapRateLimit(req: NextRequest): Promise<NextResponse | null> {
+  const policy = getPublicMapRoutePolicy(req.nextUrl.pathname);
+  if (!policy) return null;
+
+  const r = await checkRate(
+    `${policy.rate.keyPrefix}:${clientIp(req)}`,
+    policy.rate.limit,
+    policy.rate.windowSec,
+  );
+  if (r.allowed) return null;
+
+  return rateLimitedProblem(req, "map/too-many-public-marker-requests");
 }
 
 function buildCspHeader(hostname: string, nonce: string): string {
@@ -182,9 +319,11 @@ function redirectToLogin(req: NextRequest, pathname: string): NextResponse {
 export async function proxy(req: NextRequest) {
   const url = req.nextUrl;
 
-  // 1. Rate limit (auth routes only)
+  // 1. Rate limit
   const rateBlocked = await checkAuthRateLimit(req);
   if (rateBlocked) return rateBlocked;
+  const publicMapRateBlocked = await checkPublicMapRateLimit(req);
+  if (publicMapRateBlocked) return publicMapRateBlocked;
 
   // 2. CSP nonce 주입
   const nonce = randomBytes(16).toString("base64");
@@ -217,11 +356,8 @@ export async function proxy(req: NextRequest) {
     return res;
   }
 
-  if (isAdmin(url.pathname) && !ADMIN_ROLES.has(session.role)) {
-    return NextResponse.redirect(new URL(ROUTES.forbidden, req.url));
-  }
-  // SP6-iv: 매물 등록/수정 broker (또는 admin) 만 진입.
-  if (isBrokerGated(url.pathname) && !BROKER_ALLOWED_ROLES.has(session.role)) {
+  const pageRoutePolicy = getPageRoutePolicy(url.pathname);
+  if (pageRoutePolicy && !pageRoutePolicy.requiredRoles.includes(session.role)) {
     return NextResponse.redirect(new URL(ROUTES.forbidden, req.url));
   }
 

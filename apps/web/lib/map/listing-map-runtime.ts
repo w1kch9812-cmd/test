@@ -1,4 +1,8 @@
 import { MAP_LAYER_COLORS } from "@gongzzang/ui/tokens.js";
+import {
+  LISTING_MARKER_RENDER_MAX_ZOOM,
+  LISTING_MARKER_RENDER_MIN_ZOOM,
+} from "@/lib/map/map-zoom-policy";
 import { ALL_ACTIVE_MARKER_FILTER_HASH } from "@/lib/map/marker-tile-contract";
 import {
   buildListingMarkerLayerRegistration,
@@ -218,8 +222,8 @@ async function setupListingMarkerTileLayers(
   try {
     const registration = buildListingMarkerLayerRegistration({
       filterHash: ALL_ACTIVE_MARKER_FILTER_HASH,
-      minzoom: 8,
-      maxzoom: 18,
+      minzoom: LISTING_MARKER_RENDER_MIN_ZOOM,
+      maxzoom: LISTING_MARKER_RENDER_MAX_ZOOM,
     });
 
     if (!mb.getSource?.(registration.sourceId)) {

@@ -16,6 +16,7 @@ describe("env schema (SP6-i extension)", () => {
     process.env.NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID = "naver-client";
     process.env.NEXT_PUBLIC_PLATFORM_CORE_BASE_URL = "https://platform-core.gongzzang.test";
     process.env.INTERNAL_AUTH_SECRET = "production-internal-auth-secret-32-valid";
+    process.env.PLATFORM_CORE_WEBHOOK_SECRET = "production-platform-core-webhook-secret-32-valid";
   };
 
   beforeEach(() => {
@@ -25,6 +26,7 @@ describe("env schema (SP6-i extension)", () => {
       vi.stubEnv("NODE_ENV", originalNodeEnv);
     }
     delete process.env.INTERNAL_AUTH_SECRET;
+    delete process.env.PLATFORM_CORE_WEBHOOK_SECRET;
     delete process.env.NEXT_PUBLIC_TILES_MANIFEST_URL;
   });
 
@@ -168,6 +170,20 @@ describe("env schema (SP6-i extension)", () => {
     delete process.env.INTERNAL_AUTH_SECRET;
 
     await expect(import("@/lib/env")).rejects.toThrow(/Invalid environment/);
+  });
+
+  it("throws on missing PLATFORM_CORE_WEBHOOK_SECRET in production", async () => {
+    setValidProductionEnv();
+    delete process.env.PLATFORM_CORE_WEBHOOK_SECRET;
+
+    await expect(import("@/lib/env")).rejects.toThrow(/PLATFORM_CORE_WEBHOOK_SECRET/);
+  });
+
+  it("throws on repeated-character PLATFORM_CORE_WEBHOOK_SECRET in production", async () => {
+    setValidProductionEnv();
+    process.env.PLATFORM_CORE_WEBHOOK_SECRET = "x".repeat(32);
+
+    await expect(import("@/lib/env")).rejects.toThrow(/PLATFORM_CORE_WEBHOOK_SECRET/);
   });
 
   it("throws on development INTERNAL_AUTH_SECRET in production", async () => {

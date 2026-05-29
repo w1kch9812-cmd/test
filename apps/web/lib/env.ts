@@ -11,6 +11,7 @@ const optionalUrl = z.preprocess(
 
 const forbiddenPublicClientIds = new Set(["naver-maps-placeholder", "your_naver_client_id_here"]);
 const devInternalAuthSecret = "dev-internal-auth-must-be-shared";
+const devPlatformCoreWebhookSecret = "dev-platform-core-webhook-secret-must-be-shared";
 const forbiddenProductionSessionSecrets = new Set([
   "change-me-to-random-32-byte-base64-string-aaaaaaaaaa",
   "ci-placeholder-secret-32-bytes-padding-ok",
@@ -95,6 +96,20 @@ const requiredInternalAuthSecret = z
     message: "must not be a repeated character in production",
   });
 
+const requiredPlatformCoreWebhookSecret = z
+  .string()
+  .trim()
+  .min(16)
+  .refine((value) => !isProduction || value.length >= 32, {
+    message: "must be at least 32 characters in production",
+  })
+  .refine((value) => !isProduction || value !== devPlatformCoreWebhookSecret, {
+    message: "must be configured explicitly in production",
+  })
+  .refine(isNotRepeatedProductionSecret, {
+    message: "must not be a repeated character in production",
+  });
+
 const requiredSessionSecret = z
   .string()
   .trim()
@@ -143,6 +158,9 @@ const ServerEnvSchema = PublicEnvSchema.extend({
   INTERNAL_AUTH_SECRET: isProduction
     ? requiredInternalAuthSecret
     : requiredInternalAuthSecret.default(devInternalAuthSecret),
+  PLATFORM_CORE_WEBHOOK_SECRET: isProduction
+    ? requiredPlatformCoreWebhookSecret
+    : requiredPlatformCoreWebhookSecret.default(devPlatformCoreWebhookSecret),
 });
 
 const isServer = typeof window === "undefined";
@@ -160,6 +178,7 @@ const parsed = Schema.safeParse({
   REDIS_URL: process.env.REDIS_URL,
   SESSION_SECRET: process.env.SESSION_SECRET,
   INTERNAL_AUTH_SECRET: process.env.INTERNAL_AUTH_SECRET,
+  PLATFORM_CORE_WEBHOOK_SECRET: process.env.PLATFORM_CORE_WEBHOOK_SECRET,
 });
 
 if (!parsed.success) {
