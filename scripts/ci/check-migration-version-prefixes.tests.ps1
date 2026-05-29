@@ -74,3 +74,4 @@ try {
 }
 
 Write-Host "check-migration-version-prefixes-tests-ok"
+exit 0

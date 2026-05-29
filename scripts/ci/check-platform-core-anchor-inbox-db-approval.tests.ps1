@@ -108,3 +108,4 @@ try {
 }
 
 Write-Host "check-platform-core-anchor-inbox-db-approval-tests-ok"
+exit 0
