@@ -29,22 +29,11 @@ auth route budgets, page gates, Rust API direct ingress rate policies, backend
 role policies, provider-neutral edge/ingress projection, and listing marker
 serving cache/budget constants match the registry. Runtime code consumes
 generated TypeScript/Rust policy artifacts; the registry checker fails when
-those generated artifacts, the edge projection, the AWS WAFv2/Pulumi manifest,
-Pulumi consumer, association support, or middleware mounts drift.
-`infrastructure/index.ts` now reads the generated WAFv2 manifest, declares the
-Pulumi WebACL resource, and can attach the WebACL to a regional target when an
-environment stack sets `wafRegionalResourceArn`. `@gongzzang/infrastructure`
-owns the Pulumi npm dependencies, and CI runs the local Pulumi preview
-guardrail against `infrastructure/security/aws-wafv2-edge-policy.generated.json`.
-The preview guardrail fails on Pulumi warnings as well as non-zero exits.
-The remaining production deployment gap is creating environment stacks with
-real AWS credentials and setting the target ALB/API Gateway ARN, or wiring the
-generated WebACL ARN into the CloudFront distribution module for global edge
-scope. Production deploy admission now calls
-`scripts/ci/check-production-edge-admission.ps1`, which blocks regional
-production deploy admission unless `GONGZZANG_WAF_REGIONAL_RESOURCE_ARN`
-contains a valid WAFv2 regional association target and the Pulumi preview emits
-`regional_association=planned`.
+those generated artifacts, the provider-neutral edge projection, or middleware
+mounts drift. AWS WAFv2/Pulumi manifests, Pulumi WebACL consumers, and
+production deploy admission are deferred production-promotion work. They are not
+part of the current Gongzzang Platform Core consumer integration gate and must
+not be expanded while only validating the consumer boundary.
 
 ## File Structure
 
@@ -67,23 +56,8 @@ contains a valid WAFv2 regional association target and the Pulumi preview emits
 - `infrastructure/security/traffic-auth-edge-policy.generated.json`
   - Generated provider-neutral edge/ingress projection for CloudFront, AWS
     WAFv2, ALB, or service mesh IaC consumers.
-- `infrastructure/security/aws-wafv2-edge-policy.generated.json`
-  - Generated AWS WAFv2/Pulumi-facing rule manifest derived from the edge
-    projection.
-- `infrastructure/Pulumi.yaml`
-  - Pulumi project descriptor for Gongzzang infrastructure.
-- `infrastructure/Pulumi.local-preview.yaml`
-  - Local preview stack config for CI-safe WebACL preview without real AWS
-    credentials.
-- `infrastructure/index.ts`
-  - Pulumi WebACL consumer and optional regional WebACL association for the
-    generated AWS WAFv2 manifest.
-- `infrastructure/package.json`
-  - Pulumi SDK and CLI dependencies for infrastructure-only previews.
-- `scripts/ci/check-pulumi-local-preview.ps1`
-  - CI guardrail that runs local Pulumi preview for the generated WebACL.
 - `scripts/ci/generate-traffic-auth-policy.ps1`
-  - Generator for TypeScript, Rust, edge, and AWS WAFv2 policy artifacts.
+  - Generator for TypeScript, Rust, and provider-neutral edge policy artifacts.
 - `.github/workflows/ci.yml`
   - CI hook for registry drift checks.
 - `lefthook.yml`
@@ -399,7 +373,7 @@ Expected:
 
 ```text
 traffic-auth-policy-registry-tests-ok
-traffic-auth-policy-generated ts=apps/web/lib/policies/traffic-auth-policy.generated.ts rust=services/api/src/listing_marker_policy.rs,services/api/src/traffic_auth_policy.rs edge=infrastructure/security/traffic-auth-edge-policy.generated.json aws_wafv2=infrastructure/security/aws-wafv2-edge-policy.generated.json
+traffic-auth-policy-generated ts=apps/web/lib/policies/traffic-auth-policy.generated.ts rust=services/api/src/listing_marker_policy.rs,services/api/src/traffic_auth_policy.rs edge=infrastructure/security/traffic-auth-edge-policy.generated.json
 traffic-auth-policy-registry-ok routes=4 service_policies=2
 ```
 
@@ -412,23 +386,26 @@ traffic-auth-policy-registry-ok routes=4 service_policies=2
 - Create: `infrastructure/security/aws-wafv2-edge-policy.generated.json`
 - Test: `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`
 
-- [x] **Step 1: Fail when the WAFv2 manifest is missing**
+> Deferred until production promotion. Do not execute as part of the current
+> Platform Core consumer integration gate.
 
-The checker test suite includes a negative case proving that a repo with the
+- [ ] **Step 1: Fail when the WAFv2 manifest is missing**
+
+The checker test suite should include a negative case proving that a repo with the
 provider-neutral edge projection but without the AWS WAFv2/Pulumi-facing
 manifest fails.
 
-- [x] **Step 2: Generate the WAFv2 manifest**
+- [ ] **Step 2: Generate the WAFv2 manifest**
 
-The manifest contains WAF-representable IP rate rules for public/auth routes,
+The manifest should contain WAF-representable IP rate rules for public/auth routes,
 blocked query-shape rules for public marker tile requests, service identity
 trace entries, and explicit `identity_aware_application_rules` for controls
 that must stay in the application or service boundary because WAFv2 cannot key
 them by session or service identity.
 
-- [x] **Step 3: Verify WAFv2 manifest drift**
+- [ ] **Step 3: Verify WAFv2 manifest drift**
 
-The checker validates source policy IDs, priorities, methods, path match mode,
+The checker should validate source policy IDs, priorities, methods, path match mode,
 five-minute WAF rate-limit conversion, forbidden query-shape blocks, and
 identity-aware fallback markers against the registry and edge projection.
 
@@ -441,38 +418,37 @@ identity-aware fallback markers against the registry and edge projection.
 - Modify: `scripts/ci/check-traffic-auth-policy-registry.ps1`
 - Test: `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`
 
-- [x] **Step 1: Fail when Pulumi does not consume the manifest**
+> Deferred until production promotion. Do not execute as part of the current
+> Platform Core consumer integration gate.
 
-The checker test suite includes a negative case proving that the WAFv2 manifest
+- [ ] **Step 1: Fail when Pulumi does not consume the manifest**
+
+The checker test suite should include a negative case proving that the WAFv2 manifest
 alone is not enough; the repo must also contain a Pulumi project and consumer
 that reads `security/aws-wafv2-edge-policy.generated.json`.
 
-- [x] **Step 2: Add the WebACL resource consumer**
+- [ ] **Step 2: Add the WebACL resource consumer**
 
-`infrastructure/index.ts` reads the generated WAFv2 manifest, creates rate-based
-rules, creates blocked query-shape rules, supports optional regional association
-through `wafRegionalResourceArn`, and exports identity-aware and service-identity
-rule IDs as evidence that those controls remain outside WAF when WAF cannot
-represent the key strategy.
+`infrastructure/index.ts` should read the generated WAFv2 manifest, create
+rate-based rules, create blocked query-shape rules, support optional regional
+association through `wafRegionalResourceArn`, and export identity-aware and
+service-identity rule IDs as evidence that those controls remain outside WAF
+when WAF cannot represent the key strategy.
 
-- [x] **Step 3: Verify consumer drift checks**
+- [ ] **Step 3: Verify consumer drift checks**
 
-The registry checker validates the Pulumi project runtime, AWS provider import,
+The registry checker should validate the Pulumi project runtime, AWS provider import,
 WebACL resource, optional WebACL association support, generated manifest path,
 and required manifest members.
 
-- [x] **Step 4: Run Pulumi preview**
+- [ ] **Step 4: Run Pulumi preview**
 
-`scripts/ci/check-pulumi-local-preview.ps1` logs into a local file backend under
-`target/`, initializes the `local-preview` stack, and runs `pulumi preview`
-without real AWS credentials. The guardrail fails on preview warnings as well as
-non-zero exits. With no regional target ARN configured, the local preview plans
-one Pulumi stack and one `aws:wafv2:WebAcl` resource, and exports
-`awsWafv2RegionalAssociationId` as `not-configured`. Environment stacks that set
-`wafRegionalResourceArn` will also plan an
-`aws:wafv2:WebAclAssociation`. The production admission path passes
-`GONGZZANG_WAF_REGIONAL_RESOURCE_ARN` only for the preview process, so
-`Pulumi.local-preview.yaml` stays unmodified.
+When this deferred workstream opens, `scripts/ci/check-pulumi-local-preview.ps1`
+should log into a local file backend under `target/`, initialize a local preview
+stack, and run `pulumi preview` without real AWS credentials. The guardrail
+should fail on preview warnings as well as non-zero exits. Production admission
+must pass `GONGZZANG_WAF_REGIONAL_RESOURCE_ARN` only for the preview process, so
+`Pulumi.local-preview.yaml` remains unmodified.
 
 ## Task 4.8: Add Pulumi Dependencies And CI Preview
 
@@ -485,27 +461,30 @@ one Pulumi stack and one `aws:wafv2:WebAcl` resource, and exports
 - Create: `scripts/ci/check-pulumi-local-preview.ps1`
 - Modify: `.github/workflows/ci.yml`
 
-- [x] **Step 1: Add infrastructure workspace package**
+> Deferred until production promotion. Do not execute as part of the current
+> Platform Core consumer integration gate.
 
-The `infrastructure` directory is now a pnpm workspace package named
+- [ ] **Step 1: Add infrastructure workspace package**
+
+The `infrastructure` directory should become a pnpm workspace package named
 `@gongzzang/infrastructure`, keeping Pulumi dependencies out of web/API runtime
 packages.
 
-- [x] **Step 2: Add Pulumi SDK and CLI dependencies**
+- [ ] **Step 2: Add Pulumi SDK and CLI dependencies**
 
-The infrastructure package declares `@pulumi/pulumi`, `@pulumi/aws`, and the
-`pulumi` CLI package. The traffic/auth checker verifies those package entries.
+The infrastructure package should declare `@pulumi/pulumi`, `@pulumi/aws`, and
+the `pulumi` CLI package. The traffic/auth checker should verify those package
+entries.
 
-- [x] **Step 3: Typecheck infrastructure**
+- [ ] **Step 3: Typecheck infrastructure**
 
-`pnpm typecheck` now includes `@gongzzang/infrastructure` through the workspace
-coverage guard.
+`pnpm typecheck` should include `@gongzzang/infrastructure` through the
+workspace coverage guard.
 
-- [x] **Step 4: Add CI local preview**
+- [ ] **Step 4: Add CI local preview**
 
-`.github/workflows/ci.yml` runs `scripts/ci/check-pulumi-local-preview.ps1`,
-which performs a warning-free local file-backend preview for the generated WAFv2
-WebACL.
+Future CI should run `scripts/ci/check-pulumi-local-preview.ps1`, which performs
+a warning-free local file-backend preview for the generated WAFv2 WebACL.
 
 ## Task 5: Platform Core Companion Registry
 

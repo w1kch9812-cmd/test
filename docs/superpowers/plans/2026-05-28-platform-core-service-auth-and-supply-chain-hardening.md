@@ -26,18 +26,11 @@ future CloudFront, AWS WAFv2, ALB, or service mesh IaC consumers. That edge
 projection reduces public ingress drift, but it does not replace
 service-to-service identity: private Platform Core reads still require workload
 identity or mTLS-capable service authentication at the protected service
-boundary. The AWS WAFv2/Pulumi-facing manifest is also generated and checked;
-it carries only controls WAF can represent directly and records session- or
-service-identity-aware controls as application/service-boundary rules. The
-Pulumi WebACL consumer now reads that generated manifest, supports optional
-regional association through `wafRegionalResourceArn`, and the local preview
-guardrail verifies the planned `aws:wafv2:WebAcl` without real AWS credentials.
-Production attachment now means creating real environment stacks and setting the
-target regional ARN, or wiring the generated WebACL ARN into CloudFront for
-global edge scope. The production deploy admission workflow now runs
-`scripts/ci/check-production-edge-admission.ps1`, so regional production
-promotion requires `GONGZZANG_WAF_REGIONAL_RESOURCE_ARN` and a Pulumi preview
-that plans the regional WebACL association.
+boundary. AWS WAFv2/Pulumi attachment and production deploy admission remain
+deferred production-promotion work, not part of the current Platform Core
+consumer integration PR. Do not treat local production-deploy, Pulumi, or load
+evidence files as current completion evidence unless the release owner explicitly
+opens the production-promotion workstream.
 
 ---
 
