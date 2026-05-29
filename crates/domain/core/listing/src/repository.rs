@@ -289,7 +289,7 @@ pub struct ListingMarkerTileQuery {
 impl ListingMarkerTileQuery {
     /// Build a query without validation. Use only when inputs are already trusted.
     #[must_use]
-    pub fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
+    pub const fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
         Self { z, x, y, filter }
     }
 

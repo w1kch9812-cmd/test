@@ -18,6 +18,10 @@ pub(super) async fn sync_listing_marker_projection_after_save(
     sync_listing_marker_projection(&mut **tx, id, false, false).await
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "projection SQL and write decision stay together to preserve one transactional read/write plan"
+)]
 async fn sync_listing_marker_projection<'e, E>(
     executor: E,
     id: &Id<ListingIdMarker>,

@@ -61,7 +61,7 @@ pub(super) async fn resolve_listing_marker_filter(
 
     row.map(|row| {
         let spec: Value = row.try_get("spec").map_err(map_sqlx_err)?;
-        json_to_filter(spec)
+        json_to_filter(&spec)
     })
     .transpose()
 }
@@ -77,15 +77,15 @@ fn filter_to_json(filter: &NormalizedListingMarkerFilterSpec) -> Value {
     })
 }
 
-fn json_to_filter(value: Value) -> Result<NormalizedListingMarkerFilterSpec, RepoError> {
-    let types = read_string_array(&value, "types")?
+fn json_to_filter(value: &Value) -> Result<NormalizedListingMarkerFilterSpec, RepoError> {
+    let types = read_string_array(value, "types")?
         .into_iter()
         .map(|raw| {
             raw.parse::<ListingType>()
                 .map_err(|e| RepoError::Database(e.to_string()))
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let transactions = read_string_array(&value, "transactions")?
+    let transactions = read_string_array(value, "transactions")?
         .into_iter()
         .map(|raw| {
             raw.parse::<TransactionType>()
@@ -96,10 +96,10 @@ fn json_to_filter(value: Value) -> Result<NormalizedListingMarkerFilterSpec, Rep
     ListingMarkerFilterSpec {
         types,
         transactions,
-        min_area_m2: read_i64_or_null(&value, "min_area_m2")?,
-        max_area_m2: read_i64_or_null(&value, "max_area_m2")?,
-        min_price_krw: read_i64_or_null(&value, "min_price_krw")?,
-        max_price_krw: read_i64_or_null(&value, "max_price_krw")?,
+        min_area_m2: read_i64_or_null(value, "min_area_m2")?,
+        max_area_m2: read_i64_or_null(value, "max_area_m2")?,
+        min_price_krw: read_i64_or_null(value, "min_price_krw")?,
+        max_price_krw: read_i64_or_null(value, "max_price_krw")?,
     }
     .try_normalized()
     .map_err(|e| RepoError::Database(e.to_string()))

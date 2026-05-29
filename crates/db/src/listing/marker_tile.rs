@@ -5,6 +5,10 @@ use sqlx::{PgPool, Row};
 
 use crate::error_map::map_sqlx_err;
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "tile SQL is intentionally contiguous so its MVT contract is reviewed as one query"
+)]
 pub(super) async fn find_listing_marker_tile(
     pool: &PgPool,
     query: ListingMarkerTileQuery,

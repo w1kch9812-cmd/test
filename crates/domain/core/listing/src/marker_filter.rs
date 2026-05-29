@@ -129,7 +129,7 @@ impl NormalizedListingMarkerFilterSpec {
 
     /// Return whether this normalized payload is equivalent to the built-in all-active filter.
     #[must_use]
-    pub fn is_all_active(&self) -> bool {
+    pub const fn is_all_active(&self) -> bool {
         self.types.is_empty()
             && self.transactions.is_empty()
             && self.min_area_m2.is_none()
@@ -178,7 +178,7 @@ impl ListingMarkerFilter {
     }
 }
 
-fn validate_range(
+const fn validate_range(
     field: &'static str,
     min: Option<i64>,
     max: Option<i64>,
