@@ -60,7 +60,7 @@ async-trait = "0.1"
 sentry = { version = "0.48.2", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
 sentry-tracing = "0.48.2"
 deadpool-redis = "0.18"
-axum = "0.7"
+axum = "0.8"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
 geo-types = { version = "0.7", features = ["serde"] }
 jsonwebtoken = "9"
