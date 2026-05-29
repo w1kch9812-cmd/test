@@ -29,7 +29,7 @@ jobs:
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
-          node-version: 20.18
+          node-version: "20.19.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Node dependency audit
@@ -86,7 +86,7 @@ jobs:
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
-          node-version: 20.18
+          node-version: "20.19.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
@@ -100,7 +100,7 @@ jobs:
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
       - run: cargo check --workspace --all-features
-      - uses: EmbarkStudios/cargo-deny-action@34899fc7ba81ca6268d5947a7a16b4649013fea1  # v2.0.6 (Round 5 SHA pin, ADR 0028)
+      - uses: EmbarkStudios/cargo-deny-action@bb137d7af7e4fb67e5f82a49c4fce4fad40782fe  # v2.0.20 / cargo-deny 0.19.8 (Round 5 SHA pin, ADR 0028)
         with: { command: check }
 
   supply-chain-provenance:
@@ -131,7 +131,7 @@ jobs:
 
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
-          node-version: 20.18
+          node-version: "20.19.0"
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
@@ -144,8 +144,9 @@ jobs:
       - name: Build web release candidate
         run: |
           pnpm --filter @gongzzang/web build
-          mkdir -p target/supply-chain
-          tar -czf target/supply-chain/gongzzang-web-next-build.tgz -C apps/web .next
+          mkdir -p target/supply-chain/gongzzang-web-next-build
+          cp -R apps/web/.next target/supply-chain/gongzzang-web-next-build/.next
+          tar -czf target/supply-chain/gongzzang-web-next-build.tgz -C target/supply-chain gongzzang-web-next-build
 
       - name: Build API release candidate
         run: cargo build -p api --release --locked
@@ -153,7 +154,7 @@ jobs:
       - name: Generate Node workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
         with:
-          path: target/supply-chain/gongzzang-web-next-build.tgz
+          path: target/supply-chain/gongzzang-web-next-build
           format: cyclonedx-json
           output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 
@@ -248,7 +249,7 @@ jobs:
         with: { version: 9.12.0 }
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with:
-          node-version: 20.18
+          node-version: "20.19.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Check internal Markdown links
