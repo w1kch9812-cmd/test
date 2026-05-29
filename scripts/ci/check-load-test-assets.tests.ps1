@@ -23,20 +23,27 @@ function Invoke-Checker([string] $Root) {
     }
 }
 
-function Write-MinimalLoadAssets([string] $Root, [switch] $UnsafeProductionTarget) {
+function Write-MinimalLoadAssets([string] $Root, [switch] $UnsafeProductionTarget, [switch] $EmptyScenarios) {
     $target = if ($UnsafeProductionTarget) { "https://gongzzang.com" } else { "https://perf.gongzzang.internal" }
+    $scenarios = if ($EmptyScenarios) {
+        "[]"
+    } else {
+        @"
+[
+    {"id":"api-read-mix","file":"tests/load/scenarios/api-read-mix.js","maxSafeRps":50},
+    {"id":"map-marker-mix","file":"tests/load/scenarios/map-marker-mix.js","maxSafeRps":50},
+    {"id":"capacity-stress","file":"tests/load/scenarios/capacity-stress.js","maxSafeRps":800},
+    {"id":"platform-core-events","file":"tests/load/scenarios/platform-core-events.js","maxSafeRps":50}
+  ]
+"@
+    }
     Write-File $Root "docs\testing\load.md" "# Load Testing`n"
     Write-File $Root "tests\load\README.md" "# Load Scenarios`n"
     Write-File $Root "tests\load\scenarios.v1.json" @"
 {
   "schemaVersion": "gongzzang.load.scenarios.v1",
   "defaultTargetBaseUrl": "$target",
-  "scenarios": [
-    {"id":"api-read-mix","file":"tests/load/scenarios/api-read-mix.js","maxSafeRps":50},
-    {"id":"map-marker-mix","file":"tests/load/scenarios/map-marker-mix.js","maxSafeRps":50},
-    {"id":"capacity-stress","file":"tests/load/scenarios/capacity-stress.js","maxSafeRps":800},
-    {"id":"platform-core-events","file":"tests/load/scenarios/platform-core-events.js","maxSafeRps":50}
-  ]
+  "scenarios": $scenarios
 }
 "@
     foreach ($file in @(
@@ -60,6 +67,9 @@ try {
     Write-MinimalLoadAssets $okRoot
     $ok = Invoke-Checker $okRoot
     if ($ok.ExitCode -ne 0) { throw "expected ok fixture to pass: $($ok.Output)" }
+    if (!$ok.Output.Contains("check-load-test-assets-ok scenarios=4")) {
+        throw "expected ok fixture scenario count, got: $($ok.Output)"
+    }
 
     $unsafeRoot = Join-Path $TempRoot "unsafe"
     Write-MinimalLoadAssets $unsafeRoot -UnsafeProductionTarget
@@ -67,6 +77,14 @@ try {
     if ($unsafe.ExitCode -eq 0) { throw "expected production target fixture to fail" }
     if (!$unsafe.Output.Contains("defaultTargetBaseUrl must not be production")) {
         throw "expected production target error, got: $($unsafe.Output)"
+    }
+
+    $emptyRoot = Join-Path $TempRoot "empty"
+    Write-MinimalLoadAssets $emptyRoot -EmptyScenarios
+    $empty = Invoke-Checker $emptyRoot
+    if ($empty.ExitCode -eq 0) { throw "expected empty scenarios fixture to fail" }
+    if (!$empty.Output.Contains("scenario registry must contain exactly 4 scenarios")) {
+        throw "expected scenario count error, got: $($empty.Output)"
     }
 
     Write-Output "check-load-test-assets-tests-ok"

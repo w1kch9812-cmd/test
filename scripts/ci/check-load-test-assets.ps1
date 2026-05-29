@@ -33,9 +33,29 @@ if ($registry.schemaVersion -ne "gongzzang.load.scenarios.v1") { throw "scenario
 if ([string] $registry.defaultTargetBaseUrl -match "gongzzang\.com|api\.gongzzang\.com") {
     throw "defaultTargetBaseUrl must not be production"
 }
-foreach ($scenario in @($registry.scenarios)) {
+$requiredScenarios = [ordered]@{
+    "api-read-mix" = "tests/load/scenarios/api-read-mix.js"
+    "map-marker-mix" = "tests/load/scenarios/map-marker-mix.js"
+    "capacity-stress" = "tests/load/scenarios/capacity-stress.js"
+    "platform-core-events" = "tests/load/scenarios/platform-core-events.js"
+}
+$scenarios = @($registry.scenarios)
+if ($scenarios.Count -ne $requiredScenarios.Count) {
+    throw "scenario registry must contain exactly $($requiredScenarios.Count) scenarios"
+}
+foreach ($requiredId in $requiredScenarios.Keys) {
+    $matchingScenarios = @($scenarios | Where-Object { [string] $_.id -eq $requiredId })
+    if ($matchingScenarios.Count -ne 1) { throw "scenario registry missing required scenario: $requiredId" }
+
+    $scenario = $matchingScenarios[0]
+    $requiredFile = $requiredScenarios[$requiredId]
+    if ([string] $scenario.file -ne $requiredFile) {
+        throw "scenario registry file mismatch for $requiredId"
+    }
+}
+foreach ($scenario in $scenarios) {
     Assert-File ([string] $scenario.file)
     if ([int] $scenario.maxSafeRps -lt 1) { throw "scenario maxSafeRps must be positive: $($scenario.id)" }
 }
 
-Write-Output "check-load-test-assets-ok scenarios=$(@($registry.scenarios).Count)"
+Write-Output "check-load-test-assets-ok scenarios=$($scenarios.Count)"
