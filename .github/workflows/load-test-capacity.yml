@@ -57,8 +57,6 @@ jobs:
 
       - name: Run load test
         shell: pwsh
-        env:
-          PLATFORM_CORE_WEBHOOK_SECRET: ${{ secrets.PLATFORM_CORE_WEBHOOK_SECRET }}
         run: |
           $runArgs = @(
             "-Scenario", "${{ inputs.scenario }}",
