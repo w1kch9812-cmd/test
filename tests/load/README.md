@@ -17,3 +17,7 @@ hostnames without scheme, path, port, query, or credentials.
 
 For authenticated API read paths, set `LOAD_AUTH_BEARER_TOKEN` in the runner
 environment. Do not put bearer tokens in workflow inputs or committed files.
+
+For marker runs, set `LOAD_FILTER_HASH` and optionally `LOAD_FILTER_HASH_MISS`
+to known fixture hashes from the perf dataset. The default miss path reuses the
+same valid hash and changes only the requested tile.

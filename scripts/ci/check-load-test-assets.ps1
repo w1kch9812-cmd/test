@@ -89,6 +89,11 @@ foreach ($operatorControl in @("LOAD_APPROVED_TARGET_HOSTS", "LOAD_AUTH_BEARER_T
         throw "load testing manual missing operator control: $operatorControl"
     }
 }
+foreach ($fixtureControl in @("LOAD_FILTER_HASH", "LOAD_FILTER_HASH_MISS", "LOAD_MARKER_*")) {
+    if (!$loadManual.Contains($fixtureControl)) {
+        throw "load testing manual missing fixture control: $fixtureControl"
+    }
+}
 
 Assert-Contains `
     -RelativePath ".github/workflows/ci.yml" `
@@ -145,6 +150,9 @@ $mapScenario = Read-Text "tests/load/scenarios/map-marker-mix.js"
 if ($mapScenario -match "(?i)(\?|&)(bbox|bounds)=") {
     throw "load-test marker scenario must not use public bbox or bounds request shapes"
 }
+if ($mapScenario.Contains('defaultFilterHash}-miss')) {
+    throw "map-marker-mix scenario must not create artificial miss filter hashes"
+}
 foreach ($needle in @("marker-tiles/listing", "marker-counts/listing", "marker-filters/listing", "marker-masks/listing")) {
     if (!$mapScenario.Contains($needle)) {
         throw "map-marker-mix scenario missing required marker path: $needle"
@@ -179,7 +187,7 @@ if ($eventScenario.Contains("PLATFORM_CORE_WEBHOOK_SECRET") -or $eventScenario.C
 }
 
 $launcher = Read-Text "scripts/load/run-k6.ps1"
-foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "normalize-k6-summary.ps1")) {
+foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "LOAD_FILTER_HASH_MISS", "LOAD_MARKER_MISS_X", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "normalize-k6-summary.ps1")) {
     if (!$launcher.Contains($needle)) {
         throw "load-test launcher missing required token: $needle"
     }

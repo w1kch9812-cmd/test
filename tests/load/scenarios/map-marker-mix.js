@@ -51,7 +51,7 @@ function baseTags(routeGroup, requestKind, cacheState, priority = "normal") {
 
 function filterHash(cacheState) {
   if (cacheState === "miss") {
-    return __ENV.LOAD_FILTER_HASH_MISS || `${__ENV.LOAD_FILTER_HASH || defaultFilterHash}-miss`;
+    return __ENV.LOAD_FILTER_HASH_MISS || __ENV.LOAD_FILTER_HASH || defaultFilterHash;
   }
 
   return __ENV.LOAD_FILTER_HASH || defaultFilterHash;

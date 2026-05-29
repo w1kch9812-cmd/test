@@ -357,6 +357,35 @@ foreach ($key in $profileConfig.Keys) {
 if ($AllowStress) {
     $envValues["ALLOW_STRESS"] = "true"
 }
+foreach ($approvedFixtureName in @(
+    "LOAD_FILTER_HASH",
+    "LOAD_FILTER_HASH_MISS",
+    "LOAD_ITERATION_SLEEP_SECONDS",
+    "LOAD_LISTING_ID",
+    "LOAD_MARKER_HIT_X",
+    "LOAD_MARKER_HIT_Y",
+    "LOAD_MARKER_HIT_Z",
+    "LOAD_MARKER_MAX_AREA_M2",
+    "LOAD_MARKER_MAX_PRICE_KRW",
+    "LOAD_MARKER_MIN_AREA_M2",
+    "LOAD_MARKER_MIN_PRICE_KRW",
+    "LOAD_MARKER_MISS_MIN_PRICE_KRW",
+    "LOAD_MARKER_MISS_X",
+    "LOAD_MARKER_MISS_Y",
+    "LOAD_MARKER_MISS_Z",
+    "LOAD_MARKER_TRANSACTIONS",
+    "LOAD_MARKER_TYPES",
+    "LOAD_MARKER_X",
+    "LOAD_MARKER_Y",
+    "LOAD_MARKER_Z",
+    "LOAD_MASK_BASE_VERSION",
+    "LOAD_PNU"
+)) {
+    $approvedFixtureValue = [Environment]::GetEnvironmentVariable($approvedFixtureName, "Process")
+    if (![string]::IsNullOrEmpty($approvedFixtureValue)) {
+        $envValues[$approvedFixtureName] = $approvedFixtureValue
+    }
+}
 foreach ($approvedSecretName in @("LOAD_AUTH_BEARER_TOKEN")) {
     $approvedSecretValue = [Environment]::GetEnvironmentVariable($approvedSecretName, "Process")
     if (![string]::IsNullOrEmpty($approvedSecretValue)) {

@@ -36,6 +36,11 @@ Authenticated read scenarios use `LOAD_AUTH_BEARER_TOKEN` from the runner
 environment when present. The wrapper passes this value to k6 but does not write
 it to `run.json`, `spec.json`, logs, or generated reports.
 
+Scenario fixture variables are allowlisted before they are passed to k6. Use
+`LOAD_FILTER_HASH`, `LOAD_FILTER_HASH_MISS`, `LOAD_LISTING_ID`, `LOAD_PNU`, and
+the documented `LOAD_MARKER_*` coordinate/filter variables on the runner when a
+perf dataset uses different fixture records.
+
 ## Run Types
 
 - `smoke`: short validation that the scenario, target, credentials, and evidence

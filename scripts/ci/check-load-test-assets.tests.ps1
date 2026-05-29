@@ -59,6 +59,9 @@ function Write-MinimalLoadAssets(
     $operatorControls = @(
         "LOAD_APPROVED_TARGET_HOSTS",
         "LOAD_AUTH_BEARER_TOKEN",
+        "LOAD_FILTER_HASH",
+        "LOAD_FILTER_HASH_MISS",
+        "LOAD_MARKER_*",
         "maxSafeRps"
     )
     if ($MissingOperatorControls) {
@@ -80,7 +83,7 @@ function Write-MinimalLoadAssets(
     $mapScenario = if ($UnsafeBboxScenario) {
         "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?bbox=unsafe`n"
     } else {
-        "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf`n/api/proxy/map/v1/marker-counts/listing`n/api/proxy/map/v1/marker-filters/listing`n/api/proxy/map/v1/marker-masks/listing`n"
+        "/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf`n/api/proxy/map/v1/marker-counts/listing`n/api/proxy/map/v1/marker-filters/listing`n/api/proxy/map/v1/marker-masks/listing`nLOAD_FILTER_HASH_MISS`n"
     }
     Write-File $Root "tests\load\scenarios\map-marker-mix.js" $mapScenario
     Write-File $Root "tests\load\scenarios\capacity-stress.js" "ALLOW_STRESS`n/listings`nLOAD_AUTH_BEARER_TOKEN`n50`n100`n200`n300`n400`n600`n800`n"
@@ -90,7 +93,7 @@ function Write-MinimalLoadAssets(
         "/platform-core/events`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`nx-platform-core-event-id`nx-platform-core-event-type`nx-platform-core-outbox-scope`n"
     }
     Write-File $Root "tests\load\scenarios\platform-core-events.js" $webhookScenario
-    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nIsDefaultPort`nnon-local load-test targets must use the default https port`nsummary-export`nnormalize-k6-summary.ps1`n"
+    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nLOAD_FILTER_HASH_MISS`nLOAD_MARKER_MISS_X`nIsDefaultPort`nnon-local load-test targets must use the default https port`nsummary-export`nnormalize-k6-summary.ps1`n"
     Write-File $Root "scripts\load\normalize-k6-summary.ps1" "bottleneck.md`nrecommendation.md`nbaseline-comparison.md`nhealthy`nlatency breakpoint`nerror breakpoint`nexit 1`n"
     Write-File $Root ".github\workflows\load-test-capacity.yml" "workflow_dispatch`nruns-on: [self-hosted, load-test]`nupload-artifact`ntarget/audit/load-tests`nLOAD_INPUT_TARGET`n`$env:LOAD_INPUT_TARGET`nLOAD_INPUT_SCENARIO`n`$env:LOAD_INPUT_SCENARIO`n"
     $ciContent = if ($MissingCiGuardrail) {
