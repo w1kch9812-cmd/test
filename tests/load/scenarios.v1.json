@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "gongzzang.load.scenarios.v1",
+  "defaultTargetBaseUrl": "https://perf.gongzzang.internal",
+  "slo": {
+    "apiP95Ms": 300,
+    "apiP99Ms": 1000,
+    "errorRate": 0.01,
+    "markerHitP95Ms": 100,
+    "markerMissP95Ms": 500,
+    "markerP99Ms": 1500
+  },
+  "scenarios": [
+    { "id": "api-read-mix", "file": "tests/load/scenarios/api-read-mix.js", "maxSafeRps": 50 },
+    { "id": "map-marker-mix", "file": "tests/load/scenarios/map-marker-mix.js", "maxSafeRps": 50 },
+    {
+      "id": "capacity-stress",
+      "file": "tests/load/scenarios/capacity-stress.js",
+      "maxSafeRps": 800
+    },
+    {
+      "id": "platform-core-events",
+      "file": "tests/load/scenarios/platform-core-events.js",
+      "maxSafeRps": 50
+    }
+  ]
+}

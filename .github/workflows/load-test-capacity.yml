@@ -1,0 +1,81 @@
+name: Load Test Capacity
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Load-test scenario id
+        required: true
+        default: api-read-mix
+        type: choice
+        options:
+          - api-read-mix
+          - map-marker-mix
+          - capacity-stress
+          - platform-core-events
+      profile:
+        description: Load profile
+        required: true
+        default: smoke
+        type: choice
+        options:
+          - smoke
+          - baseline
+          - stress
+          - spike
+          - soak
+      target:
+        description: Target base URL, without path/query/fragment
+        required: true
+        default: https://perf.gongzzang.internal
+        type: string
+      environment:
+        description: Evidence environment label
+        required: true
+        default: perf
+        type: choice
+        options:
+          - perf
+          - staging
+          - local
+          - ci
+      allow_stress:
+        description: Required for stress, spike, soak, or capacity-stress runs
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  run-load-test:
+    name: Run k6 load test
+    runs-on: [self-hosted, load-test]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+
+      - name: Run load test
+        shell: pwsh
+        env:
+          PLATFORM_CORE_WEBHOOK_SECRET: ${{ secrets.PLATFORM_CORE_WEBHOOK_SECRET }}
+        run: |
+          $runArgs = @(
+            "-Scenario", "${{ inputs.scenario }}",
+            "-Profile", "${{ inputs.profile }}",
+            "-TargetBaseUrl", "${{ inputs.target }}",
+            "-Environment", "${{ inputs.environment }}"
+          )
+          if ([System.Convert]::ToBoolean("${{ inputs.allow_stress }}")) {
+            $runArgs += "-AllowStress"
+          }
+
+          ./scripts/load/run-k6.ps1 @runArgs
+
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+        if: always()
+        with:
+          name: load-test-capacity-evidence
+          path: target/audit/load-tests/**
+          if-no-files-found: warn
+          retention-days: 30
