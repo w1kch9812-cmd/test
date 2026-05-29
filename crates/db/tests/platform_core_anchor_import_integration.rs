@@ -209,11 +209,11 @@ async fn inbox_event_records_processing_processed_and_failed_states() {
         .await
         .unwrap();
     let processed = sqlx::query(
-        r#"
+        r"
         select status, processed_at is not null as has_processed_at, failed_at is null as no_failed_at
         from platform_core_event_inbox
         where event_id = $1::uuid
-        "#,
+        ",
     )
     .bind(&processed_event.event_id)
     .fetch_one(&pool)
@@ -248,11 +248,11 @@ async fn inbox_event_records_processing_processed_and_failed_states() {
     .unwrap();
 
     let failed = sqlx::query(
-        r#"
+        r"
         select status, failed_at is not null as has_failed_at, failure_reason
         from platform_core_event_inbox
         where event_id = $1::uuid
-        "#,
+        ",
     )
     .bind(&failed_event.event_id)
     .fetch_one(&pool)
@@ -325,7 +325,7 @@ async fn anchor_import_upserts_long_algorithm_version_and_refreshes_listing_proj
     .await
     .unwrap();
     sqlx::query(
-        r#"
+        r"
         insert into listing (
             id, owner_id, parcel_pnu, status, listing_type, transaction_type, price_krw, area_m2,
             title, description, created_at, updated_at, version
@@ -345,7 +345,7 @@ async fn anchor_import_upserts_long_algorithm_version_and_refreshes_listing_proj
             now(),
             1
         )
-        "#,
+        ",
     )
     .bind(pnu)
     .execute(&pool)
@@ -374,7 +374,7 @@ async fn anchor_import_upserts_long_algorithm_version_and_refreshes_listing_proj
     assert_eq!(report.refreshed_listing_projection_count, 1);
 
     let row = sqlx::query(
-        r#"
+        r"
         select
             a.algorithm_version,
             p.anchor_snapshot_id,
@@ -383,7 +383,7 @@ async fn anchor_import_upserts_long_algorithm_version_and_refreshes_listing_proj
         from parcel_marker_anchor a
         join listing_marker_projection p on p.pnu = a.pnu
         where a.pnu = $1
-        "#,
+        ",
     )
     .bind(pnu)
     .fetch_one(&pool)

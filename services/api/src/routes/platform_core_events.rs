@@ -153,7 +153,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn anchor_snapshot_event_maps_to_pending_import_inbox_row() {
+    fn anchor_snapshot_event_maps_to_pending_import_inbox_row() -> Result<(), &'static str> {
         let event = PlatformCoreEventEnvelope {
             event_id: "0196f0b0-3e01-7000-8000-000000000002".to_owned(),
             event_type: PARCEL_ANCHOR_SNAPSHOT_EVENT_TYPE.to_owned(),
@@ -171,7 +171,7 @@ mod tests {
             }),
         };
 
-        let row = inbox_insert_from_event(&event).expect("inbox row");
+        let row = inbox_insert_from_event(&event)?;
         assert_eq!(row.event_id, event.event_id);
         assert_eq!(row.effect, "enqueue_anchor_projection_import");
         assert_eq!(
@@ -182,5 +182,6 @@ mod tests {
             row.source_geometry_version.as_deref(),
             Some("silver.parcel_boundaries@20260528")
         );
+        Ok(())
     }
 }

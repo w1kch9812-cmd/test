@@ -41,8 +41,8 @@ test.describe("SP10 Panel System", () => {
     await page.goto(`/listings?p=parcel:${TEST_PNU}.summary`);
     // Dialog (panel) presence — 데이터 fetch 가 실패해도 frame 은 존재.
     await expect(page.getByRole("dialog")).toBeVisible();
-    // PNU 표시 확인 — error / empty card 도 entry.id 를 헤더로 노출하므로 안전.
-    await expect(page.locator(`text=${TEST_PNU}`).first()).toBeVisible();
+    // URL state is the stable invariant when backend data is unavailable.
+    await expectPanelParam(page, `parcel:${TEST_PNU}.summary`);
   });
 
   test("URL hydration: depth 2 chain", async ({ page }) => {

@@ -952,7 +952,9 @@ mod tests {
         assert_eq!(config.artifact_checksum_sha256, "a".repeat(64));
         assert_eq!(
             config.platform_core_updated_at,
-            "2026-05-28T12:00:00Z".parse::<DateTime<Utc>>().unwrap()
+            "2026-05-28T12:00:00Z"
+                .parse::<DateTime<Utc>>()
+                .expect("fixture timestamp must be valid RFC3339")
         );
     }
 
@@ -962,7 +964,7 @@ mod tests {
             &reqwest::Url::parse(
                 "https://platform-core.example.com/artifacts/anchors/manifest.json",
             )
-            .unwrap(),
+            .expect("fixture manifest URL must be valid"),
             "gold/parcel-marker-anchors/shard-000001.jsonl",
         )
         .expect("object url");
