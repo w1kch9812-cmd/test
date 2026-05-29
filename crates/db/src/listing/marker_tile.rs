@@ -5,7 +5,10 @@ use sqlx::{PgPool, Row};
 
 use crate::error_map::map_sqlx_err;
 
-#[allow(clippy::too_many_lines)] // One SQL tile contract; keeping the CTEs together preserves auditability.
+#[expect(
+    clippy::too_many_lines,
+    reason = "tile SQL is intentionally contiguous so its MVT contract is reviewed as one query"
+)]
 pub(super) async fn find_listing_marker_tile(
     pool: &PgPool,
     query: ListingMarkerTileQuery,
