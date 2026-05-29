@@ -44,6 +44,20 @@ pre-commit:
       run: bash scripts/lefthook/panel-no-state-without-router.sh
     catalog-m1-boundary:
       run: bash scripts/lefthook/catalog-m1-boundary.sh
+    pnu-anchor-pbf-marker-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+    platform-core-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
+    platform-core-event-receiver-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
+    platform-core-catalog-api-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
+    platform-core-dependency-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
+    migration-version-prefixes:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+    platform-core-anchor-inbox-db-approval:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
 
 pre-push:
   parallel: false
@@ -60,6 +74,51 @@ pre-push:
         - rebase
     catalog-m1-boundary:
       run: bash scripts/lefthook/catalog-m1-boundary.sh
+      skip:
+        - merge
+        - rebase
+    platform-core-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
+      skip:
+        - merge
+        - rebase
+    pnu-anchor-pbf-marker-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+      skip:
+        - merge
+        - rebase
+    traffic-auth-policy-registry:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-traffic-auth-policy-registry.ps1
+      skip:
+        - merge
+        - rebase
+    platform-integration-policy:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-event-receiver-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-catalog-api-contract:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-dependency-boundary:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
+      skip:
+        - merge
+        - rebase
+    migration-version-prefixes:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+      skip:
+        - merge
+        - rebase
+    platform-core-anchor-inbox-db-approval:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
       skip:
         - merge
         - rebase

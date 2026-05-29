@@ -1,18 +1,7 @@
-//! `GET /api/buildings?parcel_pnu=:pnu` — 필지 위 건축물 list.
+//! `GET /api/buildings?parcel_pnu=:pnu` building list route.
 //!
-//! data.go.kr `getBrTitleInfo` 위 thin REST shell. 본 모듈은 `panel` 단어를 모름 —
-//! pure REST resource (spec § 7 F1).
-//!
-//! # SSOT (2026-05-08 unification)
-//!
-//! 이전엔 본 파일이 `BuildingItem` (panel-only, 21 필드) 를 별도 정의해 SSOT 위반.
-//! `building_domain::Building` (rich, 11 필드) 와 두 모델 공존 → Codex round 7 verdict
-//! 의 "장기 SSOT debt".
-//!
-//! 본 commit 으로 통합:
-//! - Silver = `building_domain::Building` (단일 SSOT, 21+ 필드, geom 옵션)
-//! - Gold = 본 파일의 `BuildingResponse` (HTTP wire shape, `snake_case` 도메인 → JSON)
-//! - reader trait 은 `Vec<Building>` 반환 (panel 전용 `subset` 제거)
+//! Gongzzang owns the B2C route contract and user-facing response shape.
+//! Canonical catalog building data is read through Platform Core.
 
 use std::sync::Arc;
 
@@ -20,173 +9,215 @@ use auth::middleware::AuthenticatedUser;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use building_domain::entity::Building;
 use serde::{Deserialize, Serialize};
 use shared_kernel::pnu::Pnu;
 
 use crate::http::problem::{problem, ProblemResponse};
 
-/// reader 통신 / 파싱 실패 - 라우트가 502 매핑.
+/// Reader communication or parsing error mapped to a `502` route response.
 pub type BuildingRegisterError = Box<dyn std::error::Error + Send + Sync>;
 
-/// 건축물대장 reader port — `building_domain::Building` 의 list 반환.
+/// Building reader port returning route-facing records.
 ///
-/// 구현체:
-/// - production: `services/api/src/building_reader.rs::DataGoKrBuildingRegisterReader`
-/// - dev fallback: `main.rs` 의 `NoOpBuildingRegisterReader` (빈 vec)
+/// Implementations:
+/// - production: `services/api/src/building_reader.rs::PlatformCoreBuildingRegisterReader`
+/// - dev fallback: `startup.rs::NoOpBuildingRegisterReader`
 pub trait BuildingRegisterReader: Send + Sync {
-    /// PNU 한 건의 건축물 list 조회. 빈 vec 가능.
+    /// Lists buildings for a PNU.
     ///
     /// # Errors
-    /// 백엔드 통신 / 파싱 실패는 `BuildingRegisterError` 로 (라우트가 502 매핑).
+    ///
+    /// Returns a reader error when the backing Platform Core call or response
+    /// translation fails.
     fn list_by_pnu<'a>(
         &'a self,
         pnu: &'a Pnu,
     ) -> std::pin::Pin<
         Box<
-            dyn std::future::Future<Output = Result<Vec<Building>, BuildingRegisterError>>
-                + Send
+            dyn std::future::Future<
+                    Output = Result<Vec<BuildingRegisterRecord>, BuildingRegisterError>,
+                > + Send
                 + 'a,
         >,
     >;
 }
 
-/// `/api/buildings` 핸들러 공유 상태.
+/// Shared state for `/api/buildings`.
 #[derive(Clone)]
 pub struct BuildingsState {
-    /// 건축물대장 reader port.
+    /// Building reader port.
     pub reader: Arc<dyn BuildingRegisterReader>,
 }
 
-/// `GET /api/buildings` 쿼리 파라미터.
+/// Query parameters for `GET /api/buildings`.
 #[derive(Debug, Deserialize)]
 pub struct BuildingsQuery {
-    /// 필지 PNU (19 자리).
+    /// Parcel PNU, 19 digits.
     pub parcel_pnu: String,
 }
 
-/// 건축물 응답 단건 — `Building` Silver 의 wire shape (Gold).
-///
-/// 도메인 필드명 (`snake_case`) → JSON 필드명 (의미 노출). HTTP 계약은 본 struct 가 SSOT.
-/// 향후 `utoipa` annotation 추가 → `OpenAPI` → TS 자동 생성 (AGENTS.md § 10.3 Type Safety).
+/// Route-facing building register record.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BuildingRegisterRecord {
+    /// Building identifier.
+    pub id: String,
+    /// Building name.
+    pub name: String,
+    /// Address text.
+    pub address: Option<String>,
+    /// Purpose label or code.
+    pub purpose: String,
+    /// Structure label or code.
+    pub structure: String,
+    /// Plot area in square meters.
+    pub plot_area_m2: Option<f64>,
+    /// Building area in square meters.
+    pub building_area_m2: Option<f64>,
+    /// Building coverage ratio, percent.
+    pub building_coverage_ratio: Option<f64>,
+    /// Total floor area in square meters.
+    pub total_area_m2: f64,
+    /// Floor area ratio, percent.
+    pub floor_area_ratio: Option<f64>,
+    /// Above-ground floor count.
+    pub above_ground_floors: u8,
+    /// Underground floor count.
+    pub below_ground_floors: u8,
+    /// Building height in meters.
+    pub height_m: Option<f64>,
+    /// Passenger elevator count.
+    pub passenger_elevators: Option<u32>,
+    /// Emergency elevator count.
+    pub emergency_elevators: Option<u32>,
+    /// Indoor self-parking count.
+    pub indoor_self_parking: Option<u32>,
+    /// Outdoor self-parking count.
+    pub outdoor_self_parking: Option<u32>,
+    /// Annex building count.
+    pub annex_building_count: Option<u32>,
+    /// Annex building area in square meters.
+    pub annex_building_area_m2: Option<f64>,
+    /// Permit date, `YYYY-MM-DD`.
+    pub permitted_at: Option<String>,
+    /// Construction start date, `YYYY-MM-DD`.
+    pub started_at: Option<String>,
+    /// Use approval date, `YYYY-MM-DD`.
+    pub approved_at: Option<String>,
+}
+
+/// HTTP response shape for one building.
 #[derive(Debug, Serialize)]
 pub struct BuildingResponse {
-    /// 관리건축물대장 PK.
+    /// Building identifier from Platform Core.
     pub id: String,
-    /// 건물명 (없으면 빈 문자열).
+    /// Building name, empty when Platform Core has no route-facing name.
     pub name: String,
-    /// 대지위치 풀주소.
+    /// Address text when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
 
-    /// 주용도 (도메인 enum 의 사용자 노출 라벨).
+    /// Purpose label or code.
     pub purpose: String,
-    /// 구조 (도메인 enum 의 사용자 노출 라벨).
+    /// Structure label or code.
     pub structure: String,
 
-    /// 대지면적 m².
+    /// Plot area in square meters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plot_area_m2: Option<f64>,
-    /// 건축면적 m².
+    /// Building area in square meters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub building_area_m2: Option<f64>,
-    /// 건폐율 %.
+    /// Building coverage ratio, percent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub building_coverage_ratio: Option<f64>,
-    /// 연면적 m².
+    /// Total floor area in square meters.
     pub total_area_m2: f64,
-    /// 용적률 %.
+    /// Floor area ratio, percent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub floor_area_ratio: Option<f64>,
 
-    /// 지상층수.
+    /// Above-ground floor count.
     pub above_ground_floors: u8,
-    /// 지하층수.
+    /// Underground floor count.
     pub below_ground_floors: u8,
-    /// 건물 높이 m.
+    /// Building height in meters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_m: Option<f64>,
 
-    /// 승용 승강기수.
+    /// Passenger elevator count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub passenger_elevators: Option<u32>,
-    /// 비상용 승강기수.
+    /// Emergency elevator count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub emergency_elevators: Option<u32>,
 
-    /// 옥내 자주식 주차 대수.
+    /// Indoor self-parking count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indoor_self_parking: Option<u32>,
-    /// 옥외 자주식 주차 대수.
+    /// Outdoor self-parking count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outdoor_self_parking: Option<u32>,
 
-    /// 부속건축물 수.
+    /// Annex building count.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annex_building_count: Option<u32>,
-    /// 부속건축물 면적 m².
+    /// Annex building area in square meters.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annex_building_area_m2: Option<f64>,
 
-    /// 허가일 (`YYYY-MM-DD`).
+    /// Permit date, `YYYY-MM-DD`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permitted_at: Option<String>,
-    /// 착공일 (`YYYY-MM-DD`).
+    /// Construction start date, `YYYY-MM-DD`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
-    /// 사용승인일 (`YYYY-MM-DD`).
+    /// Use approval date, `YYYY-MM-DD`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approved_at: Option<String>,
 }
 
-impl From<Building> for BuildingResponse {
-    fn from(b: Building) -> Self {
+impl From<BuildingRegisterRecord> for BuildingResponse {
+    fn from(b: BuildingRegisterRecord) -> Self {
         Self {
-            id: b.mgm_bldrgst_pk,
-            name: b.building_name.unwrap_or_default(),
-            address: b.plat_plc,
-            purpose: format!("{:?}", b.main_purpose_code),
-            structure: format!("{:?}", b.structure_code),
-            plot_area_m2: b.plat_area_m2.map(shared_kernel::area::AreaM2::as_f64),
-            building_area_m2: b.arch_area_m2.map(shared_kernel::area::AreaM2::as_f64),
+            id: b.id,
+            name: b.name,
+            address: b.address,
+            purpose: b.purpose,
+            structure: b.structure,
+            plot_area_m2: b.plot_area_m2,
+            building_area_m2: b.building_area_m2,
             building_coverage_ratio: b.building_coverage_ratio,
-            total_area_m2: b.total_floor_area_m2.as_f64(),
+            total_area_m2: b.total_area_m2,
             floor_area_ratio: b.floor_area_ratio,
-            above_ground_floors: b.ground_floors,
-            below_ground_floors: b.underground_floors,
+            above_ground_floors: b.above_ground_floors,
+            below_ground_floors: b.below_ground_floors,
             height_m: b.height_m,
             passenger_elevators: b.passenger_elevators,
             emergency_elevators: b.emergency_elevators,
             indoor_self_parking: b.indoor_self_parking,
             outdoor_self_parking: b.outdoor_self_parking,
             annex_building_count: b.annex_building_count,
-            annex_building_area_m2: b
-                .annex_building_area_m2
-                .map(shared_kernel::area::AreaM2::as_f64),
-            permitted_at: b.permit_date.map(|d| d.format("%Y-%m-%d").to_string()),
-            started_at: b
-                .construction_start_date
-                .map(|d| d.format("%Y-%m-%d").to_string()),
-            approved_at: b
-                .use_approval_date
-                .map(|d| d.format("%Y-%m-%d").to_string()),
+            annex_building_area_m2: b.annex_building_area_m2,
+            permitted_at: b.permitted_at,
+            started_at: b.started_at,
+            approved_at: b.approved_at,
         }
     }
 }
 
-/// 건축물 list 응답.
+/// Building list response.
 #[derive(Debug, Serialize)]
 pub struct BuildingsResponse {
-    /// 건축물 list. 미발견 시 빈 vec.
+    /// Building list. Empty when none are available.
     pub buildings: Vec<BuildingResponse>,
 }
 
-/// `GET /api/buildings?parcel_pnu=...` — 인증 필수.
+/// Handles `GET /api/buildings?parcel_pnu=...`.
 ///
 /// # Errors
 ///
-/// - PNU 형식 오류 → `400 invalid-pnu`
-/// - reader 실패 → `502 buildings-lookup-failed`
+/// - `400 invalid-pnu` when the PNU is malformed.
+/// - `502 buildings-lookup-failed` when Platform Core lookup fails.
 pub async fn list_buildings(
     State(state): State<BuildingsState>,
     _auth: AuthenticatedUser,

@@ -5,17 +5,17 @@ use std::sync::Arc;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use listing_domain::repository::ListingRepository;
 use serde::{Deserialize, Serialize};
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::listing_marker_serving::ListingMarkerServingGateway;
 use crate::routes::listing_marker_common::{is_stable_filter_hash, resolve_listing_marker_filter};
 
 /// Shared state for listing marker count routes.
 #[derive(Clone)]
 pub struct ListingMarkerCountsState {
-    /// Gongzzang listing repository.
-    pub listing_repo: Arc<dyn ListingRepository>,
+    /// Gongzzang marker serving gateway.
+    pub serving: Arc<ListingMarkerServingGateway>,
 }
 
 /// `GET /map/v1/marker-counts/listing` query parameters.
@@ -64,11 +64,11 @@ pub async fn get_listing_marker_count(
         ));
     }
 
-    let filter = resolve_listing_marker_filter(&state.listing_repo, filter_hash).await?;
+    let filter = resolve_listing_marker_filter(&state.serving, filter_hash).await?;
 
     let count = state
-        .listing_repo
-        .count_listing_markers(filter.into_spec())
+        .serving
+        .count_listing_markers(filter_hash, filter.into_spec())
         .await
         .map_err(|e| {
             tracing::warn!(error = %e, "listing marker count query failed");

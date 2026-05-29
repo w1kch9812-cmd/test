@@ -6,18 +6,19 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use listing_domain::repository::{
-    ListingMarkerFilter, ListingMarkerMaskQuery, ListingMarkerTileQuery, ListingRepository,
+    ListingMarkerFilter, ListingMarkerMaskQuery, ListingMarkerTileQuery,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::listing_marker_serving::ListingMarkerServingGateway;
 use crate::routes::listing_marker_common::{is_stable_filter_hash, resolve_listing_marker_filter};
 
 /// Shared state for listing marker mask routes.
 #[derive(Clone)]
 pub struct ListingMarkerMasksState {
-    /// Gongzzang listing repository.
-    pub listing_repo: Arc<dyn ListingRepository>,
+    /// Gongzzang marker serving gateway.
+    pub serving: Arc<ListingMarkerServingGateway>,
 }
 
 /// `GET /map/v1/marker-masks/listing/:z/:x/:y` query parameters.
@@ -77,22 +78,31 @@ pub async fn get_listing_marker_mask(
         ));
     }
 
-    let filter = resolve_listing_marker_filter(&state.listing_repo, filter_hash).await?;
+    let filter = resolve_listing_marker_filter(&state.serving, filter_hash).await?;
     let mask_query =
         parse_listing_marker_mask_query(&z_raw, &x_raw, &y_raw, filter, q.base_version)?;
 
     let mask = state
-        .listing_repo
-        .find_listing_marker_mask(mask_query)
+        .serving
+        .find_listing_marker_mask(filter_hash, mask_query)
         .await
         .map_err(|e| {
             tracing::warn!(error = %e, "listing marker mask query failed");
-            problem(
-                "map/listing-marker-mask-unavailable",
-                "listing marker mask is unavailable",
-                StatusCode::SERVICE_UNAVAILABLE,
-                None,
-            )
+            if e.to_string().contains("budget violation") {
+                problem(
+                    "map/listing-marker-mask-unrepresentable",
+                    "listing marker mask cannot be represented truthfully",
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    None,
+                )
+            } else {
+                problem(
+                    "map/listing-marker-mask-unavailable",
+                    "listing marker mask is unavailable",
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    None,
+                )
+            }
         })?;
 
     if q.base_version.is_some() && mask.projection_version != q.base_version {

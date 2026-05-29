@@ -4,20 +4,18 @@ use std::sync::Arc;
 use auth::jwks_cache::JwksCache;
 use auth::verifier::{JwtVerifier, Verifier};
 use deadpool_redis::{Config as RedisCfg, Runtime as RedisRt};
-use parcel_domain::reader::ParcelReader;
-use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup, VWorldParcelInfoLookup};
-use raw_capture_client::RawCapture;
+use parcel_lookup::{NoOpParcelInfoLookup, ParcelInfoLookup};
 use sqlx::postgres::PgPoolOptions;
-use vworld_client::{VWorldClient, VWorldConfig, VWorldParcelReader};
 
 use crate::building_reader;
 use crate::photo_upload;
-use crate::r2_raw_capture;
-use crate::raw_capture_metadata;
+use crate::platform_core_auth::{PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig};
+use crate::platform_core_parcel_lookup;
 use crate::routes;
 
-/// SP10 T3: `NoOp` building reader — `DATA_GO_KR_API_KEY` missing fallback.
-/// Production blocks this fallback before wiring reaches handlers.
+/// Dev-only building reader fallback.
+/// Production requires Platform Core Catalog because canonical building data is
+/// no longer owned by the Gongzzang API service.
 struct NoOpBuildingRegisterReader;
 
 impl routes::buildings::BuildingRegisterReader for NoOpBuildingRegisterReader {
@@ -28,7 +26,7 @@ impl routes::buildings::BuildingRegisterReader for NoOpBuildingRegisterReader {
         Box<
             dyn std::future::Future<
                     Output = Result<
-                        Vec<building_domain::entity::Building>,
+                        Vec<routes::buildings::BuildingRegisterRecord>,
                         routes::buildings::BuildingRegisterError,
                     >,
                 > + Send
@@ -124,112 +122,117 @@ pub fn is_production_env() -> bool {
         || std::env::var("NODE_ENV").as_deref() == Ok("production")
 }
 
-pub fn build_raw_capture(
-    is_production: bool,
-    pool: sqlx::PgPool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    let inner = match r2_raw_capture::R2RawCaptureConfig::from_env() {
-        Ok(cfg) => build_r2_raw_capture(cfg, is_production)?,
-        Err(error) => build_noop_raw_capture(&error, is_production)?,
-    };
-    Ok(Arc::new(raw_capture_metadata::TrackedRawCapture::new(
-        inner, pool,
-    )))
+pub fn build_parcel_lookup(is_production: bool) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
+    build_parcel_lookup_from_platform_core_base_url_with_service_auth_metadata(
+        is_production,
+        optional_env("PLATFORM_CORE_API_BASE_URL"),
+        optional_env("PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE"),
+        optional_env("PLATFORM_CORE_SERVICE_TOKEN"),
+        platform_core_service_auth_metadata_from_env(),
+    )
 }
 
-fn build_r2_raw_capture(
-    cfg: r2_raw_capture::R2RawCaptureConfig,
+#[cfg(test)]
+fn build_parcel_lookup_from_platform_core_base_url(
     is_production: bool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    if is_production && cfg.fallback_dir.is_none() {
-        return Err(production_config_error(
-            "BRONZE_FALLBACK_DIR 미설정 — R2 PUT 실패 시 raw 영구 손실. \
-             production 은 ADR 0026 의 디스크 fallback 필수 \
-             (예: /var/lib/gongzzang/bronze-fallback)",
-        ));
-    }
-    if let Err(error) = cfg.ensure_fallback_writable() {
-        handle_unwritable_raw_capture_fallback(&cfg, is_production, &error)?;
-    }
-    tracing::info!(
-        "raw_capture: R2 live (bucket={}, prefix={}, fallback={:?}) — ADR 0026",
-        cfg.bucket,
-        cfg.bronze_prefix,
-        cfg.fallback_dir,
-    );
-    Ok(Arc::new(r2_raw_capture::R2RawCapture::new(cfg)))
-}
-
-fn handle_unwritable_raw_capture_fallback(
-    cfg: &r2_raw_capture::R2RawCaptureConfig,
-    is_production: bool,
-    error: &std::io::Error,
-) -> Result<(), StartupError> {
-    if is_production {
-        return Err(production_config_error(format!(
-            "BRONZE_FALLBACK_DIR ({:?}) mkdir/write probe 실패 — production 차단: {error}",
-            cfg.fallback_dir
-        )));
-    }
-    tracing::warn!(
-        error = %error,
-        fallback_dir = ?cfg.fallback_dir,
-        "BRONZE_FALLBACK_DIR not writable (dev only — production 은 fail-fast)"
-    );
-    Ok(())
-}
-
-fn build_noop_raw_capture(
-    error: &r2_raw_capture::R2ConfigError,
-    is_production: bool,
-) -> Result<Arc<dyn RawCapture>, StartupError> {
-    if is_production {
-        return Err(production_config_error(format!(
-            "R2 env (R2_ACCOUNT_ID/ACCESS_KEY/SECRET_KEY/BUCKET) 미설정 — Bronze raw_response 보존 path 0 (ADR 0026): {error}"
-        )));
-    }
-    tracing::warn!(
-        error = %error,
-        "raw_capture: R2 env missing → NoOp (dev only; production 은 fail-fast)"
-    );
-    Ok(Arc::new(raw_capture_client::NoOpRawCapture::new()))
-}
-
-pub fn build_parcel_lookup(
-    is_production: bool,
-    raw_capture: &Arc<dyn RawCapture>,
+    base_url: Option<String>,
+    service_token: Option<String>,
 ) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
-    match VWorldConfig::from_env() {
-        Ok(cfg) => Ok(build_vworld_parcel_lookup(cfg, raw_capture)),
-        Err(error) => build_noop_parcel_lookup(&error, is_production),
-    }
+    build_parcel_lookup_from_platform_core_base_url_with_service_auth_metadata(
+        is_production,
+        base_url,
+        None,
+        service_token,
+        PlatformCoreServiceAuthMetadataConfig::default(),
+    )
 }
 
-fn build_vworld_parcel_lookup(
-    cfg: VWorldConfig,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Arc<dyn ParcelInfoLookup> {
-    tracing::info!("parcel_lookup: V-World live (LP_PA_CBND_BUBUN) + PgRawCapture");
-    let client = Arc::new(VWorldClient::new(cfg));
-    let reader: Arc<dyn ParcelReader> =
-        Arc::new(VWorldParcelReader::new(client, Arc::clone(raw_capture)));
-    Arc::new(VWorldParcelInfoLookup::new(reader))
+fn build_parcel_lookup_from_platform_core_base_url_with_service_auth_metadata(
+    is_production: bool,
+    base_url: Option<String>,
+    workload_identity_token_file: Option<String>,
+    service_token: Option<String>,
+    service_auth_metadata: PlatformCoreServiceAuthMetadataConfig,
+) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
+    if let Some(base_url) = base_url {
+        let auth = build_platform_core_service_auth(
+            is_production,
+            workload_identity_token_file,
+            service_token,
+            service_auth_metadata,
+        )?;
+        tracing::info!(
+            "parcel_lookup: Platform Core Catalog live (/catalog/v1/parcels/by-pnu/:pnu)"
+        );
+        return platform_core_parcel_lookup::build_platform_core_parcel_info_lookup(
+            &base_url, auth,
+        )
+        .map_err(|error| {
+            production_config_error(format!(
+                "PLATFORM_CORE_API_BASE_URL invalid for parcel_lookup: {error}"
+            ))
+        });
+    }
+    build_noop_parcel_lookup(is_production)
 }
 
 fn build_noop_parcel_lookup(
-    error: &vworld_client::ConfigError,
     is_production: bool,
 ) -> Result<Arc<dyn ParcelInfoLookup>, StartupError> {
     if is_production {
-        return Err(production_config_error(format!(
-            "parcel_lookup VWORLD env 미설정 (audit 2026-05-08): {error}"
-        )));
+        return Err(production_config_error(
+            "PLATFORM_CORE_API_BASE_URL must be set for parcel_lookup because Platform Core owns catalog parcel data",
+        ));
     }
     tracing::warn!(
-        error = %error,
-        "parcel_lookup: VWORLD env missing → NoOp fallback (dev only; production 은 fail-fast)"
+        "parcel_lookup: PLATFORM_CORE_API_BASE_URL missing - NoOp empty result (dev only)"
     );
     Ok(Arc::new(NoOpParcelInfoLookup::new()))
+}
+
+fn build_platform_core_service_auth(
+    is_production: bool,
+    workload_identity_token_file: Option<String>,
+    service_token: Option<String>,
+    service_auth_metadata: PlatformCoreServiceAuthMetadataConfig,
+) -> Result<Option<PlatformCoreServiceAuth>, StartupError> {
+    if let Some(token_file) = workload_identity_token_file {
+        if is_production && service_token.is_some() {
+            return Err(production_config_error(
+                "PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE and PLATFORM_CORE_SERVICE_TOKEN must not both be set in production",
+            ));
+        }
+        return PlatformCoreServiceAuth::new_from_workload_identity_token_file(token_file.as_str())
+            .map(Some)
+            .map_err(|error| production_config_error(error.to_string()));
+    }
+    if let Some(token) = service_token {
+        return PlatformCoreServiceAuth::new_for_environment(
+            &token,
+            service_auth_metadata,
+            is_production,
+        )
+        .map(Some)
+        .map_err(|error| production_config_error(error.to_string()));
+    }
+    if is_production {
+        return Err(production_config_error(
+            "PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE or PLATFORM_CORE_SERVICE_TOKEN must be set because Platform Core APIs require service-to-service auth",
+        ));
+    }
+    tracing::warn!(
+        "PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE and PLATFORM_CORE_SERVICE_TOKEN missing - Platform Core calls are unauthenticated in dev only"
+    );
+    Ok(None)
+}
+
+fn platform_core_service_auth_metadata_from_env() -> PlatformCoreServiceAuthMetadataConfig {
+    PlatformCoreServiceAuthMetadataConfig {
+        scope: optional_env("PLATFORM_CORE_SERVICE_TOKEN_SCOPE"),
+        issued_at: optional_env("PLATFORM_CORE_SERVICE_TOKEN_ISSUED_AT"),
+        expires_at: optional_env("PLATFORM_CORE_SERVICE_TOKEN_EXPIRES_AT"),
+        rotation_owner: optional_env("PLATFORM_CORE_SERVICE_TOKEN_ROTATION_OWNER"),
+    }
 }
 
 pub fn build_photo_upload_issuer(
@@ -333,6 +336,7 @@ pub fn build_photo_object_verifier_from_config_result(
     }
 }
 
+#[allow(clippy::disallowed_types)] // JWKS client is owned by the auth boundary, not Catalog integration.
 pub fn build_verifier(dev_mode: bool, is_production: bool) -> Result<Arc<Verifier>, StartupError> {
     if dev_mode {
         if is_production {
@@ -400,42 +404,64 @@ pub fn build_internal_auth_secret(is_production: bool) -> Result<Arc<str>, Start
 
 pub fn build_building_reader(
     is_production: bool,
-    raw_capture: &Arc<dyn RawCapture>,
 ) -> Result<Arc<dyn routes::buildings::BuildingRegisterReader>, StartupError> {
-    if let Some(key) =
-        optional_env("DATA_GO_KR_API_KEY").or_else(|| optional_env("ODP_SERVICE_KEY"))
-    {
-        return Ok(build_data_go_kr_building_reader(key, raw_capture));
+    build_building_reader_from_platform_core_base_url_with_service_auth_metadata(
+        is_production,
+        optional_env("PLATFORM_CORE_API_BASE_URL"),
+        optional_env("PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE"),
+        optional_env("PLATFORM_CORE_SERVICE_TOKEN"),
+        platform_core_service_auth_metadata_from_env(),
+    )
+}
+
+#[cfg(test)]
+fn build_building_reader_from_platform_core_base_url(
+    is_production: bool,
+    base_url: Option<String>,
+    service_token: Option<String>,
+) -> Result<Arc<dyn routes::buildings::BuildingRegisterReader>, StartupError> {
+    build_building_reader_from_platform_core_base_url_with_service_auth_metadata(
+        is_production,
+        base_url,
+        None,
+        service_token,
+        PlatformCoreServiceAuthMetadataConfig::default(),
+    )
+}
+
+fn build_building_reader_from_platform_core_base_url_with_service_auth_metadata(
+    is_production: bool,
+    base_url: Option<String>,
+    workload_identity_token_file: Option<String>,
+    service_token: Option<String>,
+    service_auth_metadata: PlatformCoreServiceAuthMetadataConfig,
+) -> Result<Arc<dyn routes::buildings::BuildingRegisterReader>, StartupError> {
+    if let Some(base_url) = base_url {
+        let auth = build_platform_core_service_auth(
+            is_production,
+            workload_identity_token_file,
+            service_token,
+            service_auth_metadata,
+        )?;
+        tracing::info!(
+            "building_register: Platform Core Catalog live (/catalog/v1/parcels/by-pnu/:pnu/buildings)"
+        );
+        return building_reader::build_platform_core_building_register_reader(&base_url, auth)
+            .map_err(|error| {
+                production_config_error(format!(
+                    "PLATFORM_CORE_API_BASE_URL invalid for building_register: {error}"
+                ))
+            });
     }
     if is_production {
         return Err(production_config_error(
-            "DATA_GO_KR_API_KEY (또는 ODP_SERVICE_KEY) 미설정 — building_register NoOp \
-             가 사용자한테 silent empty list 반환 (audit 2026-05-08)",
+            "PLATFORM_CORE_API_BASE_URL must be set for building_register because Platform Core owns catalog building data",
         ));
     }
-    tracing::warn!("building_register: DATA_GO_KR_API_KEY missing → NoOp empty list (dev only)");
-    Ok(Arc::new(NoOpBuildingRegisterReader))
-}
-
-fn build_data_go_kr_building_reader(
-    service_key: String,
-    raw_capture: &Arc<dyn RawCapture>,
-) -> Arc<dyn routes::buildings::BuildingRegisterReader> {
-    tracing::info!(
-        "building_register: data.go.kr live (getBrTitleInfo via DataGoKrBuildingRegisterReader)"
+    tracing::warn!(
+        "building_register: PLATFORM_CORE_API_BASE_URL missing - NoOp empty list (dev only)"
     );
-    let base_url =
-        std::env::var("ODP_BASE_URL").unwrap_or_else(|_| "https://apis.data.go.kr".to_owned());
-    let client = Arc::new(data_go_kr_client::DataGoKrClient::new(
-        data_go_kr_client::DataGoKrConfig {
-            service_key,
-            base_url,
-        },
-    ));
-    Arc::new(building_reader::DataGoKrBuildingRegisterReader::new(
-        client,
-        Arc::clone(raw_capture),
-    ))
+    Ok(Arc::new(NoOpBuildingRegisterReader))
 }
 
 #[cfg(test)]

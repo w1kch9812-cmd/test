@@ -270,8 +270,11 @@ pub const LISTING_MARKER_TILE_LAYER: &str = "listing";
 /// Marker tile response content type.
 pub const LISTING_MARKER_TILE_CONTENT_TYPE: &str = "application/vnd.mapbox-vector-tile";
 
+/// Minimum zoom accepted by the Gongzzang listing marker tile API.
+pub const LISTING_MARKER_TILE_MIN_ZOOM: u8 = 14;
+
 /// Maximum zoom accepted by the listing marker tile API.
-pub const LISTING_MARKER_TILE_MAX_ZOOM: u8 = 24;
+pub const LISTING_MARKER_TILE_MAX_ZOOM: u8 = 22;
 
 /// Validated tile query for the listing marker PBF surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,7 +292,7 @@ pub struct ListingMarkerTileQuery {
 impl ListingMarkerTileQuery {
     /// Build a query without validation. Use only when inputs are already trusted.
     #[must_use]
-    pub fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
+    pub const fn new(z: u8, x: u32, y: u32, filter: ListingMarkerFilter) -> Self {
         Self { z, x, y, filter }
     }
 
@@ -305,7 +308,7 @@ impl ListingMarkerTileQuery {
         y: u32,
         filter: ListingMarkerFilter,
     ) -> Result<Self, ListingMarkerTileQueryError> {
-        if z > LISTING_MARKER_TILE_MAX_ZOOM {
+        if !(LISTING_MARKER_TILE_MIN_ZOOM..=LISTING_MARKER_TILE_MAX_ZOOM).contains(&z) {
             return Err(ListingMarkerTileQueryError::InvalidZoom { z });
         }
         let axis_limit = 1_u32 << u32::from(z);

@@ -16,7 +16,7 @@ pub struct ListingsState {
     /// `ListingPhoto` 저장소.
     pub photo_repo: Arc<dyn ListingPhotoRepository>,
     /// PNU → 행정/지목/용도지역 lookup (ADR 0018, SP9 T4).
-    /// production = `VWorldParcelInfoLookup`, dev/test = `NoOpParcelInfoLookup`.
+    /// production = `PlatformCoreParcelInfoLookup`, dev/test = `NoOpParcelInfoLookup`.
     pub parcel_lookup: Arc<dyn ParcelInfoLookup>,
     /// Listing photo binary upload URL issuer.
     pub photo_upload_issuer: Arc<dyn ListingPhotoUploadUrlIssuer>,

@@ -104,14 +104,19 @@ version bigint not null default 1,
 deleted_at timestamptz null
 ```
 
-## 11. JSONB raw_response
+## 11. Gongzzang-owned external response archive
 
-외부 공공 API 응답:
+Catalog source raw lineage is Platform Core-owned. Gongzzang must not add raw
+tables for parcel, building, industrial complex, manufacturer, public/reference
+spatial layers, or Catalog API drift monitoring.
+
+For a future Gongzzang-owned external adapter approved by ADR, archive tables use
+an explicit owner-specific name:
 
 ```sql
 create table listing_external_data (
     listing_id char(30) primary key references listing(id),
-    source varchar(20) not null,  -- 'vworld', 'data_go_kr', ...
+    source varchar(40) not null,  -- e.g. 'korean_law', 'nice_identity'
     raw_response jsonb not null,
     fetched_at timestamptz not null,
     expires_at timestamptz not null
@@ -120,7 +125,8 @@ create table listing_external_data (
 create index on listing_external_data using gin (raw_response);
 ```
 
-raw 보존 = 감사 + replay + 분쟁 시 증빙.
+Raw retention = audit, replay, and dispute evidence for the owning Gongzzang
+adapter only.
 
 ## 12. 금지
 

@@ -1,149 +1,48 @@
 # etl-base-layer
 
-PMTiles base layer ETL — Bronze SHP 다운로드 / Gold PMTiles 빌드 / R2 업로드.
+`etl-base-layer` is retained only as a fail-closed handover stub.
 
-ADR [0016 PMTiles 100%](../../docs/adr/0016-medallion-base-layer-postgis-silver-pmtiles-gold.md) 의 ETL 측 구현. SP9 plan T3.
+Platform Core Catalog owns the static vector tile artifact lifecycle:
 
-## 진행 단계
+- source acquisition
+- bronze/gold build steps
+- R2/CDN object layout
+- manifest publication
+- rollback pointer management
+- lineage metadata
 
-- ✅ **T3a** — Bronze 다운로드 + sha256 + 로컬 manifest.json
-- ✅ **T3b.1 (현재)** — R2 업로드 path (`aws-sdk-s3`) + Bronze archive + manifest R2 upload + GoldManifest 데이터 모델
-- ⏳ **T3b.2** — SHP → GeoJSON (`ogr2ogr`, EPSG:5179 → EPSG:4326), `tippecanoe` spawn (parcels Z14-17 / admin Z6-12 / complex Z0-16 — 산단 모든 zoom visible), Gold artifact R2 upload, verify (강남 PNU 1168010100107370000 + row count Δ < 5%), Gold manifest hot-swap (`current_version` 갱신)
+Gongzzang must not run static vector tile ETL. Legacy subcommands remain only so
+old scheduled jobs fail with a clear ownership notice instead of mutating stale
+state.
 
-## 환경변수
+## Commands
 
-### Bronze (T3a)
-
-| 변수 | 필수 | 기본 |
-|---|---|---|
-| `BRONZE_DIR` | — | `./var/bronze` |
-| `BRONZE_BATCH_LABEL` | — | UTC `%Y-%m` |
-| `BRONZE_PARCEL_SHP_URL` | optional | — |
-| `BRONZE_ADMIN_SHP_URL` | optional | — |
-| `BRONZE_COMPLEX_GEOJSON_URL` | optional | — |
-
-세 URL 중 하나도 없으면 fail-fast (exit 2).
-
-### R2 업로드 (T3b.1)
-
-R2 4-tuple 이 *모두* 설정되어야 활성. 부분 설정은 fallback 으로 *비활성* (실수로 partial 자격이 commit 되어도 silent skip — 비밀 유출 방지).
-
-| 변수 | 필수 | 기본 |
-|---|---|---|
-| `R2_ACCOUNT_ID` | R2 활성 시 | — |
-| `R2_ACCESS_KEY` | R2 활성 시 | — |
-| `R2_SECRET_KEY` | R2 활성 시 | — |
-| `R2_BUCKET` | R2 활성 시 | — |
-| `R2_BRONZE_PREFIX` | — | `bronze` |
-| `R2_GOLD_PREFIX` | — | `gold` |
-| `GOLD_VERSION` | — | (T3b.2 의 빌드 시점에 결정) |
-
-### R2 KEY 레이아웃 (ADR 0016)
-
-```text
-<bucket>/<bronze_prefix>/<batch_label>/parcel.shp.zip
-<bucket>/<bronze_prefix>/<batch_label>/admin.shp.zip
-<bucket>/<bronze_prefix>/<batch_label>/industrial-complex.geojson
-<bucket>/<bronze_prefix>/<batch_label>/manifest.json     # Bronze manifest (hot-cache)
-
-<bucket>/<gold_prefix>/<version>/parcels.pmtiles         # T3b.2
-<bucket>/<gold_prefix>/<version>/admin.pmtiles           # T3b.2
-<bucket>/<gold_prefix>/<version>/complex.pmtiles         # T3b.2
-<bucket>/<gold_prefix>/manifest.json                     # T3b.2 (hot-swap pointer)
-```
-
-## 로컬 실행
-
-R2 미설정 (T3a 호환) — 로컬 파일만 만듦:
+These commands intentionally exit with code `2`:
 
 ```bash
-BRONZE_PARCEL_SHP_URL=https://www.data.go.kr/.../parcel.shp.zip \
-BRONZE_DIR=./var/bronze \
-cargo run -p etl-base-layer
+cargo run -p etl-base-layer -- bronze
+cargo run -p etl-base-layer -- gold
+cargo run -p etl-base-layer -- promote
+cargo run -p etl-base-layer -- cleanup-manifest-backups
 ```
 
-R2 활성:
+Each command logs that Platform Core Catalog owns the artifact lifecycle and
+that Gongzzang is a consumer only.
+
+## Guardrails
+
+The package tests block legacy implementation source from returning:
 
 ```bash
-BRONZE_PARCEL_SHP_URL=https://www.data.go.kr/.../parcel.shp.zip \
-BRONZE_ADMIN_SHP_URL=https://www.data.go.kr/.../admin.shp.zip \
-BRONZE_DIR=./var/bronze \
-R2_ACCOUNT_ID=<cloudflare_account> \
-R2_ACCESS_KEY=<r2_access_key> \
-R2_SECRET_KEY=<r2_secret_key> \
-R2_BUCKET=gongzzang-static \
-cargo run -p etl-base-layer
+cargo test -p etl-base-layer
+cargo clippy -p etl-base-layer --all-targets -- -D warnings
 ```
 
-결과 (R2 활성):
-
-```text
-# 로컬
-./var/bronze/<batch_label>/parcel.shp.zip
-./var/bronze/<batch_label>/admin.shp.zip
-./var/bronze/<batch_label>/manifest.json
-
-# R2
-gongzzang-static/bronze/<batch_label>/parcel.shp.zip       (Content-Type: application/zip)
-gongzzang-static/bronze/<batch_label>/admin.shp.zip
-gongzzang-static/bronze/<batch_label>/manifest.json        (Cache-Control: no-cache)
-```
-
-## 검증
-
-- `cargo test -p etl-base-layer` — 12 unit tests (manifest serde, env config, R2 mock, bronze key layout)
-- `cargo clippy -p etl-base-layer --all-targets -- -D warnings` — 통과
-- 로컬 smoke (T3a 호환) — 임의의 작은 url 다운로드 + sha256 계산 + manifest 저장 확인
-- R2 smoke (T3b.1) — wiremock 으로 PUT 1회 검증, 5xx 응답 propagation 검증
-
-## 의존성 핀
-
-workspace `[rust-toolchain.toml]` = 1.91.1. AWS SDK crates are pinned as one matched
-line so `cargo deny check` cannot silently reintroduce legacy `rustls-webpki` 0.101.x.
-
-| crate | 핀 | 사유 |
-|---|---|---|
-| `aws-sdk-s3` | `=1.133.0` | matched AWS SDK line |
-| `aws-config` | `=1.8.17` | matched AWS SDK line |
-| `aws-credential-types` | `=1.2.14` | matched AWS SDK line |
-| `aws-smithy-types` | `=1.4.8` | matched AWS SDK line |
-## Docker (Plan D L1 Reproducibility)
-
-[Dockerfile.etl](./Dockerfile.etl) — multi-stage 결정성 빌드:
-
-- Stage 1: `tippecanoe-builder` — `felt/tippecanoe` git tag `2.80.0` (immutable)
-- Stage 2: `rust-builder` — `rust:1.91.1-slim-bookworm` + `cargo build --release`
-- Stage 3: `runtime` — `ubuntu:22.04` + `gdal-bin=3.4.*` + tippecanoe + etl-base-layer
-
-빌드:
+Repository-level boundary checks also require Platform Core-owned SP9 tooling
+and workflows to stay absent from Gongzzang:
 
 ```bash
-GIT_SHA=$(git rev-parse HEAD)
-TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-docker build \
-  -f services/etl-base-layer/Dockerfile.etl \
-  -t gongzzang/etl-base-layer:${GIT_SHA} \
-  --build-arg GIT_SHA=${GIT_SHA} \
-  --build-arg BUILD_TIMESTAMP=${TS} \
-  .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1 -Root .
 ```
 
-CI 사용 (다음 commit 의 `.github/workflows/sp9-base-layer-etl.yml`) — 위 이미지가
-`ubuntu-22.04-large` runner 에서 pulled 후 `docker run` 으로 호출.
-
-비-root 사용자 (`etl`, uid 10001) 로 실행 — 보안 best practice.
-
-## 후속 (T3b.2 / T6)
-
-T3b.2 추가 의존:
-
-- `tokio::process::Command` (ogr2ogr / tippecanoe spawn) ✅
-- pmtiles parser (`pmtiles-rs` 또는 ogrinfo 결과 파싱) — verify 단계의 강남 PNU lookup (L2)
-- CI: `apt install gdal-bin`, tippecanoe build from `felt/tippecanoe` source ✅ (Dockerfile.etl)
-
-T6 (`.github/workflows/sp9-base-layer-etl.yml`):
-
-- 매월 1일 03:00 KST cron
-- `ubuntu-22.04-large` (32GB RAM — 1.4억 polygon)
-- timeout 720분
-- 실패 시 Sentry 알림
+See [ADR 0036](../../docs/adr/0036-static-vector-tile-runtime-contract.md).

@@ -20,12 +20,16 @@
 | 영역 | 최소 커버리지 |
 |------|------------|
 | `crates/domain/*` | **90%** (도메인 핵심) |
-| `crates/data-clients/*`, `crates/db` | 70% |
+| `crates/db` | 70% |
+| 공짱 소유 비-Catalog 외부 어댑터 crate | 70% |
 | `services/*` | 60% |
 | `apps/*` 라우터/Server Action | 50% |
 | `packages/ui-web` 컴포넌트 | 40% (시각 회귀로 보강) |
 
 도구: `cargo-tarpaulin` (Rust), Vitest coverage (TS).
+
+Catalog 소스 클라이언트, raw capture, 공용 공간 데이터 리더는 Platform Core 소유다.
+공짱 테스트 커버리지 표는 그 crate를 다시 만들거나 관리 대상으로 해석하면 안 된다.
 
 ## 3. 네이밍 규칙
 

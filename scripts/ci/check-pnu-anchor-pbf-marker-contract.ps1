@@ -216,6 +216,22 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "migrations/30016_platform_core_event_inbox_anchor_import.sql"
+        Tokens = @(
+            "alter table parcel_marker_anchor",
+            "alter column algorithm_version type varchar(128)",
+            "create table platform_core_event_inbox",
+            "event_id uuid primary key",
+            "payload jsonb not null",
+            "anchor_snapshot_id varchar(128)",
+            "source_geometry_version varchar(128)",
+            "status in ('accepted', 'pending_import', 'processing', 'processed', 'failed')",
+            "platform_core_event_inbox_anchor_payload_chk",
+            "platform_core_event_inbox_pending_idx",
+            "platform_core_event_inbox_anchor_snapshot_idx"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/domain/core/listing/src/repository.rs"
         Tokens = @(
             "find_listing_marker_tile",
@@ -294,6 +310,24 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "crates/db/src/platform_core_anchor.rs"
+        Tokens = @(
+            "insert_inbox_event",
+            "find_inbox_event_payload",
+            "find_pending_anchor_import_event_ids",
+            "mark_inbox_event_processing",
+            "mark_inbox_event_processed",
+            "mark_inbox_event_failed",
+            "status in ('pending_import', 'processing')",
+            "status = 'processing'",
+            "processed_at = now()",
+            "failed_at = now()",
+            "failure_reason",
+            "import_anchor_rows",
+            "listing_marker_projection"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/db/tests/listing_marker_tile_integration.rs"
         Tokens = @(
             "listing_marker_tile_represents_every_active_listing_on_same_pnu",
@@ -304,8 +338,17 @@ $contracts = @(
             "feature_count",
             "aggregate_count",
             "listing_marker_projection_upsert_uses_platform_core_anchor_snapshot",
+            "listing_marker_tile_applies_normalized_filter_spec"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "crates/db/tests/listing_marker_tile_integration/filter_index.rs"
+        Tokens = @(
             "listing_marker_filter_registry_round_trips_normalized_filter",
-            "listing_marker_mask_returns_show_ids_for_loaded_tile"
+            "listing_marker_mask_returns_show_ids_for_loaded_tile",
+            "count_listing_markers",
+            "find_listing_marker_mask",
+            "ListingMarkerMaskEncoding::Show"
         )
     },
     [pscustomobject]@{
@@ -361,6 +404,58 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "services/api/src/platform_core_anchor_import.rs"
+        Tokens = @(
+            "platform-core.parcel_marker_anchor_artifact_manifest.v1",
+            "platform-core.parcel_marker_anchor_artifact_entry.v1",
+            "parse_anchor_manifest",
+            "parse_anchor_rows",
+            "parse_anchor_entry",
+            "source_srid",
+            "anchor_srid",
+            "EPSG:4326",
+            "algorithm_version",
+            "source_geometry_checksum_sha256",
+            "artifact_row_count",
+            "object row_count"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/bin/platform_core_anchor_import.rs"
+        Tokens = @(
+            "PlatformCoreAnchorImport",
+            "parse_anchor_manifest",
+            "parse_anchor_rows",
+            "verify_size_bytes",
+            "object.size_bytes",
+            "verify_sha256",
+            "object.checksum_sha256",
+            "ChecksumMismatch",
+            "SizeMismatch",
+            "PLATFORM_CORE_EVENT_ID",
+            "mark_inbox_event_processing",
+            "mark_inbox_event_processed",
+            "mark_inbox_event_failed",
+            "truncate_failure_reason",
+            "pg_try_advisory_lock",
+            "pg_advisory_unlock",
+            "event_import_lock_key",
+            "InboxEventAlreadyLocked",
+            "ImportSource::EventPayload",
+            "event_artifact_config_from_payload",
+            "find_inbox_event_payload",
+            "artifact_manifest_url",
+            "artifact_checksum_sha256",
+            "fetch_artifact_bytes",
+            "resolve_artifact_object_url",
+            "ImportSource::PendingInboxBatch",
+            "PLATFORM_CORE_ANCHOR_IMPORT_BATCH_LIMIT",
+            "run_pending_inbox_batch",
+            "find_pending_anchor_import_event_ids",
+            "BatchImportFailed"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "services/api/src/main.rs"
         Tokens = @(
             "pub mod listing_marker_tiles",
@@ -387,16 +482,11 @@ $contracts = @(
     [pscustomobject]@{
         RelativePath = "apps/web/lib/map/marker-tile-contract.ts"
         Tokens = @(
-            'response_format: z.literal("mvt_pbf")',
-            'position_source: z.literal("pnu_anchor")',
-            'bbox_marker_runtime_forbidden: z.literal(true)',
-            'dropped_marker_success_forbidden: z.literal(true)',
-            "PARCEL_ANCHOR_MARKER_TILE_LAYER",
             "LISTING_MARKER_TILE_LAYER",
             "LISTING_MARKER_TILE_ENDPOINT_TEMPLATE",
             "ALL_ACTIVE_MARKER_FILTER_HASH",
-            "buildMarkerTileSource",
             "buildListingMarkerTileSource",
+            "assertSupportedListingFilterHash",
             "resolveSameOrigin",
             "browser origin is required for listing marker tile URLs",
             "lst_filter_v1_[0-9a-f]{64}"
@@ -406,6 +496,34 @@ $contracts = @(
             "bbox=",
             "lat=",
             "lng="
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/map/vector-tile-manifest.ts"
+        Tokens = @(
+            "PARCEL_ANCHOR_AGGREGATE_VECTOR_TILE_LAYER",
+            "PARCEL_ANCHOR_VECTOR_TILE_LAYER",
+            "render_min_zoom",
+            "render_max_zoom",
+            "tiles_url_template",
+            "fetchVectorTileManifest",
+            "buildVectorTileSource"
+        )
+        Forbidden = @(
+            "bounds=",
+            "bbox="
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/map/map-zoom-policy.ts"
+        Tokens = @(
+            "GONGZZANG_MAP_ZOOM_POLICY",
+            "exactParcelAnchorMinZoom: 12",
+            "parcel",
+            "minZoom: 14",
+            "maxZoom: 22",
+            "LISTING_MARKER_RENDER_MIN_ZOOM",
+            "LISTING_MARKER_RENDER_MAX_ZOOM"
         )
     },
     [pscustomobject]@{
@@ -428,12 +546,10 @@ $contracts = @(
     [pscustomobject]@{
         RelativePath = "apps/web/components/listings/listing-map.tsx"
         Tokens = @(
-            "setupListingMarkerTileLayers",
-            "buildListingMarkerLayerRegistration",
+            "setupMapboxRuntime",
             "buildListingMarkerLayerFilter",
             "buildListingMarkerServerKey",
-            "listingMarkerFilters",
-            "listingMarkerCounts",
+            "loadListingMarkerServerState",
             "LISTING_MARKER_TILE_CIRCLE_LAYER_ID",
             'pushPanel({ kind: "listing", id: listingId, view: "summary" })',
             'pushPanel({ kind: "parcel", id: pnu, view: "summary" })'
@@ -448,6 +564,24 @@ $contracts = @(
             "boundsTimerRef",
             "setBounds",
             "getBounds()"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "apps/web/lib/map/listing-map-runtime.ts"
+        Tokens = @(
+            "setupListingMarkerTileLayers",
+            "buildListingMarkerLayerRegistration",
+            "LISTING_MARKER_RENDER_MIN_ZOOM",
+            "LISTING_MARKER_RENDER_MAX_ZOOM",
+            "buildParcelAnchorMarkerLayerRegistrations",
+            "fetchVectorTileManifest",
+            "setupMarkerTileLayers"
+        )
+        Forbidden = @(
+            "bounds=",
+            "bbox=",
+            "lat=",
+            "lng="
         )
     },
     [pscustomobject]@{
@@ -495,7 +629,7 @@ $contracts = @(
             "preserves Mapbox vector tile responses as binary",
             "application/vnd.mapbox-vector-tile",
             "arrayBuffer()",
-            "map/v1/marker-tiles/listing/0/0/0.pbf"
+            "map/v1/marker-tiles/listing/14/8780/6345.pbf"
         )
     },
     [pscustomobject]@{
@@ -512,7 +646,7 @@ $contracts = @(
         RelativePath = "apps/web/tests/unit/platform-core-proxy.test.ts"
         Tokens = @(
             "allows Gongzzang listing PBF marker tile proxy without sid",
-            "/api/proxy/map/v1/marker-tiles/listing/0/0/0.pbf?filter_hash=all-active-v1",
+            "/api/proxy/map/v1/marker-tiles/listing/14/8780/6345.pbf?filter_hash=all-active-v1",
             "allows Naver HTTP resources only for local production preview CSP"
         )
     },
@@ -579,7 +713,10 @@ $contracts = @(
             "listing_marker_projection",
             "listing_marker_filter_registry",
             "listing_marker_projection_anchor_srid_chk",
-            "listing_marker_filter_registry_spec_shape_chk"
+            "listing_marker_filter_registry_spec_shape_chk",
+            "platform_core_event_inbox",
+            "platform_core_event_inbox_anchor_payload_chk",
+            "platform_core_event_inbox_pending_idx"
         )
         Forbidden = @(
             "listing.geom_point SRID expected 4326",

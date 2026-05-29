@@ -46,6 +46,8 @@ paths = [
     '''apps/web/tests/unit/setup\.ts''',
     # naver-maps.ts line 22: NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID env var 참조 — 실 credential 아님
     '''apps/web/lib/naver-maps\.ts''',
+    '''apps/web/tests/unit/map/vector-tile-manifest\.test\.ts''',
+    '''services/etl-base-layer/src/gold/promote\.rs''',
 ]
 regexes = [
     '''your_.*_here''',
@@ -53,6 +55,8 @@ regexes = [
     '''ZITADEL_API_KEY=$''',
     '''naver-client''',
     '''naver-maps-placeholder''',
+    '''Authorization:\s+Bearer\s+(?:bogus\.token|\$TOKEN|DEV\.[A-Za-z0-9_-]+)''',
+    '''(?i)(?:object_)?key_prefix"?\s*:\s*"?gold/[A-Za-z0-9_./-]+''',
     # test-secret-placeholder: SESSION_SECRET 테스트 픽스처, 실 secret 아님
     '''test-secret-placeholder''',
 ]
@@ -61,4 +65,8 @@ stopwords = [
     "test-secret-placeholder-32-chars-x",
     "naver-client",
     "naver-maps-placeholder",
+    "bogus.token",
+    "DEV.test-user-1",
+    "gold/parcel-marker-anchor",
+    "gold/parcel-marker-anchor-aggregate",
 ]

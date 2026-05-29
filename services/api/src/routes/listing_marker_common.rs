@@ -1,13 +1,10 @@
 //! Shared helpers for listing marker public map routes.
 
-use std::sync::Arc;
-
 use axum::http::StatusCode;
-use listing_domain::repository::{
-    ListingMarkerFilter, ListingRepository, ALL_ACTIVE_LISTING_MARKER_FILTER_HASH,
-};
+use listing_domain::repository::{ListingMarkerFilter, ALL_ACTIVE_LISTING_MARKER_FILTER_HASH};
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::listing_marker_serving::ListingMarkerServingGateway;
 
 /// Validate the public marker filter hash character set before repository lookup.
 #[must_use]
@@ -26,14 +23,14 @@ pub fn is_stable_filter_hash(value: &str) -> bool {
 ///
 /// Returns a problem response when the hash is unknown or the registry lookup fails.
 pub async fn resolve_listing_marker_filter(
-    repo: &Arc<dyn ListingRepository>,
+    serving: &ListingMarkerServingGateway,
     filter_hash: &str,
 ) -> Result<ListingMarkerFilter, ProblemResponse> {
     if filter_hash == ALL_ACTIVE_LISTING_MARKER_FILTER_HASH {
         return Ok(ListingMarkerFilter::AllActive);
     }
 
-    let spec = repo
+    let spec = serving
         .resolve_listing_marker_filter(filter_hash)
         .await
         .map_err(|e| {
@@ -95,8 +92,9 @@ mod tests {
             filter_hash: filter_hash.clone(),
             filter: filter.clone(),
         });
+        let serving = ListingMarkerServingGateway::new(repo, None);
 
-        let resolved = resolve_listing_marker_filter(&repo, &filter_hash)
+        let resolved = resolve_listing_marker_filter(&serving, &filter_hash)
             .await
             .expect("registered filter");
 

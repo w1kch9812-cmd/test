@@ -6,19 +6,19 @@ use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use listing_domain::repository::{
-    ListingMarkerFilter, ListingMarkerTileQuery, ListingRepository,
-    LISTING_MARKER_TILE_CONTENT_TYPE,
+    ListingMarkerFilter, ListingMarkerTileQuery, LISTING_MARKER_TILE_CONTENT_TYPE,
 };
 use serde::Deserialize;
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::listing_marker_serving::ListingMarkerServingGateway;
 use crate::routes::listing_marker_common::{is_stable_filter_hash, resolve_listing_marker_filter};
 
 /// Shared state for listing marker tile routes.
 #[derive(Clone)]
 pub struct ListingMarkerTilesState {
-    /// Gongzzang listing repository.
-    pub listing_repo: Arc<dyn ListingRepository>,
+    /// Gongzzang marker serving gateway.
+    pub serving: Arc<ListingMarkerServingGateway>,
 }
 
 /// `GET /map/v1/marker-tiles/listing/:z/:x/:y.pbf` query parameters.
@@ -62,16 +62,18 @@ pub async fn get_listing_marker_tile(
         ));
     }
 
-    let filter = resolve_listing_marker_filter(&state.listing_repo, filter_hash).await?;
+    let filter = resolve_listing_marker_filter(&state.serving, filter_hash).await?;
     let query = parse_listing_marker_tile_query(&z_raw, &x_raw, &y_pbf, filter)?;
 
     let tile = state
-        .listing_repo
-        .find_listing_marker_tile(query)
+        .serving
+        .find_listing_marker_tile(filter_hash, query)
         .await
         .map_err(|e| {
             tracing::warn!(error = %e, "listing marker tile query failed");
-            if e.to_string().contains("completeness violation") {
+            if e.to_string().contains("completeness violation")
+                || e.to_string().contains("budget violation")
+            {
                 problem(
                     "map/listing-marker-tile-unrepresentable",
                     "listing marker tile cannot be represented truthfully",
@@ -168,14 +170,31 @@ mod tests {
 
     #[test]
     fn parses_listing_marker_tile_path_with_pbf_suffix() {
-        let query =
-            parse_listing_marker_tile_query("8", "10", "11.pbf", ListingMarkerFilter::AllActive)
-                .expect("query");
+        let query = parse_listing_marker_tile_query(
+            "14",
+            "8780",
+            "6345.pbf",
+            ListingMarkerFilter::AllActive,
+        )
+        .expect("query");
 
-        assert_eq!(query.z, 8);
-        assert_eq!(query.x, 10);
-        assert_eq!(query.y, 11);
+        assert_eq!(query.z, 14);
+        assert_eq!(query.x, 8780);
+        assert_eq!(query.y, 6345);
         assert_eq!(query.filter, ListingMarkerFilter::AllActive);
+    }
+
+    #[test]
+    fn rejects_listing_marker_tile_below_gongzzang_render_min_zoom() {
+        let err = parse_listing_marker_tile_query(
+            "13",
+            "4390",
+            "3172.pbf",
+            ListingMarkerFilter::AllActive,
+        )
+        .expect_err("z below listing marker tile minimum must be rejected");
+
+        assert_eq!(err.status, StatusCode::BAD_REQUEST);
     }
 
     #[test]

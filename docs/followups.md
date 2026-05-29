@@ -30,7 +30,7 @@
 **현재 상태**: 백엔드 직접 호출 (DEV.* 토큰 with `AUTH_DEV_MODE=true`) 은 200 OK 확인.
 실제 Zitadel JWT 로는 위 fix 필요.
 
-**예상 처리 시점**: SP6-iii (매물 상세) 또는 SP6-data-vworld 시작 전.
+**예상 처리 시점**: SP6-iii (매물 상세) 또는 Platform Core Catalog 연동 범위 확대 전.
 
 ---
 
@@ -91,13 +91,13 @@ tokens 그대로 차용 (Pretendard Variable 만 한글용으로 sub).
 
 ---
 
-### 5. Frontend `gongzzang_2` Postgres 호스트 포트 5500 (Windows reserved range)
+### 5. Frontend `gongzzang_2` Postgres 호스트 포트 15432 (Windows reserved range)
 
 **원인**: Windows 가 5360-5459 + 일부 다른 영역을 Hyper-V dynamic port range 로
 예약. 5432 / 5433 / 5434 모두 bind 실패.
 
-**현재 처리**: `infrastructure/docker/docker-compose.yml` 에서 `5500:5432`,
-`.env` 의 `DATABASE_URL=...@localhost:5500/...`.
+**현재 처리**: `infrastructure/docker/docker-compose.yml` 에서 `${POSTGRES_HOST_PORT:-15432}:5432`,
+`.env` 의 `DATABASE_URL=...@localhost:15432/...`.
 
 **향후**: Linux/macOS 개발자한테는 5432 가 자연스러움. WSL 또는 cross-platform
 조건부 포트 설정 검토 (production 은 무관).
@@ -126,5 +126,5 @@ tokens 그대로 차용 (Pretendard Variable 만 한글용으로 sub).
 - ✓ Claude.com 디자인 시스템 적용 (token + primitive + 화면)
 - ✓ raw `<select>` → shadcn `<Select>` primitive
 - ✓ 누락 primitive 추가 (Select / Skeleton / Separator / Badge)
-- ✓ Postgres 5500 포트 + 마이그레이션 적용
+- ✓ Postgres 15432 포트 + 마이그레이션 적용
 - ✓ API 8080 구동 (DEV 토큰 200 OK 확인)

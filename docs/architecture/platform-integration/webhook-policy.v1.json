@@ -1,0 +1,36 @@
+{
+  "schema_version": "gongzzang.platform_integration.webhook_policy.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "receiver": {
+    "id": "platform_core_event_receiver",
+    "runtime_file": "apps/web/app/platform-core/events/route.ts",
+    "contract_pin": "docs/architecture/platform-core-webhook-receiver-contract.v1.pin.json",
+    "signature": {
+      "algorithm": "hmac_sha256",
+      "version": "v1",
+      "header": "x-platform-core-signature",
+      "timestamp_header": "x-platform-core-timestamp",
+      "max_skew_seconds": 300,
+      "signed_payload": "timestamp.body"
+    },
+    "required_headers": [
+      "x-platform-core-event-id",
+      "x-platform-core-event-type",
+      "x-platform-core-outbox-scope"
+    ],
+    "accepted_events": [
+      "catalog.industrial_complex.gold_pointer.published.v1",
+      "catalog.parcel_marker_anchor.snapshot.published.v1"
+    ],
+    "replay_baseline": "redis_event_inbox_replay_ledger",
+    "runtime_safety": {
+      "idempotency_key": "event_id",
+      "replay_ledger": "apps/web/lib/platform-core/event-inbox.ts",
+      "duplicate_policy": "ack_without_side_effects",
+      "dead_letter_queue": "redis_event_inbox_dead_letter_status",
+      "schema_compatibility": "accepted_events_must_have_zod_handler"
+    }
+  }
+}

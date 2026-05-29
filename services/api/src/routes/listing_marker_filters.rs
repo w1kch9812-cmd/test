@@ -5,18 +5,19 @@ use std::sync::Arc;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
-use listing_domain::repository::{ListingMarkerFilterSpec, ListingRepository};
+use listing_domain::repository::ListingMarkerFilterSpec;
 use serde::{Deserialize, Serialize};
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::transaction_type::TransactionType;
 
 use crate::http::problem::{problem, ProblemResponse};
+use crate::listing_marker_serving::ListingMarkerServingGateway;
 
 /// Shared state for listing marker filter registration routes.
 #[derive(Clone)]
 pub struct ListingMarkerFiltersState {
-    /// Gongzzang listing repository.
-    pub listing_repo: Arc<dyn ListingRepository>,
+    /// Gongzzang marker serving gateway.
+    pub serving: Arc<ListingMarkerServingGateway>,
 }
 
 /// `POST /map/v1/marker-filters/listing` payload.
@@ -68,7 +69,7 @@ pub async fn post_listing_marker_filter(
     })?;
 
     let registered = state
-        .listing_repo
+        .serving
         .register_listing_marker_filter(normalized)
         .await
         .map_err(|e| {

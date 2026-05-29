@@ -6,20 +6,20 @@
 
 | 파일 | 내용 | 상태 |
 |------|------|------|
-| data-flow.md | 사용자 요청 → 공식 API → DB 캐시 → 응답 | TODO |
+| data-flow.md | 사용자 요청 → Gongzzang API → Platform Core contract / Gongzzang DB → 응답 | TODO |
 | layers.md | Clean Architecture 계층 + 의존성 방향 | TODO |
 | mcp-vs-api.md | 에이전트 경로 vs 프로덕션 경로 상세 | TODO |
 | geo-pipeline.md | PostGIS 인덱싱·타일·공간쿼리 파이프라인 | TODO |
-| caching.md | Redis 레이어, V-World TTL, 법령 캐시 | TODO |
+| caching.md | Redis 레이어, Platform Core contract cache, 법령 캐시 | TODO |
 | observability.md | Sentry + OTel + 로깅 | TODO |
 
 ## 현재 확정된 원칙
 
-1. **2-레이어 데이터 접근** — [AGENTS.md §3](../../AGENTS.md)
+1. **3-service 데이터 접근** — [AGENTS.md §0.5](../../AGENTS.md)
 2. **Clean Architecture** — UI → UseCase → Port → Adapter
-3. **PostGIS가 공간 연산의 SSOT** — 클라이언트 Turf.js는 UX 보조만
-4. **좌표계 규칙** — 저장 4326, 연산 5179, 타일 3857
-5. **캐시 계층** — Redis(Hot) → PostgreSQL(Cold) → V-World(Origin)
+3. **Platform Core가 Catalog SSOT** — parcel geometry, PNU anchors, public/reference spatial layers
+4. **Gongzzang은 B2C product semantics SSOT** — listing, listing photo, user, market, insights
+5. **좌표계 규칙** — Platform Core contract 가 SRID를 명시하고, Gongzzang read model은 사본임을 드러냄
 
 ## 초기 데이터 플로우 스케치
 
@@ -28,11 +28,11 @@
   ↓ HTTPS
 [Next.js Edge/SSR]
   ↓ Server Action
-[Use Case Layer]
+[Gongzzang Use Case Layer]
   ├─▶ [PostGIS Repo] ─▶ Postgres + PostGIS
-  ├─▶ [V-World Client] ─▶ api.vworld.kr (cached via Redis)
+  ├─▶ [Platform Core Client] ─▶ Catalog / Workforce published contracts
   ├─▶ [Law API Client] ─▶ open.law.go.kr
-  └─▶ [OpenData Client] ─▶ data.go.kr
+  └─▶ [Gongzzang-owned External API Client] ─▶ product-owned external source
 
 [Claude Code 세션] ─▶ MCP (korean-land / korean-law / opendata)
   └─ 개발·운영 조회 전용, 프로덕션 경로와 분리

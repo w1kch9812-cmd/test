@@ -1,0 +1,102 @@
+{
+  "schema_version": "gongzzang.platform_integration.index.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "decision_sources": [
+    "docs/adr/0030-three-service-architecture.md",
+    "docs/adr/0034-catalog-ownership-handover-to-platform-core.md",
+    "docs/adr/0037-pnu-anchor-pbf-marker-tiles.md",
+    "docs/adr/0038-listing-marker-serving-index-filter-mask.md",
+    "docs/adr/0028-supply-chain-sha-pin-and-cleanup-cron.md"
+  ],
+  "components": [
+    {
+      "id": "platform_integration.route_exposure",
+      "path": "docs/architecture/platform-integration/route-exposure-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.route_exposure_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.traffic_auth",
+      "path": "docs/architecture/traffic-auth-policy-registry.v1.json",
+      "schema_version": "gongzzang.traffic_auth_policy_registry.v1",
+      "primary_guardrail": "scripts/ci/check-traffic-auth-policy-registry.ps1"
+    },
+    {
+      "id": "platform_integration.platform_core_boundary",
+      "path": "docs/architecture/platform-core-boundary.v1.json",
+      "schema_version": "gongzzang.platform_core_boundary.v1",
+      "primary_guardrail": "scripts/ci/check-platform-core-boundary.ps1"
+    },
+    {
+      "id": "platform_integration.allowed_call_matrix",
+      "path": "docs/architecture/platform-integration/allowed-call-matrix.v1.json",
+      "schema_version": "gongzzang.platform_integration.allowed_call_matrix.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.service_auth",
+      "path": "docs/architecture/platform-integration/service-auth-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.service_auth_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.webhook",
+      "path": "docs/architecture/platform-integration/webhook-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.webhook_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-core-event-receiver-contract.ps1"
+    },
+    {
+      "id": "platform_integration.supply_chain",
+      "path": "docs/architecture/platform-integration/supply-chain-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.supply_chain_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.operations",
+      "path": "docs/architecture/platform-integration/operations-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.operations_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.exception_policy",
+      "path": "docs/architecture/platform-integration/exception-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.exception_policy.v1",
+      "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    }
+  ],
+  "required_guardrails": [
+    "scripts/ci/check-platform-integration-policy.ps1",
+    "scripts/ci/check-traffic-auth-policy-registry.ps1",
+    "scripts/ci/check-platform-core-boundary.ps1",
+    "scripts/ci/check-platform-core-event-receiver-contract.ps1",
+    "scripts/ci/check-platform-core-catalog-api-contract.ps1",
+    "scripts/ci/check-platform-core-dependency-boundary.ps1",
+    "scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1",
+    "scripts/ci/check-migration-version-prefixes.ps1",
+    "scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1"
+  ],
+  "production_promotion_guardrails": [
+    "scripts/ci/check-production-edge-admission.ps1",
+    "scripts/ci/check-pulumi-local-preview.ps1",
+    "scripts/ci/check-load-test-assets.ps1",
+    "scripts/ci/verify-load-test-capacity-evidence.ps1"
+  ],
+  "required_ci_jobs_or_steps": [
+    "pnpm audit --audit-level moderate",
+    "cargo-deny-action",
+    "gitleaks-action",
+    "check-platform-integration-policy.ps1",
+    "check-migration-version-prefixes.ps1",
+    "check-platform-core-anchor-inbox-db-approval.ps1",
+    "supply-chain-provenance",
+    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb"
+  ],
+  "production_promotion_jobs_or_steps": [
+    "check-production-edge-admission.ps1",
+    "check-load-test-assets.ps1",
+    "verify-load-test-capacity-evidence.tests.ps1"
+  ]
+}

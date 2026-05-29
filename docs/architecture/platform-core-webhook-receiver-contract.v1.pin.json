@@ -1,0 +1,29 @@
+{
+  "schema_version": "gongzzang.platform_core_webhook_receiver_contract_pin.v1",
+  "source_repo": "platform-core",
+  "source_path": "docs/events/webhook/receiver-contract.v1.example.json",
+  "source_schema_version": "platform-core.webhook_receiver_contract.v1",
+  "consumer_slug": "gongzzang",
+  "endpoint_path": "/platform-core/events",
+  "required_headers": [
+    "x-platform-core-event-id",
+    "x-platform-core-event-type",
+    "x-platform-core-outbox-scope",
+    "x-platform-core-signature",
+    "x-platform-core-timestamp"
+  ],
+  "accepted_status_codes": [200, 202, 204],
+  "required_ack_status": "accepted",
+  "supported_events": [
+    {
+      "event_type": "catalog.industrial_complex.gold_pointer.published.v1",
+      "required_effect": "invalidate_catalog_cache",
+      "envelope_ref": "docs/events/webhook/outbox-webhook-envelope.v1.example.json"
+    },
+    {
+      "event_type": "catalog.parcel_marker_anchor.snapshot.published.v1",
+      "required_effect": "enqueue_anchor_projection_import",
+      "envelope_ref": "docs/events/webhook/parcel-marker-anchor-snapshot-envelope.v1.example.json"
+    }
+  ]
+}

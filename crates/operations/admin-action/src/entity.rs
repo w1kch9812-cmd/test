@@ -28,8 +28,7 @@ pub struct AdminAction {
     pub id: Id<AdminActionMarker>,
     /// 어드민 사용자 (FK → `user.id`).
     pub admin_id: Id<UserMarker>,
-    /// 액션 종류 (≤50자, 비어있지 않음). 예: `verify_business`, `approve_listing`,
-    /// `force_pipeline_run`.
+    /// 액션 종류 (≤50자, 비어있지 않음). 예: `verify_business`, `approve_listing`.
     pub action_kind: String,
     /// 대상 리소스 종류 (≤30자). `target_id` 와 동시에 `Some`/`None`.
     pub target_kind: Option<String>,
@@ -182,8 +181,8 @@ mod tests {
 
     #[test]
     fn happy_path_without_target_both_none() {
-        let action = make_full("force_pipeline_run", None, None, "corr_x").expect("valid");
-        assert_eq!(action.action_kind, "force_pipeline_run");
+        let action = make_full("approve_listing", None, None, "corr_x").expect("valid");
+        assert_eq!(action.action_kind, "approve_listing");
         assert!(action.target_kind.is_none());
         assert!(action.target_id.is_none());
         assert!(!action.has_target());
@@ -262,7 +261,7 @@ mod tests {
 
     #[test]
     fn has_target_false_when_both_none() {
-        let action = make_full("force_pipeline_run", None, None, "corr_x").expect("valid");
+        let action = make_full("approve_listing", None, None, "corr_x").expect("valid");
         assert!(!action.has_target());
     }
 
@@ -283,7 +282,7 @@ mod tests {
 
     #[test]
     fn serde_roundtrip_without_target() {
-        let action = make_full("force_pipeline_run", None, None, "corr_x").expect("valid");
+        let action = make_full("approve_listing", None, None, "corr_x").expect("valid");
         let json = serde_json::to_string(&action).expect("serialize");
         let back: AdminAction = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(action, back);

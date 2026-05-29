@@ -1,0 +1,112 @@
+{
+  "schema_version": "gongzzang.platform_integration.allowed_call_matrix.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "default_decision": "deny",
+  "policy_model": "explicit_allow_only",
+  "allowed_calls": [
+    {
+      "id": "gongzzang_api_to_platform_core_catalog_read",
+      "status": "active",
+      "direction": "outbound",
+      "source_repo": "gongzzang",
+      "source_service": "gongzzang-api",
+      "target_repo": "platform-core",
+      "target_service": "platform-core-api",
+      "protocol": "https",
+      "methods": ["GET"],
+      "allowed_surfaces": [
+        "/catalog/v1/vector-tiles/manifest",
+        "/map/v1/marker-tiles/contract",
+        "/catalog/v1/parcels/by-pnu/:pnu",
+        "/catalog/v1/parcels/by-pnu/:pnu/buildings"
+      ],
+      "traffic_policy_id": "gongzzang_to_platform_core_catalog",
+      "service_auth_policy_id": "gongzzang_api_to_platform_core_api",
+      "decision_reference": "docs/adr/0034-catalog-ownership-handover-to-platform-core.md",
+      "current_required_controls": [
+        "bearer_service_token",
+        "timeout",
+        "circuit_breaker",
+        "no_direct_database"
+      ],
+      "target_required_controls": [
+        "short_lived_workload_identity",
+        "mtls",
+        "default_deny_authorization",
+        "policy_id_audit_attribute"
+      ]
+    },
+    {
+      "id": "platform_core_outbox_to_gongzzang_webhook",
+      "status": "active",
+      "direction": "inbound",
+      "source_repo": "platform-core",
+      "source_service": "platform-core-outbox-publisher",
+      "target_repo": "gongzzang",
+      "target_service": "gongzzang-web",
+      "protocol": "https",
+      "methods": ["POST"],
+      "allowed_surfaces": ["/platform-core/events"],
+      "traffic_policy_id": "platform_core_to_gongzzang_events",
+      "webhook_policy_id": "platform_core_event_receiver",
+      "service_auth_policy_id": "platform_core_outbox_to_gongzzang_webhook",
+      "decision_reference": "docs/adr/0034-catalog-ownership-handover-to-platform-core.md",
+      "current_required_controls": [
+        "timestamped_hmac_sha256",
+        "timestamp_skew_limit",
+        "event_header_match"
+      ],
+      "target_required_controls": [
+        "event_replay_ledger",
+        "idempotency_key_store",
+        "dead_letter_queue",
+        "signed_event_envelope_or_mtls"
+      ]
+    },
+    {
+      "id": "dawneer_to_platform_core_catalog_read",
+      "status": "planned",
+      "direction": "cross_repo_reference",
+      "source_repo": "dawneer",
+      "source_service": "dawneer-web",
+      "target_repo": "platform-core",
+      "target_service": "platform-core-api",
+      "protocol": "https",
+      "methods": ["GET"],
+      "allowed_surfaces": ["platform-core-catalog-read-api"],
+      "decision_reference": "docs/adr/0030-three-service-architecture.md",
+      "current_required_controls": ["not_yet_launched"],
+      "target_required_controls": [
+        "short_lived_workload_identity",
+        "mtls",
+        "default_deny_authorization",
+        "policy_id_audit_attribute"
+      ]
+    }
+  ],
+  "prohibited_calls": [
+    {
+      "id": "gongzzang_to_platform_core_database",
+      "source_repo": "gongzzang",
+      "target_repo": "platform-core",
+      "target_surface": "database",
+      "decision": "deny"
+    },
+    {
+      "id": "dawneer_to_platform_core_database",
+      "source_repo": "dawneer",
+      "target_repo": "platform-core",
+      "target_surface": "database",
+      "decision": "deny"
+    },
+    {
+      "id": "platform_core_to_gongzzang_listing_write",
+      "source_repo": "platform-core",
+      "target_repo": "gongzzang",
+      "target_surface": "listing_semantics",
+      "decision": "deny"
+    }
+  ]
+}

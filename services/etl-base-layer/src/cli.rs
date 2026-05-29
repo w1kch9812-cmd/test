@@ -2,9 +2,7 @@ use std::process::ExitCode;
 
 use tracing::{error, warn};
 
-use crate::bronze_cli::run_bronze;
-use crate::gold_cli::run_gold;
-use crate::handover::{run_cleanup_backups_cli, run_promote_cli};
+use crate::handover::{run_bronze_cli, run_cleanup_backups_cli, run_gold_cli, run_promote_cli};
 
 pub async fn async_main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -42,8 +40,8 @@ fn subcommand_args(args: &[String]) -> Vec<String> {
 
 fn spawn_cli_task(command: CliCommand) -> tokio::task::JoinHandle<ExitCode> {
     match command {
-        CliCommand::Bronze => tokio::spawn(run_bronze()),
-        CliCommand::Gold(args) => tokio::spawn(run_gold(args)),
+        CliCommand::Bronze => tokio::spawn(async move { run_bronze_cli(&[]) }),
+        CliCommand::Gold(args) => tokio::spawn(async move { run_gold_cli(&args) }),
         CliCommand::Promote(args) => tokio::spawn(async move { run_promote_cli(&args) }),
         CliCommand::CleanupManifestBackups(args) => {
             tokio::spawn(async move { run_cleanup_backups_cli(&args) })
@@ -60,18 +58,15 @@ fn unknown_subcommand_exit(error: &UnknownSubcommand) -> ExitCode {
 }
 
 async fn wait_for_cli_task_or_shutdown(task: tokio::task::JoinHandle<ExitCode>) -> ExitCode {
-    // L8 — graceful shutdown handler. Ctrl+C / SIGTERM 시 즉시 abort.
-    // 본 결정의 정당화는 ADR 0024 (`docs/adr/0024-etl-cancel-protocol-immediate-abort.md`):
-    // L3 staging atomicity 가 partial state 를 prod 에서 차단하므로 즉시 abort 가 안전.
-    // tippecanoe resume 불가 + 월 1회 cron 이라 state machine 의 cost > value.
+    // Handover stubs still keep the old immediate-abort shutdown behavior so
+    // retired scheduled jobs cannot hang during shutdown.
     tokio::select! {
         biased;
         result = task => {
             task_exit_code(result)
         }
         () = shutdown_signal() => {
-            warn!("shutdown signal received — aborting (L3 staging spec 가 prod 보호)");
-            // 130 = bash convention for SIGINT (128 + 2).
+            warn!("shutdown signal received; aborting handover stub");
             ExitCode::from(130)
         }
     }
@@ -80,14 +75,14 @@ async fn wait_for_cli_task_or_shutdown(task: tokio::task::JoinHandle<ExitCode>) 
 fn task_exit_code(result: Result<ExitCode, tokio::task::JoinError>) -> ExitCode {
     match result {
         Ok(code) => code,
-        Err(e) => {
-            error!(error = %e, "task panicked or aborted");
+        Err(error) => {
+            error!(error = %error, "task panicked or aborted");
             ExitCode::FAILURE
         }
     }
 }
 
-/// L8 — Ctrl+C (Unix SIGINT) + Unix SIGTERM 양쪽 listen. Windows 는 `ctrl_c` 만.
+/// Listen for Ctrl+C and, on Unix, SIGTERM.
 async fn shutdown_signal() {
     #[cfg(unix)]
     {

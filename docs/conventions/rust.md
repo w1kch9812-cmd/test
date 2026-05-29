@@ -112,9 +112,14 @@ use crate::domain::Listing;
 apps/* → packages/*
 services/* → crates/*
 crates/domain/* → crates/shared-kernel만
-crates/data-clients/* → crates/{circuit-breaker, observability, api-types}
 crates/db → crates/{domain (ports만), api-types}
+crates/parcel-lookup → shared-kernel + port/projection 의존만 (HTTP 클라이언트 금지)
+crates/data-clients/<approved-gongzzang-api> → crates/{circuit-breaker, observability, api-types}
 ```
+
+Platform Core Catalog 연동 HTTP 어댑터는 `services/api/src/platform_core_*`에 둔다.
+`crates/parcel-lookup`은 순수 port/projection crate이며 `reqwest`나 Platform Core Catalog
+도메인 crate에 의존하지 않는다.
 
 위반 시 cargo-arch (또는 자체 deps 룰) CI 차단.
 

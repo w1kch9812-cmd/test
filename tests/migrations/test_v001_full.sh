@@ -31,25 +31,36 @@ EXPECTED_TABLES=(
   notification
   audit_log
   outbox_event
-  pipeline_schedule
-  pipeline_run
   admin_action
   business_verification_queue
   listing_review_queue
   listing_report
   featured_content
   system_alert
-  parcel_external_data
   parcel_marker_anchor
   listing_marker_projection
   listing_marker_filter_registry
-  api_health_check
+  platform_core_event_inbox
   external_account
 )
 
 for t in "${EXPECTED_TABLES[@]}"; do
   if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_tables where schemaname='public' and tablename='$t';" | grep -q '^1$'; then
     echo "FAIL: missing table $t" >&2
+    exit 1
+  fi
+done
+
+FORBIDDEN_TABLES=(
+  api_health_check
+  parcel_external_data
+  pipeline_run
+  pipeline_schedule
+)
+
+for t in "${FORBIDDEN_TABLES[@]}"; do
+  if psql "$DATABASE_URL" -t -A -c "select 1 from pg_tables where schemaname='public' and tablename='$t';" | grep -q '^1$'; then
+    echo "FAIL: Platform Core legacy table must be absent after cleanup migration: $t" >&2
     exit 1
   fi
 done
@@ -69,8 +80,8 @@ if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_extension where extname='po
 fi
 
 IDX_COUNT=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and indexname not like '%_pkey';")
-if [ "$IDX_COUNT" -lt 25 ]; then
-  echo "FAIL: expected at least 25 non-PK indexes across application tables, got $IDX_COUNT" >&2
+if [ "$IDX_COUNT" -lt 18 ]; then
+  echo "FAIL: expected at least 18 non-PK indexes across application tables, got $IDX_COUNT" >&2
   exit 1
 fi
 
@@ -112,24 +123,6 @@ fi
 
 if ! psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='\"user\"'::regclass and conname='user_roles_valid_chk';" | grep -q '^1$'; then
   echo "FAIL: user_roles_valid_chk missing (V003_05)" >&2
-  exit 1
-fi
-
-PED_PK=$(psql "$DATABASE_URL" -t -A -c "select count(*) from information_schema.table_constraints where table_schema='public' and table_name='parcel_external_data' and constraint_type='PRIMARY KEY';")
-if [ "$PED_PK" != "1" ]; then
-  echo "FAIL: parcel_external_data PK missing (V003_06)" >&2
-  exit 1
-fi
-
-PED_CHECK=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_constraint where conrelid='parcel_external_data'::regclass and contype='c';")
-if [ "$PED_CHECK" -lt 1 ]; then
-  echo "FAIL: parcel_external_data source CHECK missing (V003_06)" >&2
-  exit 1
-fi
-
-PED_BRIN=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='parcel_external_data' and indexname='parcel_external_data_fetched_brin_idx';")
-if [ "$PED_BRIN" != "1" ]; then
-  echo "FAIL: parcel_external_data_fetched_brin_idx missing (V003_06)" >&2
   exit 1
 fi
 
@@ -178,6 +171,24 @@ fi
 LMFR_HASH_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_filter_registry'::regclass and conname='listing_marker_filter_registry_hash_chk';")
 if [ "$LMFR_HASH_CHECK" != "1" ]; then
   echo "FAIL: listing_marker_filter_registry_hash_chk missing" >&2
+  exit 1
+fi
+
+PCEI_PAYLOAD_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='platform_core_event_inbox'::regclass and conname='platform_core_event_inbox_anchor_payload_chk';")
+if [ "$PCEI_PAYLOAD_CHECK" != "1" ]; then
+  echo "FAIL: platform_core_event_inbox_anchor_payload_chk missing" >&2
+  exit 1
+fi
+
+PCEI_PENDING_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='platform_core_event_inbox' and indexname='platform_core_event_inbox_pending_idx';")
+if [ "$PCEI_PENDING_IDX" != "1" ]; then
+  echo "FAIL: platform_core_event_inbox_pending_idx missing" >&2
+  exit 1
+fi
+
+PCEI_ANCHOR_SNAPSHOT_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='platform_core_event_inbox' and indexname='platform_core_event_inbox_anchor_snapshot_idx';")
+if [ "$PCEI_ANCHOR_SNAPSHOT_IDX" != "1" ]; then
+  echo "FAIL: platform_core_event_inbox_anchor_snapshot_idx missing" >&2
   exit 1
 fi
 

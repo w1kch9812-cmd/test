@@ -4,7 +4,7 @@ Rust 백엔드 아키텍처·패턴 SSOT.
 
 ## 책임 영역
 - Axum HTTP 서버 (services/api)
-- Tokio 워커 (services/worker, services/data-pipeline)
+- Tokio worker for Gongzzang-owned asynchronous jobs (`services/worker`)
 - DDD Aggregate 17개 (4 Bounded Context)
 - Clean Architecture (Port + Adapter)
 - CQRS (Read/Write 분리, Phase 3+)

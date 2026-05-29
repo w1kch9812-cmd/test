@@ -86,6 +86,7 @@ jobs:
           REDIS_URL: rediss://redis.gongzzang.example:6379
           SESSION_SECRET: ci-build-session-secret-32-bytes-valid
           INTERNAL_AUTH_SECRET: ci-build-internal-auth-secret-32-valid
+          PLATFORM_CORE_WEBHOOK_SECRET: ci-build-platform-core-webhook-secret-32-valid
 
       - name: Bundle size budget
         run: pnpm --filter=@gongzzang/web test:bundle

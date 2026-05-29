@@ -10,8 +10,6 @@
 //! `POST /users` 는 제거 — first-sign-in 자동 생성으로 대체.
 
 #![forbid(unsafe_code)]
-// FU 26 — JWKS reqwest::Client 초기화는 legitimate (auth crate 가 wrapper).
-#![allow(clippy::disallowed_types)]
 
 use std::env;
 use std::process::ExitCode;
@@ -24,15 +22,20 @@ use db::listing::PgListingRepository;
 use db::listing_photo::PgListingPhotoRepository;
 use db::user::PgUserRepository;
 use listing_domain::repository::ListingRepository;
+use listing_marker_serving::ListingMarkerServingGateway;
 use listing_photo_domain::repository::ListingPhotoRepository;
 use tower_http::trace::TraceLayer;
 use user_domain::repository::UserRepository;
 
+use crate::backend_authorization::{enforce_backend_roles, BackendAuthorizationState};
+use crate::backend_rate_limit::{
+    enforce_backend_rate_limit, AllowAllBackendRateLimiter, BackendRateLimitState,
+    RedisBackendRateLimiter,
+};
 use crate::startup::{
     build_building_reader, build_internal_auth_secret, build_parcel_lookup,
-    build_photo_download_issuer, build_photo_upload_issuer, build_raw_capture,
-    build_redis_pool_shared, build_verifier, connect_postgres, init_tracing, is_production_env,
-    required_env, StartupError,
+    build_photo_download_issuer, build_photo_upload_issuer, build_redis_pool_shared,
+    build_verifier, connect_postgres, init_tracing, is_production_env, required_env, StartupError,
 };
 
 mod http {
@@ -43,11 +46,17 @@ mod http {
 
 mod observability;
 mod photo_upload;
+pub mod platform_core_anchor_import;
+mod platform_core_auth;
+mod platform_core_parcel_lookup;
 
+mod backend_authorization;
+mod backend_rate_limit;
 mod building_reader;
-mod r2_raw_capture;
-mod raw_capture_metadata;
+mod listing_marker_policy;
+mod listing_marker_serving;
 mod startup;
+mod traffic_auth_policy;
 
 mod routes {
     pub mod admin_listings;
@@ -63,6 +72,7 @@ mod routes {
     pub mod listings;
     pub mod notifications;
     pub mod parcels; // SP10 T3
+    pub mod platform_core_events;
     pub mod users;
 }
 
@@ -101,17 +111,7 @@ async fn async_main() -> Result<(), StartupError> {
     let photo_repo: Arc<dyn ListingPhotoRepository> =
         Arc::new(PgListingPhotoRepository::new(pool.clone()));
 
-    // SP9 T4 / ADR 0018: PNU lookup. VWORLD_API_KEY 미설정 → NoOp fallback (dev/CI).
-    // audit 2026-05-08 fix: production 에서 NoOp fallback 차단 — production 은
-    // VWORLD_API_KEY *반드시* (startup fail-fast).
-    //
-    // ADR 0026: Bronze API archive = R2 (S3-호환 객체 저장소). Postgres jsonb 폐기 —
-    // cost (~7-10x) + UPSERT 시계열 손실 + connection pool 부담. R2 키 구조:
-    //   `bronze/{source}/{yyyy}/{mm}/{dd}/{pnu}_{epoch_ms}.json`
-    // V-World parcel_lookup 과 data.go.kr building_register 둘 다 같은 sink 공유.
-    let raw_capture = build_raw_capture(is_production, pool.clone())?;
-
-    let parcel_lookup = build_parcel_lookup(is_production, &raw_capture)?;
+    let parcel_lookup = build_parcel_lookup(is_production)?;
     let photo_upload_issuer = build_photo_upload_issuer(is_production)?;
     let photo_download_issuer = build_photo_download_issuer(is_production)?;
     let photo_object_verifier = startup::build_photo_object_verifier(is_production)?;
@@ -134,6 +134,18 @@ async fn async_main() -> Result<(), StartupError> {
     // `fail_closed_on_denylist_error` 는 *Redis error* 만 잡지 *Redis 부재* 는 못 잡음.
     // 따라서 production 에서는 Redis 자체가 없으면 startup 차단.
     let redis_pool_shared = build_redis_pool_shared(is_production)?;
+    let backend_rate_limiter: Arc<dyn backend_rate_limit::BackendRateLimiter> =
+        if let Some(redis_pool) = &redis_pool_shared {
+            Arc::new(RedisBackendRateLimiter::new(redis_pool.clone()))
+        } else {
+            Arc::new(AllowAllBackendRateLimiter)
+        };
+    let backend_rate_limit_state = BackendRateLimitState::new(
+        backend_rate_limiter,
+        traffic_auth_policy::BACKEND_RATE_POLICIES,
+    );
+    let backend_authorization_state =
+        BackendAuthorizationState::new(traffic_auth_policy::BACKEND_ROLE_POLICIES);
 
     let jti_denylist: Option<Arc<dyn auth::jti_denylist::JtiDenylist>> =
         redis_pool_shared.as_ref().map(|pool| {
@@ -161,8 +173,12 @@ async fn async_main() -> Result<(), StartupError> {
     // SP-Obs T7: health check state -- DB pool + (optional) Redis pool 공유.
     let health_state = routes::health::HealthState {
         pool: auth_event_state.pool.clone(),
-        redis_pool: redis_pool_shared,
+        redis_pool: redis_pool_shared.clone(),
     };
+    let listing_marker_serving = Arc::new(ListingMarkerServingGateway::new(
+        listings_state.listing_repo.clone(),
+        redis_pool_shared.clone(),
+    ));
 
     // SP-Obs T7: K8s/ECS liveness vs readiness 분리. /healthz = liveness 으로
     // 변경 (이전 SP1 의 stateless `health()` 와 동등 — body shape 만 JSON 으로).
@@ -171,6 +187,14 @@ async fn async_main() -> Result<(), StartupError> {
         .route("/users/me", get(routes::users::me))
         .route("/users/:id", get(routes::users::get_user))
         .with_state(app_state)
+        .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
@@ -184,32 +208,48 @@ async fn async_main() -> Result<(), StartupError> {
             get(routes::listing_marker_tiles::get_listing_marker_tile),
         )
         .with_state(routes::listing_marker_tiles::ListingMarkerTilesState {
-            listing_repo: listings_state.listing_repo.clone(),
-        });
+            serving: listing_marker_serving.clone(),
+        })
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
     let listing_marker_counts_router: Router<()> = Router::new()
         .route(
             "/map/v1/marker-counts/listing",
             get(routes::listing_marker_counts::get_listing_marker_count),
         )
         .with_state(routes::listing_marker_counts::ListingMarkerCountsState {
-            listing_repo: listings_state.listing_repo.clone(),
-        });
+            serving: listing_marker_serving.clone(),
+        })
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
     let listing_marker_filters_router: Router<()> = Router::new()
         .route(
             "/map/v1/marker-filters/listing",
             axum::routing::post(routes::listing_marker_filters::post_listing_marker_filter),
         )
         .with_state(routes::listing_marker_filters::ListingMarkerFiltersState {
-            listing_repo: listings_state.listing_repo.clone(),
-        });
+            serving: listing_marker_serving.clone(),
+        })
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
     let listing_marker_masks_router: Router<()> = Router::new()
         .route(
             "/map/v1/marker-masks/listing/:z/:x/:y",
             get(routes::listing_marker_masks::get_listing_marker_mask),
         )
         .with_state(routes::listing_marker_masks::ListingMarkerMasksState {
-            listing_repo: listings_state.listing_repo.clone(),
-        });
+            serving: listing_marker_serving.clone(),
+        })
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
 
     let listings_router: Router<()> = Router::new()
         .route(
@@ -243,6 +283,14 @@ async fn async_main() -> Result<(), StartupError> {
         )
         .with_state(listings_state.clone())
         .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
         ));
@@ -255,24 +303,37 @@ async fn async_main() -> Result<(), StartupError> {
         .route("/api/parcels/:pnu", get(routes::parcels::get_parcel))
         .with_state(parcels_state)
         .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
         ));
 
-    // SP10 T3 + audit 2026-05-08 round 2 (P2): building_register reader 라이브 wire.
-    //
-    // env (`DATA_GO_KR_API_KEY` 또는 `ODP_SERVICE_KEY`) 있으면 `DataGoKrBuildingRegisterReader`
-    // (data.go.kr `getBrTitleInfo` 라이브 호출). 없으면 dev fallback NoOp + production fail-fast.
-    //
-    // 본 reader 는 *panel 응답용 좁은 subset* (BuildingItem) 만 채움. rich Building entity
-    // (V-World 폴리곤 합성) 는 FU 40 의 R2 PMTiles 에서 별도 도입.
-    let building_reader = build_building_reader(is_production, &raw_capture)?;
+    // Building data is a Platform Core Catalog concern. Gongzzang keeps only
+    // the route-facing response shape and consumes the published Platform Core
+    // HTTP contract. Dev/CI may fall back to an empty reader; production fails
+    // fast when PLATFORM_CORE_API_BASE_URL is missing.
+    let building_reader = build_building_reader(is_production)?;
     let buildings_state = routes::buildings::BuildingsState {
         reader: building_reader,
     };
     let buildings_router: Router<()> = Router::new()
         .route("/api/buildings", get(routes::buildings::list_buildings))
         .with_state(buildings_state)
+        .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
@@ -306,6 +367,14 @@ async fn async_main() -> Result<(), StartupError> {
         .route("/me/bookmarks", get(routes::bookmarks::list_my_bookmarks))
         .with_state(bookmarks_state)
         .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
+        .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
         ));
@@ -325,6 +394,14 @@ async fn async_main() -> Result<(), StartupError> {
             axum::routing::post(routes::admin_listings::reject_listing),
         )
         .with_state(admin_listings_state)
+        .layer(middleware::from_fn_with_state(
+            backend_authorization_state.clone(),
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ))
         .layer(middleware::from_fn_with_state(
             auth_state.clone(),
             auth_layer,
@@ -350,12 +427,30 @@ async fn async_main() -> Result<(), StartupError> {
             axum::routing::post(routes::notifications::mark_all_read),
         )
         .with_state(notifications_state)
+        .layer(middleware::from_fn_with_state(
+            backend_authorization_state,
+            enforce_backend_roles,
+        ))
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state,
+            enforce_backend_rate_limit,
+        ))
         .layer(middleware::from_fn_with_state(auth_state, auth_layer));
     // SECURITY (audit 2026-05-08 fix): /internal/auth/event 는 frontend BFF (apps/web)
     // 의 server-side 호출 전용. handler 내부에서 `X-Internal-Auth` shared secret 헤더
     // *constant-time* 비교 (auth_event::post_auth_event). production 에서 secret 미설정
     // 시 init 단계 fail-fast (위 internal_auth_secret 로딩).
     // 추가 layer (defence in depth, 후속): network ACL 로 ingress 차단 (SP6-iam-infra).
+    let platform_core_events_router: Router<()> = Router::new()
+        .route(
+            "/internal/platform-core/events",
+            axum::routing::post(routes::platform_core_events::post_platform_core_event),
+        )
+        .with_state(routes::platform_core_events::PlatformCoreEventsState {
+            pool: auth_event_state.pool.clone(),
+            internal_auth_secret: auth_event_state.internal_auth_secret.clone(),
+        });
+
     let internal: Router<()> = Router::new()
         .route(
             "/internal/auth/event",
@@ -375,6 +470,7 @@ async fn async_main() -> Result<(), StartupError> {
         .merge(bookmarks_router)
         .merge(admin_router)
         .merge(notifications_router)
+        .merge(platform_core_events_router)
         .merge(internal)
         // SP-Obs T2: X-Request-Id 가 outermost — TraceLayer 와 auth_layer 보다 먼저
         // 실행돼 모든 trace 가 같은 request_id 공유. 인증 실패해도 trace ID 부여.
