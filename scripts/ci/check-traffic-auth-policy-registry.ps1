@@ -323,7 +323,8 @@ $tsGenerated = Read-TextFile -RelativePath "apps/web/lib/policies/traffic-auth-p
 $rustGenerated = Read-TextFile -RelativePath "services/api/src/listing_marker_policy.rs"
 $rustTrafficGenerated = Read-TextFile -RelativePath "services/api/src/traffic_auth_policy.rs"
 $serving = Read-ListingMarkerServingSources
-$apiMain = Read-TextFile -RelativePath "services/api/src/main.rs"
+$apiMain = (Read-TextFile -RelativePath "services/api/src/main.rs") + "`n" +
+    (Read-TextFile -RelativePath "services/api/src/app.rs")
 $apiRouteSources = $apiMain + "`n" + (Read-TextFile -RelativePath "services/api/src/routes/health.rs")
 $boundary = Read-TextFile -RelativePath "docs/architecture/platform-core-boundary.v1.json"
 $ciWorkflow = Read-TextFile -RelativePath ".github/workflows/ci.yml"

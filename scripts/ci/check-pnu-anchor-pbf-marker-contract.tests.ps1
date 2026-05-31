@@ -419,6 +419,8 @@ pub mod listing_marker_filters
 pub mod listing_marker_masks
 pub mod listing_marker_tombstones
 pub mod listing_marker_deltas
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\app.rs" -Content @'
 /map/v1/marker-tiles/listing/:z/:x/:y_pbf
 /map/v1/marker-counts/listing
 /map/v1/marker-filters/listing

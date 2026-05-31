@@ -690,11 +690,11 @@ $generatedBackendRolePolicies
 crate::listing_marker_policy
 '@
     $protectedAuthLayer = if ($OmitBackendProtectedAuthLayer) { "" } else { "auth_layer" }
+    $backendAuthorizationModule = if ($OmitBackendAuthorizationLayer) { "" } else { "mod backend_authorization;" }
     $backendAuthorizationLayer = if ($OmitBackendAuthorizationLayer) {
         ""
     } else {
         @'
-mod backend_authorization;
 use crate::backend_authorization::{enforce_backend_roles, BackendAuthorizationState};
 let backend_authorization_state = BackendAuthorizationState::new(traffic_auth_policy::BACKEND_ROLE_POLICIES);
 '@
@@ -705,9 +705,12 @@ let backend_authorization_state = BackendAuthorizationState::new(traffic_auth_po
         "    .layer(middleware::from_fn_with_state(backend_authorization_state.clone(), enforce_backend_roles))"
     }
     Write-File -Root $Root -RelativePath "services\api\src\main.rs" -Content @"
-$backendAuthorizationLayer
+$backendAuthorizationModule
 mod backend_rate_limit;
 mod traffic_auth_policy;
+"@
+    Write-File -Root $Root -RelativePath "services\api\src\app.rs" -Content @"
+$backendAuthorizationLayer
 use crate::backend_rate_limit::{enforce_backend_rate_limit, RedisBackendRateLimiter};
 let backend_rate_limiter = RedisBackendRateLimiter::new(redis_pool.clone());
 let listing_marker_tiles_router: Router<()> = Router::new()

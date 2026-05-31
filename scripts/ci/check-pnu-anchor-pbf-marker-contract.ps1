@@ -554,7 +554,10 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
-        RelativePath = "services/api/src/main.rs"
+        RelativePaths = @(
+            "services/api/src/main.rs",
+            "services/api/src/app.rs"
+        )
         Tokens = @(
             "pub mod listing_marker_tiles",
             "pub mod listing_marker_counts",
@@ -861,30 +864,41 @@ $contracts = @(
 $checkedFiles = 0
 $violations = @()
 foreach ($contract in $contracts) {
-    $relativePath = [string] $contract.RelativePath
-    $path = Join-Path $resolvedRoot ($relativePath -replace "/", "\")
-    if (!(Test-Path -LiteralPath $path)) {
-        [Console]::Error.WriteLine("missing PNU anchor PBF marker contract file: {0}", $relativePath)
-        exit 1
-    }
-
-    $checkedFiles += 1
-    if (Test-Path -LiteralPath $path -PathType Container) {
-        $content = Get-ChildItem -LiteralPath $path -Recurse -File -Filter "*.rs" |
-            Sort-Object -Property FullName |
-            ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw } |
-            Out-String
+    $relativePaths = @()
+    if ($null -ne $contract.PSObject.Properties["RelativePaths"]) {
+        $relativePaths = @($contract.RelativePaths)
     }
     else {
-        $content = Get-Content -LiteralPath $path -Raw
+        $relativePaths = @([string] $contract.RelativePath)
     }
+    $relativePathLabel = $relativePaths -join ", "
+    $contentParts = @()
+    foreach ($relativePath in $relativePaths) {
+        $path = Join-Path $resolvedRoot ($relativePath -replace "/", "\")
+        if (!(Test-Path -LiteralPath $path)) {
+            [Console]::Error.WriteLine("missing PNU anchor PBF marker contract file: {0}", $relativePath)
+            exit 1
+        }
+
+        $checkedFiles += 1
+        if (Test-Path -LiteralPath $path -PathType Container) {
+            $contentParts += (Get-ChildItem -LiteralPath $path -Recurse -File -Filter "*.rs" |
+                    Sort-Object -Property FullName |
+                    ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw } |
+                    Out-String)
+        }
+        else {
+            $contentParts += Get-Content -LiteralPath $path -Raw
+        }
+    }
+    $content = $contentParts -join "`n"
 
     foreach ($token in @($contract.Tokens)) {
         if ($content.Contains($token)) {
             continue
         }
         $violations += [pscustomobject]@{
-            Path = $relativePath
+            Path = $relativePathLabel
             Kind = "missing token"
             Value = $token
         }
@@ -899,7 +913,7 @@ foreach ($contract in $contracts) {
             continue
         }
         $violations += [pscustomobject]@{
-            Path = $relativePath
+            Path = $relativePathLabel
             Kind = "forbidden token"
             Value = $token
         }
@@ -914,7 +928,7 @@ foreach ($contract in $contracts) {
             continue
         }
         $violations += [pscustomobject]@{
-            Path = $relativePath
+            Path = $relativePathLabel
             Kind = "forbidden pattern"
             Value = $pattern
         }
