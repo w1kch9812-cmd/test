@@ -251,7 +251,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
-        run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
+        run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90 --exclude-files '*/tests.rs'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
         with:
