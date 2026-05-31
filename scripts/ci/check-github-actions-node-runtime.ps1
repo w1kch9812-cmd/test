@@ -42,6 +42,7 @@ $requiredNode24ActionPins = @{
     "actions/upload-artifact" = "043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
     "gitleaks/gitleaks-action" = "e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e"
     "pnpm/action-setup" = "0e279bb959325dab635dd2c09392533439d90093"
+    "Swatinem/rust-cache" = "c19371144df3bb44fab255c43d04cbc2ab54d1c4"
 }
 $usesPattern = "(?m)^\s*(?:-\s*)?uses:\s*([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@([0-9a-f]{40})\b"
 $node24Pattern = "(?m)^\s*FORCE_JAVASCRIPT_ACTIONS_TO_NODE24\s*:\s*['""]?true['""]?\s*(?:#.*)?$"

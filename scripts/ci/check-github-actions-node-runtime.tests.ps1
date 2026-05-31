@@ -61,7 +61,8 @@ function Write-MinimalWorkflowRepo {
         [switch] $MissingNode24OptIn,
         [switch] $AllowsUnsecureNodeVersion,
         [switch] $MissingCiGate,
-        [switch] $StaleNode20Action
+        [switch] $StaleNode20Action,
+        [switch] $StaleRustCacheAction
     )
 
     $nodeRuntimeEnv = if ($MissingNode24OptIn) {
@@ -89,6 +90,11 @@ function Write-MinimalWorkflowRepo {
     } else {
         "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e"
     }
+    $rustCacheSha = if ($StaleRustCacheAction) {
+        "9d47c6ad4b02e050fd481d890b2ea34778fd09d6"
+    } else {
+        "c19371144df3bb44fab255c43d04cbc2ab54d1c4"
+    }
 
     Write-File $Root ".github\workflows\ci.yml" @"
 name: CI
@@ -104,6 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@$checkoutSha
+      - uses: Swatinem/rust-cache@$rustCacheSha
 $ciGate
 "@
 
@@ -167,6 +174,15 @@ try {
         throw "expected stale Node 20 action fixture to fail"
     }
     Assert-Contains $staleNode20Action.Output "must use Node 24 native action pin"
+
+    $staleRustCacheActionRoot = Join-Path $TempRoot "stale-rust-cache-action"
+    Write-MinimalWorkflowRepo -Root $staleRustCacheActionRoot -StaleRustCacheAction
+    $staleRustCacheAction = Invoke-Checker -Root $staleRustCacheActionRoot
+    if ($staleRustCacheAction.ExitCode -eq 0) {
+        throw "expected stale rust-cache action fixture to fail"
+    }
+    Assert-Contains $staleRustCacheAction.Output "Swatinem/rust-cache"
+    Assert-Contains $staleRustCacheAction.Output "must use Node 24 native action pin"
 
     Write-Host "github-actions-node-runtime-tests-ok"
     exit 0
