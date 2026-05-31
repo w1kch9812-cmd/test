@@ -304,6 +304,20 @@ $serving = Read-TextFile -RelativePath "services/api/src/listing_marker_serving.
 $apiMain = Read-TextFile -RelativePath "services/api/src/main.rs"
 $apiRouteSources = $apiMain + "`n" + (Read-TextFile -RelativePath "services/api/src/routes/health.rs")
 $boundary = Read-TextFile -RelativePath "docs/architecture/platform-core-boundary.v1.json"
+$ciWorkflow = Read-TextFile -RelativePath ".github/workflows/ci.yml"
+
+Assert-Contains `
+    -Content $ciWorkflow `
+    -Needle "./scripts/ci/check-traffic-auth-policy-registry.ps1" `
+    -Message "CI traffic/auth policy registry gate"
+Assert-Contains `
+    -Content $ciWorkflow `
+    -Needle "./scripts/ci/check-traffic-auth-policy-registry.tests.ps1" `
+    -Message "CI traffic/auth policy registry tests gate"
+Assert-Contains `
+    -Content $ciWorkflow `
+    -Needle "-IncludeProductionEdge" `
+    -Message "CI traffic/auth production edge policy gate"
 
 $edgeProjection = $null
 $awsWafRateRules = @()

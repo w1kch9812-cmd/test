@@ -51,6 +51,15 @@ jobs:
       - name: Platform Core event receiver contract guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-core-event-receiver-contract.ps1
+      - name: Traffic/auth policy registry guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1
+      - name: Traffic/auth policy registry guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.tests.ps1
+      - name: Traffic/auth production edge policy guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1

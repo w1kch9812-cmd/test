@@ -98,7 +98,8 @@ function Write-MinimalRepo {
         [switch] $OmitPulumiCliPackage,
         [switch] $OmitPulumiLocalPreviewStack,
         [switch] $PollutePulumiLocalPreviewStack,
-        [switch] $OmitPulumiWafAssociation
+        [switch] $OmitPulumiWafAssociation,
+        [switch] $OmitCiWorkflowTrafficAuthPolicyGate
     )
 
     $tileExposure = if ($OmitDataExposurePolicy) {
@@ -475,6 +476,37 @@ $backendRoutePolicies
   ]
 }
 "@
+    $ciWorkflowTrafficAuthPolicyGate = if ($OmitCiWorkflowTrafficAuthPolicyGate) {
+        @'
+name: CI
+jobs:
+  lint-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Platform Core boundary guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-platform-core-boundary.ps1
+'@
+    } else {
+        @'
+name: CI
+jobs:
+  lint-format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Traffic/auth policy registry guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1
+      - name: Traffic/auth policy registry guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.tests.ps1
+      - name: Traffic/auth production edge policy guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
+'@
+    }
+    Write-File -Root $Root -RelativePath ".github\workflows\ci.yml" -Content $ciWorkflowTrafficAuthPolicyGate
+
     Write-File -Root $Root -RelativePath "apps\web\proxy.ts" -Content @'
 GENERATED_PUBLIC_MAP_ROUTE_POLICIES
 GENERATED_AUTH_RATE_ROUTE_POLICIES
@@ -1162,6 +1194,12 @@ try {
     $missingGeneratedExposure = Invoke-Checker -Root $missingGeneratedExposureRoot
     Assert-Equals $missingGeneratedExposure.ExitCode 1 "missing generated exposure exit code mismatch"
     Assert-Contains $missingGeneratedExposure.Output "generated TS exposure"
+
+    $missingCiWorkflowTrafficAuthRoot = Join-Path $TempRoot "missing-ci-workflow-traffic-auth"
+    Write-MinimalRepo -Root $missingCiWorkflowTrafficAuthRoot -OmitCiWorkflowTrafficAuthPolicyGate
+    $missingCiWorkflowTrafficAuth = Invoke-Checker -Root $missingCiWorkflowTrafficAuthRoot
+    Assert-Equals $missingCiWorkflowTrafficAuth.ExitCode 1 "missing CI workflow traffic/auth gate exit code mismatch"
+    Assert-Contains $missingCiWorkflowTrafficAuth.Output "CI traffic/auth policy registry gate"
 
     $missingAuthRoutePoliciesRoot = Join-Path $TempRoot "missing-auth-route-policies"
     Write-MinimalRepo -Root $missingAuthRoutePoliciesRoot -OmitAuthRoutePolicies
