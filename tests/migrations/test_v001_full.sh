@@ -177,15 +177,15 @@ if [ "$LMFR_HASH_CHECK" != "1" ]; then
   exit 1
 fi
 
-LMT_TILE_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='listing_marker_tombstone_log' and indexname='listing_marker_tombstone_tile_active_idx';")
+LMT_TILE_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='listing_marker_tombstone_log' and indexname='listing_marker_tombstone_active_tile_idx';")
 if [ "$LMT_TILE_IDX" != "1" ]; then
-  echo "FAIL: listing_marker_tombstone_tile_active_idx missing" >&2
+  echo "FAIL: listing_marker_tombstone_active_tile_idx missing" >&2
   exit 1
 fi
 
-LMD_TILE_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='listing_marker_delta_log' and indexname='listing_marker_delta_tile_active_idx';")
+LMD_TILE_IDX=$(psql "$DATABASE_URL" -t -A -c "select count(*) from pg_indexes where schemaname='public' and tablename='listing_marker_delta_log' and indexname='listing_marker_delta_active_tile_idx';")
 if [ "$LMD_TILE_IDX" != "1" ]; then
-  echo "FAIL: listing_marker_delta_tile_active_idx missing" >&2
+  echo "FAIL: listing_marker_delta_active_tile_idx missing" >&2
   exit 1
 fi
 
@@ -195,9 +195,9 @@ if [ "$LMDT_PENDING_IDX" != "1" ]; then
   exit 1
 fi
 
-LMDT_STATUS_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_dirty_tile_queue'::regclass and conname='listing_marker_dirty_tile_status_chk';")
+LMDT_STATUS_CHECK=$(psql "$DATABASE_URL" -t -A -c "select 1 from pg_constraint where conrelid='listing_marker_dirty_tile_queue'::regclass and conname='listing_marker_dirty_status_chk';")
 if [ "$LMDT_STATUS_CHECK" != "1" ]; then
-  echo "FAIL: listing_marker_dirty_tile_status_chk missing" >&2
+  echo "FAIL: listing_marker_dirty_status_chk missing" >&2
   exit 1
 fi
 

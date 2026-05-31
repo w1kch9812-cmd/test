@@ -217,6 +217,7 @@ try {
     }
 
     Write-Output "check-load-test-assets-tests-ok"
+    exit 0
 } finally {
     Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
