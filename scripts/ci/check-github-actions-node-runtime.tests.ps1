@@ -35,9 +35,11 @@ function Invoke-Checker {
 function Assert-Contains {
     param([string] $Text, [string] $Expected)
 
-    $actualCompact = $Text -replace "\s+", ""
+    $ansiPattern = "$([regex]::Escape([string] [char] 27))\[[0-9;?]*[ -/]*[@-~]"
+    $actualPlain = $Text -replace $ansiPattern, ""
+    $actualCompact = $actualPlain -replace "\s+", ""
     $expectedCompact = $Expected -replace "\s+", ""
-    if (!$Text.Contains($Expected) -and !$actualCompact.Contains($expectedCompact)) {
+    if (!$actualPlain.Contains($Expected) -and !$actualCompact.Contains($expectedCompact)) {
         throw "Expected output to contain '$Expected'. Actual output: $Text"
     }
 }
