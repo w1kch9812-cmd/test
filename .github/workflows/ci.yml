@@ -16,6 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   RUST_BACKTRACE: 1
   SQLX_OFFLINE: "true"
 
@@ -60,6 +61,12 @@ jobs:
       - name: Traffic/auth production edge policy guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
+      - name: GitHub Actions Node runtime guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-github-actions-node-runtime.ps1
+      - name: GitHub Actions Node runtime guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-github-actions-node-runtime.tests.ps1
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1
