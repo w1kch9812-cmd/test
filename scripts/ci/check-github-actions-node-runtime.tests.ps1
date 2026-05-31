@@ -60,7 +60,8 @@ function Write-MinimalWorkflowRepo {
         [string] $Root,
         [switch] $MissingNode24OptIn,
         [switch] $AllowsUnsecureNodeVersion,
-        [switch] $MissingCiGate
+        [switch] $MissingCiGate,
+        [switch] $StaleNode20Action
     )
 
     $nodeRuntimeEnv = if ($MissingNode24OptIn) {
@@ -78,6 +79,16 @@ function Write-MinimalWorkflowRepo {
     } else {
         "      - run: ./scripts/ci/check-github-actions-node-runtime.ps1`n      - run: ./scripts/ci/check-github-actions-node-runtime.tests.ps1`n"
     }
+    $checkoutSha = if ($StaleNode20Action) {
+        "11bd71901bbe5b1630ceea73d27597364c9af683"
+    } else {
+        "de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+    }
+    $setupNodeSha = if ($StaleNode20Action) {
+        "39370e3970a6d050c480ffad4ff0ed4d3fdee5af"
+    } else {
+        "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e"
+    }
 
     Write-File $Root ".github\workflows\ci.yml" @"
 name: CI
@@ -92,7 +103,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@$checkoutSha
 $ciGate
 "@
 
@@ -109,7 +120,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+      - uses: actions/setup-node@$setupNodeSha
         with:
           node-version: "20.19.0"
 "@
@@ -148,6 +159,14 @@ try {
         throw "expected missing CI gate fixture to fail"
     }
     Assert-Contains $missingCiGate.Output "CI workflow must run check-github-actions-node-runtime.ps1"
+
+    $staleNode20ActionRoot = Join-Path $TempRoot "stale-node20-action"
+    Write-MinimalWorkflowRepo -Root $staleNode20ActionRoot -StaleNode20Action
+    $staleNode20Action = Invoke-Checker -Root $staleNode20ActionRoot
+    if ($staleNode20Action.ExitCode -eq 0) {
+        throw "expected stale Node 20 action fixture to fail"
+    }
+    Assert-Contains $staleNode20Action.Output "must use Node 24 native action pin"
 
     Write-Host "github-actions-node-runtime-tests-ok"
     exit 0

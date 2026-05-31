@@ -25,10 +25,10 @@ jobs:
     name: Lint & Format (Biome + clippy + markdownlint)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
         with:
           node-version: "20.19.0"
           cache: pnpm
@@ -107,10 +107,10 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
         with:
           node-version: "20.19.0"
           cache: pnpm
@@ -121,7 +121,7 @@ jobs:
     name: cargo check + cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
@@ -150,12 +150,12 @@ jobs:
       INTERNAL_AUTH_SECRET: ci-build-internal-auth-secret-32-bytes
       PLATFORM_CORE_WEBHOOK_SECRET: ci-build-platform-core-webhook-secret-32
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
 
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
         with:
           node-version: "20.19.0"
           cache: pnpm
@@ -216,7 +216,7 @@ jobs:
           subject-path: target/release/api
           sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         with:
           name: supply-chain-release-candidates
           path: |
@@ -231,7 +231,7 @@ jobs:
     name: Catalog M1 boundary
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
       - name: Enforce gongzzang3 catalog M1 boundary
         run: bash scripts/lefthook/catalog-m1-boundary.sh
 
@@ -242,7 +242,7 @@ jobs:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.5 (Round 5 SHA pin, ADR 0028)
@@ -252,7 +252,7 @@ jobs:
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
         run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
         with:
           name: coverage-lcov
@@ -262,9 +262,9 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.7 (Round 5 SHA pin, ADR 0028)
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0 (Node 24 SHA pin, ADR 0028)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
@@ -273,10 +273,10 @@ jobs:
     name: Markdown link check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
         with:
           node-version: "20.19.0"
           cache: pnpm
@@ -288,6 +288,6 @@ jobs:
     name: File size limit (≤500 권장 / 1500 강제)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
       - name: Check file sizes
         run: bash scripts/lefthook/file-line-limit.sh
