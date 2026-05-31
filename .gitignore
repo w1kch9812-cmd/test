@@ -67,6 +67,7 @@ login-*.png
 .cache/
 .temp/
 .tmp/
+.wrangler/
 
 # === 학습용 외부 레포 (빌드 제외) ===
 reference/*/

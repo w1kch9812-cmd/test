@@ -7,6 +7,7 @@ const SESSION_TTL_SEC = 60 * 60;
 
 interface E2eSessionOptions {
   role?: string;
+  baseURL?: string;
 }
 
 export async function plantAuthenticatedSession(
@@ -35,7 +36,7 @@ export async function plantAuthenticatedSession(
     {
       name: SID_COOKIE_NAME,
       value: sid,
-      url: "http://localhost:3000",
+      url: options.baseURL ?? "http://127.0.0.1:3100",
       httpOnly: true,
       sameSite: "Strict",
     },

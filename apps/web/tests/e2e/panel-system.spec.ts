@@ -33,8 +33,8 @@ async function expectDialogHydrated(page: Page) {
 }
 
 test.describe("SP10 Panel System", () => {
-  test.beforeEach(async ({ context }) => {
-    await plantAuthenticatedSession(context);
+  test.beforeEach(async ({ baseURL, context }) => {
+    await plantAuthenticatedSession(context, { baseURL });
   });
 
   test("URL hydration: depth 1 panel from ?p directly", async ({ page }) => {

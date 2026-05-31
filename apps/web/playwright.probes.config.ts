@@ -1,4 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
+import { DEFAULT_PROBE_PLAYWRIGHT_PORT, resolvePlaywrightRuntime } from "./playwright-runtime";
+
+const runtime = resolvePlaywrightRuntime({
+  env: process.env,
+  defaultPort: DEFAULT_PROBE_PLAYWRIGHT_PORT,
+});
 
 export default defineConfig({
   testDir: "./tests/probes",
@@ -9,7 +15,7 @@ export default defineConfig({
   workers: 1,
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: runtime.baseURL,
     trace: "retain-on-failure",
   },
   projects: [
@@ -19,16 +25,15 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    command: runtime.command,
+    url: runtime.webServerUrl,
+    reuseExistingServer: runtime.reuseExistingServer,
     timeout: 120000,
     env: {
       ZITADEL_ISSUER: process.env.ZITADEL_ISSUER ?? "http://localhost:8443",
       ZITADEL_CLIENT_ID: process.env.ZITADEL_CLIENT_ID ?? "ci-placeholder",
       ZITADEL_AUDIENCE: process.env.ZITADEL_AUDIENCE ?? "ci-placeholder",
-      ZITADEL_REDIRECT_URI:
-        process.env.ZITADEL_REDIRECT_URI ?? "http://localhost:3000/api/auth/callback",
+      ZITADEL_REDIRECT_URI: process.env.ZITADEL_REDIRECT_URI ?? runtime.zitadelRedirectUri,
       REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6379",
       SESSION_SECRET: process.env.SESSION_SECRET ?? "ci-placeholder-secret-32-bytes-padding-ok",
     },

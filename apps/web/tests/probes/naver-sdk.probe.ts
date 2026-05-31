@@ -4,7 +4,6 @@ import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { plantAuthenticatedSession } from "../e2e/auth";
 
 const OUT_DIR = "var/sample";
-const LISTINGS_URL = "http://localhost:3000/listings";
 const MAP_BOOT_TIMEOUT_MS = 15_000;
 
 interface ViewportSpec {
@@ -33,7 +32,7 @@ async function writeProbeJson(
 }
 
 async function openAuthenticatedListings(page: Page) {
-  await page.goto(LISTINGS_URL, { waitUntil: "load", timeout: 60_000 });
+  await page.goto("/listings", { waitUntil: "load", timeout: 60_000 });
   await page.waitForTimeout(MAP_BOOT_TIMEOUT_MS);
 }
 
@@ -259,8 +258,8 @@ async function captureCadastralLayer(page: Page): Promise<unknown> {
 }
 
 test.describe("Naver SDK probes", () => {
-  test.beforeEach(async ({ context }) => {
-    await plantAuthenticatedSession(context);
+  test.beforeEach(async ({ baseURL, context }) => {
+    await plantAuthenticatedSession(context, { baseURL });
   });
 
   test("catalogs style layers and rendered feature-state support", async ({ page }, testInfo) => {
