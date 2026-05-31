@@ -39,7 +39,18 @@ function Assert-Contains {
     $actualPlain = $Text -replace $ansiPattern, ""
     $actualCompact = $actualPlain -replace "\s+", ""
     $expectedCompact = $Expected -replace "\s+", ""
-    if (!$actualPlain.Contains($Expected) -and !$actualCompact.Contains($expectedCompact)) {
+    $position = 0
+    $containsTokensInOrder = $true
+    foreach ($token in ($Expected -split "\s+" | Where-Object { $_ -ne "" })) {
+        $index = $actualPlain.IndexOf($token, $position, [System.StringComparison]::Ordinal)
+        if ($index -lt 0) {
+            $containsTokensInOrder = $false
+            break
+        }
+        $position = $index + $token.Length
+    }
+
+    if (!$actualPlain.Contains($Expected) -and !$actualCompact.Contains($expectedCompact) -and !$containsTokensInOrder) {
         throw "Expected output to contain '$Expected'. Actual output: $Text"
     }
 }
