@@ -243,7 +243,7 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
-        RelativePath = "crates/domain/core/listing/src/repository.rs"
+        RelativePath = "crates/domain/core/listing/src/repository"
         Tokens = @(
             "find_listing_marker_tile",
             "LISTING_MARKER_TILE_LAYER",
@@ -863,13 +863,21 @@ $violations = @()
 foreach ($contract in $contracts) {
     $relativePath = [string] $contract.RelativePath
     $path = Join-Path $resolvedRoot ($relativePath -replace "/", "\")
-    if (!(Test-Path -LiteralPath $path -PathType Leaf)) {
+    if (!(Test-Path -LiteralPath $path)) {
         [Console]::Error.WriteLine("missing PNU anchor PBF marker contract file: {0}", $relativePath)
         exit 1
     }
 
     $checkedFiles += 1
-    $content = Get-Content -LiteralPath $path -Raw
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        $content = Get-ChildItem -LiteralPath $path -Recurse -File -Filter "*.rs" |
+            Sort-Object -Property FullName |
+            ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw } |
+            Out-String
+    }
+    else {
+        $content = Get-Content -LiteralPath $path -Raw
+    }
 
     foreach ($token in @($contract.Tokens)) {
         if ($content.Contains($token)) {
