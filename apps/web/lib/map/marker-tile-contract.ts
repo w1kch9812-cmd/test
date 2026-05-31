@@ -1,7 +1,10 @@
 import { API } from "@/lib/routes";
 
 const LISTING_MARKER_TILE_ENDPOINT_TEMPLATE = API.proxy.listingMarkerTileTemplate;
+const LISTING_MARKER_DELTA_TILE_ENDPOINT_PREFIX = API.proxy.listingMarkerDeltasPrefix;
+const LISTING_MARKER_TOMBSTONE_ENDPOINT_PREFIX = API.proxy.listingMarkerTombstonesPrefix;
 export const LISTING_MARKER_TILE_LAYER = "listing";
+export const LISTING_MARKER_DELTA_TILE_LAYER = "listing_delta";
 export const ALL_ACTIVE_MARKER_FILTER_HASH = "all-active-v1";
 
 export type MarkerTileSource = {
@@ -16,6 +19,32 @@ export type BuildListingMarkerTileSourceInput = {
   minzoom: number;
   maxzoom: number;
   origin?: string;
+};
+
+export type BuildListingMarkerDeltaTileSourceInput = {
+  baseVersion: number | null;
+  minzoom: number;
+  maxzoom: number;
+  origin?: string;
+};
+
+export type BuildListingMarkerTombstoneUrlInput = {
+  z: number;
+  x: number;
+  y: number;
+  baseVersion: number | null;
+  origin?: string;
+};
+
+export type ListingMarkerOverlayState = {
+  baseVersion: number | null;
+  tombstoneIds: Set<string>;
+  deltaSourceId: typeof LISTING_MARKER_DELTA_TILE_LAYER;
+};
+
+export type CreateListingMarkerOverlayStateInput = {
+  baseVersion: number | null;
+  tombstoneIds?: Iterable<string>;
 };
 
 export function buildListingMarkerTileSource(
@@ -35,6 +64,40 @@ export function buildListingMarkerTileSource(
     ],
     minzoom: input.minzoom,
     maxzoom: input.maxzoom,
+  };
+}
+
+export function buildListingMarkerDeltaTileSource(
+  input: BuildListingMarkerDeltaTileSourceInput,
+): MarkerTileSource {
+  assertZoomRange(input.minzoom, input.maxzoom);
+
+  return {
+    type: "vector",
+    tiles: [
+      `${resolveSameOrigin(input.origin)}${LISTING_MARKER_DELTA_TILE_ENDPOINT_PREFIX}/{z}/{x}/{y}.pbf${buildBaseVersionQuery(
+        input.baseVersion,
+      )}`,
+    ],
+    minzoom: input.minzoom,
+    maxzoom: input.maxzoom,
+  };
+}
+
+export function buildListingMarkerTombstoneUrl(input: BuildListingMarkerTombstoneUrlInput): string {
+  assertTileCoordinate(input.z, input.x, input.y);
+  return `${resolveSameOrigin(input.origin)}${LISTING_MARKER_TOMBSTONE_ENDPOINT_PREFIX}/${input.z}/${input.x}/${input.y}${buildBaseVersionQuery(
+    input.baseVersion,
+  )}`;
+}
+
+export function createListingMarkerOverlayState(
+  input: CreateListingMarkerOverlayStateInput,
+): ListingMarkerOverlayState {
+  return {
+    baseVersion: input.baseVersion,
+    tombstoneIds: new Set(input.tombstoneIds ?? []),
+    deltaSourceId: LISTING_MARKER_DELTA_TILE_LAYER,
   };
 }
 
@@ -61,6 +124,27 @@ function assertZoomRange(minzoom: number, maxzoom: number): void {
   }
 
   throw new Error("marker tile zoom range must be 0..24 and minzoom <= maxzoom");
+}
+
+function assertTileCoordinate(z: number, x: number, y: number): void {
+  if (!Number.isInteger(z) || z < 0 || z > 22) {
+    throw new Error("marker tile z coordinate must be 0..22");
+  }
+  const axisLimit = 2 ** z;
+  if (!Number.isInteger(x) || x < 0 || x >= axisLimit) {
+    throw new Error("marker tile x coordinate is outside the z axis range");
+  }
+  if (!Number.isInteger(y) || y < 0 || y >= axisLimit) {
+    throw new Error("marker tile y coordinate is outside the z axis range");
+  }
+}
+
+function buildBaseVersionQuery(baseVersion: number | null): string {
+  if (baseVersion === null) return "";
+  if (!Number.isInteger(baseVersion) || baseVersion < 0) {
+    throw new Error("marker tile baseVersion must be a non-negative integer");
+  }
+  return `?base_version=${encodeURIComponent(String(baseVersion))}`;
 }
 
 function stripTrailingSlash(value: string): string {

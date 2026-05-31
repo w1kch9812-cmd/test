@@ -2,8 +2,11 @@
 import { describe, expect, it } from "vitest";
 import { GONGZZANG_MAP_ZOOM_POLICY } from "@/lib/map/map-zoom-policy";
 import {
+  buildListingMarkerDeltaLayerRegistration,
   buildListingMarkerLayerRegistration,
   buildParcelAnchorMarkerLayerRegistrations,
+  LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID,
+  LISTING_MARKER_DELTA_TILE_SOURCE_ID,
   LISTING_MARKER_TILE_CIRCLE_LAYER_ID,
   LISTING_MARKER_TILE_SOURCE_ID,
   PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_CIRCLE_LAYER_ID,
@@ -137,5 +140,21 @@ describe("parcel anchor marker tile map style", () => {
     expect(registration.source.tiles[0]).not.toContain("bounds=");
     expect(registration.source.tiles[0]).not.toContain("lat=");
     expect(registration.source.tiles[0]).not.toContain("lng=");
+  });
+
+  it("registers Gongzzang listing marker delta source with the listing delta layer", () => {
+    const registration = buildListingMarkerDeltaLayerRegistration({
+      baseVersion: 41,
+      minzoom: 0,
+      maxzoom: GONGZZANG_MAP_ZOOM_POLICY.markers.listing.maxZoom,
+      origin: "http://localhost:3900",
+    });
+
+    expect(registration.sourceId).toBe(LISTING_MARKER_DELTA_TILE_SOURCE_ID);
+    expect(registration.source.tiles[0]).toBe(
+      "http://localhost:3900/api/proxy/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf?base_version=41",
+    );
+    expect(registration.layers[0].id).toBe(LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID);
+    expect(registration.layers[0]["source-layer"]).toBe("listing_delta");
   });
 });

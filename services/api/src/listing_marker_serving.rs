@@ -8,8 +8,9 @@ use crate::listing_marker_policy::{
 };
 use deadpool_redis::redis::{self, AsyncCommands};
 use listing_domain::repository::{
-    ListingMarkerCount, ListingMarkerMask, ListingMarkerMaskEncoding, ListingMarkerMaskQuery,
-    ListingMarkerRegisteredFilter, ListingMarkerTile, ListingMarkerTileQuery, ListingRepository,
+    ListingMarkerCount, ListingMarkerDeltas, ListingMarkerMask, ListingMarkerMaskEncoding,
+    ListingMarkerMaskQuery, ListingMarkerOverlayTileQuery, ListingMarkerRegisteredFilter,
+    ListingMarkerTile, ListingMarkerTileQuery, ListingMarkerTombstones, ListingRepository,
     NormalizedListingMarkerFilterSpec, RepoError, LISTING_MARKER_TILE_LAYER,
 };
 use serde::{Deserialize, Serialize};
@@ -151,6 +152,27 @@ impl ListingMarkerServingGateway {
         }
 
         self.wait_for_mask_cache(&cache_key).await
+    }
+
+    pub async fn find_listing_marker_tombstones(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerTombstones, RepoError> {
+        let tombstones = self
+            .listing_repo
+            .find_listing_marker_tombstones(query)
+            .await?;
+        validate_tombstone_budget(&tombstones)?;
+        Ok(tombstones)
+    }
+
+    pub async fn find_listing_marker_deltas(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerDeltas, RepoError> {
+        let deltas = self.listing_repo.find_listing_marker_deltas(query).await?;
+        validate_delta_budget(&deltas)?;
+        Ok(deltas)
     }
 
     async fn load_listing_marker_tile(
@@ -295,6 +317,39 @@ fn validate_mask_budget(mask: &ListingMarkerMask) -> Result<(), RepoError> {
             "listing marker mask budget violation: marker_ids={} max={}",
             mask.marker_ids.len(),
             MAX_LISTING_MARKER_MASK_IDS
+        )));
+    }
+    Ok(())
+}
+
+fn validate_tombstone_budget(tombstones: &ListingMarkerTombstones) -> Result<(), RepoError> {
+    if tombstones.marker_ids.len() > MAX_LISTING_MARKER_MASK_IDS {
+        return Err(RepoError::Database(format!(
+            "listing marker tombstone budget violation: marker_ids={} max={}",
+            tombstones.marker_ids.len(),
+            MAX_LISTING_MARKER_MASK_IDS
+        )));
+    }
+    Ok(())
+}
+
+fn validate_delta_budget(deltas: &ListingMarkerDeltas) -> Result<(), RepoError> {
+    if deltas.bytes.len() > MAX_LISTING_MARKER_TILE_BYTES {
+        return Err(RepoError::Database(format!(
+            "listing marker delta budget violation: bytes={} max={}",
+            deltas.bytes.len(),
+            MAX_LISTING_MARKER_TILE_BYTES
+        )));
+    }
+    if deltas.feature_count < 0 {
+        return Err(RepoError::Database(
+            "listing marker delta budget violation: negative feature count".to_owned(),
+        ));
+    }
+    if deltas.feature_count > MAX_LISTING_MARKER_TILE_FEATURES {
+        return Err(RepoError::Database(format!(
+            "listing marker delta budget violation: features={} max={MAX_LISTING_MARKER_TILE_FEATURES}",
+            deltas.feature_count
         )));
     }
     Ok(())

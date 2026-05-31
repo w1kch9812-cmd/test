@@ -397,7 +397,14 @@ try {
     $k6Command = @(Get-Command k6 -CommandType Application -ErrorAction Stop)[0]
     $k6Result = Invoke-K6WithEnvironment `
         -Executable $k6Command.Source `
-        -Arguments @("run", "--summary-export", $summaryPath, $scenarioScript) `
+        -Arguments @(
+            "run",
+            "--summary-export",
+            $summaryPath,
+            "--summary-trend-stats",
+            "min,avg,med,p(90),p(95),p(99),max",
+            $scenarioScript
+        ) `
         -EnvironmentValues $envValues `
         -WorkingDirectory $RepoRoot
     $k6ExitCode = $k6Result.ExitCode

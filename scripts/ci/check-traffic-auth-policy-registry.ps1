@@ -292,7 +292,7 @@ Assert-ArrayContains `
     -Message "service_to_service target controls"
 
 $publicRoutes = @($registry.public_route_policies)
-Assert-Equals -Actual $publicRoutes.Count -Expected 4 -Message "public_route_policies count mismatch"
+Assert-Equals -Actual $publicRoutes.Count -Expected 6 -Message "public_route_policies count mismatch"
 Assert-Unique -Values ($publicRoutes | ForEach-Object { $_.id }) -Message "public route policy ids must be unique"
 
 $proxy = Read-TextFile -RelativePath "apps/web/proxy.ts"

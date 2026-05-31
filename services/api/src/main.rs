@@ -66,10 +66,13 @@ mod routes {
     pub mod health;
     pub mod listing_marker_common;
     pub mod listing_marker_counts;
+    pub mod listing_marker_deltas;
     pub mod listing_marker_filters;
     pub mod listing_marker_masks;
     pub mod listing_marker_tiles;
+    pub mod listing_marker_tombstones;
     pub mod listings;
+    pub mod metrics;
     pub mod notifications;
     pub mod parcels; // SP10 T3
     pub mod platform_core_events;
@@ -244,6 +247,32 @@ async fn async_main() -> Result<(), StartupError> {
             get(routes::listing_marker_masks::get_listing_marker_mask),
         )
         .with_state(routes::listing_marker_masks::ListingMarkerMasksState {
+            serving: listing_marker_serving.clone(),
+        })
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
+    let listing_marker_tombstones_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-tombstones/listing/:z/:x/:y",
+            get(routes::listing_marker_tombstones::get_listing_marker_tombstones),
+        )
+        .with_state(
+            routes::listing_marker_tombstones::ListingMarkerTombstonesState {
+                serving: listing_marker_serving.clone(),
+            },
+        )
+        .layer(middleware::from_fn_with_state(
+            backend_rate_limit_state.clone(),
+            enforce_backend_rate_limit,
+        ));
+    let listing_marker_deltas_router: Router<()> = Router::new()
+        .route(
+            "/map/v1/marker-deltas/listing/:z/:x/:y_pbf",
+            get(routes::listing_marker_deltas::get_listing_marker_deltas),
+        )
+        .with_state(routes::listing_marker_deltas::ListingMarkerDeltasState {
             serving: listing_marker_serving.clone(),
         })
         .layer(middleware::from_fn_with_state(
@@ -451,6 +480,13 @@ async fn async_main() -> Result<(), StartupError> {
             internal_auth_secret: auth_event_state.internal_auth_secret.clone(),
         });
 
+    let metrics_router: Router<()> = Router::new()
+        .route("/internal/metrics", get(routes::metrics::get_metrics))
+        .with_state(routes::metrics::MetricsState {
+            pool: auth_event_state.pool.clone(),
+            internal_auth_secret: auth_event_state.internal_auth_secret.clone(),
+        });
+
     let internal: Router<()> = Router::new()
         .route(
             "/internal/auth/event",
@@ -464,6 +500,8 @@ async fn async_main() -> Result<(), StartupError> {
         .merge(listing_marker_counts_router)
         .merge(listing_marker_filters_router)
         .merge(listing_marker_masks_router)
+        .merge(listing_marker_tombstones_router)
+        .merge(listing_marker_deltas_router)
         .merge(listings_router)
         .merge(parcels_router) // SP10 T3
         .merge(buildings_router) // SP10 T3
@@ -471,6 +509,7 @@ async fn async_main() -> Result<(), StartupError> {
         .merge(admin_router)
         .merge(notifications_router)
         .merge(platform_core_events_router)
+        .merge(metrics_router)
         .merge(internal)
         // SP-Obs T2: X-Request-Id 가 outermost — TraceLayer 와 auth_layer 보다 먼저
         // 실행돼 모든 trace 가 같은 request_id 공유. 인증 실패해도 trace ID 부여.

@@ -66,6 +66,12 @@ jobs:
       - name: PNU anchor PBF marker contract guardrail
         shell: pwsh
         run: ./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+      - name: Load-test asset guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-load-test-assets.ps1
+      - name: Load-test asset guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-load-test-assets.tests.ps1
       - name: Install ripgrep for repository guardrails
         run: |
           sudo apt-get update -qq

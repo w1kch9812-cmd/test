@@ -12,6 +12,7 @@ not application runtime dependencies.
 - Do not run tests that consume VWorld or OpenDataPortal quota from Gongzzang.
 - Do not test with production PII.
 - Do not log Authorization, Cookie, Set-Cookie, Platform Core service tokens, or webhook secrets.
+- Do not treat local/ci smoke or host-process sizing results as launch capacity evidence.
 - Do not claim a launch spec without evidence under `target/audit/load-tests`.
 
 ## Enterprise Gates
@@ -55,9 +56,20 @@ perf dataset uses different fixture records.
 | Scenario | Purpose | Max safe RPS |
 | --- | --- | ---: |
 | `api-read-mix` | Mixed API read capacity discovery. | 50 |
-| `map-marker-mix` | Listing marker tile hit and miss behavior. | 50 |
+| `map-marker-mix` | Listing marker base tile, delta, tombstone, cache hit, and cache miss behavior. | 50 |
 | `capacity-stress` | Non-production capacity ceiling discovery. | 800 |
 | `platform-core-events` | Platform Core event consumer path validation. | 50 |
+
+`map-marker-mix` must exercise the runtime composition:
+
+```text
+visible markers = base tile + delta overlay - tombstone overlay - unauthorized records
+```
+
+Minimum accepted evidence for this scenario includes successful base tile, base + tombstone,
+base + delta, cache hit, and cache miss samples. A run is not launch evidence if deleted/private
+marker exposure is observed, if a successful tile silently drops eligible markers, or if DB pool
+saturation appears under the accepted RPS.
 
 ## Evidence
 

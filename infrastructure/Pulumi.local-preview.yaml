@@ -1,0 +1,6 @@
+encryptionsalt: v1:M1NcTy+pyo0=:v1:pShLZOIqXP7ffpAy:i7C1xNED3vZxse5DpMwxatUM/H78mw==
+config:
+  aws:region: ap-northeast-2
+  aws:skipCredentialsValidation: "true"
+  aws:skipRequestingAccountId: "true"
+  aws:skipMetadataApiCheck: "true"

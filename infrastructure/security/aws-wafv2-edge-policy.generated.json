@@ -1,0 +1,215 @@
+{
+  "schema_version": "gongzzang.aws_wafv2_edge_policy_manifest.v1",
+  "source_projection": "infrastructure/security/traffic-auth-edge-policy.generated.json",
+  "source_registry": "docs/architecture/traffic-auth-policy-registry.v1.json",
+  "managed_by": "pulumi",
+  "scope_options": ["CLOUDFRONT", "REGIONAL"],
+  "rate_based_rules": [
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tile",
+      "priority": 1000,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 3000,
+      "match": {
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"],
+        "path": "/api/proxy/map/v1/marker-tiles/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_count",
+      "priority": 1010,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path_match": "EXACT",
+        "methods": ["GET"],
+        "path": "/api/proxy/map/v1/marker-counts/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_filter",
+      "priority": 1020,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 300,
+      "match": {
+        "path_match": "EXACT",
+        "methods": ["POST"],
+        "path": "/api/proxy/map/v1/marker-filters/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_mask",
+      "priority": 1030,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"],
+        "path": "/api/proxy/map/v1/marker-masks/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tombstone",
+      "priority": 1040,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"],
+        "path": "/api/proxy/map/v1/marker-tombstones/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_delta",
+      "priority": 1050,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"],
+        "path": "/api/proxy/map/v1/marker-deltas/listing"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.login",
+      "priority": 1060,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 25,
+      "match": {
+        "path_match": "EXACT",
+        "methods": ["POST"],
+        "path": "/api/auth/login",
+        "path_source": "API.auth.login"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.callback",
+      "priority": 1070,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 50,
+      "match": {
+        "path_match": "EXACT",
+        "methods": ["GET"],
+        "path": "/api/auth/callback",
+        "path_source": "API.auth.callback"
+      }
+    }
+  ],
+  "blocked_query_shape_rules": [
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tile",
+      "priority": 2000,
+      "action": "BLOCK",
+      "match": {
+        "path": "/api/proxy/map/v1/marker-tiles/listing",
+        "path_match": "STARTS_WITH",
+        "query_parameters": ["bbox", "bounds", "south", "west", "north", "east"]
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tombstone",
+      "priority": 2010,
+      "action": "BLOCK",
+      "match": {
+        "path": "/api/proxy/map/v1/marker-tombstones/listing",
+        "path_match": "STARTS_WITH",
+        "query_parameters": ["bbox", "bounds", "south", "west", "north", "east"]
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_delta",
+      "priority": 2020,
+      "action": "BLOCK",
+      "match": {
+        "path": "/api/proxy/map/v1/marker-deltas/listing",
+        "path_match": "STARTS_WITH",
+        "query_parameters": ["bbox", "bounds", "south", "west", "north", "east"]
+      }
+    }
+  ],
+  "identity_aware_application_rules": [
+    {
+      "source_policy_id": "gongzzang.auth.refresh",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listings_collection_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listings_collection_create",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_detail_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_detail_update",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_submit_for_review",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_revise",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_bookmark",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_photos_collection",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_photo_read_delete",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_photo_delete",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.listing_photo_confirm",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.notifications_unread_count",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.notification_mark_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.notifications_mark_all_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.my_bookmarks",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.parcel_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
+      "source_policy_id": "gongzzang.api_proxy.buildings_read",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    }
+  ],
+  "service_identity_rules": [
+    {
+      "source_policy_id": "gongzzang_to_platform_core_catalog",
+      "target_auth_method": "mtls_or_short_lived_service_identity"
+    },
+    {
+      "source_policy_id": "platform_core_to_gongzzang_events",
+      "target_auth_method": "mtls_or_signed_event_envelope"
+    }
+  ]
+}

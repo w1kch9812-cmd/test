@@ -26,6 +26,21 @@ The browser instant filter applies fast filters such as asset type, deal type, p
 already loaded listing marker tiles. Exact nationwide counts, unseen-tile results, and optional
 marker masks come from server marker indexes, not from viewport `bbox` requests.
 
+Freshness is composed as:
+
+```text
+visible markers = base tile + delta overlay - tombstone overlay - unauthorized records
+```
+
+- Base tile: ordinary Gongzzang listing marker PBF tile.
+- Delta overlay: short-lived `listing_delta` PBF for newly public or updated public markers.
+- Tombstone overlay: short-lived marker id hide set for sold, expired, rejected, deleted, or
+  private markers that may still exist in a cached base tile.
+
+The frontend must not treat a failed tombstone response as permission to keep showing stale
+private or deleted markers. Safe fallback is to refresh the base tile or hide the affected listing
+marker layer until the overlay state is available.
+
 ## Environment
 
 ```text
@@ -57,6 +72,7 @@ NEXT_PUBLIC_PLATFORM_CORE_BASE_URL=<platform-core origin>
 | `apps/web/lib/map/vector-tile-manifest.ts` | Platform-core vector tile manifest client |
 | `apps/web/lib/map/marker-tile-contract.ts` | Gongzzang listing marker tile source contract |
 | `apps/web/lib/map/marker-tile-style.ts` | Platform-core anchor and Gongzzang listing layer registration |
+| `apps/web/lib/map/listing-marker-filter.ts` | Browser-side listing marker filter plus tombstone hide predicate |
 | `apps/web/lib/listings/use-listings-query.ts` | Listing card query hook |
 | `apps/web/stores/listings.ts` | Listing filters and selected listing state |
 

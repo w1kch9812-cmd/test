@@ -63,8 +63,9 @@ mod tests {
     use listing_domain::entity::Listing;
     use listing_domain::repository::{
         CardSearchQuery, ListingCardSummary, ListingDetail, ListingMarkerCount,
-        ListingMarkerFilter, ListingMarkerFilterSpec, ListingMarkerMask, ListingMarkerMaskQuery,
-        ListingMarkerRegisteredFilter, ListingMarkerTile, ListingMarkerTileQuery,
+        ListingMarkerDeltas, ListingMarkerFilter, ListingMarkerFilterSpec, ListingMarkerMask,
+        ListingMarkerMaskQuery, ListingMarkerOverlayTileQuery, ListingMarkerRegisteredFilter,
+        ListingMarkerTile, ListingMarkerTileQuery, ListingMarkerTombstones,
         ListingParcelDenormalize, ListingRepository, NormalizedListingMarkerFilterSpec, RepoError,
     };
     use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
@@ -130,6 +131,20 @@ mod tests {
             &self,
             _query: ListingMarkerMaskQuery,
         ) -> Result<ListingMarkerMask, RepoError> {
+            panic!("unused")
+        }
+
+        async fn find_listing_marker_tombstones(
+            &self,
+            _query: ListingMarkerOverlayTileQuery,
+        ) -> Result<ListingMarkerTombstones, RepoError> {
+            panic!("unused")
+        }
+
+        async fn find_listing_marker_deltas(
+            &self,
+            _query: ListingMarkerOverlayTileQuery,
+        ) -> Result<ListingMarkerDeltas, RepoError> {
             panic!("unused")
         }
 

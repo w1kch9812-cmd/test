@@ -45,6 +45,20 @@
       ]
     },
     {
+      "id": "gongzzang.public_map.listing_marker_tombstone",
+      "exposure": "public_anonymous_proxy",
+      "policy_source": "docs/architecture/traffic-auth-policy-registry.v1.json",
+      "path_source": "API.proxy.listingMarkerTombstonesPrefix",
+      "required_controls": ["data_minimization", "rate_limit", "response_budget"]
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_delta",
+      "exposure": "public_anonymous_proxy",
+      "policy_source": "docs/architecture/traffic-auth-policy-registry.v1.json",
+      "path_source": "API.proxy.listingMarkerDeltasPrefix",
+      "required_controls": ["data_minimization", "rate_limit", "response_budget"]
+    },
+    {
       "id": "gongzzang.platform_core.webhook_receiver",
       "exposure": "platform_core_signed_webhook",
       "path": "apps/web/app/platform-core/events/route.ts",

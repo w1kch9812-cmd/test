@@ -1,15 +1,27 @@
 use listing_domain::repository::{
-    ListingMarkerTile, ListingMarkerTileQuery, RepoError, LISTING_MARKER_TILE_LAYER,
+    ListingMarkerTile, ListingMarkerTileQuery, RepoError, LISTING_MARKER_TILE_EXACT_MIN_ZOOM,
+    LISTING_MARKER_TILE_LAYER,
 };
 use sqlx::{PgPool, Row};
 
 use crate::error_map::map_sqlx_err;
 
+pub(super) async fn find_listing_marker_tile(
+    pool: &PgPool,
+    query: ListingMarkerTileQuery,
+) -> Result<ListingMarkerTile, RepoError> {
+    if query.z < LISTING_MARKER_TILE_EXACT_MIN_ZOOM {
+        return find_aggregate_listing_marker_tile(pool, query).await;
+    }
+
+    find_exact_listing_marker_tile(pool, query).await
+}
+
 #[expect(
     clippy::too_many_lines,
     reason = "tile SQL is intentionally contiguous so its MVT contract is reviewed as one query"
 )]
-pub(super) async fn find_listing_marker_tile(
+async fn find_exact_listing_marker_tile(
     pool: &PgPool,
     query: ListingMarkerTileQuery,
 ) -> Result<ListingMarkerTile, RepoError> {
@@ -125,6 +137,190 @@ pub(super) async fn find_listing_marker_tile(
             (SELECT COUNT(*)::int8 FROM represented) AS represented_count,
             (SELECT COUNT(*)::int8 FROM represented) AS feature_count,
             0::int8 AS aggregate_count,
+            (SELECT max(anchor_snapshot_id) FROM represented) AS anchor_snapshot_id
+        ",
+    )
+    .bind(i32::from(query.z))
+    .bind(i32::try_from(query.x).map_err(|e| RepoError::Database(e.to_string()))?)
+    .bind(i32::try_from(query.y).map_err(|e| RepoError::Database(e.to_string()))?)
+    .bind(types)
+    .bind(transactions)
+    .bind(filter.min_area_m2)
+    .bind(filter.max_area_m2)
+    .bind(filter.min_price_krw)
+    .bind(filter.max_price_krw)
+    .bind(LISTING_MARKER_TILE_LAYER)
+    .fetch_one(pool)
+    .await
+    .map_err(map_sqlx_err)?;
+
+    let unanchored_active_count: i64 = row
+        .try_get("unanchored_active_count")
+        .map_err(map_sqlx_err)?;
+    if unanchored_active_count > 0 {
+        return Err(RepoError::Database(format!(
+            "listing marker tile completeness violation: unanchored_active_count={unanchored_active_count}"
+        )));
+    }
+
+    let unprojected_active_count: i64 = row
+        .try_get("unprojected_active_count")
+        .map_err(map_sqlx_err)?;
+    if unprojected_active_count > 0 {
+        return Err(RepoError::Database(format!(
+            "listing marker tile completeness violation: unprojected_active_count={unprojected_active_count}"
+        )));
+    }
+
+    let eligible_count: i64 = row.try_get("eligible_count").map_err(map_sqlx_err)?;
+    let represented_count: i64 = row.try_get("represented_count").map_err(map_sqlx_err)?;
+    if eligible_count != represented_count {
+        return Err(RepoError::Database(format!(
+            "listing marker tile completeness violation: eligible_count={eligible_count}, represented_count={represented_count}"
+        )));
+    }
+
+    Ok(ListingMarkerTile {
+        bytes: row.try_get("bytes").map_err(map_sqlx_err)?,
+        layer_name: LISTING_MARKER_TILE_LAYER,
+        eligible_count,
+        represented_count,
+        feature_count: row.try_get("feature_count").map_err(map_sqlx_err)?,
+        aggregate_count: row.try_get("aggregate_count").map_err(map_sqlx_err)?,
+        anchor_snapshot_id: row.try_get("anchor_snapshot_id").map_err(map_sqlx_err)?,
+    })
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "aggregate SQL is intentionally contiguous so its MVT contract is reviewed as one query"
+)]
+async fn find_aggregate_listing_marker_tile(
+    pool: &PgPool,
+    query: ListingMarkerTileQuery,
+) -> Result<ListingMarkerTile, RepoError> {
+    let filter = query.filter.into_spec();
+    let types = filter
+        .types
+        .iter()
+        .map(|value| value.as_str().to_owned())
+        .collect::<Vec<_>>();
+    let transactions = filter
+        .transactions
+        .iter()
+        .map(|value| value.as_str().to_owned())
+        .collect::<Vec<_>>();
+
+    let row = sqlx::query(
+        r"
+        WITH unanchored_active AS (
+            SELECT COUNT(*)::int8 AS count
+            FROM listing l
+            LEFT JOIN parcel_marker_anchor a ON a.pnu = l.parcel_pnu
+            WHERE l.status = 'active'
+              AND a.pnu IS NULL
+        ),
+        unprojected_active AS (
+            SELECT COUNT(*)::int8 AS count
+            FROM listing l
+            INNER JOIN parcel_marker_anchor a ON a.pnu = l.parcel_pnu
+            LEFT JOIN listing_marker_projection p ON p.listing_id = l.id
+            WHERE l.status = 'active'
+              AND (
+                  p.listing_id IS NULL
+                  OR p.pnu IS DISTINCT FROM l.parcel_pnu
+                  OR p.anchor_snapshot_id IS DISTINCT FROM a.anchor_snapshot_id
+                  OR p.source_geometry_version IS DISTINCT FROM a.source_geometry_version
+                  OR p.source_geometry_checksum_sha256 IS DISTINCT FROM a.source_geometry_checksum_sha256
+                  OR p.source_listing_version IS DISTINCT FROM l.version
+                  OR p.listing_status IS DISTINCT FROM l.status
+                  OR p.visibility_scope IS DISTINCT FROM 'public'
+                  OR p.listing_type IS DISTINCT FROM l.listing_type
+                  OR p.transaction_type IS DISTINCT FROM l.transaction_type
+                  OR p.price_krw IS DISTINCT FROM l.price_krw
+                  OR p.area_m2 IS DISTINCT FROM l.area_m2
+              )
+        ),
+        eligible AS (
+            SELECT
+                p.marker_id,
+                p.anchor_point,
+                p.anchor_snapshot_id,
+                p.projection_version
+            FROM listing_marker_projection p
+            WHERE p.listing_status = 'active'
+              AND p.visibility_scope = 'public'
+              AND (cardinality($4::text[]) = 0 OR p.listing_type = ANY($4::text[]))
+              AND (cardinality($5::text[]) = 0 OR p.transaction_type = ANY($5::text[]))
+              AND ($6::numeric IS NULL OR p.area_m2 >= $6::numeric)
+              AND ($7::numeric IS NULL OR p.area_m2 <= $7::numeric)
+              AND ($8::bigint IS NULL OR p.price_krw >= $8::bigint)
+              AND ($9::bigint IS NULL OR p.price_krw <= $9::bigint)
+              AND ST_Intersects(
+                  ST_Transform(p.anchor_point, 3857),
+                  ST_TileEnvelope($1, $2, $3)
+              )
+        ),
+        aggregate_feature AS (
+            SELECT
+                format('listing_aggregate_%s_%s_%s', $1, $2, $3) AS marker_id,
+                NULL::text AS listing_id,
+                NULL::text AS pnu,
+                'listing_aggregate'::text AS kind,
+                COUNT(*)::int4 AS count,
+                1::int4 AS rank,
+                NULL::text AS detail_ref,
+                max(anchor_snapshot_id) AS anchor_snapshot_id,
+                max(projection_version)::int8 AS projection_version,
+                NULL::text AS listing_type,
+                NULL::text AS transaction_type,
+                NULL::bigint AS price_krw,
+                NULL::float8 AS area_m2,
+                ST_AsMVTGeom(
+                    ST_Centroid(ST_Collect(ST_Transform(anchor_point, 3857))),
+                    ST_TileEnvelope($1, $2, $3),
+                    4096,
+                    256,
+                    true
+                ) AS geom
+            FROM eligible
+            HAVING COUNT(*) > 0
+        ),
+        represented AS (
+            SELECT *
+            FROM aggregate_feature
+            WHERE geom IS NOT NULL
+        ),
+        tile_features AS (
+            SELECT
+                marker_id,
+                listing_id,
+                pnu,
+                kind,
+                count,
+                rank,
+                detail_ref,
+                anchor_snapshot_id,
+                projection_version,
+                listing_type,
+                transaction_type,
+                price_krw,
+                area_m2,
+                geom
+            FROM represented
+        ),
+        tile AS (
+            SELECT ST_AsMVT(tile_features, $10, 4096, 'geom') AS bytes
+            FROM tile_features
+        )
+        SELECT
+            COALESCE((SELECT bytes FROM tile), '\x'::bytea) AS bytes,
+            (SELECT count FROM unanchored_active) AS unanchored_active_count,
+            (SELECT count FROM unprojected_active) AS unprojected_active_count,
+            (SELECT COUNT(*)::int8 FROM eligible) AS eligible_count,
+            COALESCE((SELECT count::int8 FROM represented), 0) AS represented_count,
+            0::int8 AS feature_count,
+            (SELECT COUNT(*)::int8 FROM represented) AS aggregate_count,
             (SELECT max(anchor_snapshot_id) FROM represented) AS anchor_snapshot_id
         ",
     )

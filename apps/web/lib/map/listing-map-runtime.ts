@@ -5,8 +5,10 @@ import {
 } from "@/lib/map/map-zoom-policy";
 import { ALL_ACTIVE_MARKER_FILTER_HASH } from "@/lib/map/marker-tile-contract";
 import {
+  buildListingMarkerDeltaLayerRegistration,
   buildListingMarkerLayerRegistration,
   buildParcelAnchorMarkerLayerRegistrations,
+  LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID,
   LISTING_MARKER_TILE_CIRCLE_LAYER_ID,
   PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID,
 } from "@/lib/map/marker-tile-style";
@@ -225,17 +227,24 @@ async function setupListingMarkerTileLayers(
       minzoom: LISTING_MARKER_RENDER_MIN_ZOOM,
       maxzoom: LISTING_MARKER_RENDER_MAX_ZOOM,
     });
+    const deltaRegistration = buildListingMarkerDeltaLayerRegistration({
+      baseVersion: null,
+      minzoom: 0,
+      maxzoom: LISTING_MARKER_RENDER_MAX_ZOOM,
+    });
 
-    if (!mb.getSource?.(registration.sourceId)) {
-      mb.addSource(registration.sourceId, registration.source);
-    }
-    for (const layer of registration.layers) {
-      if (!mb.getLayer?.(layer.id)) {
-        mb.addLayer(layer);
+    for (const markerRegistration of [registration, deltaRegistration]) {
+      if (!mb.getSource?.(markerRegistration.sourceId)) {
+        mb.addSource(markerRegistration.sourceId, markerRegistration.source);
+      }
+      for (const layer of markerRegistration.layers) {
+        if (!mb.getLayer?.(layer.id)) {
+          mb.addLayer(layer);
+        }
       }
     }
     if (typeof mb.on === "function") {
-      mb.on("click", LISTING_MARKER_TILE_CIRCLE_LAYER_ID, (e: unknown) => {
+      const onListingMarkerClick = (e: unknown) => {
         const evt = e as {
           features?: Array<{ properties?: { id?: string; detail_ref?: string } }>;
         };
@@ -244,7 +253,9 @@ async function setupListingMarkerTileLayers(
         if (typeof listingId === "string" && listingId.length > 0) {
           onListingClick(listingId);
         }
-      });
+      };
+      mb.on("click", LISTING_MARKER_TILE_CIRCLE_LAYER_ID, onListingMarkerClick);
+      mb.on("click", LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID, onListingMarkerClick);
     }
   } catch (err) {
     logMapLayerFailure("listing-markers", err, {

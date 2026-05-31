@@ -1,6 +1,8 @@
 import { LISTING_TYPE_COLOR_FALLBACK, MAP_LAYER_COLORS } from "@gongzzang/ui/tokens.js";
 import {
+  buildListingMarkerDeltaTileSource,
   buildListingMarkerTileSource,
+  LISTING_MARKER_DELTA_TILE_LAYER,
   LISTING_MARKER_TILE_LAYER,
   type MarkerTileSource,
 } from "@/lib/map/marker-tile-contract";
@@ -20,6 +22,8 @@ export const PARCEL_ANCHOR_AGGREGATE_MARKER_TILE_CIRCLE_LAYER_ID =
 export const PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID = "parcel-anchor-markers-circle";
 export const LISTING_MARKER_TILE_SOURCE_ID = LISTING_MARKER_TILE_LAYER;
 export const LISTING_MARKER_TILE_CIRCLE_LAYER_ID = "listing-markers-circle";
+export const LISTING_MARKER_DELTA_TILE_SOURCE_ID = LISTING_MARKER_DELTA_TILE_LAYER;
+export const LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID = "listing-marker-deltas-circle";
 
 type MarkerCircleLayer<
   LayerId extends string,
@@ -72,10 +76,22 @@ type ListingMarkerLayer = MarkerCircleLayer<
   typeof LISTING_MARKER_TILE_LAYER
 >;
 
+type ListingMarkerDeltaLayer = MarkerCircleLayer<
+  typeof LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID,
+  typeof LISTING_MARKER_DELTA_TILE_SOURCE_ID,
+  typeof LISTING_MARKER_DELTA_TILE_LAYER
+>;
+
 export type ListingMarkerLayerRegistration = {
   sourceId: typeof LISTING_MARKER_TILE_SOURCE_ID;
   source: MarkerTileSource;
   layers: [ListingMarkerLayer];
+};
+
+export type ListingMarkerDeltaLayerRegistration = {
+  sourceId: typeof LISTING_MARKER_DELTA_TILE_SOURCE_ID;
+  source: MarkerTileSource;
+  layers: [ListingMarkerDeltaLayer];
 };
 
 export type BuildParcelAnchorMarkerLayerRegistrationInput = {
@@ -84,6 +100,13 @@ export type BuildParcelAnchorMarkerLayerRegistrationInput = {
 
 export type BuildListingMarkerLayerRegistrationInput = {
   filterHash: string;
+  minzoom: number;
+  maxzoom: number;
+  origin?: string;
+};
+
+export type BuildListingMarkerDeltaLayerRegistrationInput = {
+  baseVersion: number | null;
   minzoom: number;
   maxzoom: number;
   origin?: string;
@@ -180,6 +203,33 @@ export function buildListingMarkerLayerRegistration(
         type: "circle",
         source: LISTING_MARKER_TILE_SOURCE_ID,
         "source-layer": LISTING_MARKER_TILE_LAYER,
+        minzoom: input.minzoom,
+        maxzoom: input.maxzoom,
+        paint: {
+          "circle-color": LISTING_TYPE_COLOR_FALLBACK,
+          "circle-opacity": 0.96,
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 14, 6, 18, 9],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-opacity": 0.96,
+          "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 8, 1, 14, 1.5, 18, 2],
+        },
+      },
+    ],
+  };
+}
+
+export function buildListingMarkerDeltaLayerRegistration(
+  input: BuildListingMarkerDeltaLayerRegistrationInput,
+): ListingMarkerDeltaLayerRegistration {
+  return {
+    sourceId: LISTING_MARKER_DELTA_TILE_SOURCE_ID,
+    source: buildListingMarkerDeltaTileSource(input),
+    layers: [
+      {
+        id: LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID,
+        type: "circle",
+        source: LISTING_MARKER_DELTA_TILE_SOURCE_ID,
+        "source-layer": LISTING_MARKER_DELTA_TILE_LAYER,
         minzoom: input.minzoom,
         maxzoom: input.maxzoom,
         paint: {

@@ -232,18 +232,35 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "migrations/30017_listing_marker_overlay_and_dirty_queue.sql"
+        Tokens = @(
+            "create table listing_marker_tombstone_log",
+            "create table listing_marker_delta_log",
+            "create table listing_marker_dirty_tile_queue",
+            "expires_at",
+            "listing_marker_dirty_tile_pending_once_idx",
+            "status in ('pending', 'processing', 'done', 'failed')"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/domain/core/listing/src/repository.rs"
         Tokens = @(
             "find_listing_marker_tile",
             "LISTING_MARKER_TILE_LAYER",
+            "LISTING_MARKER_DELTA_TILE_LAYER",
+            "LISTING_MARKER_TILE_EXACT_MIN_ZOOM",
             "ALL_ACTIVE_LISTING_MARKER_FILTER_HASH",
             "LISTING_MARKER_TILE_CONTENT_TYPE",
             "ListingMarkerFilter",
             "ListingMarkerTileQuery",
             "ListingMarkerTile",
             "find_listing_marker_mask",
+            "find_listing_marker_tombstones",
+            "find_listing_marker_deltas",
             "ListingMarkerMaskQuery",
-            "ListingMarkerMask"
+            "ListingMarkerMask",
+            "ListingMarkerTombstones",
+            "ListingMarkerDeltas"
         )
         Forbidden = @(
             "find_markers_in_bbox",
@@ -282,6 +299,40 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "crates/db/src/listing/marker_delta.rs"
+        Tokens = @(
+            "find_listing_marker_deltas",
+            "listing_marker_delta_log",
+            "listing_marker_projection",
+            "LISTING_MARKER_DELTA_TILE_LAYER",
+            "ST_AsMVTGeom",
+            "ST_AsMVT",
+            "projection_version",
+            "anchor_snapshot_id"
+        )
+        Forbidden = @(
+            "contact",
+            "business_number",
+            "business_verified"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "crates/db/src/listing/marker_tombstone.rs"
+        Tokens = @(
+            "find_listing_marker_tombstones",
+            "listing_marker_tombstone_log",
+            "marker_ids",
+            "projection_version",
+            "anchor_snapshot_id"
+        )
+        Forbidden = @(
+            "price_krw",
+            "area_m2",
+            "contact",
+            "business_number"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "crates/db/src/listing/marker_mask.rs"
         Tokens = @(
             "find_listing_marker_mask",
@@ -307,6 +358,17 @@ $contracts = @(
             "listing_marker_filter_registry",
             "request_count",
             "last_used_at"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "crates/db/src/listing/marker_projection.rs"
+        Tokens = @(
+            "listing_marker_delta_log",
+            "listing_marker_tombstone_log",
+            "listing_marker_dirty_tile_queue",
+            "values (0), (6), (10), (11), (12), (13), (14)",
+            "old_public",
+            "new_public"
         )
     },
     [pscustomobject]@{
@@ -387,6 +449,42 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_tombstones.rs"
+        Tokens = @(
+            "get_listing_marker_tombstones",
+            "ListingMarkerTombstonesState",
+            "find_listing_marker_tombstones",
+            "encoding: `"hide`"",
+            "marker_ids",
+            "base_version"
+        )
+        Forbidden = @(
+            "bbox",
+            "bounds",
+            "price_krw",
+            "area_m2",
+            "contact"
+        )
+    },
+    [pscustomobject]@{
+        RelativePath = "services/api/src/routes/listing_marker_deltas.rs"
+        Tokens = @(
+            "get_listing_marker_deltas",
+            "ListingMarkerDeltasState",
+            "find_listing_marker_deltas",
+            "LISTING_MARKER_TILE_CONTENT_TYPE",
+            "public, max-age=5",
+            "base_version"
+        )
+        Forbidden = @(
+            "bbox",
+            "bounds",
+            "price_krw",
+            "area_m2",
+            "contact"
+        )
+    },
+    [pscustomobject]@{
         RelativePath = "services/api/src/routes/listing_marker_tiles.rs"
         Tokens = @(
             "get_listing_marker_tile",
@@ -462,13 +560,19 @@ $contracts = @(
             "pub mod listing_marker_counts",
             "pub mod listing_marker_filters",
             "pub mod listing_marker_masks",
+            "pub mod listing_marker_tombstones",
+            "pub mod listing_marker_deltas",
             "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
             "/map/v1/marker-counts/listing",
             "/map/v1/marker-filters/listing",
             "/map/v1/marker-masks/listing/:z/:x/:y",
+            "/map/v1/marker-tombstones/listing/:z/:x/:y",
+            "/map/v1/marker-deltas/listing/:z/:x/:y_pbf",
             "get(routes::listing_marker_tiles::get_listing_marker_tile)",
             "ListingMarkerTilesState",
-            "ListingMarkerMasksState"
+            "ListingMarkerMasksState",
+            "ListingMarkerTombstonesState",
+            "ListingMarkerDeltasState"
         )
     },
     [pscustomobject]@{
@@ -483,7 +587,11 @@ $contracts = @(
         RelativePath = "apps/web/lib/map/marker-tile-contract.ts"
         Tokens = @(
             "LISTING_MARKER_TILE_LAYER",
+            "LISTING_MARKER_DELTA_TILE_LAYER",
             "LISTING_MARKER_TILE_ENDPOINT_TEMPLATE",
+            "buildListingMarkerDeltaTileSource",
+            "buildListingMarkerTombstoneUrl",
+            "createListingMarkerOverlayState",
             "ALL_ACTIVE_MARKER_FILTER_HASH",
             "buildListingMarkerTileSource",
             "assertSupportedListingFilterHash",
@@ -531,9 +639,12 @@ $contracts = @(
         Tokens = @(
             "buildParcelAnchorMarkerLayerRegistration",
             "buildListingMarkerLayerRegistration",
+            "buildListingMarkerDeltaLayerRegistration",
             "PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID",
             "LISTING_MARKER_TILE_CIRCLE_LAYER_ID",
+            "LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID",
             "LISTING_MARKER_TILE_SOURCE_ID",
+            "LISTING_MARKER_DELTA_TILE_SOURCE_ID",
             '"source-layer": LISTING_MARKER_TILE_LAYER'
         )
         Forbidden = @(
@@ -571,6 +682,7 @@ $contracts = @(
         Tokens = @(
             "setupListingMarkerTileLayers",
             "buildListingMarkerLayerRegistration",
+            "buildListingMarkerDeltaLayerRegistration",
             "LISTING_MARKER_RENDER_MIN_ZOOM",
             "LISTING_MARKER_RENDER_MAX_ZOOM",
             "buildParcelAnchorMarkerLayerRegistrations",
@@ -589,10 +701,16 @@ $contracts = @(
         Tokens = @(
             "listingMarkerCounts",
             "listingMarkerFilters",
+            "listingMarkerDeltasPrefix",
+            "listingMarkerDeltaTemplate",
             "listingMarkerMaskTemplate",
+            "listingMarkerTombstonesPrefix",
+            "listingMarkerTombstoneTemplate",
             "marker-counts/listing",
             "marker-filters/listing",
-            "marker-masks/listing"
+            "marker-masks/listing",
+            "marker-deltas/listing",
+            "marker-tombstones/listing"
         )
     },
     [pscustomobject]@{
@@ -682,7 +800,10 @@ $contracts = @(
         Tokens = @(
             "builds the Gongzzang-owned listing marker vector source through same-origin proxy",
             "LISTING_MARKER_TILE_LAYER",
+            "LISTING_MARKER_DELTA_TILE_LAYER",
             "http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1",
+            "http://localhost:3900/api/proxy/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf?base_version=41",
+            "http://localhost:3900/api/proxy/map/v1/marker-tombstones/listing/14/13970/6344?base_version=41",
             "not.toContain(`"bbox=`")",
             "not.toContain(`"bounds=`")"
         )
@@ -691,8 +812,11 @@ $contracts = @(
         RelativePath = "apps/web/tests/unit/map/marker-tile-style.test.ts"
         Tokens = @(
             "registers Gongzzang listing marker source and circle layer without coordinate inputs",
+            "registers Gongzzang listing marker delta source with the listing delta layer",
             "LISTING_MARKER_TILE_CIRCLE_LAYER_ID",
+            "LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID",
             "LISTING_MARKER_TILE_SOURCE_ID",
+            "LISTING_MARKER_DELTA_TILE_SOURCE_ID",
             "http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1"
         )
     },

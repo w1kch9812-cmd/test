@@ -3,6 +3,13 @@ set -euo pipefail
 
 fail=0
 root="${1:-.}"
+extensions=(
+  "*.md"
+  "*.rs"
+  "*.ts"
+  "*.tsx"
+  "*.sql"
+)
 
 if [ ! -d "$root" ]; then
   echo "file-line-limit: root directory does not exist: ${root}" >&2
@@ -32,14 +39,11 @@ report_warning() {
   fi
 }
 
-while IFS= read -r -d '' file; do
-  lines="$(wc -l < "$file" | tr -d '[:space:]')"
-  if [ "$lines" -gt 1500 ]; then
-    report_error "$file" "$lines"
-  elif [ "$lines" -gt 500 ]; then
-    report_warning "$file" "$lines"
-  fi
-done < <(
+list_git_files() {
+  git ls-files -z --cached --others --exclude-standard -- "${extensions[@]}"
+}
+
+list_find_files() {
   find . -type f \
     \( -name "*.md" -o -name "*.rs" -o -name "*.ts" -o -name "*.tsx" -o -name "*.sql" \) \
     ! -path "./.git/*" \
@@ -47,11 +51,39 @@ done < <(
     ! -path "./_archive/*" \
     ! -path "./target/*" \
     ! -path "./.next/*" \
+    ! -path "./.wrangler/*" \
+    ! -path "./.turbo/*" \
+    ! -path "./.superpowers/*" \
+    ! -path "./.codex/*" \
+    ! -path "./.mcp-local/*" \
+    ! -path "./.playwright-mcp/*" \
     ! -path "./reference/*" \
+    ! -path "./apps/web/public/dev-tiles/*" \
+    ! -path "./apps/web/public/pmtiles/*" \
     ! -path "*/.venv/*" \
     ! -path "*/var/*" \
     -print0
-)
+}
+
+list_files() {
+  if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    list_git_files
+  else
+    list_find_files
+  fi
+}
+
+while IFS= read -r -d '' file; do
+  if [ ! -f "$file" ]; then
+    continue
+  fi
+  lines="$(wc -l < "$file" | tr -d '[:space:]')"
+  if [ "$lines" -gt 1500 ]; then
+    report_error "$file" "$lines"
+  elif [ "$lines" -gt 500 ]; then
+    report_warning "$file" "$lines"
+  fi
+done < <(list_files)
 
 if [ "$fail" -ne 0 ]; then
   exit 1

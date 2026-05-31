@@ -8,6 +8,24 @@
 
 **Tech Stack:** k6 JavaScript, PowerShell 7, GitHub Actions manual workflow on self-hosted load-test runners, CloudWatch/OTel evidence files, markdown docs.
 
+**Execution note, 2026-05-29:** The static asset guardrail, scenario registry,
+k6 shared libraries, four k6 scenarios, evidence wrapper, normalizer, manual
+workflow, and CI wiring are present and locally verified. `k6 inspect` passes
+for all four scenarios. A local `api-read-mix` smoke run produced complete
+evidence under `target/audit/load-tests/2026-05-29/local/api-read-mix/` and the
+result report is recorded in
+`docs/research/2026-05-29-load-test-result.md`. That smoke run is classified as
+`error breakpoint` because the local target was unavailable; it proves the
+evidence pipeline, not production launch capacity. A real perf/staging
+operator run remains required before any launch sizing claim.
+
+**Admission hardening note, 2026-05-29:** Production deploy admission now
+requires `scripts/ci/verify-load-test-capacity-evidence.ps1` against a
+downloaded `load-test-capacity-evidence` artifact. The verifier accepts only
+healthy `api-read-mix`, `map-marker-mix`, and `platform-core-events` evidence
+from `perf.gongzzang.internal` or `staging.gongzzang.internal`; local/ci smoke,
+wrong-host, and production-target evidence are rejected.
+
 ---
 
 ## File Structure

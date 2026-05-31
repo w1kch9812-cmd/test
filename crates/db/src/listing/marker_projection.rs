@@ -47,7 +47,10 @@ where
                 a.anchor_point,
                 a.anchor_snapshot_id,
                 a.source_geometry_version,
-                a.source_geometry_checksum_sha256
+                a.source_geometry_checksum_sha256,
+                existing.listing_id is not null as had_existing,
+                existing.listing_status as old_listing_status,
+                existing.visibility_scope as old_visibility_scope
             from listing l
             left join listing_marker_projection existing on existing.listing_id = l.id
             inner join parcel_marker_anchor a on a.pnu = l.parcel_pnu
@@ -57,6 +60,50 @@ where
                   or l.status = 'active'
                   or existing.listing_id is not null
               )
+        ),
+        projected as (
+            select
+                'lm_' || id as marker_id,
+                id as listing_id,
+                parcel_pnu as pnu,
+                anchor_point,
+                anchor_snapshot_id,
+                source_geometry_version,
+                source_geometry_checksum_sha256,
+                version as source_listing_version,
+                least(
+                    16383,
+                    greatest(0, floor(((ST_X(anchor_point) + 180.0) / 360.0) * 16384.0)::integer)
+                ) as z14_tile_x,
+                least(
+                    16383,
+                    greatest(
+                        0,
+                        floor(
+                            (
+                                (
+                                    1.0 - (
+                                        ln(
+                                            tan(radians(ST_Y(anchor_point)))
+                                            + (1.0 / cos(radians(ST_Y(anchor_point))))
+                                        ) / pi()
+                                    )
+                                ) / 2.0
+                            ) * 16384.0
+                        )::integer
+                    )
+                ) as z14_tile_y,
+                status as listing_status,
+                case when status = 'active' then 'public' else 'owner_private' end as visibility_scope,
+                listing_type,
+                transaction_type,
+                price_krw,
+                area_m2,
+                updated_at as listing_updated_at,
+                had_existing,
+                old_listing_status,
+                old_visibility_scope
+            from candidate
         ),
         upserted as (
             insert into listing_marker_projection (
@@ -82,47 +129,27 @@ where
                 updated_at
             )
             select
-                'lm_' || id,
-                id,
-                parcel_pnu,
+                marker_id,
+                listing_id,
+                pnu,
                 anchor_point,
                 anchor_snapshot_id,
                 source_geometry_version,
                 source_geometry_checksum_sha256,
-                version,
+                source_listing_version,
                 1,
-                least(
-                    16383,
-                    greatest(0, floor(((ST_X(anchor_point) + 180.0) / 360.0) * 16384.0)::integer)
-                ),
-                least(
-                    16383,
-                    greatest(
-                        0,
-                        floor(
-                            (
-                                (
-                                    1.0 - (
-                                        ln(
-                                            tan(radians(ST_Y(anchor_point)))
-                                            + (1.0 / cos(radians(ST_Y(anchor_point))))
-                                        ) / pi()
-                                    )
-                                ) / 2.0
-                            ) * 16384.0
-                        )::integer
-                    )
-                ),
-                status,
-                case when status = 'active' then 'public' else 'owner_private' end,
+                z14_tile_x,
+                z14_tile_y,
+                listing_status,
+                visibility_scope,
                 listing_type,
                 transaction_type,
                 price_krw,
                 area_m2,
                 0,
-                updated_at,
+                listing_updated_at,
                 now()
-            from candidate
+            from projected
             on conflict (listing_id) do update set
                 marker_id = excluded.marker_id,
                 pnu = excluded.pnu,
@@ -159,10 +186,127 @@ where
                or listing_marker_projection.area_m2 is distinct from excluded.area_m2
                or listing_marker_projection.rank_score is distinct from excluded.rank_score
                or listing_marker_projection.listing_updated_at is distinct from excluded.listing_updated_at
+            returning
+                marker_id,
+                listing_id,
+                pnu,
+                anchor_snapshot_id,
+                projection_version,
+                z14_tile_x,
+                z14_tile_y,
+                listing_status,
+                visibility_scope
+        ),
+        changed as (
+            select
+                u.marker_id,
+                u.listing_id,
+                u.pnu,
+                u.anchor_snapshot_id,
+                u.projection_version,
+                u.z14_tile_x,
+                u.z14_tile_y,
+                u.listing_status,
+                u.visibility_scope,
+                p.had_existing,
+                p.old_listing_status,
+                p.old_visibility_scope,
+                (
+                    p.old_listing_status = 'active'
+                    and p.old_visibility_scope = 'public'
+                ) as old_public,
+                (
+                    u.listing_status = 'active'
+                    and u.visibility_scope = 'public'
+                ) as new_public
+            from upserted u
+            join projected p on p.listing_id = u.listing_id
+        ),
+        inserted_delta as (
+            insert into listing_marker_delta_log (
+                marker_id,
+                listing_id,
+                pnu,
+                z14_tile_x,
+                z14_tile_y,
+                projection_version,
+                anchor_snapshot_id,
+                change_kind
+            )
+            select
+                marker_id,
+                listing_id,
+                pnu,
+                z14_tile_x,
+                z14_tile_y,
+                projection_version,
+                anchor_snapshot_id,
+                case
+                    when old_public then 'updated_public'
+                    else 'became_public'
+                end
+            from changed
+            where new_public
+            on conflict do nothing
+            returning 1
+        ),
+        inserted_tombstone as (
+            insert into listing_marker_tombstone_log (
+                marker_id,
+                listing_id,
+                pnu,
+                z14_tile_x,
+                z14_tile_y,
+                projection_version,
+                anchor_snapshot_id,
+                reason
+            )
+            select
+                marker_id,
+                listing_id,
+                pnu,
+                z14_tile_x,
+                z14_tile_y,
+                projection_version,
+                anchor_snapshot_id,
+                case listing_status
+                    when 'sold' then 'sold'
+                    when 'expired' then 'expired'
+                    when 'rejected' then 'rejected'
+                    else 'private'
+                end
+            from changed
+            where old_public and not new_public
+            on conflict do nothing
+            returning 1
+        ),
+        inserted_dirty_tile as (
+            insert into listing_marker_dirty_tile_queue (
+                tile_z,
+                tile_x,
+                tile_y,
+                reason,
+                priority
+            )
+            select
+                dirty_zoom.tile_z,
+                z14_tile_x / (1 << (14 - dirty_zoom.tile_z)),
+                z14_tile_y / (1 << (14 - dirty_zoom.tile_z)),
+                case when old_public and not new_public then 'tombstone' else 'delta' end,
+                case when old_public and not new_public then 10 else 100 end
+            from changed
+            cross join (
+                values (0), (6), (10), (11), (12), (13), (14)
+            ) as dirty_zoom(tile_z)
+            where old_public or new_public
+            on conflict do nothing
             returning 1
         )
         select
             (select count(*)::int8 from candidate) as candidate_count,
+            (select count(*)::int8 from inserted_delta) as inserted_delta_count,
+            (select count(*)::int8 from inserted_tombstone) as inserted_tombstone_count,
+            (select count(*)::int8 from inserted_dirty_tile) as inserted_dirty_tile_count,
             exists(select 1 from listing where id = $1) as listing_exists,
             exists(
                 select 1
