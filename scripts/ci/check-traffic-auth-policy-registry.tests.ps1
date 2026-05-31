@@ -1334,6 +1334,7 @@ try {
     Assert-Contains $missingPulumiWafAssociation.Output "Pulumi AWS WAFv2 association"
 
     Write-Host "traffic-auth-policy-registry-tests-ok"
+    exit 0
 } finally {
     if (Test-Path -LiteralPath $TempRoot) {
         Remove-Item -LiteralPath $TempRoot -Recurse -Force

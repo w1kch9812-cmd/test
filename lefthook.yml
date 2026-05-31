@@ -92,6 +92,11 @@ pre-push:
       skip:
         - merge
         - rebase
+    traffic-auth-policy-registry-tests:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-traffic-auth-policy-registry.tests.ps1
+      skip:
+        - merge
+        - rebase
     platform-integration-policy:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1
       skip:
