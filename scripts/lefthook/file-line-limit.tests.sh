@@ -71,3 +71,15 @@ reset_tmp_root
 write_lines "${tmp_root}/services/scraper-py/.venv/vendor.md" 1501
 write_lines "${tmp_root}/apps/web/var/logs/browser-smoke.md" 1501
 assert_success "ignores local virtualenv and runtime artifacts" bash "$script" "$tmp_root"
+
+reset_tmp_root
+git -C "$tmp_root" init -q
+printf '.wrangler/\n' > "${tmp_root}/.gitignore"
+write_lines "${tmp_root}/.wrangler/state/generated.ts" 1501
+write_lines "${tmp_root}/apps/web/lib/runtime.ts" 20
+assert_success "uses git ignore rules for local generated artifacts" bash "$script" "$tmp_root"
+
+reset_tmp_root
+git -C "$tmp_root" init -q
+write_lines "${tmp_root}/apps/web/lib/oversized.ts" 1501
+assert_failure_contains "checks untracked files in git worktrees" "oversized.ts has 1501 lines" bash "$script" "$tmp_root"
