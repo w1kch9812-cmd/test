@@ -200,7 +200,7 @@ jobs:
           subject-path: target/release/api
           sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         with:
           name: supply-chain-release-candidates
           path: |
@@ -236,7 +236,7 @@ jobs:
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
         run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882  # v4.4.3 (Round 5 SHA pin, ADR 0028)
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v4.4.3 (Round 5 SHA pin, ADR 0028)
         if: always()
         with:
           name: coverage-lcov
