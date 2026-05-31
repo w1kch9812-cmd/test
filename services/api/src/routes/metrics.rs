@@ -39,7 +39,7 @@ pub async fn get_metrics(State(state): State<MetricsState>, headers: HeaderMap) 
     }
 
     match load_listing_marker_metrics(&state.pool).await {
-        Ok(metrics) => text_response(StatusCode::OK, render_listing_marker_metrics(metrics)),
+        Ok(metrics) => text_response(StatusCode::OK, render_listing_marker_metrics(&metrics)),
         Err(error) => {
             tracing::warn!(error = %error, "metrics query failed");
             text_response(
@@ -99,7 +99,7 @@ fn text_response(status: StatusCode, body: String) -> Response {
     response
 }
 
-fn render_listing_marker_metrics(metrics: ListingMarkerMetrics) -> String {
+fn render_listing_marker_metrics(metrics: &ListingMarkerMetrics) -> String {
     format!(
         "# HELP gongzzang_listing_marker_dirty_tiles_pending Pending listing marker dirty tile rebuilds.\n\
          # TYPE gongzzang_listing_marker_dirty_tiles_pending gauge\n\
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn renders_listing_marker_metrics() {
-        let body = render_listing_marker_metrics(ListingMarkerMetrics {
+        let body = render_listing_marker_metrics(&ListingMarkerMetrics {
             dirty_tiles_pending: 3,
             dirty_tile_oldest_age_seconds: 12.5,
             tombstones_active: 2,

@@ -125,6 +125,8 @@ fn parse_listing_marker_tombstone_query(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used)]
+
     use super::*;
 
     #[test]
