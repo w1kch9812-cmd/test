@@ -519,7 +519,10 @@ $contracts = @(
         )
     },
     [pscustomobject]@{
-        RelativePath = "services/api/src/bin/platform_core_anchor_import.rs"
+        RelativePaths = @(
+            "services/api/src/bin/platform_core_anchor_import.rs",
+            "services/api/src/bin/platform_core_anchor_import"
+        )
         Tokens = @(
             "PlatformCoreAnchorImport",
             "parse_anchor_manifest",

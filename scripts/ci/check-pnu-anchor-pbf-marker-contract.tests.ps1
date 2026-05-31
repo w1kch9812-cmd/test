@@ -388,29 +388,35 @@ verify_size_bytes
 object.size_bytes
 verify_sha256
 object.checksum_sha256
-ChecksumMismatch
-SizeMismatch
 PLATFORM_CORE_EVENT_ID
 mark_inbox_event_processing
 mark_inbox_event_processed
 mark_inbox_event_failed
 truncate_failure_reason
-pg_try_advisory_lock
-pg_advisory_unlock
-event_import_lock_key
 InboxEventAlreadyLocked
 ImportSource::EventPayload
+ImportSource::PendingInboxBatch
+PLATFORM_CORE_ANCHOR_IMPORT_BATCH_LIMIT
+run_pending_inbox_batch
+find_pending_anchor_import_event_ids
+BatchImportFailed
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\bin\platform_core_anchor_import\source.rs" -Content @'
 event_artifact_config_from_payload
 find_inbox_event_payload
 artifact_manifest_url
 artifact_checksum_sha256
 fetch_artifact_bytes
 resolve_artifact_object_url
-ImportSource::PendingInboxBatch
-PLATFORM_CORE_ANCHOR_IMPORT_BATCH_LIMIT
-run_pending_inbox_batch
-find_pending_anchor_import_event_ids
-BatchImportFailed
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\bin\platform_core_anchor_import\error.rs" -Content @'
+ChecksumMismatch
+SizeMismatch
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\bin\platform_core_anchor_import\lock.rs" -Content @'
+pg_try_advisory_lock
+pg_advisory_unlock
+event_import_lock_key
 '@
     Write-File -Root $Root -RelativePath "services\api\src\main.rs" -Content @'
 pub mod listing_marker_tiles
