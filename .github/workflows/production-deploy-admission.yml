@@ -83,7 +83,7 @@ jobs:
           run-id: ${{ inputs.run-id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v4.1.0 (Round 5 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
 
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
