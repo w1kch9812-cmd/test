@@ -96,7 +96,7 @@ jobs:
         run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
       - name: markdownlint
         run: pnpm markdownlint-cli2 "**/*.md" "#**/node_modules/**" "#**/_archive/**" "#**/reference/**" "#**/target/**" "#**/.next/**" "#**/.turbo/**"
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1", components: "rustfmt, clippy" }
       - name: cargo fmt
         run: cargo fmt --all -- --check
@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
       - run: cargo check --workspace --all-features
@@ -160,7 +160,7 @@ jobs:
           node-version: "20.19.0"
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
 
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
@@ -243,7 +243,7 @@ jobs:
       RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
         with:
