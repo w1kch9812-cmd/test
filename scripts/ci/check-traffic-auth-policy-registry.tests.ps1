@@ -686,7 +686,7 @@ problem_type: "map/too-many-public-marker-requests"
 problem_type: "proxy/too-many-requests"
 $generatedBackendRolePolicies
 "@
-    Write-File -Root $Root -RelativePath "services\api\src\listing_marker_serving.rs" -Content @'
+    Write-File -Root $Root -RelativePath "services\api\src\listing_marker_serving\mod.rs" -Content @'
 crate::listing_marker_policy
 '@
     $protectedAuthLayer = if ($OmitBackendProtectedAuthLayer) { "" } else { "auth_layer" }

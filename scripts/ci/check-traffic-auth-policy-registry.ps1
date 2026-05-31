@@ -38,6 +38,28 @@ function Read-JsonFile {
     return $content | ConvertFrom-Json
 }
 
+function Read-ListingMarkerServingSources {
+    $flatPath = Resolve-RepoPath -RelativePath "services/api/src/listing_marker_serving.rs"
+    if (Test-Path -LiteralPath $flatPath -PathType Leaf) {
+        return Get-Content -LiteralPath $flatPath -Raw -Encoding UTF8
+    }
+
+    $modulePath = Resolve-RepoPath -RelativePath "services/api/src/listing_marker_serving"
+    if (!(Test-Path -LiteralPath $modulePath -PathType Container)) {
+        throw "Required listing marker serving source is missing: services/api/src/listing_marker_serving.rs or services/api/src/listing_marker_serving/mod.rs"
+    }
+    $moduleSources = @(
+        Get-ChildItem -LiteralPath $modulePath -File -Filter "*.rs" -Recurse |
+            Sort-Object FullName
+    )
+    if ($moduleSources.Count -eq 0) {
+        throw "Required listing marker serving source is missing: services/api/src/listing_marker_serving/*.rs"
+    }
+    return (($moduleSources | ForEach-Object {
+                Get-Content -LiteralPath $_.FullName -Raw -Encoding UTF8
+            }) -join "`n")
+}
+
 function Assert-Equals {
     param([object] $Actual, [object] $Expected, [string] $Message)
     if ($Actual -ne $Expected) {
@@ -300,7 +322,7 @@ $apiProxyRoute = Read-TextFile -RelativePath "apps/web/app/api/proxy/[...path]/r
 $tsGenerated = Read-TextFile -RelativePath "apps/web/lib/policies/traffic-auth-policy.generated.ts"
 $rustGenerated = Read-TextFile -RelativePath "services/api/src/listing_marker_policy.rs"
 $rustTrafficGenerated = Read-TextFile -RelativePath "services/api/src/traffic_auth_policy.rs"
-$serving = Read-TextFile -RelativePath "services/api/src/listing_marker_serving.rs"
+$serving = Read-ListingMarkerServingSources
 $apiMain = Read-TextFile -RelativePath "services/api/src/main.rs"
 $apiRouteSources = $apiMain + "`n" + (Read-TextFile -RelativePath "services/api/src/routes/health.rs")
 $boundary = Read-TextFile -RelativePath "docs/architecture/platform-core-boundary.v1.json"
