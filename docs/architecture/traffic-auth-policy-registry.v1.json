@@ -255,6 +255,89 @@
           "bulk_listing_export"
         ]
       }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_tombstone",
+      "description": "Anonymous browser access to marker ids that must be hidden after a loaded listing marker tile becomes stale.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerTombstonesPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-tombstones/listing",
+      "backend_route": "/map/v1/marker-tombstones/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-tombstone",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "response_budget": {
+        "max_mask_ids": 20000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["marker_id_mask"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_delta",
+      "description": "Anonymous browser access to short-lived listing marker MVT/PBF delta overlays.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerDeltasPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-deltas/listing",
+      "backend_route": "/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-delta",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "response_budget": {
+        "max_tile_bytes": 262144,
+        "max_features": 10000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["derived_marker_tile"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
     }
   ],
   "auth_route_policies": [
@@ -377,6 +460,20 @@
       "id": "gongzzang.api_proxy.public_marker_masks",
       "target_path_kind": "template",
       "target_path": "map/v1/marker-masks/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.public_marker_tombstones",
+      "target_path_kind": "template",
+      "target_path": "map/v1/marker-tombstones/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "exposure_class": "public_derived"
+    },
+    {
+      "id": "gongzzang.api_proxy.public_marker_deltas",
+      "target_path_kind": "template",
+      "target_path": "map/v1/marker-deltas/listing/:z/:x/:y_pbf",
       "methods": ["GET"],
       "exposure_class": "public_derived"
     },
@@ -568,6 +665,22 @@
     {
       "id": "gongzzang.backend.public_marker_masks",
       "path": "/map/v1/marker-masks/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_tombstones",
+      "path": "/map/v1/marker-tombstones/listing/:z/:x/:y",
+      "methods": ["GET"],
+      "router_group": "public_marker",
+      "exposure_class": "public_derived",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.public_marker_deltas",
+      "path": "/map/v1/marker-deltas/listing/:z/:x/:y_pbf",
       "methods": ["GET"],
       "router_group": "public_marker",
       "exposure_class": "public_derived",

@@ -114,6 +114,28 @@ Retry a transient failure only after verifying the event payload's
 the Platform Core release record. Do not edit `parcel_marker_anchor` or
 `listing_marker_projection` directly.
 
+## Listing Marker Freshness Operations
+
+Gongzzang listing markers compose runtime visibility as:
+
+```text
+visible markers = base tile + delta overlay - tombstone overlay - unauthorized records
+```
+
+Platform Core owns PNU anchor source data. Gongzzang owns listing semantics,
+projection, delta logs, tombstone logs, and dirty-tile rebuild decisions.
+
+Watch these metrics from `/internal/metrics`:
+
+- `gongzzang_listing_marker_dirty_tiles_pending`
+- `gongzzang_listing_marker_dirty_tile_oldest_age_seconds`
+- `gongzzang_listing_marker_tombstones_active`
+- `gongzzang_listing_marker_deltas_active`
+
+If tombstones or deltas grow unexpectedly, inspect `listing_marker_dirty_tile_queue`,
+`listing_marker_tombstone_log`, and `listing_marker_delta_log`. Do not bypass this by adding
+listing-owned latitude/longitude or public `bbox` marker APIs.
+
 ## Load And Fault Verification
 
 Required tests:

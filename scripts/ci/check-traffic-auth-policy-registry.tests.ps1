@@ -424,6 +424,30 @@ function Write-MinimalRepo {
       "cache_policy": {"ttl_seconds":30},
       "single_flight_policy": {"lock_seconds":5,"wait_attempts":10,"wait_milliseconds":50},
       "response_budget": {"max_mask_ids":20000}$maskExposure
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_tombstone",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerTombstonesPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-tombstones/listing",
+      "backend_route": "/map/v1/marker-tombstones/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "auth_policy": {"method":"anonymous_public","session_required":false},
+      "rate_policy": {"key_prefix":"public-map:listing-marker-tombstone","limit":120,"window_seconds":60,"problem_type":"map/too-many-public-marker-requests"},
+      "response_budget": {"max_mask_ids":20000}$maskExposure
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_delta",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerDeltasPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-deltas/listing",
+      "backend_route": "/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "auth_policy": {"method":"anonymous_public","session_required":false},
+      "rate_policy": {"key_prefix":"public-map:listing-marker-delta","limit":120,"window_seconds":60,"problem_type":"map/too-many-public-marker-requests"},
+      "response_budget": {"max_tile_bytes":262144,"max_features":10000}$tileExposure
     }
   ],
 $authRoutePolicies
@@ -462,6 +486,8 @@ exposure: policy.exposure
 API.proxy.listingMarkerTilesPrefix
 API.proxy.listingMarkerCounts
 API.proxy.listingMarkerFilters
+API.proxy.listingMarkerTombstonesPrefix
+API.proxy.listingMarkerDeltasPrefix
 LISTING_MARKER_MASK_PREFIX
 '@
     $apiProxyExposureGate = if ($OmitApiProxyExposureGate) {
@@ -567,6 +593,14 @@ LISTING_MARKER_MASK_PREFIX
 public-map:listing-marker-mask
 limit: 120
 windowSec: 60
+API.proxy.listingMarkerTombstonesPrefix
+public-map:listing-marker-tombstone
+limit: 120
+windowSec: 60
+API.proxy.listingMarkerDeltasPrefix
+public-map:listing-marker-delta
+limit: 120
+windowSec: 60
 $generatedExposureMetadata
 "@
     Write-File -Root $Root -RelativePath "services\api\src\listing_marker_policy.rs" -Content @'
@@ -607,6 +641,8 @@ key_prefix: "public-map:listing-marker-tile"
 key_prefix: "public-map:listing-marker-count"
 key_prefix: "public-map:listing-marker-filter"
 key_prefix: "public-map:listing-marker-mask"
+key_prefix: "public-map:listing-marker-tombstone"
+key_prefix: "public-map:listing-marker-delta"
 key_prefix: "api-proxy:authenticated-read"
 key_prefix: "api-proxy:privileged-write"
 limit: 600
@@ -726,6 +762,34 @@ direct_platform_core_database
       "rate": {
         "key_strategy": "client_ip",
         "key_prefix": "public-map:listing-marker-mask",
+        "limit": 120,
+        "window_seconds": 60,
+        "problem_type": "map/too-many-public-marker-requests"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tombstone",
+      "proxy_path": "/api/proxy/map/v1/marker-tombstones/listing",
+      "backend_route": "/map/v1/marker-tombstones/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "exposure_class": "public_derived",
+      "rate": {
+        "key_strategy": "client_ip",
+        "key_prefix": "public-map:listing-marker-tombstone",
+        "limit": 120,
+        "window_seconds": 60,
+        "problem_type": "map/too-many-public-marker-requests"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_delta",
+      "proxy_path": "/api/proxy/map/v1/marker-deltas/listing",
+      "backend_route": "/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "exposure_class": "public_derived",
+      "rate": {
+        "key_strategy": "client_ip",
+        "key_prefix": "public-map:listing-marker-delta",
         "limit": 120,
         "window_seconds": 60,
         "problem_type": "map/too-many-public-marker-requests"
@@ -894,6 +958,28 @@ direct_platform_core_database
       "limit_per_5m": 600,
       "match": {
         "path": "/api/proxy/map/v1/marker-masks/listing",
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"]
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_tombstone",
+      "priority": 1031,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path": "/api/proxy/map/v1/marker-tombstones/listing",
+        "path_match": "STARTS_WITH",
+        "methods": ["GET"]
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.public_map.listing_marker_delta",
+      "priority": 1032,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 600,
+      "match": {
+        "path": "/api/proxy/map/v1/marker-deltas/listing",
         "path_match": "STARTS_WITH",
         "methods": ["GET"]
       }

@@ -8,8 +8,14 @@ import {
   type ListingMarkerServerState,
   loadListingMarkerServerState,
 } from "@/lib/map/listing-marker-server-state";
-import { ALL_ACTIVE_MARKER_FILTER_HASH } from "@/lib/map/marker-tile-contract";
-import { LISTING_MARKER_TILE_CIRCLE_LAYER_ID } from "@/lib/map/marker-tile-style";
+import {
+  ALL_ACTIVE_MARKER_FILTER_HASH,
+  createListingMarkerOverlayState,
+} from "@/lib/map/marker-tile-contract";
+import {
+  LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID,
+  LISTING_MARKER_TILE_CIRCLE_LAYER_ID,
+} from "@/lib/map/marker-tile-style";
 import { loadNaverMaps } from "@/lib/naver-maps";
 import { usePanelStack } from "@/lib/panel/use-panel-stack";
 import { useListingsStore } from "@/stores/listings";
@@ -37,20 +43,36 @@ export function ListingMap() {
   const mapRef = useRef<naver.maps.Map | null>(null);
   const [mapboxInstance, setMapboxInstance] = useState<MapboxGLLike | null>(null);
   const [, setMarkerServerState] = useState<ListingMarkerServerState>(initialMarkerServerState);
+  const [markerOverlayState, setMarkerOverlayState] = useState(() =>
+    createListingMarkerOverlayState({ baseVersion: null }),
+  );
   const filters = useListingsStore((state) => state.filters);
   const { push: pushPanel } = usePanelStack();
 
   useEffect(() => {
     const mb = mapboxInstance;
-    if (!mb?.setFilter || !mb.getLayer?.(LISTING_MARKER_TILE_CIRCLE_LAYER_ID)) return;
-    mb.setFilter(LISTING_MARKER_TILE_CIRCLE_LAYER_ID, buildListingMarkerLayerFilter(filters));
-  }, [filters, mapboxInstance]);
+    if (!mb?.setFilter) return;
+    const layerFilter = buildListingMarkerLayerFilter(filters, markerOverlayState.tombstoneIds);
+    if (mb.getLayer?.(LISTING_MARKER_TILE_CIRCLE_LAYER_ID)) {
+      mb.setFilter(LISTING_MARKER_TILE_CIRCLE_LAYER_ID, layerFilter);
+    }
+    if (mb.getLayer?.(LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID)) {
+      mb.setFilter(LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID, layerFilter);
+    }
+  }, [filters, markerOverlayState.tombstoneIds, mapboxInstance]);
 
   useEffect(() => {
     const controller = new AbortController();
 
     loadListingMarkerServerState(filters, controller.signal)
-      .then(setMarkerServerState)
+      .then((next) => {
+        setMarkerServerState(next);
+        setMarkerOverlayState(
+          createListingMarkerOverlayState({
+            baseVersion: next.projectionVersion ?? null,
+          }),
+        );
+      })
       .catch((err: unknown) => {
         if (isAbortError(err)) return;
         console.warn(

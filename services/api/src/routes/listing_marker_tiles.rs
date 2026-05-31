@@ -185,16 +185,18 @@ mod tests {
     }
 
     #[test]
-    fn rejects_listing_marker_tile_below_gongzzang_render_min_zoom() {
-        let err = parse_listing_marker_tile_query(
+    fn parses_listing_marker_low_zoom_tile_path() {
+        let query = parse_listing_marker_tile_query(
             "13",
             "4390",
             "3172.pbf",
             ListingMarkerFilter::AllActive,
         )
-        .expect_err("z below listing marker tile minimum must be rejected");
+        .expect("low zoom listing marker tile must be accepted");
 
-        assert_eq!(err.status, StatusCode::BAD_REQUEST);
+        assert_eq!(query.z, 13);
+        assert_eq!(query.x, 4390);
+        assert_eq!(query.y, 3172);
     }
 
     #[test]

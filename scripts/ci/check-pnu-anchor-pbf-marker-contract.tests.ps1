@@ -204,17 +204,31 @@ create index platform_core_event_inbox_anchor_snapshot_idx
     on platform_core_event_inbox(anchor_snapshot_id)
     where anchor_snapshot_id is not null;
 '@
+    Write-File -Root $Root -RelativePath "migrations\30017_listing_marker_overlay_and_dirty_queue.sql" -Content @'
+create table listing_marker_tombstone_log
+create table listing_marker_delta_log
+create table listing_marker_dirty_tile_queue
+expires_at
+listing_marker_dirty_tile_pending_once_idx
+status in ('pending', 'processing', 'done', 'failed')
+'@
     Write-File -Root $Root -RelativePath "crates\domain\core\listing\src\repository.rs" -Content @'
 find_listing_marker_tile
 LISTING_MARKER_TILE_LAYER
+LISTING_MARKER_DELTA_TILE_LAYER
+LISTING_MARKER_TILE_EXACT_MIN_ZOOM
 ALL_ACTIVE_LISTING_MARKER_FILTER_HASH
 LISTING_MARKER_TILE_CONTENT_TYPE
 ListingMarkerFilter
 ListingMarkerTileQuery
 ListingMarkerTile
 find_listing_marker_mask
+find_listing_marker_tombstones
+find_listing_marker_deltas
 ListingMarkerMaskQuery
 ListingMarkerMask
+ListingMarkerTombstones
+ListingMarkerDeltas
 '@
     Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_tile.rs" -Content @'
 find_listing_marker_tile
@@ -227,6 +241,23 @@ unprojected_active_count
 listing marker tile completeness violation
 eligible_count
 represented_count
+'@
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_delta.rs" -Content @'
+find_listing_marker_deltas
+listing_marker_delta_log
+listing_marker_projection
+LISTING_MARKER_DELTA_TILE_LAYER
+ST_AsMVTGeom
+ST_AsMVT
+projection_version
+anchor_snapshot_id
+'@
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_tombstone.rs" -Content @'
+find_listing_marker_tombstones
+listing_marker_tombstone_log
+marker_ids
+projection_version
+anchor_snapshot_id
 '@
     Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_mask.rs" -Content @'
 find_listing_marker_mask
@@ -242,6 +273,14 @@ resolve_listing_marker_filter
 listing_marker_filter_registry
 request_count
 last_used_at
+'@
+    Write-File -Root $Root -RelativePath "crates\db\src\listing\marker_projection.rs" -Content @'
+listing_marker_delta_log
+listing_marker_tombstone_log
+listing_marker_dirty_tile_queue
+values (0), (6), (10), (11), (12), (13), (14)
+old_public
+new_public
 '@
     Write-File -Root $Root -RelativePath "crates\db\src\platform_core_anchor.rs" -Content @'
 insert_inbox_event
@@ -298,6 +337,22 @@ get_listing_marker_mask
 ListingMarkerMasksState
 find_listing_marker_mask
 listing marker base tile version is stale
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_tombstones.rs" -Content @'
+get_listing_marker_tombstones
+ListingMarkerTombstonesState
+find_listing_marker_tombstones
+encoding: "hide"
+marker_ids
+base_version
+'@
+    Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_deltas.rs" -Content @'
+get_listing_marker_deltas
+ListingMarkerDeltasState
+find_listing_marker_deltas
+LISTING_MARKER_TILE_CONTENT_TYPE
+public, max-age=5
+base_version
 '@
     Write-File -Root $Root -RelativePath "services\api\src\routes\listing_marker_tiles.rs" -Content @'
 get_listing_marker_tile
@@ -358,13 +413,19 @@ pub mod listing_marker_tiles
 pub mod listing_marker_counts
 pub mod listing_marker_filters
 pub mod listing_marker_masks
+pub mod listing_marker_tombstones
+pub mod listing_marker_deltas
 /map/v1/marker-tiles/listing/:z/:x/:y_pbf
 /map/v1/marker-counts/listing
 /map/v1/marker-filters/listing
 /map/v1/marker-masks/listing/:z/:x/:y
+/map/v1/marker-tombstones/listing/:z/:x/:y
+/map/v1/marker-deltas/listing/:z/:x/:y_pbf
 get(routes::listing_marker_tiles::get_listing_marker_tile)
 ListingMarkerTilesState
 ListingMarkerMasksState
+ListingMarkerTombstonesState
+ListingMarkerDeltasState
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\identity\patterns.ts" -Content @'
 PNU_PATTERN
@@ -373,7 +434,11 @@ lst_[0-9A-HJKMNP-TV-Z]{26}
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\map\marker-tile-contract.ts" -Content @'
 LISTING_MARKER_TILE_LAYER
+LISTING_MARKER_DELTA_TILE_LAYER
 LISTING_MARKER_TILE_ENDPOINT_TEMPLATE
+buildListingMarkerDeltaTileSource
+buildListingMarkerTombstoneUrl
+createListingMarkerOverlayState
 ALL_ACTIVE_MARKER_FILTER_HASH
 buildListingMarkerTileSource
 assertSupportedListingFilterHash
@@ -402,9 +467,12 @@ LISTING_MARKER_RENDER_MAX_ZOOM
     Write-File -Root $Root -RelativePath "apps\web\lib\map\marker-tile-style.ts" -Content @'
 buildParcelAnchorMarkerLayerRegistration
 buildListingMarkerLayerRegistration
+buildListingMarkerDeltaLayerRegistration
 PARCEL_ANCHOR_MARKER_TILE_CIRCLE_LAYER_ID
 LISTING_MARKER_TILE_CIRCLE_LAYER_ID
+LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID
 LISTING_MARKER_TILE_SOURCE_ID
+LISTING_MARKER_DELTA_TILE_SOURCE_ID
 "source-layer": LISTING_MARKER_TILE_LAYER
 '@
     Write-File -Root $Root -RelativePath "apps\web\components\listings\listing-map.tsx" -Content @'
@@ -419,6 +487,7 @@ pushPanel({ kind: "parcel", id: pnu, view: "summary" })
     Write-File -Root $Root -RelativePath "apps\web\lib\map\listing-map-runtime.ts" -Content @'
 setupListingMarkerTileLayers
 buildListingMarkerLayerRegistration
+buildListingMarkerDeltaLayerRegistration
 LISTING_MARKER_RENDER_MIN_ZOOM
 LISTING_MARKER_RENDER_MAX_ZOOM
 buildParcelAnchorMarkerLayerRegistrations
@@ -428,10 +497,16 @@ setupMarkerTileLayers
     Write-File -Root $Root -RelativePath "apps\web\lib\routes.ts" -Content @'
 listingMarkerCounts
 listingMarkerFilters
+listingMarkerDeltasPrefix
+listingMarkerDeltaTemplate
 listingMarkerMaskTemplate
+listingMarkerTombstonesPrefix
+listingMarkerTombstoneTemplate
 marker-counts/listing
 marker-filters/listing
 marker-masks/listing
+marker-deltas/listing
+marker-tombstones/listing
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\map\listing-marker-filter.ts" -Content @'
 buildListingMarkerLayerFilter
@@ -486,14 +561,20 @@ id: z.string().regex(LISTING_ID_PATTERN)
     Write-File -Root $Root -RelativePath "apps\web\tests\unit\map\marker-tile-contract.test.ts" -Content @'
 builds the Gongzzang-owned listing marker vector source through same-origin proxy
 LISTING_MARKER_TILE_LAYER
+LISTING_MARKER_DELTA_TILE_LAYER
 http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1
+http://localhost:3900/api/proxy/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf?base_version=41
+http://localhost:3900/api/proxy/map/v1/marker-tombstones/listing/14/13970/6344?base_version=41
 not.toContain("bbox=")
 not.toContain("bounds=")
 '@
     Write-File -Root $Root -RelativePath "apps\web\tests\unit\map\marker-tile-style.test.ts" -Content @'
 registers Gongzzang listing marker source and circle layer without coordinate inputs
+registers Gongzzang listing marker delta source with the listing delta layer
 LISTING_MARKER_TILE_CIRCLE_LAYER_ID
+LISTING_MARKER_DELTA_TILE_CIRCLE_LAYER_ID
 LISTING_MARKER_TILE_SOURCE_ID
+LISTING_MARKER_DELTA_TILE_SOURCE_ID
 http://localhost:3900/api/proxy/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf?filter_hash=all-active-v1
 '@
     Write-File -Root $Root -RelativePath "apps\web\lib\panel\codec.test.ts" -Content @'

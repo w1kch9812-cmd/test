@@ -42,4 +42,27 @@ describe("buildListingMarkerLayerFilter", () => {
       ["<=", ["to-number", ["get", "price_krw"]], 5_000_000_000],
     ]);
   });
+
+  it("adds tombstone ids as a hide predicate before listing predicates", () => {
+    expect(
+      buildListingMarkerLayerFilter(
+        {
+          types: ["factory"],
+          transactions: [],
+          minAreaM2: undefined,
+          maxAreaM2: undefined,
+          minPriceKrw: undefined,
+          maxPriceKrw: undefined,
+          sort: "created_at_desc",
+          adminCode: undefined,
+          landUseType: undefined,
+        },
+        ["lm_lst_01HXY3NK0Z9F6S1B2C3D4E5F6G"],
+      ),
+    ).toEqual([
+      "all",
+      ["!", ["in", ["get", "id"], ["literal", ["lm_lst_01HXY3NK0Z9F6S1B2C3D4E5F6G"]]]],
+      ["in", ["get", "listing_type"], ["literal", ["factory"]]],
+    ]);
+  });
 });

@@ -9,10 +9,12 @@
 mod card_summaries;
 mod detail;
 mod marker_count;
+mod marker_delta;
 mod marker_filter_registry;
 mod marker_mask;
 mod marker_projection;
 mod marker_tile;
+mod marker_tombstone;
 mod persistence;
 mod repository;
 mod rows;

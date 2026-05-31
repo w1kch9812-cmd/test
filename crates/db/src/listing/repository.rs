@@ -3,9 +3,10 @@
 use async_trait::async_trait;
 use listing_domain::entity::Listing;
 use listing_domain::repository::{
-    CardSearchQuery, ListingCardSummary, ListingDetail, ListingMarkerCount, ListingMarkerMask,
-    ListingMarkerMaskQuery, ListingMarkerRegisteredFilter, ListingMarkerTile,
-    ListingMarkerTileQuery, ListingParcelDenormalize, ListingRepository,
+    CardSearchQuery, ListingCardSummary, ListingDetail, ListingMarkerCount, ListingMarkerDeltas,
+    ListingMarkerMask, ListingMarkerMaskQuery, ListingMarkerOverlayTileQuery,
+    ListingMarkerRegisteredFilter, ListingMarkerTile, ListingMarkerTileQuery,
+    ListingMarkerTombstones, ListingParcelDenormalize, ListingRepository,
     NormalizedListingMarkerFilterSpec, RepoError,
 };
 use shared_kernel::id::{Id, ListingMarker as ListingIdMarker, UserMarker};
@@ -15,8 +16,8 @@ use tracing::instrument;
 
 use super::rows::{row_to_listing, LISTING_FULL_COLUMNS};
 use super::{
-    card_summaries, detail, marker_count, marker_filter_registry, marker_mask, marker_projection,
-    marker_tile, persistence, PgListingRepository,
+    card_summaries, detail, marker_count, marker_delta, marker_filter_registry, marker_mask,
+    marker_projection, marker_tile, marker_tombstone, persistence, PgListingRepository,
 };
 use crate::error_map::map_sqlx_err;
 
@@ -66,6 +67,32 @@ impl ListingRepository for PgListingRepository {
         query: ListingMarkerMaskQuery,
     ) -> Result<ListingMarkerMask, RepoError> {
         marker_mask::find_listing_marker_mask(&self.pool, query).await
+    }
+
+    #[instrument(skip(self), fields(
+        z = query.z,
+        x = query.x,
+        y = query.y,
+        base_version = ?query.base_version,
+    ))]
+    async fn find_listing_marker_tombstones(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerTombstones, RepoError> {
+        marker_tombstone::find_listing_marker_tombstones(&self.pool, query).await
+    }
+
+    #[instrument(skip(self), fields(
+        z = query.z,
+        x = query.x,
+        y = query.y,
+        base_version = ?query.base_version,
+    ))]
+    async fn find_listing_marker_deltas(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerDeltas, RepoError> {
+        marker_delta::find_listing_marker_deltas(&self.pool, query).await
     }
 
     #[instrument(skip(self), fields(listing_id = %id.as_str()))]

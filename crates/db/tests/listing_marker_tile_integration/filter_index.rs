@@ -1,7 +1,7 @@
 use db::listing::PgListingRepository;
 use listing_domain::repository::{
     ListingMarkerFilter, ListingMarkerFilterSpec, ListingMarkerMaskEncoding,
-    ListingMarkerMaskQuery, ListingRepository,
+    ListingMarkerMaskQuery, ListingMarkerOverlayTileQuery, ListingRepository,
 };
 use shared_kernel::listing_type::ListingType;
 use shared_kernel::transaction_type::TransactionType;
@@ -125,4 +125,84 @@ async fn listing_marker_mask_returns_show_ids_for_loaded_tile() {
     assert_eq!(mask.marker_ids, vec![format!("lm_{}", listing.id.as_str())]);
     assert_eq!(mask.projection_version, Some(1));
     assert_eq!(mask.anchor_snapshot_id.as_deref(), Some("snapshot-test-v1"));
+}
+
+#[tokio::test]
+async fn listing_marker_tombstones_returns_ids_for_loaded_tile() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-tombstone-api",
+        "marker-tombstone-api@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100180000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Tombstone API listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+    listing.mark_sold(chrono::Utc::now()).unwrap();
+    repo.save(
+        &listing,
+        shared_kernel::mutation::MutationContext::new_user_action(
+            owner.clone(),
+            "corr-marker-tombstone-api",
+            "mark_sold",
+        ),
+    )
+    .await
+    .unwrap();
+
+    let tombstones = repo
+        .find_listing_marker_tombstones(
+            ListingMarkerOverlayTileQuery::try_new(0, 0, 0, None).unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        tombstones.marker_ids,
+        vec![format!("lm_{}", listing.id.as_str())]
+    );
+    assert_eq!(tombstones.projection_version, Some(2));
+    assert_eq!(
+        tombstones.anchor_snapshot_id.as_deref(),
+        Some("snapshot-test-v1")
+    );
+}
+
+#[tokio::test]
+async fn listing_marker_deltas_returns_recent_public_features_for_loaded_tile() {
+    let _guard = lock_marker_tile_tests().await;
+    let pool = setup_test_pool().await;
+    truncate_all(&pool).await;
+    let owner = seed_owner(
+        &pool,
+        "zsub-marker-delta-api",
+        "marker-delta-api@example.com",
+    )
+    .await;
+    let repo = PgListingRepository::new(pool.clone());
+    let pnu = "1111010100100210000";
+    seed_anchor(&pool, pnu).await;
+
+    let mut listing = make_listing(owner.clone(), pnu, "Delta API listing");
+    activate_listing(&repo, &mut listing, &owner).await;
+
+    let deltas = repo
+        .find_listing_marker_deltas(ListingMarkerOverlayTileQuery::try_new(0, 0, 0, None).unwrap())
+        .await
+        .unwrap();
+
+    assert!(!deltas.bytes.is_empty());
+    assert_eq!(deltas.layer_name, "listing_delta");
+    assert_eq!(deltas.feature_count, 1);
+    assert_eq!(deltas.projection_version, Some(1));
+    assert_eq!(
+        deltas.anchor_snapshot_id.as_deref(),
+        Some("snapshot-test-v1")
+    );
 }

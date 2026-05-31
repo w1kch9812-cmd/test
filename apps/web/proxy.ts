@@ -111,8 +111,12 @@ function resolvePublicMapPath(pathSource: string): string {
       return API.proxy.listingMarkerCounts;
     case "API.proxy.listingMarkerFilters":
       return API.proxy.listingMarkerFilters;
+    case "API.proxy.listingMarkerDeltasPrefix":
+      return API.proxy.listingMarkerDeltasPrefix;
     case "LISTING_MARKER_MASK_PREFIX":
       return LISTING_MARKER_MASK_PREFIX;
+    case "API.proxy.listingMarkerTombstonesPrefix":
+      return API.proxy.listingMarkerTombstonesPrefix;
     default:
       throw new Error(`Unknown public map route policy path source: ${pathSource}`);
   }

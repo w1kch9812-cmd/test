@@ -139,6 +139,28 @@ export const GENERATED_PUBLIC_MAP_ROUTE_POLICIES: readonly GeneratedPublicMapRou
     },
     rate: { keyPrefix: "public-map:listing-marker-mask", limit: 120, windowSec: 60 },
   },
+  {
+    kind: "prefix",
+    pathSource: "API.proxy.listingMarkerTombstonesPrefix",
+    exposure: {
+      class: "public_derived",
+      allowedDataClasses: ["marker_id_mask"],
+      rawRecordAccess: "forbidden",
+      bulkExport: "forbidden",
+    },
+    rate: { keyPrefix: "public-map:listing-marker-tombstone", limit: 120, windowSec: 60 },
+  },
+  {
+    kind: "prefix",
+    pathSource: "API.proxy.listingMarkerDeltasPrefix",
+    exposure: {
+      class: "public_derived",
+      allowedDataClasses: ["derived_marker_tile"],
+      rawRecordAccess: "forbidden",
+      bulkExport: "forbidden",
+    },
+    rate: { keyPrefix: "public-map:listing-marker-delta", limit: 120, windowSec: 60 },
+  },
 ];
 
 export type GeneratedApiProxyRoutePolicy = {
@@ -181,6 +203,20 @@ export const GENERATED_API_PROXY_ROUTE_POLICIES: readonly GeneratedApiProxyRoute
   {
     kind: "template",
     targetPath: "map/v1/marker-masks/listing/:z/:x/:y",
+    methods: ["GET"],
+    exposureClass: "public_derived",
+    requiredRoles: [],
+  },
+  {
+    kind: "template",
+    targetPath: "map/v1/marker-tombstones/listing/:z/:x/:y",
+    methods: ["GET"],
+    exposureClass: "public_derived",
+    requiredRoles: [],
+  },
+  {
+    kind: "template",
+    targetPath: "map/v1/marker-deltas/listing/:z/:x/:y_pbf",
     methods: ["GET"],
     exposureClass: "public_derived",
     requiredRoles: [],

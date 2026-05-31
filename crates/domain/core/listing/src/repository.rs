@@ -73,6 +73,31 @@ pub trait ListingRepository: Send + Sync {
         query: ListingMarkerMaskQuery,
     ) -> Result<ListingMarkerMask, RepoError>;
 
+    /// Return marker ids that must be hidden for a loaded listing marker tile.
+    ///
+    /// Tombstones prevent deleted, sold, rejected, expired, or private markers from remaining
+    /// visible while cached base tiles age out.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the projection index query fails.
+    async fn find_listing_marker_tombstones(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerTombstones, RepoError>;
+
+    /// Return recent public marker changes for a loaded listing marker tile.
+    ///
+    /// Delta overlays improve write freshness before the base tile cache or artifact is refreshed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RepoError::Database`] when the projection index query fails.
+    async fn find_listing_marker_deltas(
+        &self,
+        query: ListingMarkerOverlayTileQuery,
+    ) -> Result<ListingMarkerDeltas, RepoError>;
+
     /// Upsert the listing marker serving projection from listing semantics and PNU anchor data.
     ///
     /// The projection is not a coordinate source of truth. Marker position must be copied from
@@ -267,11 +292,17 @@ pub struct ListingCardSummary {
 /// Gongzzang listing marker vector-tile layer name.
 pub const LISTING_MARKER_TILE_LAYER: &str = "listing";
 
+/// Gongzzang listing marker delta vector-tile layer name.
+pub const LISTING_MARKER_DELTA_TILE_LAYER: &str = "listing_delta";
+
 /// Marker tile response content type.
 pub const LISTING_MARKER_TILE_CONTENT_TYPE: &str = "application/vnd.mapbox-vector-tile";
 
 /// Minimum zoom accepted by the Gongzzang listing marker tile API.
-pub const LISTING_MARKER_TILE_MIN_ZOOM: u8 = 14;
+pub const LISTING_MARKER_TILE_MIN_ZOOM: u8 = 0;
+
+/// Lowest zoom where exact listing marker features are preferred.
+pub const LISTING_MARKER_TILE_EXACT_MIN_ZOOM: u8 = 14;
 
 /// Maximum zoom accepted by the listing marker tile API.
 pub const LISTING_MARKER_TILE_MAX_ZOOM: u8 = 22;
@@ -416,6 +447,77 @@ pub struct ListingMarkerMask {
     pub anchor_snapshot_id: Option<String>,
 }
 
+/// Query for listing marker overlay records addressed by tile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerOverlayTileQuery {
+    /// Web mercator zoom.
+    pub z: u8,
+    /// Web mercator x coordinate.
+    pub x: u32,
+    /// Web mercator y coordinate.
+    pub y: u32,
+    /// Projection version of the already loaded base tile.
+    pub base_version: Option<i64>,
+}
+
+impl ListingMarkerOverlayTileQuery {
+    /// Validate public overlay tile-coordinate input.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ListingMarkerTileQueryError`] when zoom or axis values are outside the vector-tile
+    /// coordinate range.
+    pub fn try_new(
+        z: u8,
+        x: u32,
+        y: u32,
+        base_version: Option<i64>,
+    ) -> Result<Self, ListingMarkerTileQueryError> {
+        if z > LISTING_MARKER_TILE_MAX_ZOOM {
+            return Err(ListingMarkerTileQueryError::InvalidZoom { z });
+        }
+        let axis_limit = 1_u32 << u32::from(z);
+        if x >= axis_limit {
+            return Err(ListingMarkerTileQueryError::InvalidX { z, x });
+        }
+        if y >= axis_limit {
+            return Err(ListingMarkerTileQueryError::InvalidY { z, y });
+        }
+        Ok(Self {
+            z,
+            x,
+            y,
+            base_version,
+        })
+    }
+}
+
+/// Listing marker tombstone overlay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerTombstones {
+    /// Marker ids that must be hidden by the client.
+    pub marker_ids: Vec<String>,
+    /// Highest projection version represented by this tombstone response.
+    pub projection_version: Option<i64>,
+    /// Highest anchor snapshot identity represented by this tombstone response.
+    pub anchor_snapshot_id: Option<String>,
+}
+
+/// Listing marker delta overlay.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingMarkerDeltas {
+    /// MVT/PBF response bytes for recently changed public markers.
+    pub bytes: Vec<u8>,
+    /// MVT source-layer name.
+    pub layer_name: &'static str,
+    /// Number of changed marker features represented.
+    pub feature_count: i64,
+    /// Highest projection version represented by this delta response.
+    pub projection_version: Option<i64>,
+    /// Highest anchor snapshot identity represented by this delta response.
+    pub anchor_snapshot_id: Option<String>,
+}
+
 /// Exact listing marker count and projection metadata for a normalized filter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListingMarkerCount {
@@ -497,4 +599,16 @@ pub enum RepoError {
     /// DB 통신/SQL 에러 (정보 누설 방지로 메시지만).
     #[error("database error: {0}")]
     Database(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ListingMarkerOverlayTileQuery;
+
+    #[test]
+    fn listing_marker_overlay_query_rejects_out_of_range_tiles() {
+        assert!(ListingMarkerOverlayTileQuery::try_new(23, 0, 0, None).is_err());
+        assert!(ListingMarkerOverlayTileQuery::try_new(4, 16, 0, None).is_err());
+        assert!(ListingMarkerOverlayTileQuery::try_new(4, 0, 16, None).is_err());
+    }
 }
