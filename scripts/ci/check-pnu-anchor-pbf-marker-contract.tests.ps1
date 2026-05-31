@@ -299,7 +299,7 @@ failure_reason
 import_anchor_rows
 listing_marker_projection
 '@
-    Write-File -Root $Root -RelativePath "crates\db\tests\listing_marker_tile_integration.rs" -Content @'
+    Write-File -Root $Root -RelativePath "crates\db\tests\listing_marker_tile_integration\tiles.rs" -Content @'
 listing_marker_tile_represents_every_active_listing_on_same_pnu
 listing_marker_save_rejects_active_listing_without_anchor
 ListingMarkerTileQuery
@@ -307,6 +307,8 @@ ListingMarkerFilter::AllActive
 missing PNU anchor
 feature_count
 aggregate_count
+'@
+    Write-File -Root $Root -RelativePath "crates\db\tests\listing_marker_tile_integration\projection.rs" -Content @'
 listing_marker_projection_upsert_uses_platform_core_anchor_snapshot
 listing_marker_tile_applies_normalized_filter_spec
 '@
