@@ -1,0 +1,3 @@
+name: gongzzang-infrastructure
+runtime: nodejs
+description: Gongzzang infrastructure managed by Pulumi.

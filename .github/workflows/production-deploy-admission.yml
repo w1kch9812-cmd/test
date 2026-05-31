@@ -1,0 +1,145 @@
+name: Production Deploy Admission
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        type: string
+        required: false
+        default: supply-chain-release-candidates
+      run-id:
+        type: string
+        required: true
+      load-evidence-run-id:
+        type: string
+        required: true
+      load-evidence-artifact-name:
+        type: string
+        required: false
+        default: load-test-capacity-evidence
+      repository:
+        type: string
+        required: false
+        default: ""
+      web-artifact-path:
+        type: string
+        required: false
+        default: target/supply-chain/gongzzang-web-next-build.tgz
+      api-artifact-path:
+        type: string
+        required: false
+        default: target/release/api
+  workflow_dispatch:
+    inputs:
+      artifact-name:
+        type: string
+        required: false
+        default: supply-chain-release-candidates
+      run-id:
+        type: string
+        required: true
+        description: GitHub Actions run id that produced the attested release candidate artifact.
+      load-evidence-run-id:
+        type: string
+        required: true
+        description: GitHub Actions run id that produced accepted perf/staging load-test capacity evidence.
+      load-evidence-artifact-name:
+        type: string
+        required: false
+        default: load-test-capacity-evidence
+        description: Load-test capacity evidence artifact name from the approved load-test workflow.
+      repository:
+        type: string
+        required: false
+        default: ""
+        description: Owner/repository to verify attestations against. Defaults to this repository.
+      web-artifact-path:
+        type: string
+        required: false
+        default: target/supply-chain/gongzzang-web-next-build.tgz
+      api-artifact-path:
+        type: string
+        required: false
+        default: target/release/api
+
+permissions:
+  contents: read
+  actions: read
+  attestations: read
+
+jobs:
+  verify-production-deploy-candidates:
+    name: Verify production deploy candidates
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2 (Round 5 SHA pin, ADR 0028)
+
+      - name: Download release candidates
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0 (Round 5 SHA pin, ADR 0028)
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: .
+          run-id: ${{ inputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+        with: { version: 9.12.0 }
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.1.0 (Round 5 SHA pin, ADR 0028)
+        with:
+          node-version: 20.18
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify provenance and SBOM attestations
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ADMISSION_REPOSITORY: ${{ inputs.repository || github.repository }}
+          WEB_ARTIFACT_PATH: ${{ inputs.web-artifact-path }}
+          API_ARTIFACT_PATH: ${{ inputs.api-artifact-path }}
+        run: |
+          ./scripts/ci/verify-production-deploy-candidate.ps1 `
+            -ArtifactPath $env:WEB_ARTIFACT_PATH `
+            -Repository $env:ADMISSION_REPOSITORY
+
+          ./scripts/ci/verify-production-deploy-candidate.ps1 `
+            -ArtifactPath $env:API_ARTIFACT_PATH `
+            -Repository $env:ADMISSION_REPOSITORY
+
+          ./scripts/ci/verify-production-deploy-candidate.ps1 `
+            -ArtifactPath $env:WEB_ARTIFACT_PATH `
+            -Repository $env:ADMISSION_REPOSITORY `
+            -PredicateType https://cyclonedx.org/bom
+
+          ./scripts/ci/verify-production-deploy-candidate.ps1 `
+            -ArtifactPath $env:API_ARTIFACT_PATH `
+            -Repository $env:ADMISSION_REPOSITORY `
+            -PredicateType https://cyclonedx.org/bom
+
+      - name: Download load-test capacity evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0 (Round 5 SHA pin, ADR 0028)
+        with:
+          name: ${{ inputs.load-evidence-artifact-name }}
+          path: target/admission/load-test-capacity-evidence
+          run-id: ${{ inputs.load-evidence-run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify load-test capacity evidence
+        shell: pwsh
+        run: >
+          ./scripts/ci/verify-load-test-capacity-evidence.ps1
+          -EvidenceRoot target/admission/load-test-capacity-evidence
+
+      - name: Verify production edge admission
+        shell: pwsh
+        env:
+          GONGZZANG_EDGE_ATTACHMENT_MODE: ${{ vars.GONGZZANG_EDGE_ATTACHMENT_MODE || 'REGIONAL' }}
+          GONGZZANG_WAF_REGIONAL_RESOURCE_ARN: ${{ vars.GONGZZANG_WAF_REGIONAL_RESOURCE_ARN }}
+          GONGZZANG_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.GONGZZANG_CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          ./scripts/ci/check-production-edge-admission.ps1 `
+            -Root . `
+            -RequirePulumiAssociationPreview
