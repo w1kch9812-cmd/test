@@ -36,6 +36,8 @@ $requiredFiles = @(
     "tests/load/scenarios/platform-core-events.js",
     "scripts/load/run-k6.ps1",
     "scripts/load/normalize-k6-summary.ps1",
+    "docs/research/2026-05-29-load-test-result.md",
+    "docs/research/2026-05-29-local-sizing-test-results.md",
     ".github/workflows/load-test-capacity.yml",
     ".github/workflows/ci.yml"
 )
@@ -76,6 +78,7 @@ $requiredSafetyRules = @(
     '- Do not run tests that consume VWorld or OpenDataPortal quota from Gongzzang.',
     '- Do not test with production PII.',
     '- Do not log Authorization, Cookie, Set-Cookie, Platform Core service tokens, or webhook secrets.',
+    '- Do not treat local/ci smoke or host-process sizing results as launch capacity evidence.',
     '- Do not claim a launch spec without evidence under `target/audit/load-tests`.'
 )
 $loadManual = Read-Text "docs/testing/load.md"
@@ -190,7 +193,7 @@ if ($eventScenario.Contains("poison") -or $eventScenario.Contains("unsupported")
 }
 
 $launcher = Read-Text "scripts/load/run-k6.ps1"
-foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "LOAD_FILTER_HASH_MISS", "LOAD_MARKER_MISS_X", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "normalize-k6-summary.ps1")) {
+foreach ($needle in @("target\audit\load-tests", "Assert-ApprovedTarget", "Assert-MaxSafeRps", "LOAD_APPROVED_TARGET_HOSTS", "LOAD_FILTER_HASH_MISS", "LOAD_MARKER_MISS_X", "IsDefaultPort", "non-local load-test targets must use the default https port", "summary-export", "--summary-trend-stats", "p(99)", "normalize-k6-summary.ps1")) {
     if (!$launcher.Contains($needle)) {
         throw "load-test launcher missing required token: $needle"
     }
@@ -206,6 +209,29 @@ $normalizer = Read-Text "scripts/load/normalize-k6-summary.ps1"
 foreach ($needle in @("bottleneck.md", "recommendation.md", "baseline-comparison.md", "healthy", "latency breakpoint", "error breakpoint", "exit 1")) {
     if (!$normalizer.Contains($needle)) {
         throw "load-test normalizer missing required token: $needle"
+    }
+}
+
+$loadResultReport = Read-Text "docs/research/2026-05-29-load-test-result.md"
+foreach ($needle in @(
+    "does not establish a production launch capacity spec.",
+    'Classification: `error breakpoint`',
+    "must not be used for launch sizing.",
+    "A real perf/staging operator run remains required before any launch sizing"
+)) {
+    if (!$loadResultReport.Contains($needle)) {
+        throw "load result report launch-capacity warning missing required token: $needle"
+    }
+}
+
+$localSizingReport = Read-Text "docs/research/2026-05-29-local-sizing-test-results.md"
+foreach ($needle in @(
+    "This is not production launch sizing evidence.",
+    "Not covered: Gongzzang Rust API, Gongzzang legacy API, AWS Fargate/RDS hard",
+    "real perf/staging operator run remains required before any launch"
+)) {
+    if (!$localSizingReport.Contains($needle)) {
+        throw "local sizing report launch-capacity warning missing required token: $needle"
     }
 }
 

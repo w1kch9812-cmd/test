@@ -31,7 +31,8 @@ function Write-MinimalLoadAssets(
     [switch] $MissingOperatorControls,
     [switch] $MissingCiGuardrail,
     [switch] $UnsafeBboxScenario,
-    [switch] $MissingWebhookSigning
+    [switch] $MissingWebhookSigning,
+    [switch] $MissingLaunchCapacityWarning
 ) {
     $target = if ($UnsafeProductionTarget) { "https://gongzzang.com" } else { "https://perf.gongzzang.internal" }
     $scenarios = if ($EmptyScenarios) {
@@ -51,6 +52,7 @@ function Write-MinimalLoadAssets(
         "- Do not run tests that consume VWorld or OpenDataPortal quota from Gongzzang.",
         "- Do not test with production PII.",
         "- Do not log Authorization, Cookie, Set-Cookie, Platform Core service tokens, or webhook secrets.",
+        "- Do not treat local/ci smoke or host-process sizing results as launch capacity evidence.",
         "- Do not claim a launch spec without evidence under ``target/audit/load-tests``."
     )
     if ($MissingSafetyRule) {
@@ -93,9 +95,45 @@ function Write-MinimalLoadAssets(
         "/platform-core/events`ncatalog.industrial_complex.gold_pointer.published.v1`ncomplex_id`ncurrent_version`nsource_snapshot_id`niceberg_snapshot_id`nx-platform-core-event-id`nx-platform-core-event-type`nx-platform-core-outbox-scope`n"
     }
     Write-File $Root "tests\load\scenarios\platform-core-events.js" $webhookScenario
-    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nLOAD_FILTER_HASH_MISS`nLOAD_MARKER_MISS_X`nIsDefaultPort`nnon-local load-test targets must use the default https port`nsummary-export`nnormalize-k6-summary.ps1`n"
+    Write-File $Root "scripts\load\run-k6.ps1" "target\audit\load-tests`nAssert-ApprovedTarget`nAssert-MaxSafeRps`nLOAD_APPROVED_TARGET_HOSTS`nLOAD_AUTH_BEARER_TOKEN`nLOAD_FILTER_HASH_MISS`nLOAD_MARKER_MISS_X`nIsDefaultPort`nnon-local load-test targets must use the default https port`nsummary-export`n--summary-trend-stats`np(99)`nnormalize-k6-summary.ps1`n"
     Write-File $Root "scripts\load\normalize-k6-summary.ps1" "bottleneck.md`nrecommendation.md`nbaseline-comparison.md`nhealthy`nlatency breakpoint`nerror breakpoint`nexit 1`n"
     Write-File $Root ".github\workflows\load-test-capacity.yml" "workflow_dispatch`nruns-on: [self-hosted, load-test]`nupload-artifact`ntarget/audit/load-tests`nLOAD_INPUT_TARGET`n`$env:LOAD_INPUT_TARGET`nLOAD_INPUT_SCENARIO`n`$env:LOAD_INPUT_SCENARIO`n"
+    $loadResultReport = if ($MissingLaunchCapacityWarning) {
+        "# Load Test Result`n`nThis run verifies the evidence pipeline.`n"
+    } else {
+        @"
+# Load Test Result
+
+This run verifies the evidence pipeline for the Gongzzang load-test harness. It
+does not establish a production launch capacity spec.
+
+Classification: ``error breakpoint``
+
+The run is useful as a harness smoke test because it produced the required
+evidence files, but it must not be used for launch sizing.
+
+A real perf/staging operator run remains required before any launch sizing
+claim.
+"@
+    }
+    Write-File $Root "docs\research\2026-05-29-load-test-result.md" $loadResultReport
+    $localSizingReport = if ($MissingLaunchCapacityWarning) {
+        "# Local Sizing Test Results`n`nLocal host-process measurements only.`n"
+    } else {
+        @"
+# Local Sizing Test Results
+
+This is not production launch sizing evidence.
+
+Not covered: Gongzzang Rust API, Gongzzang legacy API, AWS Fargate/RDS hard
+limits, nationwide anchor/read-model data, Bronze normalization workers.
+
+Accepted claim: Platform Core local route smoke looked healthy on the local
+fixture, but a real perf/staging operator run remains required before any launch
+sizing claim.
+"@
+    }
+    Write-File $Root "docs\research\2026-05-29-local-sizing-test-results.md" $localSizingReport
     $ciContent = if ($MissingCiGuardrail) {
         "name: CI`n"
     } else {
@@ -168,6 +206,14 @@ try {
     if ($missingWebhookHeaders.ExitCode -eq 0) { throw "expected missing webhook headers fixture to fail" }
     if (!$missingWebhookHeaders.Output.Contains("platform-core event scenario missing required token")) {
         throw "expected webhook header error, got: $($missingWebhookHeaders.Output)"
+    }
+
+    $missingLaunchCapacityWarningRoot = Join-Path $TempRoot "missing-launch-capacity-warning"
+    Write-MinimalLoadAssets $missingLaunchCapacityWarningRoot -MissingLaunchCapacityWarning
+    $missingLaunchCapacityWarning = Invoke-Checker $missingLaunchCapacityWarningRoot
+    if ($missingLaunchCapacityWarning.ExitCode -eq 0) { throw "expected missing launch-capacity warning fixture to fail" }
+    if (!$missingLaunchCapacityWarning.Output.Contains("launch-capacity warning")) {
+        throw "expected launch-capacity warning error, got: $($missingLaunchCapacityWarning.Output)"
     }
 
     Write-Output "check-load-test-assets-tests-ok"
