@@ -48,7 +48,7 @@ Fresh local verification in the current workspace:
 | `pnpm --filter @gongzzang/web test` | 45 files passed, 194 passed, 1 skipped |
 | `pnpm --filter @gongzzang/web typecheck` | Passed |
 | `pnpm lint` | Passed |
-| `pnpm markdownlint-cli2 docs/superpowers/plans/2026-05-31-gongzzang-marker-data-plane-sss.md docs/testing/playwright-runtime.md` | 0 errors |
+| `pnpm markdownlint-cli2 docs/superpowers/plans/2026-05-31-gongzzang-marker-data-plane-sss.md docs/superpowers/plans/2026-05-31-gongzzang-marker-data-plane-sss.part-*.md docs/testing/playwright-runtime.md` | 0 errors |
 | `CI=1 pnpm --filter @gongzzang/web exec playwright test` | 15 passed, 4 skipped |
 | `check-pnu-anchor-pbf-marker-contract.ps1` and `.tests.ps1` | Passed |
 | `check-traffic-auth-policy-registry.ps1`, `.tests.ps1`, and `-IncludeProductionEdge` | Passed |
