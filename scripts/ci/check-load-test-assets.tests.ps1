@@ -196,7 +196,7 @@ try {
     Write-MinimalLoadAssets $unsafeBboxRoot -UnsafeBboxScenario
     $unsafeBbox = Invoke-Checker $unsafeBboxRoot
     if ($unsafeBbox.ExitCode -eq 0) { throw "expected unsafe bbox fixture to fail" }
-    if (!$unsafeBbox.Output.Contains("bbox") -or !$unsafeBbox.Output.Contains("request shapes")) {
+    if (!$unsafeBbox.Output.Contains("bbox") -or !$unsafeBbox.Output.Contains("bounds")) {
         throw "expected bbox guardrail error, got: $($unsafeBbox.Output)"
     }
 
