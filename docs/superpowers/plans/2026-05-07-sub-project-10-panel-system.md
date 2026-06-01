@@ -4,7 +4,7 @@
 
 ## Parts
 
-- [Part 01](./2026-05-07-sub-project-10-panel-system.part-01.md) - 838 lines
-- [Part 02](./2026-05-07-sub-project-10-panel-system.part-02.md) - 856 lines
-- [Part 03](./2026-05-07-sub-project-10-panel-system.part-03.md) - 885 lines
-- [Part 04](./2026-05-07-sub-project-10-panel-system.part-04.md) - 615 lines
+- [Part 01](./2026-05-07-sub-project-10-panel-system.part-01.md) - split index
+- [Part 02](./2026-05-07-sub-project-10-panel-system.part-02.md) - split index
+- [Part 03](./2026-05-07-sub-project-10-panel-system.part-03.md) - split index
+- [Part 04](./2026-05-07-sub-project-10-panel-system.part-04.md) - split index
