@@ -47,6 +47,17 @@ export const GENERATED_AUTH_RATE_ROUTE_POLICIES: readonly GeneratedAuthRateRoute
       problemType: "auth/too-many-requests",
     },
   },
+  {
+    pathSource: "API.auth.logout",
+    methods: ["POST", "GET"],
+    rate: {
+      keyPrefix: "auth:logout",
+      keyStrategy: "client_ip",
+      limit: 30,
+      windowSec: 60,
+      problemType: "auth/too-many-requests",
+    },
+  },
 ];
 
 export type GeneratedPageRoutePolicy = {

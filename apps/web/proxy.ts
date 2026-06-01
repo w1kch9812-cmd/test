@@ -87,6 +87,8 @@ function resolveAuthPath(pathSource: string): string {
       return API.auth.callback;
     case "API.auth.refresh":
       return API.auth.refresh;
+    case "API.auth.logout":
+      return API.auth.logout;
     default:
       throw new Error(`Unknown auth rate route policy path source: ${pathSource}`);
   }

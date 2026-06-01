@@ -221,8 +221,29 @@ function Resolve-AuthPathSource {
         "API.auth.login" { return "/api/auth/login" }
         "API.auth.callback" { return "/api/auth/callback" }
         "API.auth.refresh" { return "/api/auth/refresh" }
+        "API.auth.logout" { return "/api/auth/logout" }
         default { throw "Unsupported auth path source '$PathSource'" }
     }
+}
+
+function Get-AuthPathSourcesFromRoutesTs {
+    param([string] $Content)
+    $sources = New-Object System.Collections.Generic.List[string]
+    $matches = [regex]::Matches($Content, '(?m)^\s*([A-Za-z][A-Za-z0-9_]*)\s*:\s*"/api/auth/[^"]+"')
+    foreach ($match in $matches) {
+        $sources.Add("API.auth.$($match.Groups[1].Value)")
+    }
+    return @($sources.ToArray() | Sort-Object -Unique)
+}
+
+function Get-AxumRoutePaths {
+    param([string] $Content)
+    $paths = New-Object System.Collections.Generic.List[string]
+    $matches = [regex]::Matches($Content, '\.route\s*\(\s*"([^"]+)"', [System.Text.RegularExpressions.RegexOptions]::Singleline)
+    foreach ($match in $matches) {
+        $paths.Add([string] $match.Groups[1].Value)
+    }
+    return @($paths.ToArray() | Sort-Object -Unique)
 }
 
 function Format-TsStringArray {
@@ -318,6 +339,7 @@ Assert-Equals -Actual $publicRoutes.Count -Expected 6 -Message "public_route_pol
 Assert-Unique -Values ($publicRoutes | ForEach-Object { $_.id }) -Message "public route policy ids must be unique"
 
 $proxy = Read-TextFile -RelativePath "apps/web/proxy.ts"
+$routesTs = Read-TextFile -RelativePath "apps/web/lib/routes.ts"
 $apiProxyRoute = Read-TextFile -RelativePath "apps/web/app/api/proxy/[...path]/route.ts"
 $tsGenerated = Read-TextFile -RelativePath "apps/web/lib/policies/traffic-auth-policy.generated.ts"
 $rustGenerated = Read-TextFile -RelativePath "services/api/src/listing_marker_policy.rs"
@@ -518,6 +540,15 @@ if ($backendRoutePolicies.Count -eq 0) {
     throw "backend_route_policies must not be empty"
 }
 Assert-Unique -Values ($backendRoutePolicies | ForEach-Object { $_.id }) -Message "backend route policy ids must be unique"
+$backendRoutePolicyPathSet = @{}
+foreach ($routePolicy in $backendRoutePolicies) {
+    $backendRoutePolicyPathSet[[string] $routePolicy.path] = $true
+}
+foreach ($rustRoutePath in (Get-AxumRoutePaths -Content $apiRouteSources)) {
+    if (!$backendRoutePolicyPathSet.ContainsKey($rustRoutePath)) {
+        throw "backend_route_policies missing Rust route path: $rustRoutePath"
+    }
+}
 
 $routeRateProfiles = @(Get-RequiredProperty `
         -Object $registry `
@@ -562,6 +593,17 @@ if ($authRoutePolicies.Count -eq 0) {
 }
 Assert-Unique -Values ($authRoutePolicies | ForEach-Object { $_.id }) -Message "auth route policy ids must be unique"
 Assert-Contains -Content $tsGenerated -Needle "GENERATED_AUTH_RATE_ROUTE_POLICIES" -Message "generated TS auth rate policies"
+$authPathSourcesFromRoutes = @(Get-AuthPathSourcesFromRoutesTs -Content $routesTs)
+if ($authPathSourcesFromRoutes.Count -eq 0) {
+    throw "apps/web/lib/routes.ts auth route sources missing"
+}
+foreach ($pathSourceFromRoutes in $authPathSourcesFromRoutes) {
+    $matchingAuthRoutePolicy = @($authRoutePolicies | Where-Object { [string] $_.path_source -eq $pathSourceFromRoutes })
+    if ($matchingAuthRoutePolicy.Count -eq 0) {
+        throw "auth_route_policies missing routes.ts auth path source: $pathSourceFromRoutes"
+    }
+    Assert-Contains -Content $proxy -Needle $pathSourceFromRoutes -Message "proxy auth path source for $pathSourceFromRoutes"
+}
 $edgeAuthRules = @()
 if ($IncludeProductionEdge) {
     $edgeAuthRules = @($edgeProjection.auth_route_rules)
@@ -585,7 +627,7 @@ foreach ($routePolicy in $authRoutePolicies) {
     }
 
     $pathSource = [string] $routePolicy.path_source
-    if (!(@("API.auth.login", "API.auth.callback", "API.auth.refresh") -contains $pathSource)) {
+    if (!($authPathSourcesFromRoutes -contains $pathSource)) {
         throw "auth route policy path_source invalid for $($routePolicy.id): $pathSource"
     }
 

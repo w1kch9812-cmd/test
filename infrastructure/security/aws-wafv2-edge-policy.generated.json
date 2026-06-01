@@ -94,6 +94,18 @@
         "path": "/api/auth/callback",
         "path_source": "API.auth.callback"
       }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.logout",
+      "priority": 1080,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 150,
+      "match": {
+        "path_match": "EXACT",
+        "methods": ["POST", "GET"],
+        "path": "/api/auth/logout",
+        "path_source": "API.auth.logout"
+      }
     }
   ],
   "blocked_query_shape_rules": [

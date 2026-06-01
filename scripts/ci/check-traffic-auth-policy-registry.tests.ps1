@@ -80,6 +80,7 @@ function Write-MinimalRepo {
         [switch] $OmitGeneratedAuthRatePolicies,
         [switch] $OmitGeneratedPageRoutePolicies,
         [switch] $OmitAuthRoutePolicies,
+        [switch] $OmitAuthLogoutPolicy,
         [switch] $OmitPageRoutePolicies,
         [switch] $AllowAdminListingPageRole,
         [switch] $OmitApiProxyRoutePolicies,
@@ -90,6 +91,7 @@ function Write-MinimalRepo {
         [switch] $OmitBackendRoutePolicies,
         [switch] $OmitBackendRateProfile,
         [switch] $OmitBackendProtectedAuthLayer,
+        [switch] $AddUnregisteredBackendRoute,
         [switch] $OmitGeneratedBackendRolePolicies,
         [switch] $OmitBackendAuthorizationLayer,
         [switch] $OmitGeneratedEdgePolicy,
@@ -122,6 +124,25 @@ function Write-MinimalRepo {
         ""
     } else {
         ",`n      $(New-DataExposurePolicyJson -AllowedDataClass "marker_id_mask")"
+    }
+    $authLogoutRoutePolicy = if ($OmitAuthLogoutPolicy) {
+        ""
+    } else {
+        @'
+,
+    {
+      "id": "gongzzang.auth.logout",
+      "path_source": "API.auth.logout",
+      "methods": ["POST", "GET"],
+      "rate_policy": {
+        "key_prefix": "auth:logout",
+        "key_strategy": "client_ip",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    }
+'@
     }
     $authRoutePolicies = if ($OmitAuthRoutePolicies) {
         ""
@@ -164,6 +185,7 @@ function Write-MinimalRepo {
         "problem_type": "auth/too-many-requests"
       }
     }
+'@ + $authLogoutRoutePolicy + @'
   ],
 '@
     }
@@ -278,6 +300,22 @@ function Write-MinimalRepo {
     } else {
         @"
   "backend_route_policies": [
+    {
+      "id": "gongzzang.backend.health_liveness",
+      "path": "/healthz",
+      "methods": ["GET"],
+      "router_group": "public_health",
+      "exposure_class": "public_health",
+      "auth_policy": "anonymous_public"
+    },
+    {
+      "id": "gongzzang.backend.health_readiness",
+      "path": "/healthz/ready",
+      "methods": ["GET"],
+      "router_group": "public_health",
+      "exposure_class": "public_health",
+      "auth_policy": "anonymous_public"
+    },
     {
       "id": "gongzzang.backend.public_marker_tiles",
       "path": "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
@@ -515,6 +553,10 @@ getAuthRateRoutePolicy
 resolveAuthRateKey
 getPageRoutePolicy
 exposure: policy.exposure
+API.auth.login
+API.auth.callback
+API.auth.refresh
+API.auth.logout
 API.proxy.listingMarkerTilesPrefix
 API.proxy.listingMarkerCounts
 API.proxy.listingMarkerFilters
@@ -557,6 +599,15 @@ allowedDataClasses: ["marker_id_mask"]
     $generatedAuthRatePolicies = if ($OmitGeneratedAuthRatePolicies) {
         ""
     } else {
+        $generatedAuthLogoutRatePolicy = if ($OmitAuthLogoutPolicy) {
+            ""
+        } else {
+            @'
+API.auth.logout
+auth:logout
+limit: 30
+'@
+        }
         @'
 GENERATED_AUTH_RATE_ROUTE_POLICIES
 API.auth.login
@@ -572,7 +623,7 @@ limit: 10
 limit: 30
 windowSec: 60
 problemType: "auth/too-many-requests"
-'@
+'@ + "`n$generatedAuthLogoutRatePolicy"
     }
     $generatedPageRoutePolicies = if ($OmitGeneratedPageRoutePolicies) {
         ""
@@ -728,10 +779,46 @@ let internal: Router<()> = Router::new()
     .route("/internal/auth/event", axum::routing::post(routes::auth_event::post_auth_event))
     .with_state(auth_event_state);
 "@
+    if ($AddUnregisteredBackendRoute) {
+        Write-File -Root $Root -RelativePath "services\api\src\app.rs" -Content @"
+$backendAuthorizationLayer
+use crate::backend_rate_limit::{enforce_backend_rate_limit, RedisBackendRateLimiter};
+let backend_rate_limiter = RedisBackendRateLimiter::new(redis_pool.clone());
+let listing_marker_tiles_router: Router<()> = Router::new()
+    .route("/map/v1/marker-tiles/listing/:z/:x/:y_pbf", get(routes::listing_marker_tiles::get_listing_marker_tile))
+    .layer(middleware::from_fn_with_state(traffic_auth_policy::BACKEND_RATE_POLICIES, enforce_backend_rate_limit));
+let listings_router: Router<()> = Router::new()
+    .route("/listings", get(routes::listings::get_listings).post(routes::listings::create_listing))
+    .route("/listings/:id", get(routes::listings::get_listing).patch(routes::listings::patch_listing))
+    .route("/listings/:listing_id/photos/:photo_id", get(routes::listings::get_photo_download_redirect))
+    .route("/unregistered", get(routes::debug::unregistered))
+$backendAuthorizationLayerMount
+    .layer(middleware::from_fn_with_state(traffic_auth_policy::BACKEND_RATE_POLICIES, enforce_backend_rate_limit))
+    .layer(middleware::from_fn_with_state(auth_state.clone(), $protectedAuthLayer));
+let internal_auth_secret = build_internal_auth_secret(is_production)?;
+let internal: Router<()> = Router::new()
+    .route("/internal/auth/event", axum::routing::post(routes::auth_event::post_auth_event))
+    .with_state(auth_event_state);
+"@
+    }
     Write-File -Root $Root -RelativePath "services\api\src\routes\health.rs" -Content @'
 Router::new()
     .route("/healthz", get(liveness))
     .route("/healthz/ready", get(readiness))
+'@
+    Write-File -Root $Root -RelativePath "apps\web\lib\routes.ts" -Content @'
+export const API = {
+  auth: {
+    login: "/api/auth/login",
+    callback: "/api/auth/callback",
+    refresh: "/api/auth/refresh",
+    logout: "/api/auth/logout",
+  },
+};
+'@
+    Write-File -Root $Root -RelativePath "apps\web\app\api\auth\logout\route.ts" -Content @'
+export function POST() {}
+export function GET() {}
 '@
     Write-File -Root $Root -RelativePath "docs\architecture\platform-core-boundary.v1.json" -Content @'
 PLATFORM_CORE_SERVICE_TOKEN
@@ -863,6 +950,18 @@ direct_platform_core_database
       "rate": {
         "key_strategy": "session_or_anon",
         "key_prefix": "auth:refresh",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.logout",
+      "path_source": "API.auth.logout",
+      "methods": ["POST", "GET"],
+      "rate": {
+        "key_strategy": "client_ip",
+        "key_prefix": "auth:logout",
         "limit": 30,
         "window_seconds": 60,
         "problem_type": "auth/too-many-requests"
@@ -1042,6 +1141,18 @@ direct_platform_core_database
         "path_match": "EXACT",
         "methods": ["GET"]
       }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.logout",
+      "priority": 1060,
+      "aggregate_key_type": "IP",
+      "limit_per_5m": 150,
+      "match": {
+        "path": "/api/auth/logout",
+        "path_source": "API.auth.logout",
+        "path_match": "EXACT",
+        "methods": ["POST", "GET"]
+      }
     }
   ],
   "blocked_query_shape_rules": [],
@@ -1216,6 +1327,12 @@ try {
     Assert-Equals $missingGeneratedAuthRate.ExitCode 1 "missing generated auth rate exit code mismatch"
     Assert-Contains $missingGeneratedAuthRate.Output "generated TS auth rate"
 
+    $missingAuthLogoutPolicyRoot = Join-Path $TempRoot "missing-auth-logout-policy"
+    Write-MinimalRepo -Root $missingAuthLogoutPolicyRoot -OmitAuthLogoutPolicy
+    $missingAuthLogoutPolicy = Invoke-Checker -Root $missingAuthLogoutPolicyRoot
+    Assert-Equals $missingAuthLogoutPolicy.ExitCode 1 "missing auth logout policy exit code mismatch"
+    Assert-Contains $missingAuthLogoutPolicy.Output "API.auth.logout"
+
     $missingPageRoutePoliciesRoot = Join-Path $TempRoot "missing-page-route-policies"
     Write-MinimalRepo -Root $missingPageRoutePoliciesRoot -OmitPageRoutePolicies
     $missingPageRoutePolicies = Invoke-Checker -Root $missingPageRoutePoliciesRoot
@@ -1269,6 +1386,12 @@ try {
     $missingBackendRoutes = Invoke-Checker -Root $missingBackendRoutesRoot
     Assert-Equals $missingBackendRoutes.ExitCode 1 "missing backend route policies exit code mismatch"
     Assert-Contains $missingBackendRoutes.Output "backend_route_policies"
+
+    $unregisteredBackendRouteRoot = Join-Path $TempRoot "unregistered-backend-route"
+    Write-MinimalRepo -Root $unregisteredBackendRouteRoot -AddUnregisteredBackendRoute
+    $unregisteredBackendRoute = Invoke-Checker -Root $unregisteredBackendRouteRoot
+    Assert-Equals $unregisteredBackendRoute.ExitCode 1 "unregistered backend route exit code mismatch"
+    Assert-Contains $unregisteredBackendRoute.Output "/unregistered"
 
     $missingBackendRateRoot = Join-Path $TempRoot "missing-backend-rate-profile"
     Write-MinimalRepo -Root $missingBackendRateRoot -OmitBackendRateProfile

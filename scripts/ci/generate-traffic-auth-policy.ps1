@@ -395,6 +395,7 @@ function Resolve-AuthPathSource {
         "API.auth.login" { return "/api/auth/login" }
         "API.auth.callback" { return "/api/auth/callback" }
         "API.auth.refresh" { return "/api/auth/refresh" }
+        "API.auth.logout" { return "/api/auth/logout" }
         default { throw "Unsupported auth path source '$PathSource'" }
     }
 }

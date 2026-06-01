@@ -131,6 +131,18 @@
         "window_seconds": 60,
         "problem_type": "auth/too-many-requests"
       }
+    },
+    {
+      "source_policy_id": "gongzzang.auth.logout",
+      "path_source": "API.auth.logout",
+      "methods": ["POST", "GET"],
+      "rate": {
+        "key_strategy": "client_ip",
+        "key_prefix": "auth:logout",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
     }
   ],
   "api_proxy_route_rules": [

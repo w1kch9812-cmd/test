@@ -379,6 +379,19 @@
         "window_seconds": 60,
         "problem_type": "auth/too-many-requests"
       }
+    },
+    {
+      "id": "gongzzang.auth.logout",
+      "description": "Browser logout endpoint rate policy.",
+      "path_source": "API.auth.logout",
+      "methods": ["POST", "GET"],
+      "rate_policy": {
+        "key_prefix": "auth:logout",
+        "key_strategy": "client_ip",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
     }
   ],
   "route_rate_profiles": [
@@ -639,6 +652,15 @@
       "auth_policy": "anonymous_public"
     },
     {
+      "id": "gongzzang.backend.health_db_debug",
+      "path": "/healthz/db",
+      "methods": ["GET"],
+      "router_group": "public_health",
+      "exposure_class": "public_health",
+      "auth_policy": "anonymous_public",
+      "deployment_scope": "non_production_only"
+    },
+    {
       "id": "gongzzang.backend.public_marker_tiles",
       "path": "/map/v1/marker-tiles/listing/:z/:x/:y_pbf",
       "methods": ["GET"],
@@ -892,6 +914,22 @@
       "exposure_class": "authenticated_user",
       "auth_policy": "bearer_jwt",
       "rate_profile": "api_proxy.authenticated_write"
+    },
+    {
+      "id": "gongzzang.backend.internal_platform_core_events",
+      "path": "/internal/platform-core/events",
+      "methods": ["POST"],
+      "router_group": "internal",
+      "exposure_class": "service_to_service",
+      "auth_policy": "internal_shared_secret"
+    },
+    {
+      "id": "gongzzang.backend.internal_metrics",
+      "path": "/internal/metrics",
+      "methods": ["GET"],
+      "router_group": "internal",
+      "exposure_class": "service_to_service",
+      "auth_policy": "internal_shared_secret"
     },
     {
       "id": "gongzzang.backend.internal_auth_event",
