@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod";
-import { api } from "@/lib/api";
+import { apiProxyClient } from "@/lib/api/api-proxy-client.generated";
 
 export const NOTIFICATION_KINDS = [
   "listing_approved",
@@ -46,22 +46,22 @@ export async function fetchNotifications(
   const sp = new URLSearchParams();
   if (input.unreadOnly) sp.set("unread_only", "true");
   if (input.limit !== undefined) sp.set("limit", String(input.limit));
-  const json = await api
-    .get(sp.toString().length > 0 ? `me/notifications?${sp.toString()}` : "me/notifications")
-    .json<unknown>();
+  const json = await apiProxyClient.notificationsList.getJson<unknown>({ searchParams: sp });
   return ListResponseSchema.parse(json).notifications;
 }
 
 export async function fetchUnreadCount(): Promise<number> {
-  const json = await api.get("me/notifications/unread-count").json<unknown>();
+  const json = await apiProxyClient.notificationsUnreadCount.getJson<unknown>();
   return UnreadCountResponseSchema.parse(json).count;
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  await api.patch(`me/notifications/${id}/read`);
+  await apiProxyClient.notificationMarkRead.patch({ id });
 }
 
 export async function markAllNotificationsRead(kind: NotificationKind): Promise<number> {
-  const json = await api.post(`me/notifications/mark-all-read?kind=${kind}`).json<unknown>();
+  const json = await apiProxyClient.notificationsMarkAllRead.postJson<unknown>({
+    searchParams: new URLSearchParams({ kind }),
+  });
   return z.object({ marked_count: z.number().int().nonnegative() }).parse(json).marked_count;
 }

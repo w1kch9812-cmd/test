@@ -927,6 +927,9 @@ foreach ($routePolicy in $apiProxyRoutePolicies) {
 }
 
 $webSourceFiles = @(Get-WebSourceFiles)
+foreach ($usage in (Get-DirectApiTransportUsages -Files $webSourceFiles)) {
+    throw "direct API transport usage is forbidden outside generated API proxy client: $($usage.Method) in $($usage.Source)"
+}
 foreach ($usage in (Get-ApiClientRouteUsages -Files $webSourceFiles)) {
     $usageKey = "$($usage.Method) $($usage.Pattern)"
     if (!$apiProxyPolicyMethodPathSet.ContainsKey($usageKey)) {

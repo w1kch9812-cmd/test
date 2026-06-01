@@ -35,6 +35,45 @@ production deploy admission are deferred production-promotion work. They are not
 part of the current Gongzzang Platform Core consumer integration gate and must
 not be expanded while only validating the consumer boundary.
 
+## Generated API Control Plane
+
+Phase 1 is now active for Gongzzang browser-visible API proxy calls. The
+registry is no longer only a guardrail that checks manually written frontend API
+paths; it also generates `apps/web/lib/api/api-proxy-client.generated.ts` from
+`api_proxy_route_policies`. Product code must call generated operations such as
+`apiProxyClient.listingsCollectionRead.getJson(...)` or
+`apiProxyClient.notificationMarkRead.patch(...)` instead of writing raw
+`api.get("...")` or `api.post("...")` route strings directly.
+
+The CI checker rejects direct `api.get/post/put/patch/delete(...)` usage outside
+the generated client and transport boundary. This means newly added
+browser-visible BFF calls must first be registered in
+`traffic-auth-policy-registry.v1.json`, then generated, then consumed through the
+approved client.
+
+Current phase-1 shape:
+
+- Registry remains the single source for exposure class, method, path, rate
+  profile, auth requirement, and operational budget.
+- Generator emits a typed API proxy client for all
+  `api_proxy_route_policies`.
+- Application code imports generated operations instead of hardcoding API path
+  strings.
+- CI rejects direct raw `api.get/post/put/patch/delete("...")` calls outside the
+  generated client/transport layer.
+- Edge/proxy/backend policy projection continues to be generated from the same
+  registry, so rate limit, service identity, and exposure policy do not split
+  across files.
+
+Still deferred: production-promotion infrastructure such as AWS WAF/Pulumi
+admission, mTLS certificate rollout, and GitHub environment secret wiring. Those
+are operational deployment tasks, not blockers for the current API client
+control-plane phase.
+
+In plain terms: engineers no longer hand-write browser API roads and wait for an
+inspector to catch missing registration. For supported API proxy calls, they now
+build from the approved city map.
+
 ## File Structure
 
 - `docs/architecture/traffic-auth-policy-registry.v1.json`
@@ -47,6 +86,8 @@ not be expanded while only validating the consumer boundary.
   - Current Rust enforcement for Redis cache, single-flight, and marker response budgets.
 - `apps/web/lib/policies/traffic-auth-policy.generated.ts`
   - Generated TypeScript policy module consumed by `apps/web/proxy.ts`.
+- `apps/web/lib/api/api-proxy-client.generated.ts`
+  - Generated browser API proxy client consumed by frontend API modules.
 - `services/api/src/listing_marker_policy.rs`
   - Generated Rust constants consumed by `listing_marker_serving.rs`.
 - `services/api/src/traffic_auth_policy.rs`

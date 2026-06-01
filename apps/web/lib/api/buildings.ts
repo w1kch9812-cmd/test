@@ -1,6 +1,6 @@
 // apps/web/lib/api/buildings.ts
 import { z } from "zod";
-import { api } from "@/lib/api";
+import { apiProxyClient } from "@/lib/api/api-proxy-client.generated";
 
 export const BuildingSchema = z.object({
   id: z.string(),
@@ -22,8 +22,7 @@ export async function fetchBuildings(
   parcelPnu: string,
   signal?: AbortSignal,
 ): Promise<BuildingsResponse> {
-  const json = await api
-    .get(`api/buildings?parcel_pnu=${encodeURIComponent(parcelPnu)}`, { signal })
-    .json<unknown>();
+  const searchParams = new URLSearchParams({ parcel_pnu: parcelPnu });
+  const json = await apiProxyClient.buildingsRead.getJson<unknown>({ searchParams, signal });
   return BuildingsResponseSchema.parse(json);
 }

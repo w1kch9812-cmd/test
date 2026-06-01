@@ -58,6 +58,9 @@ jobs:
       - name: Traffic/auth policy registry guardrail tests
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.tests.ps1
+      - name: Traffic/auth API control-plane guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-traffic-auth-api-control-plane.tests.ps1
       - name: Traffic/auth production edge policy guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge

@@ -586,11 +586,7 @@ $apiProxyExposureGate
 "@
     if ($AddUnregisteredApiProxyClientUsage) {
         Write-File -Root $Root -RelativePath "apps\web\lib\unregistered-proxy-client.ts" -Content @'
-import { api } from "@/lib/api";
-
-export async function loadNotifications() {
-  return api.get("me/notifications").json();
-}
+export const unregisteredProxyTarget = "/api/proxy/me/notifications";
 '@
     }
     $generatedExposureMetadata = if ($OmitGeneratedExposureMetadata) {

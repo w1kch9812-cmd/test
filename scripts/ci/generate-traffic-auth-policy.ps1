@@ -100,6 +100,94 @@ function Get-RouteRateProfile {
     throw "Missing API proxy rate profile id=$Id"
 }
 
+function Convert-PolicyIdToOperationName {
+    param([string] $Id)
+    $leaf = $Id.Substring($Id.LastIndexOf(".") + 1)
+    $parts = @($leaf.Split("_") | Where-Object { ![string]::IsNullOrWhiteSpace([string] $_) })
+    if ($parts.Count -eq 0) {
+        throw "Cannot derive operation name from policy id '$Id'"
+    }
+    $name = [string] $parts[0]
+    foreach ($part in @($parts | Select-Object -Skip 1)) {
+        $value = [string] $part
+        $name += $value.Substring(0, 1).ToUpperInvariant() + $value.Substring(1)
+    }
+    return $name
+}
+
+function Get-ApiProxyPathParameterNames {
+    param([string] $TargetPath)
+    $names = New-Object System.Collections.Generic.List[string]
+    foreach ($segment in @($TargetPath.Split("/"))) {
+        if ($segment.StartsWith(":")) {
+            $name = $segment.Substring(1)
+            if ($name -notmatch '^[A-Za-z_][A-Za-z0-9_]*$') {
+                throw "Unsupported API proxy template parameter '$name' in '$TargetPath'"
+            }
+            $names.Add($name)
+        }
+    }
+    return @($names.ToArray())
+}
+
+function Convert-StringToTsTemplateSegment {
+    param([string] $Value)
+    $backslash = [string] [char] 92
+    $backtick = [string] [char] 96
+    $dollar = '$'
+    return $Value.
+        Replace($backslash, "$backslash$backslash").
+        Replace($backtick, "$backslash$backtick").
+        Replace($dollar, "$backslash$dollar")
+}
+
+function Convert-ApiProxyTargetPathToTsExpression {
+    param([string] $TargetPath)
+    $parts = New-Object System.Collections.Generic.List[string]
+    $hasParameter = $false
+    foreach ($segment in @($TargetPath.Split("/"))) {
+        if ([string]::IsNullOrWhiteSpace($segment)) {
+            continue
+        }
+        if ($segment.StartsWith(":")) {
+            $hasParameter = $true
+            $parts.Add('${encodePathParam(params.' + $segment.Substring(1) + ')}')
+        } else {
+            $parts.Add((Convert-StringToTsTemplateSegment -Value $segment))
+        }
+    }
+    if ($parts.Count -eq 0) {
+        throw "API proxy target_path cannot be empty"
+    }
+    $path = $parts.ToArray() -join "/"
+    if ($hasParameter) {
+        $tick = [char] 96
+        return "$tick$path$tick"
+    }
+    return "`"$(Convert-StringToTs -Value $path)`""
+}
+
+function Format-ApiProxyParamsType {
+    param([string[]] $Names)
+    if ($Names.Count -eq 0) {
+        return ""
+    }
+    $fields = @($Names | ForEach-Object { "readonly $($_): string" })
+    return "{ $($fields -join "; ") }"
+}
+
+function Get-RequestMethodName {
+    param([string] $Method)
+    switch ($Method) {
+        "GET" { return "get" }
+        "POST" { return "post" }
+        "PUT" { return "put" }
+        "PATCH" { return "patch" }
+        "DELETE" { return "delete" }
+        default { throw "Unsupported API proxy client method '$Method'" }
+    }
+}
+
 $registry = Read-JsonFile -RelativePath "docs/architecture/traffic-auth-policy-registry.v1.json"
 if ($registry.schema_version -ne $ExpectedSchemaVersion) {
     throw "Unsupported schema_version '$($registry.schema_version)'"
@@ -283,6 +371,84 @@ $tsPath = Resolve-RepoPath -RelativePath "apps/web/lib/policies/traffic-auth-pol
 New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($tsPath)) | Out-Null
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 [System.IO.File]::WriteAllText($tsPath, (($tsLines -join "`n") + "`n"), $utf8NoBom)
+
+$apiClientLines = New-Object System.Collections.Generic.List[string]
+$apiClientLines.Add("// Generated from docs/architecture/traffic-auth-policy-registry.v1.json.")
+$apiClientLines.Add("// Run scripts/ci/generate-traffic-auth-policy.ps1 after editing the registry.")
+$apiClientLines.Add("")
+$apiClientLines.Add('import type { Options as KyOptions } from "ky";')
+$apiClientLines.Add('import { api } from "@/lib/api";')
+$apiClientLines.Add("")
+$apiClientLines.Add('export type ApiProxyRequestOptions = Omit<KyOptions, "prefixUrl" | "method">;')
+$apiClientLines.Add('export type ApiProxyJsonRequestOptions = Omit<KyOptions, "prefixUrl" | "method" | "body" | "json"> & {')
+$apiClientLines.Add("  readonly json?: unknown;")
+$apiClientLines.Add("};")
+$apiClientLines.Add("")
+$apiClientLines.Add("function encodePathParam(value: string): string {")
+$apiClientLines.Add("  return encodeURIComponent(value);")
+$apiClientLines.Add("}")
+$apiClientLines.Add("")
+$apiClientLines.Add("function toJsonRequestOptions(options?: ApiProxyJsonRequestOptions): KyOptions | undefined {")
+$apiClientLines.Add("  if (options === undefined) {")
+$apiClientLines.Add("    return undefined;")
+$apiClientLines.Add("  }")
+$apiClientLines.Add("  const { json, ...rest } = options;")
+$apiClientLines.Add("  if (json === undefined) {")
+$apiClientLines.Add("    return rest;")
+$apiClientLines.Add("  }")
+$apiClientLines.Add("  return { ...rest, json };")
+$apiClientLines.Add("}")
+$apiClientLines.Add("")
+$apiClientLines.Add("export const API_PROXY_CLIENT_OPERATIONS = {")
+foreach ($route in $apiProxyRoutes) {
+    $operationName = Convert-PolicyIdToOperationName -Id ([string] $route.id)
+    $targetPath = Convert-StringToTs -Value ([string] $route.target_path)
+    $methods = Convert-StringArrayToTs -Values @($route.methods)
+    $sourcePolicyId = Convert-StringToTs -Value ([string] $route.id)
+    $apiClientLines.Add("  ${operationName}: {")
+    $apiClientLines.Add("    sourcePolicyId: `"$sourcePolicyId`",")
+    $apiClientLines.Add("    targetPath: `"$targetPath`",")
+    $apiClientLines.Add("    methods: $methods,")
+    $apiClientLines.Add("  },")
+}
+$apiClientLines.Add("} as const;")
+$apiClientLines.Add("")
+$apiClientLines.Add("export const apiProxyClient = {")
+foreach ($route in $apiProxyRoutes) {
+    $operationName = Convert-PolicyIdToOperationName -Id ([string] $route.id)
+    $targetPath = [string] $route.target_path
+    $params = @(Get-ApiProxyPathParameterNames -TargetPath $targetPath)
+    $paramsType = Format-ApiProxyParamsType -Names $params
+    $pathExpression = Convert-ApiProxyTargetPathToTsExpression -TargetPath $targetPath
+    $apiClientLines.Add("  ${operationName}: {")
+    foreach ($methodValue in @($route.methods)) {
+        $method = [string] $methodValue
+        $methodName = Get-RequestMethodName -Method $method
+        if ($method -eq "GET" -or $method -eq "DELETE") {
+            $signature = if ($params.Count -eq 0) {
+                "options?: ApiProxyRequestOptions"
+            } else {
+                "params: $paramsType, options?: ApiProxyRequestOptions"
+            }
+            $apiClientLines.Add("    ${methodName}: ($signature) => api.$methodName($pathExpression, options),")
+            $apiClientLines.Add("    $($methodName)Json: <T>($signature) => api.$methodName($pathExpression, options).json<T>(),")
+        } else {
+            $signature = if ($params.Count -eq 0) {
+                "options?: ApiProxyJsonRequestOptions"
+            } else {
+                "params: $paramsType, options?: ApiProxyJsonRequestOptions"
+            }
+            $apiClientLines.Add("    ${methodName}: ($signature) => api.$methodName($pathExpression, toJsonRequestOptions(options)),")
+            $apiClientLines.Add("    $($methodName)Json: <T>($signature) => api.$methodName($pathExpression, toJsonRequestOptions(options)).json<T>(),")
+        }
+    }
+    $apiClientLines.Add("  },")
+}
+$apiClientLines.Add("} as const;")
+
+$apiClientPath = Resolve-RepoPath -RelativePath "apps/web/lib/api/api-proxy-client.generated.ts"
+New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($apiClientPath)) | Out-Null
+[System.IO.File]::WriteAllText($apiClientPath, (($apiClientLines -join "`n") + "`n"), $utf8NoBom)
 
 function Convert-BackendPolicyPathToRustPattern {
     param([string] $Path)

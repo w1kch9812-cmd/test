@@ -1,6 +1,6 @@
 // apps/web/lib/api/parcels.ts
 import { z } from "zod";
-import { api } from "@/lib/api";
+import { apiProxyClient } from "@/lib/api/api-proxy-client.generated";
 
 export const ParcelInfoSchema = z.object({
   pnu: z.string(),
@@ -19,6 +19,6 @@ export const ParcelInfoSchema = z.object({
 export type ParcelInfo = z.infer<typeof ParcelInfoSchema>;
 
 export async function fetchParcel(pnu: string, signal?: AbortSignal): Promise<ParcelInfo> {
-  const json = await api.get(`api/parcels/${pnu}`, { signal }).json<unknown>();
+  const json = await apiProxyClient.parcelRead.getJson<unknown>({ pnu }, { signal });
   return ParcelInfoSchema.parse(json);
 }

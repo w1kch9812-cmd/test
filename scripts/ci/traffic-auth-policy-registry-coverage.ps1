@@ -16,10 +16,37 @@ function Get-WebSourceFiles {
                 $relative -notmatch '(^|/)tests?/' -and
                 $relative -notmatch '\.(test|spec)\.tsx?$' -and
                 $relative -ne "apps/web/lib/policies/traffic-auth-policy.generated.ts" -and
+                $relative -ne "apps/web/lib/api/api-proxy-client.generated.ts" -and
                 $relative -ne "apps/web/app/api/proxy/[...path]/route.ts"
             } |
             Sort-Object FullName
     )
+}
+
+function Get-DirectApiTransportUsages {
+    param([System.IO.FileInfo[]] $Files)
+    $allowedSources = @{
+        "apps/web/lib/api.ts"                                  = $true
+        "apps/web/lib/api/api-proxy-client.generated.ts"       = $true
+        "apps/web/app/api/proxy/[...path]/route.ts"            = $true
+        "apps/web/lib/policies/traffic-auth-policy.generated.ts" = $true
+    }
+    $usages = New-Object System.Collections.Generic.List[object]
+    foreach ($file in $Files) {
+        $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding UTF8
+        $relative = $file.FullName.Substring($resolvedRoot.Length).TrimStart("\", "/") -replace "\\", "/"
+        if ($allowedSources.ContainsKey($relative)) {
+            continue
+        }
+        $matches = [regex]::Matches($content, '\bapi\s*\.\s*(get|post|put|patch|delete)\s*\(', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        foreach ($match in $matches) {
+            $usages.Add([pscustomobject]@{
+                    Method = ([string] $match.Groups[1].Value).ToUpperInvariant()
+                    Source = $relative
+                })
+        }
+    }
+    return @($usages.ToArray())
 }
 
 function Get-StringLiterals {

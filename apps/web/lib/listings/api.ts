@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { api } from "@/lib/api";
+import { apiProxyClient } from "@/lib/api/api-proxy-client.generated";
 import type { ListingFilters } from "@/lib/listings/filters";
 import { toSearchParams } from "@/lib/listings/filters";
 
@@ -54,7 +54,10 @@ export async function fetchListings(
   if (input.page !== undefined) sp.set("page", String(input.page));
   if (input.size !== undefined) sp.set("size", String(input.size));
 
-  const json = await api.get(`listings?${sp.toString()}`, { signal }).json<unknown>();
+  const json = await apiProxyClient.listingsCollectionRead.getJson<unknown>({
+    searchParams: sp,
+    signal,
+  });
   return ListingsResponseSchema.parse(json);
 }
 
@@ -100,6 +103,6 @@ export type ListingDetail = z.infer<typeof ListingDetailSchema>;
  * 404 (매물 미존재 또는 RBAC 차단) → ky `HTTPError` throw.
  */
 export async function fetchListingDetail(id: string, signal?: AbortSignal): Promise<ListingDetail> {
-  const json = await api.get(`listings/${id}`, { signal }).json<unknown>();
+  const json = await apiProxyClient.listingDetailRead.getJson<unknown>({ id }, { signal });
   return ListingDetailSchema.parse(json);
 }

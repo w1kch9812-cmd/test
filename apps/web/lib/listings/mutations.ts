@@ -6,7 +6,7 @@
  * `HTTPError` 로 throw — caller 가 detail 파싱.
  */
 
-import { api } from "@/lib/api";
+import { apiProxyClient } from "@/lib/api/api-proxy-client.generated";
 import {
   type CreateListingFormValues,
   type CreateListingResponse,
@@ -35,7 +35,7 @@ export async function createListing(
     contact_visibility: values.contact_visibility,
   };
 
-  const json = await api.post("listings", { json: body }).json<unknown>();
+  const json = await apiProxyClient.listingsCollectionCreate.postJson<unknown>({ json: body });
   return CreateListingResponseSchema.parse(json);
 }
 
@@ -50,22 +50,23 @@ export async function createListing(
  * 같은 사용자/매물 두번째 호출은 note 갱신 (서버 멱등 design).
  */
 export async function addBookmark(listingId: string, note?: string): Promise<void> {
-  await api
-    .post(`listings/${listingId}/bookmark`, { json: { note: note ?? null } })
-    .json<unknown>();
+  await apiProxyClient.listingBookmark.postJson<unknown>(
+    { id: listingId },
+    { json: { note: note ?? null } },
+  );
 }
 
 /**
  * `DELETE /listings/:id/bookmark` — 멱등 (이미 없어도 200).
  */
 export async function removeBookmark(listingId: string): Promise<void> {
-  await api.delete(`listings/${listingId}/bookmark`);
+  await apiProxyClient.listingBookmark.delete({ id: listingId });
 }
 
 export async function submitForReview(
   listingId: string,
 ): Promise<{ id: string; version: number; status: string }> {
-  const json = await api.post(`listings/${listingId}/submit-for-review`).json<unknown>();
+  const json = await apiProxyClient.listingSubmitForReview.postJson<unknown>({ id: listingId });
 
   // 임시 인라인 schema — 별도 파일로 분리는 FU 56 (편집 + revise + photo 풀 mutation 묶음).
   if (
