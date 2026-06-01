@@ -377,6 +377,22 @@
       }
     },
     {
+      "source_policy_id": "gongzzang.api_proxy.notifications_list",
+      "edge_path": "/api/proxy/me/notifications",
+      "target_path": "me/notifications",
+      "target_path_kind": "exact",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "required_roles": [],
+      "rate": {
+        "key_strategy": "session_sub",
+        "key_prefix": "api-proxy:authenticated-read",
+        "limit": 240,
+        "window_seconds": 60,
+        "problem_type": "proxy/too-many-requests"
+      }
+    },
+    {
       "source_policy_id": "gongzzang.api_proxy.notifications_unread_count",
       "edge_path": "/api/proxy/me/notifications/unread-count",
       "target_path": "me/notifications/unread-count",

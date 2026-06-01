@@ -84,6 +84,7 @@ function Write-MinimalRepo {
         [switch] $OmitPageRoutePolicies,
         [switch] $AllowAdminListingPageRole,
         [switch] $OmitApiProxyRoutePolicies,
+        [switch] $AddUnregisteredApiProxyClientUsage,
         [switch] $OmitRouteRateProfiles,
         [switch] $OmitAuthenticatedApiProxyRateProfile,
         [switch] $OmitApiProxyExposureGate,
@@ -583,6 +584,15 @@ resolveApiProxyRateKey
 checkRate(
 $apiProxyExposureGate
 "@
+    if ($AddUnregisteredApiProxyClientUsage) {
+        Write-File -Root $Root -RelativePath "apps\web\lib\unregistered-proxy-client.ts" -Content @'
+import { api } from "@/lib/api";
+
+export async function loadNotifications() {
+  return api.get("me/notifications").json();
+}
+'@
+    }
     $generatedExposureMetadata = if ($OmitGeneratedExposureMetadata) {
         ""
     } else {
@@ -814,7 +824,12 @@ export const API = {
     refresh: "/api/auth/refresh",
     logout: "/api/auth/logout",
   },
+  proxy: {
+    listingMarkerTilesPrefix: `${API_PROXY_BASE}/map/v1/marker-tiles/listing`,
+  },
 };
+
+const API_PROXY_BASE = "/api/proxy";
 '@
     Write-File -Root $Root -RelativePath "apps\web\app\api\auth\logout\route.ts" -Content @'
 export function POST() {}
@@ -1356,6 +1371,12 @@ try {
     $missingApiProxyPolicies = Invoke-Checker -Root $missingApiProxyPoliciesRoot
     Assert-Equals $missingApiProxyPolicies.ExitCode 1 "missing API proxy route policies exit code mismatch"
     Assert-Contains $missingApiProxyPolicies.Output "api_proxy_route_policies"
+
+    $unregisteredApiProxyClientUsageRoot = Join-Path $TempRoot "unregistered-api-proxy-client-usage"
+    Write-MinimalRepo -Root $unregisteredApiProxyClientUsageRoot -AddUnregisteredApiProxyClientUsage
+    $unregisteredApiProxyClientUsage = Invoke-Checker -Root $unregisteredApiProxyClientUsageRoot
+    Assert-Equals $unregisteredApiProxyClientUsage.ExitCode 1 "unregistered API proxy client usage exit code mismatch"
+    Assert-Contains $unregisteredApiProxyClientUsage.Output "me/notifications"
 
     $missingRouteRateProfilesRoot = Join-Path $TempRoot "missing-route-rate-profiles"
     Write-MinimalRepo -Root $missingRouteRateProfilesRoot -OmitRouteRateProfiles

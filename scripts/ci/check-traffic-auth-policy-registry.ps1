@@ -246,6 +246,8 @@ function Get-AxumRoutePaths {
     return @($paths.ToArray() | Sort-Object -Unique)
 }
 
+. (Join-Path $PSScriptRoot "traffic-auth-policy-registry-coverage.ps1")
+
 function Format-TsStringArray {
     param([object[]] $Values)
     $quotedValues = @($Values | ForEach-Object {
@@ -911,6 +913,31 @@ if ($apiProxyRoutePolicies.Count -eq 0) {
 }
 Assert-Unique -Values ($apiProxyRoutePolicies | ForEach-Object { $_.id }) -Message "API proxy route policy ids must be unique"
 Assert-Contains -Content $tsGenerated -Needle "GENERATED_API_PROXY_ROUTE_POLICIES" -Message "generated TS API proxy route policies"
+$apiProxyPolicyPathSet = @{}
+$apiProxyPolicyMethodPathSet = @{}
+foreach ($routePolicy in $apiProxyRoutePolicies) {
+    $policyPattern = Convert-ApiProxyTargetToCoveragePattern -Path ([string] $routePolicy.target_path)
+    if ($null -eq $policyPattern) {
+        throw "API proxy route policy target_path cannot be normalized for $($routePolicy.id): $($routePolicy.target_path)"
+    }
+    $apiProxyPolicyPathSet[$policyPattern] = $true
+    foreach ($method in @($routePolicy.methods)) {
+        $apiProxyPolicyMethodPathSet["$([string] $method) $policyPattern"] = $true
+    }
+}
+
+$webSourceFiles = @(Get-WebSourceFiles)
+foreach ($usage in (Get-ApiClientRouteUsages -Files $webSourceFiles)) {
+    $usageKey = "$($usage.Method) $($usage.Pattern)"
+    if (!$apiProxyPolicyMethodPathSet.ContainsKey($usageKey)) {
+        throw "API proxy client route usage has no matching api_proxy_route_policies: $usageKey in $($usage.Source)"
+    }
+}
+foreach ($usage in (Get-ApiProxyLiteralUsages -Files $webSourceFiles)) {
+    if (!(Test-ApiProxyPolicyPathCoverage -PolicyPathSet $apiProxyPolicyPathSet -Pattern ([string] $usage.Pattern))) {
+        throw "API proxy literal has no matching api_proxy_route_policies target_path: $($usage.Pattern) in $($usage.Source)"
+    }
+}
 $edgeApiProxyRules = @()
 if ($IncludeProductionEdge) {
     $edgeApiProxyRules = @($edgeProjection.api_proxy_route_rules)

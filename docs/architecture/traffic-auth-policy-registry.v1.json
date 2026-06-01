@@ -586,6 +586,14 @@
       "rate_profile": "api_proxy.privileged_write"
     },
     {
+      "id": "gongzzang.api_proxy.notifications_list",
+      "target_path_kind": "exact",
+      "target_path": "me/notifications",
+      "methods": ["GET"],
+      "exposure_class": "authenticated_user",
+      "rate_profile": "api_proxy.authenticated_read"
+    },
+    {
       "id": "gongzzang.api_proxy.notifications_unread_count",
       "target_path_kind": "exact",
       "target_path": "me/notifications/unread-count",

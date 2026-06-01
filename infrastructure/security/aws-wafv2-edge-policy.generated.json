@@ -190,6 +190,10 @@
       "reason": "key_strategy_not_representable_in_wafv2"
     },
     {
+      "source_policy_id": "gongzzang.api_proxy.notifications_list",
+      "reason": "key_strategy_not_representable_in_wafv2"
+    },
+    {
       "source_policy_id": "gongzzang.api_proxy.notifications_unread_count",
       "reason": "key_strategy_not_representable_in_wafv2"
     },
