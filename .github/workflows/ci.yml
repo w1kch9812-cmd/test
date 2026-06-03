@@ -198,23 +198,23 @@ jobs:
           output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 
       - name: Attest web provenance
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4 (Round 5 SHA pin, ADR 0028)
         with:
           subject-path: target/supply-chain/gongzzang-web-next-build.tgz
 
       - name: Attest API provenance
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4 (Round 5 SHA pin, ADR 0028)
         with:
           subject-path: target/release/api
 
       - name: Attest web SBOM
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4 (Round 5 SHA pin, ADR 0028)
         with:
           subject-path: target/supply-chain/gongzzang-web-next-build.tgz
           sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 
       - name: Attest API SBOM
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4 (Round 5 SHA pin, ADR 0028)
         with:
           subject-path: target/release/api
           sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
