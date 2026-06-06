@@ -6,6 +6,7 @@
 | Status | Accepted |
 | Preceded by | [ADR 0030](./0030-three-service-architecture.md), [ADR 0034](./0034-catalog-ownership-handover-to-platform-core.md), [ADR 0036](./0036-static-vector-tile-runtime-contract.md), [ADR 0038](./0038-listing-marker-serving-index-filter-mask.md) |
 | Platform Core counterpart | `../../../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md` |
+| Enterprise benchmark | [2026-06-07 enterprise lakehouse/media/registry benchmark](../research/2026-06-07-enterprise-lakehouse-media-registry-benchmark.md) |
 
 ## Context
 
@@ -15,6 +16,11 @@ buildings, industrial complexes, PNU anchors, and public/reference spatial layer
 
 Both kinds of data need Bronze/Silver/Gold pipelines, but they must not be mixed in a root-level R2
 namespace where `bronze/` and `gold/` do not reveal the owner.
+
+The enterprise benchmark confirms the target pattern: domain-owned physical storage with central
+registry/catalog governance, lineage, access policy, and active-version control. R2 Data Catalog or
+Iceberg can govern queryable tables, but Platform Core's Lakehouse Registry remains the cross-service
+asset identity and consumer-contract control plane.
 
 ## Decision
 

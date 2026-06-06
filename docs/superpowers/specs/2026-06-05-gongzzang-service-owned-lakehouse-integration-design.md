@@ -4,6 +4,7 @@ Status: Approved design
 Date: 2026-06-05
 Owner: `gongzzang`
 Counterpart: `../../../../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md`
+Enterprise benchmark: `../../research/2026-06-07-enterprise-lakehouse-media-registry-benchmark.md`
 
 ## Summary
 
@@ -16,6 +17,8 @@ This means:
 - Platform Core owns PNU anchors, parcel/building geometry, industrial complexes, and public spatial
   references.
 - Platform Core's Lakehouse Registry is the cross-service address book and governance layer.
+- R2 Data Catalog / Iceberg is a table/catalog mechanism for queryable lakehouse tables, not a
+  replacement for Platform Core's cross-service registry.
 
 ## Target Flow
 
