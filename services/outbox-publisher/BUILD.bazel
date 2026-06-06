@@ -1,0 +1,15 @@
+load("//tools/bazel:rust_workspace.bzl", "gongzzang_rust_binary_with_unit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+gongzzang_rust_binary_with_unit_test(
+    name = "outbox_publisher_service",
+    crate_name = "outbox_publisher_service",
+    crate_root = "src/main.rs",
+    srcs = glob(["src/**/*.rs"]),
+    internal_deps = [
+        "//crates/db:db",
+        "//crates/domain/audit/outbox-event:outbox_event_domain",
+        "//crates/outbox-publisher:outbox_publisher",
+    ],
+)

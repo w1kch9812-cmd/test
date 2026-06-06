@@ -7,6 +7,13 @@ on:
       - "apps/web/**"
       - "packages/ui/**"
       - "packages/api-types/**"
+      - "tools/bazel/**"
+      - ".bazelignore"
+      - ".bazelrc"
+      - ".bazelversion"
+      - "BUILD.bazel"
+      - "MODULE.bazel"
+      - "REPO.bazel"
       - "pnpm-workspace.yaml"
       - "turbo.json"
       - "package.json"
@@ -20,6 +27,13 @@ on:
       - "apps/web/**"
       - "packages/ui/**"
       - "packages/api-types/**"
+      - "tools/bazel/**"
+      - ".bazelignore"
+      - ".bazelrc"
+      - ".bazelversion"
+      - "BUILD.bazel"
+      - "MODULE.bazel"
+      - "REPO.bazel"
       - "pnpm-workspace.yaml"
       - "turbo.json"
       - "package.json"
@@ -64,14 +78,23 @@ jobs:
           node-version: "20.19.0"
           cache: "pnpm"
 
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
+      - name: TypeScript typecheck (Bazel hermetic)
+        run: bazelisk build //:frontend_hermetic_typechecks --config=ci --verbose_failures
+
+      - name: Next production build (Bazel hermetic)
+        run: bazelisk build //:frontend_hermetic_full_builds --config=ci --verbose_failures
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Biome lint (root)
         run: pnpm lint
-
-      - name: TypeScript typecheck
-        run: pnpm typecheck
 
       - name: Vitest unit
         run: pnpm test

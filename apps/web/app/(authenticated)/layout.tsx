@@ -12,6 +12,8 @@ import { getSession } from "@/lib/session/store";
 const LOGIN_ROUTE = ROUTES.login as Route;
 const LISTINGS_ROUTE = ROUTES.listings.index as Route;
 
+export const dynamic = "force-dynamic";
+
 export default async function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const t = await getTranslations("common");
   const cookieStore = await cookies();

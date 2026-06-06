@@ -6,6 +6,7 @@ import type { Route } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
+import type { MouseEvent } from "react";
 import type { ListingCard as ListingCardData } from "@/lib/listings/api";
 import { formatAreaPyeong, formatPriceKrw } from "@/lib/listings/format";
 import { usePanelStack } from "@/lib/panel/use-panel-stack";
@@ -42,7 +43,7 @@ export function ListingCard({ data }: ListingCardProps) {
     >
       <Link
         href={ROUTES.listings.detail(data.id) as Route}
-        onClick={(e) => {
+        onClick={(e: MouseEvent<HTMLAnchorElement>) => {
           // Cmd/Ctrl-click / middle-click 은 그대로 새 탭 — server redirect 가 받음.
           if (e.metaKey || e.ctrlKey || e.button === 1) return;
           e.preventDefault();
@@ -87,7 +88,7 @@ export function ListingCard({ data }: ListingCardProps) {
               type="button"
               aria-label={t("card.favoritePlaceholder")}
               className="inline-flex items-center gap-1 transition-colors hover:text-[var(--color-primary)]"
-              onClick={(e) => {
+              onClick={(e: MouseEvent<HTMLButtonElement>) => {
                 e.preventDefault();
                 // SP6-iii 가 즐겨찾기 toggle 구현
               }}

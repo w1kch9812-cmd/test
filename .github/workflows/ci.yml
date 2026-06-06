@@ -21,6 +21,36 @@ env:
   SQLX_OFFLINE: "true"
 
 jobs:
+  bazel-fast-graph:
+    name: Bazel fast graph
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
+      - name: Bazel test graph
+        run: |
+          mkdir -p target/bazel/bep target/bazel/profile
+          bazelisk test //... --config=ci --verbose_failures \
+            --build_event_json_file=target/bazel/bep/ci-test.json \
+            --profile=target/bazel/profile/ci-test.gz
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
+        if: always()
+        with:
+          name: bazel-fast-graph-evidence
+          path: |
+            target/bazel/bep/ci-test.json
+            target/bazel/profile/ci-test.gz
+          if-no-files-found: ignore
+          retention-days: 14
+
   lint-format:
     name: Lint & Format (Biome + clippy + markdownlint)
     runs-on: ubuntu-latest

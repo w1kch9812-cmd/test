@@ -1,0 +1,209 @@
+load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sqlx_cargo_metadata_stub",
+    srcs = ["sqlx_cargo_metadata_stub.sh"],
+)
+
+FRONTEND_TRANSITION_TAGS = [
+    "manual",
+    "local",
+    "no-sandbox",
+]
+
+GUARDRAIL_TRANSITION_TAGS = [
+    "manual",
+    "local",
+    "no-sandbox",
+]
+
+transition_shell_test(
+    name = "frontend_lint",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["lint"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "frontend_typecheck",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["typecheck"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "frontend_unit_test",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["test"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "frontend_build",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["build"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "frontend_bundle",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["bundle"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "frontend_e2e",
+    srcs = ["run_pnpm_task.sh"],
+    script_args = ["e2e"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_no_fake_pass",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["no-fake-pass"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_forbidden_implementation_markers",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["forbidden-implementation-markers"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_file_line_limit",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["file-line-limit"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_catalog_m1_boundary",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["catalog-m1-boundary"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_markdown_links",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["markdown-links"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_workspace_typecheck_coverage",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["workspace-typecheck-coverage"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_core_boundary",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-core-boundary"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_core_dependency_boundary",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-core-dependency-boundary"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_core_catalog_api_contract",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-core-catalog-api-contract"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_core_event_receiver_contract",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-core-event-receiver-contract"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_pnu_anchor_pbf_marker_contract",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["pnu-anchor-pbf-marker-contract"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_migration_version_prefixes",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["migration-version-prefixes"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_core_anchor_inbox_db_approval",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-core-anchor-inbox-db-approval"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_platform_integration_policy",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["platform-integration-policy"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_traffic_auth_policy_registry",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["traffic-auth-policy-registry"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_traffic_auth_policy_registry_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["traffic-auth-policy-registry-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_traffic_auth_api_control_plane_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["traffic-auth-api-control-plane-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_github_actions_node_runtime",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["github-actions-node-runtime"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_github_actions_node_runtime_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["github-actions-node-runtime-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_load_test_assets",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["load-test-assets"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_load_test_assets_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["load-test-assets-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)

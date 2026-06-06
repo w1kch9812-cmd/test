@@ -1,0 +1,203 @@
+load("@aspect_bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
+load("@aspect_rules_js//contrib/nextjs:defs.bzl", "nextjs_build")
+load("@aspect_rules_js//js:defs.bzl", "js_binary", "js_library")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+package(default_visibility = ["//visibility:public"])
+
+npm_link_all_packages(name = "node_modules")
+
+WEB_SOURCES = glob(
+    [
+        "app/**/*.ts",
+        "app/**/*.tsx",
+        "components/**/*.ts",
+        "components/**/*.tsx",
+        "lib/**/*.ts",
+        "lib/**/*.tsx",
+        "stores/**/*.ts",
+        "stores/**/*.tsx",
+        "tests/**/*.ts",
+        "tests/**/*.tsx",
+        "*.ts",
+        "*.tsx",
+        "*.mjs",
+    ],
+    exclude = [
+        ".next/**",
+        ".turbo/**",
+        "node_modules/**",
+        "playwright-report/**",
+        "test-results/**",
+        "var/**",
+        "tsconfig.tsbuildinfo",
+    ],
+    allow_empty = True,
+)
+
+WEB_APP_SOURCES = glob(
+    [
+        "app/**/*.ts",
+        "app/**/*.tsx",
+        "components/**/*.ts",
+        "components/**/*.tsx",
+        "lib/**/*.ts",
+        "lib/**/*.tsx",
+        "stores/**/*.ts",
+        "stores/**/*.tsx",
+        "i18n.ts",
+        "instrumentation.ts",
+        "next-env.d.ts",
+        "proxy.ts",
+    ],
+    allow_empty = True,
+)
+
+WEB_STATIC = glob(
+    [
+        "public/**",
+        "*.json",
+    ],
+    exclude = [
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.bazel.json",
+    ],
+    allow_empty = True,
+)
+
+WEB_ASSETS = glob(
+    [
+        "app/**/*.css",
+        "components/**/*.css",
+        "lib/**/*.css",
+        "lib/**/*.json",
+    ],
+    allow_empty = True,
+)
+
+WEB_RUNTIME_DEPS = [
+    ":node_modules/@gongzzang/api-types",
+    ":node_modules/@gongzzang/ui",
+    ":node_modules/@hookform/resolvers",
+    ":node_modules/@opentelemetry/api",
+    ":node_modules/@opentelemetry/instrumentation-fetch",
+    ":node_modules/@opentelemetry/sdk-node",
+    ":node_modules/@tailwindcss/postcss",
+    ":node_modules/@tanstack/react-query",
+    ":node_modules/@types/navermaps",
+    ":node_modules/@types/node",
+    ":node_modules/@types/react",
+    ":node_modules/@types/react-dom",
+    ":node_modules/class-variance-authority",
+    ":node_modules/clsx",
+    ":node_modules/ioredis",
+    ":node_modules/iron-session",
+    ":node_modules/ky",
+    ":node_modules/lucide-react",
+    ":node_modules/next",
+    ":node_modules/next-intl",
+    ":node_modules/oauth4webapi",
+    ":node_modules/pino",
+    ":node_modules/react",
+    ":node_modules/react-dom",
+    ":node_modules/react-hook-form",
+    ":node_modules/sonner",
+    ":node_modules/tailwind-merge",
+    ":node_modules/tailwindcss",
+    ":node_modules/typescript",
+    ":node_modules/zod",
+    ":node_modules/zustand",
+]
+
+WEB_TEST_DEPS = [
+    ":node_modules/@axe-core/playwright",
+    ":node_modules/@playwright/test",
+    ":node_modules/@testing-library/jest-dom",
+    ":node_modules/@testing-library/react",
+    ":node_modules/@vitejs/plugin-react",
+    ":node_modules/happy-dom",
+    ":node_modules/vite",
+    ":node_modules/vitest",
+]
+
+WEB_WORKSPACE_RUNTIME_DEPS = [
+    "//packages/api-types:pkg",
+    "//packages/ui:pkg",
+]
+
+WEB_WORKSPACE_TYPE_DEPS = [
+    "//packages/api-types:api_types_declarations",
+    "//packages/ui:ui_declarations",
+]
+
+WEB_NEXT_DEPS = WEB_RUNTIME_DEPS + WEB_WORKSPACE_RUNTIME_DEPS
+
+WEB_TYPECHECK_DEPS = [
+    ":node_modules",
+] + WEB_RUNTIME_DEPS + WEB_TEST_DEPS + WEB_WORKSPACE_TYPE_DEPS
+
+NEXT_BUILD_SOURCES = WEB_APP_SOURCES + WEB_ASSETS + WEB_STATIC + [
+    "package.json",
+    "postcss.config.mjs",
+    "tsconfig.json",
+]
+
+js_binary(
+    name = "next_js_binary",
+    data = [
+        ":node_modules/next",
+    ],
+    entry_point = "bazel/next-cli.mjs",
+)
+
+js_library(
+    name = "pkg",
+    srcs = WEB_SOURCES + WEB_ASSETS + WEB_STATIC + [
+        "package.json",
+        "tsconfig.json",
+    ],
+    deps = WEB_TYPECHECK_DEPS + WEB_WORKSPACE_RUNTIME_DEPS,
+)
+
+copy_to_bin(
+    name = "source_files_to_bin",
+    srcs = WEB_SOURCES + WEB_ASSETS + [
+        "package.json",
+    ],
+)
+
+nextjs_build(
+    name = "next_production_build",
+    config = "next.config.ts",
+    srcs = NEXT_BUILD_SOURCES,
+    data = WEB_NEXT_DEPS,
+    env = {
+        "GONGZZANG_BAZEL_NEXT_BUILD": "1",
+        "INTERNAL_AUTH_SECRET": "bazel-internal-auth-secret-32-valid",
+        "NEXT_PUBLIC_API_BASE_URL": "https://api.gongzzang.invalid",
+        "NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID": "bazel-build-naver-client-id",
+        "NEXT_PUBLIC_PLATFORM_CORE_BASE_URL": "https://platform-core.gongzzang.invalid",
+        "NEXT_TELEMETRY_DISABLED": "1",
+        "PLATFORM_CORE_WEBHOOK_SECRET": "bazel-platform-core-webhook-secret-32-valid",
+        "REDIS_URL": "rediss://redis.gongzzang.invalid:6379",
+        "SESSION_SECRET": "bazel-production-session-secret-32-valid",
+        "ZITADEL_AUDIENCE": "bazel-production-audience",
+        "ZITADEL_CLIENT_ID": "bazel-production-client",
+        "ZITADEL_ISSUER": "https://auth.gongzzang.invalid",
+        "ZITADEL_REDIRECT_URI": "https://gongzzang.invalid/api/auth/callback",
+    },
+    next_js_binary = ":next_js_binary",
+)
+
+ts_config(
+    name = "tsconfig",
+    src = "tsconfig.json",
+)
+
+ts_config(
+    name = "tsconfig_bazel",
+    src = "tsconfig.bazel.json",
+    deps = [":tsconfig"],
+)

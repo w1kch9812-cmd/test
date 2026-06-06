@@ -1,0 +1,9 @@
+load("//tools/bazel:rust_workspace.bzl", "gongzzang_rust_library_with_unit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+gongzzang_rust_library_with_unit_test(
+    name = "shared_kernel",
+    crate_name = "shared_kernel",
+    srcs = glob(["src/**/*.rs"]),
+)

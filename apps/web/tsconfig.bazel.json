@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"],
+      "@gongzzang/api-types": ["../../packages/api-types/index.ts"],
+      "@gongzzang/ui": ["../../packages/ui/index.ts"],
+      "@gongzzang/ui/lib/utils": ["../../packages/ui/lib/utils.ts"],
+      "@gongzzang/ui/primitives": ["../../packages/ui/primitives/index.ts"],
+      "@gongzzang/ui/tokens.js": ["../../packages/ui/tokens.ts"]
+    },
+    "types": ["node", "navermaps", "vitest/globals", "@testing-library/jest-dom"]
+  }
+}

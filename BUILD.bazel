@@ -1,0 +1,238 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+package(default_visibility = ["//visibility:public"])
+
+npm_link_all_packages(name = "node_modules")
+
+filegroup(
+    name = "bazel_control_plane",
+    srcs = [
+        ".bazelignore",
+        ".bazelrc",
+        ".bazelversion",
+        ".npmrc",
+        ".nvmrc",
+        "MODULE.bazel",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+    ],
+)
+
+filegroup(
+    name = "cargo_workspace_inputs",
+    srcs = [
+        "Cargo.lock",
+        "Cargo.toml",
+        "rust-toolchain.toml",
+    ],
+)
+
+filegroup(
+    name = "sqlx_offline_data",
+    srcs = glob([".sqlx/*.json"]),
+)
+
+alias(
+    name = "frontend_lint",
+    actual = "//tools/bazel:frontend_lint",
+    tags = ["manual"],
+)
+
+alias(
+    name = "frontend_typecheck",
+    actual = "//tools/bazel:frontend_typecheck",
+    tags = ["manual"],
+)
+
+alias(
+    name = "frontend_unit_test",
+    actual = "//tools/bazel:frontend_unit_test",
+    tags = ["manual"],
+)
+
+alias(
+    name = "frontend_build",
+    actual = "//tools/bazel:frontend_build",
+    tags = ["manual"],
+)
+
+alias(
+    name = "frontend_bundle",
+    actual = "//tools/bazel:frontend_bundle",
+    tags = ["manual"],
+)
+
+alias(
+    name = "frontend_e2e",
+    actual = "//tools/bazel:frontend_e2e",
+    tags = ["manual"],
+)
+
+alias(
+    name = "api_types_typecheck_bazel",
+    actual = "//packages/api-types:api_types_typecheck",
+)
+
+alias(
+    name = "ui_typecheck_bazel",
+    actual = "//packages/ui:ui_typecheck",
+)
+
+alias(
+    name = "web_typecheck_bazel",
+    actual = ":web_typecheck_typecheck",
+)
+
+alias(
+    name = "web_next_production_build_bazel",
+    actual = "//apps/web:next_production_build",
+)
+
+filegroup(
+    name = "frontend_hermetic_typechecks",
+    srcs = [
+        ":api_types_typecheck_bazel",
+        ":ui_typecheck_bazel",
+        ":web_typecheck_bazel",
+    ],
+)
+
+filegroup(
+    name = "frontend_hermetic_full_builds",
+    srcs = [
+        ":web_next_production_build_bazel",
+    ],
+)
+
+WEB_TYPECHECK_DEPS = [
+    "//apps/web:node_modules/@axe-core/playwright",
+    "//apps/web:node_modules/@gongzzang/api-types",
+    "//apps/web:node_modules/@gongzzang/ui",
+    "//apps/web:node_modules/@hookform/resolvers",
+    "//apps/web:node_modules/@opentelemetry/api",
+    "//apps/web:node_modules/@opentelemetry/instrumentation-fetch",
+    "//apps/web:node_modules/@opentelemetry/sdk-node",
+    "//apps/web:node_modules/@playwright/test",
+    "//apps/web:node_modules/@tailwindcss/postcss",
+    "//apps/web:node_modules/@tanstack/react-query",
+    "//apps/web:node_modules/@testing-library/jest-dom",
+    "//apps/web:node_modules/@testing-library/react",
+    "//apps/web:node_modules/@types/navermaps",
+    "//apps/web:node_modules/@types/node",
+    "//apps/web:node_modules/@types/react",
+    "//apps/web:node_modules/@types/react-dom",
+    "//apps/web:node_modules/@vitejs/plugin-react",
+    "//apps/web:node_modules/class-variance-authority",
+    "//apps/web:node_modules/clsx",
+    "//apps/web:node_modules/happy-dom",
+    "//apps/web:node_modules/ioredis",
+    "//apps/web:node_modules/iron-session",
+    "//apps/web:node_modules/ky",
+    "//apps/web:node_modules/lucide-react",
+    "//apps/web:node_modules/next",
+    "//apps/web:node_modules/next-intl",
+    "//apps/web:node_modules/oauth4webapi",
+    "//apps/web:node_modules/pino",
+    "//apps/web:node_modules/react",
+    "//apps/web:node_modules/react-dom",
+    "//apps/web:node_modules/react-hook-form",
+    "//apps/web:node_modules/sonner",
+    "//apps/web:node_modules/tailwind-merge",
+    "//apps/web:node_modules/tailwindcss",
+    "//apps/web:node_modules/typescript",
+    "//apps/web:node_modules/vite",
+    "//apps/web:node_modules/vitest",
+    "//apps/web:node_modules/zod",
+    "//apps/web:node_modules/zustand",
+    "//packages/api-types:api_types_declarations",
+    "//packages/ui:ui_declarations",
+]
+
+ts_project(
+    name = "web_typecheck",
+    srcs = [
+        "//apps/web:source_files_to_bin",
+        "//packages/api-types:source_files_to_bin",
+        "//packages/ui:source_files_to_bin",
+    ],
+    deps = WEB_TYPECHECK_DEPS,
+    incremental = True,
+    no_emit = True,
+    preserve_jsx = False,
+    resolve_json_module = True,
+    root_dir = ".",
+    tsconfig = "//apps/web:tsconfig_bazel",
+)
+
+test_suite(
+    name = "frontend_verification",
+    tests = [
+        ":frontend_lint",
+        ":frontend_typecheck",
+        ":frontend_unit_test",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "frontend_release_verification",
+    tests = [
+        ":frontend_build",
+        ":frontend_bundle",
+        ":frontend_e2e",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "guardrails_fast",
+    tests = [
+        "//tools/bazel:guardrail_catalog_m1_boundary",
+        "//tools/bazel:guardrail_file_line_limit",
+        "//tools/bazel:guardrail_forbidden_implementation_markers",
+        "//tools/bazel:guardrail_no_fake_pass",
+        "//tools/bazel:guardrail_workspace_typecheck_coverage",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "guardrails_policy",
+    tests = [
+        "//tools/bazel:guardrail_github_actions_node_runtime",
+        "//tools/bazel:guardrail_load_test_assets",
+        "//tools/bazel:guardrail_migration_version_prefixes",
+        "//tools/bazel:guardrail_platform_core_anchor_inbox_db_approval",
+        "//tools/bazel:guardrail_platform_core_boundary",
+        "//tools/bazel:guardrail_platform_core_catalog_api_contract",
+        "//tools/bazel:guardrail_platform_core_dependency_boundary",
+        "//tools/bazel:guardrail_platform_core_event_receiver_contract",
+        "//tools/bazel:guardrail_platform_integration_policy",
+        "//tools/bazel:guardrail_pnu_anchor_pbf_marker_contract",
+        "//tools/bazel:guardrail_traffic_auth_policy_registry",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "guardrails_policy_tests",
+    tests = [
+        "//tools/bazel:guardrail_github_actions_node_runtime_tests",
+        "//tools/bazel:guardrail_load_test_assets_tests",
+        "//tools/bazel:guardrail_traffic_auth_api_control_plane_tests",
+        "//tools/bazel:guardrail_traffic_auth_policy_registry_tests",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "guardrails_all",
+    tests = [
+        ":guardrails_fast",
+        ":guardrails_policy",
+        ":guardrails_policy_tests",
+    ],
+    tags = ["manual"],
+)

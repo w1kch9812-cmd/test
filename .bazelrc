@@ -1,0 +1,28 @@
+common --enable_bzlmod
+common --announce_rc
+# Bazel's Bzlmod lockfile is intentionally disabled for now because the generated
+# MODULE.bazel.lock exceeds this repo's 1500-line file limit. Re-enable only with
+# an ADR-approved partition/exception strategy.
+common --lockfile_mode=off
+
+# Optional local/CI remote-cache credentials live outside version control. Copy
+# `.bazelrc.remote.example` to `.bazelrc.remote` and fill provider-specific
+# values when a managed cache is approved.
+try-import %workspace%/.bazelrc.remote
+
+# Local cache is the default developer baseline. Managed remote cache/execution
+# is introduced only after credentials, ownership, and cache-write policy exist.
+build --disk_cache=~/.cache/bazel/gongzzang/disk
+build --repository_cache=~/.cache/bazel/gongzzang/repository
+build --guard_against_concurrent_changes
+
+test --test_output=errors
+test --test_summary=detailed
+test --test_env=RUST_BACKTRACE=1
+
+build:dev --remote_download_toplevel
+
+build:ci --remote_download_minimal
+build:ci --noshow_progress
+test:ci --test_output=errors
+test:ci --test_summary=detailed

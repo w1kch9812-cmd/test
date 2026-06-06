@@ -1,0 +1,40 @@
+load("//tools/bazel:rust_workspace.bzl", "gongzzang_rust_library_with_unit_test")
+
+package(default_visibility = ["//visibility:public"])
+
+gongzzang_rust_library_with_unit_test(
+    name = "db",
+    compile_data = [
+        "//:bazel_control_plane",
+        "//:cargo_workspace_inputs",
+        "//:sqlx_offline_data",
+        "//tools/bazel:sqlx_cargo_metadata_stub",
+    ],
+    crate_name = "db",
+    srcs = glob(["src/**/*.rs"]),
+    internal_deps = [
+        "//crates/domain/audit/audit-log:audit_log_domain",
+        "//crates/domain/audit/outbox-event:outbox_event_domain",
+        "//crates/domain/core/listing-photo:listing_photo_domain",
+        "//crates/domain/core/listing:listing_domain",
+        "//crates/domain/core/shared-kernel:shared_kernel",
+        "//crates/domain/core/user:user_domain",
+        "//crates/domain/insights/analysis-report:analysis_report_domain",
+        "//crates/domain/insights/bookmark:bookmark_domain",
+        "//crates/domain/insights/notification:notification_domain",
+        "//crates/domain/insights/search-history:search_history_domain",
+        "//crates/operations/admin-action:admin_action_domain",
+        "//crates/operations/business-verification-queue:business_verification_queue_domain",
+        "//crates/operations/listing-report:listing_report_domain",
+        "//crates/operations/listing-review-queue:lrq_domain",
+        "//crates/operations/operations-meta:operations_meta_domain",
+    ],
+    internal_dev_deps = [
+        "//crates/outbox-publisher:outbox_publisher",
+    ],
+    rustc_env = {
+        "CARGO": "../../tools/bazel/sqlx_cargo_metadata_stub.sh",
+        "SQLX_OFFLINE": "true",
+        "SQLX_OFFLINE_DIR": ".sqlx",
+    },
+)
