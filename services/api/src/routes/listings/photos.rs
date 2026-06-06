@@ -100,7 +100,7 @@ pub async fn request_photo_upload(
         listing_photo_domain::entity::PhotoContentType::Webp => "webp",
     };
     let r2_key = format!(
-        "listings/{}/{}.{ext}",
+        "media/listing-photo/listings/{}/photos/{}.{ext}",
         listing.id.as_str(),
         photo_id.as_str()
     );

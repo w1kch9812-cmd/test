@@ -31,8 +31,10 @@ fn sample_listing_id() -> Id<ListingMarker> {
     Id::<ListingMarker>::new()
 }
 
-const SAMPLE_R2_KEY: &str = "listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1.jpg";
-const SAMPLE_THUMB_KEY: &str = "listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg";
+const SAMPLE_R2_KEY: &str =
+    "media/listing-photo/listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1.jpg";
+const SAMPLE_THUMB_KEY: &str =
+    "media/listing-photo/listings/lst_01HXY3NK0Z9F6S1B2C3D4E5F6G/photos/p1_thumb.jpg";
 
 /// 모든 `Some` 필드 + `Jpeg`로 happy path 빌드.
 fn build_full() -> ListingPhoto {

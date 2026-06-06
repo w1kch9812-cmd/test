@@ -72,7 +72,7 @@ pub struct ListingPhoto {
     pub id: Id<ListingPhotoMarker>,
     /// 소속 매물 (`FK` + `ON DELETE CASCADE`).
     pub listing_id: Id<ListingMarker>,
-    /// `R2` 객체 키 (예: `'listings/lst_01HXY/photos/p1.jpg'`).
+    /// `R2` 객체 키 (예: `'media/listing-photo/listings/lst_01HXY/photos/p1.jpg'`).
     pub r2_key: String,
     /// 썸네일 `R2` 키 (선택).
     pub thumbnail_r2_key: Option<String>,

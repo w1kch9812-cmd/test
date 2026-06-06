@@ -23,7 +23,7 @@ fn r2_config() -> ListingPhotoUploadConfig {
 async fn disabled_issuer_fails_without_mock_url() {
     let result = DisabledListingPhotoUploadUrlIssuer
         .issue_upload_url(PhotoUploadUrlRequest {
-            r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            r2_key: "media/listing-photo/listings/lst_1/photos/lph_1.jpg".to_owned(),
             content_type: PhotoContentType::Jpeg,
         })
         .await;
@@ -35,7 +35,7 @@ async fn disabled_issuer_fails_without_mock_url() {
 async fn disabled_object_verifier_fails_without_mock_success() {
     let result = DisabledListingPhotoObjectVerifier
         .verify_uploaded_object(PhotoObjectVerifyRequest {
-            r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            r2_key: "media/listing-photo/listings/lst_1/photos/lph_1.jpg".to_owned(),
             expected_content_type: PhotoContentType::Jpeg,
         })
         .await;
@@ -47,7 +47,7 @@ async fn disabled_object_verifier_fails_without_mock_success() {
 async fn disabled_download_issuer_fails_without_mock_url() {
     let result = DisabledListingPhotoDownloadUrlIssuer
         .issue_download_url(PhotoDownloadUrlRequest {
-            r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            r2_key: "media/listing-photo/listings/lst_1/photos/lph_1.jpg".to_owned(),
         })
         .await;
 
@@ -105,7 +105,7 @@ async fn r2_issuer_presigns_put_with_required_content_type_header() {
     let issuer = R2ListingPhotoUploadUrlIssuer::new(r2_config());
     let result = issuer
         .issue_upload_url(PhotoUploadUrlRequest {
-            r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            r2_key: "media/listing-photo/listings/lst_1/photos/lph_1.jpg".to_owned(),
             content_type: PhotoContentType::Jpeg,
         })
         .await;
@@ -129,7 +129,7 @@ async fn r2_download_issuer_presigns_get_without_mock_url() {
     let issuer = R2ListingPhotoDownloadUrlIssuer::new(r2_config());
     let result = issuer
         .issue_download_url(PhotoDownloadUrlRequest {
-            r2_key: "listings/lst_1/lph_1.jpg".to_owned(),
+            r2_key: "media/listing-photo/listings/lst_1/photos/lph_1.jpg".to_owned(),
         })
         .await;
 
