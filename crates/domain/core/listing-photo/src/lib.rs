@@ -8,4 +8,8 @@
 
 pub mod entity;
 pub mod errors;
+pub mod events;
 pub mod repository;
+
+#[cfg(test)]
+mod events_tests;

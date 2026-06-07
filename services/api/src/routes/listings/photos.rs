@@ -23,6 +23,9 @@ use crate::photo_upload::{
 use super::mutation::load_listing_for_actor;
 use super::state::ListingsState;
 
+#[path = "photo_events.rs"]
+mod photo_events;
+
 #[derive(Debug, Deserialize)]
 pub struct RequestPhotoUploadRequest {
     /// 표시 순서 (≥0).
@@ -341,7 +344,12 @@ pub async fn confirm_photo_upload(
             )
         })?;
 
-    let ctx = http_user_action(&auth, "confirm_photo_upload");
+    let event = photo_events::upload_confirmed_event_for_photo(
+        &photo,
+        metadata.file_size_bytes,
+        uploaded_at,
+    );
+    let ctx = http_user_action(&auth, "confirm_photo_upload").with_events(vec![event]);
     state.photo_repo.save(&photo, ctx).await.map_err(|e| {
         tracing::error!(error = %e, "photo confirm save failed");
         photo_repo_problem(&e)

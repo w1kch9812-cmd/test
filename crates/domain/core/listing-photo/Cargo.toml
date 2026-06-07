@@ -10,11 +10,9 @@ description = "공짱 ListingPhoto Aggregate (Core BC, RDS 동적 + R2 binary)"
 shared-kernel = { path = "../shared-kernel", version = "0.1.0" }
 chrono = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
-
-[dev-dependencies]
-serde_json = { workspace = true }
 
 [lints]
 workspace = true
