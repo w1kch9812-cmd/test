@@ -3,7 +3,7 @@
 ## Scope
 
 This runbook covers the temporary `PLATFORM_CORE_SERVICE_TOKEN` used by
-`gongzzang-api` when calling Platform Core Catalog APIs. This token is a
+Gongzzang runtime services when calling Platform Core APIs. This token is a
 bridge control until mTLS or short-lived workload identity is deployed.
 Production should prefer `PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE` whenever
 Platform Core or the service mesh can mount a short-lived credential file.
@@ -23,7 +23,10 @@ Required values:
 
 - Workload identity token files are read before each Platform Core request so
   file rotation can take effect without changing process configuration.
-- Scope must be `catalog:read`.
+- Scope must match the active allowed-call policy:
+  - `catalog:read` for `gongzzang_api_to_platform_core_catalog_read`.
+  - `lakehouse:write` for
+    `gongzzang_pipeline_to_platform_core_lakehouse_registry`.
 - TTL must be 90 days or lower.
 - `issued_at` must not be in the future.
 - `expires_at` must not be expired.
@@ -33,19 +36,18 @@ Required values:
 
 1. Prefer mounting a short-lived workload identity token file and setting
    `PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE`.
-2. Create a replacement static token on the Platform Core side with `catalog:read`
-   scope.
+2. Create a replacement static token on the Platform Core side with the exact
+   scope required by the target allowed-call policy.
 3. Record the issue timestamp, expiry timestamp, and rotation owner.
 4. Update the production secret store with the new token and metadata as one
    change.
-5. Deploy Gongzzang API and confirm startup succeeds.
+5. Deploy the target Gongzzang service and confirm startup succeeds.
 6. Confirm Platform Core receives `x-gongzzang-service-auth-policy-id` and
-   `x-gongzzang-service-auth-scope` on Catalog reads.
-7. Confirm Platform Core receives `x-gongzzang-service-auth-source:
-   gongzzang-api`, `x-gongzzang-service-auth-target: platform-core-api`, and
-   `x-gongzzang-allowed-call-id:
-   gongzzang_api_to_platform_core_catalog_read` so default-deny authorization
-   can match the allowed-call matrix.
+   `x-gongzzang-service-auth-scope` on the target request.
+7. Confirm Platform Core receives the expected source, target, and
+   `x-gongzzang-allowed-call-id` for the allowed-call matrix entry:
+   `gongzzang-api` for Catalog reads and `gongzzang-worker` for Lakehouse
+   Registry writes.
 8. Revoke the old token after the rollout is healthy.
 
 ## Rollback
@@ -59,4 +61,4 @@ token; issue a replacement instead.
 The replacement target is SPIFFE/SPIRE or cloud workload identity with mTLS and
 default-deny service authorization. Bearer token removal is blocked until the
 allowed-call matrix and Platform Core authorization policy both enforce the
-`gongzzang_api_to_platform_core_catalog_read` call.
+active `gongzzang_*_to_platform_core_*` call.

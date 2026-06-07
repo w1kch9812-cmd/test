@@ -187,7 +187,9 @@ $guardrailLine
       "id": "gongzzang_pipeline_to_platform_core_lakehouse_registry",
       "status": "planned",
       "source_repo": "gongzzang",
+      "source_service": "gongzzang-worker",
       "target_repo": "platform-core",
+      "target_service": "platform-core-api",
       "allowed_surfaces": [
         "POST /internal/lakehouse/ingestion-runs",
         "POST /internal/lakehouse/artifacts",
@@ -200,6 +202,31 @@ $guardrailLine
         "registry_contract_defined",
         "object_checksum_verified",
         "no_direct_database"
+      ],
+      "service_auth_policy_id": "gongzzang_worker_to_platform_core_api"
+    }
+  ]
+}
+'@
+
+    Write-File -Root $Root -RelativePath "docs\architecture\platform-integration\service-auth-policy.v1.json" -Content @'
+{
+  "schema_version": "gongzzang.platform_integration.service_auth_policy.v1",
+  "outbound_identities": [
+    {
+      "id": "gongzzang_worker_to_platform_core_api",
+      "source_service": "gongzzang-worker",
+      "target_service": "platform-core-api",
+      "token_metadata": {
+        "required_scope": "lakehouse:write"
+      },
+      "authorization_policy": {
+        "default_decision": "deny",
+        "allowed_call_id": "gongzzang_pipeline_to_platform_core_lakehouse_registry"
+      },
+      "runtime_files": [
+        "services/api/src/platform_core_auth.rs",
+        "services/api/src/platform_core_lakehouse_registry.rs"
       ]
     }
   ]

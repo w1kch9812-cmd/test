@@ -103,6 +103,7 @@
         "POST /internal/lakehouse/promotions",
         "GET /internal/lakehouse/assets/{qualified_name}/active"
       ],
+      "service_auth_policy_id": "gongzzang_worker_to_platform_core_api",
       "decision_reference": "docs/adr/0039-service-owned-lakehouse-registry-integration.md",
       "current_required_controls": [
         "registry_contract_defined",

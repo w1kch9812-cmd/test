@@ -14,7 +14,8 @@ mod http {
 mod observability;
 mod photo_upload;
 pub mod platform_core_anchor_import;
-mod platform_core_auth;
+pub mod platform_core_auth;
+pub mod platform_core_lakehouse_registry;
 mod platform_core_parcel_lookup;
 
 mod backend_authorization;

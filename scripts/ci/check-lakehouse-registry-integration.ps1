@@ -19,9 +19,12 @@ $PolicyPath = "docs/architecture/platform-integration/lakehouse-registry-policy.
 $IndexPath = "docs/architecture/platform-integration/index.v1.json"
 $BoundaryPath = "docs/architecture/platform-core-boundary.v1.json"
 $AllowedCallMatrixPath = "docs/architecture/platform-integration/allowed-call-matrix.v1.json"
+$ServiceAuthPolicyPath = "docs/architecture/platform-integration/service-auth-policy.v1.json"
 $ThisGuardrail = "scripts/ci/check-lakehouse-registry-integration.ps1"
 $RequiredContract = "lakehouse_registry_registration:gongzzang_to_platform_core"
 $ExpectedBucket = "gongzzang-lakehouse-prod"
+$LakehouseAllowedCallId = "gongzzang_pipeline_to_platform_core_lakehouse_registry"
+$LakehouseServiceAuthPolicyId = "gongzzang_worker_to_platform_core_api"
 
 function Resolve-RepoPath {
     param([string] $RelativePath)
@@ -131,7 +134,7 @@ function Assert-PolicyShape {
     Assert-NotEmptyString -Value $registry.contract_ref -Message "platform_core_registry.contract_ref"
     Assert-Equals `
         -Actual $registry.allowed_call_id `
-        -Expected "gongzzang_pipeline_to_platform_core_lakehouse_registry" `
+        -Expected $LakehouseAllowedCallId `
         -Message "platform_core_registry.allowed_call_id mismatch"
     foreach ($surface in @(
             "POST /internal/lakehouse/ingestion-runs",
@@ -259,7 +262,9 @@ function Assert-AllowedCallMatrix {
         throw "lakehouse registry allowed call must be planned or active"
     }
     Assert-Equals -Actual $call.source_repo -Expected "gongzzang" -Message "lakehouse registry source_repo mismatch"
+    Assert-Equals -Actual $call.source_service -Expected "gongzzang-worker" -Message "lakehouse registry source_service mismatch"
     Assert-Equals -Actual $call.target_repo -Expected "platform-core" -Message "lakehouse registry target_repo mismatch"
+    Assert-Equals -Actual $call.service_auth_policy_id -Expected $LakehouseServiceAuthPolicyId -Message "lakehouse registry service_auth_policy_id mismatch"
     foreach ($surface in @($Policy.platform_core_registry.api_surfaces | ForEach-Object { [string] $_ })) {
         Assert-ContainsString `
             -Values @($call.allowed_surfaces | ForEach-Object { [string] $_ }) `
@@ -271,6 +276,37 @@ function Assert-AllowedCallMatrix {
             -Values @($call.current_required_controls | ForEach-Object { [string] $_ }) `
             -Expected $control `
             -Message "allowed call matrix lakehouse current_required_controls"
+    }
+}
+
+function Assert-ServiceAuthPolicy {
+    param([object] $Policy, [object] $ServiceAuthPolicy)
+
+    Assert-Equals `
+        -Actual $ServiceAuthPolicy.schema_version `
+        -Expected "gongzzang.platform_integration.service_auth_policy.v1" `
+        -Message "service auth policy schema_version mismatch"
+    $identity = @($ServiceAuthPolicy.outbound_identities | Where-Object {
+            [string] $_.id -eq $LakehouseServiceAuthPolicyId
+        })
+    Assert-Equals -Actual $identity.Count -Expected 1 -Message "lakehouse registry service auth identity count mismatch"
+    $identity = $identity[0]
+    Assert-Equals -Actual $identity.source_service -Expected "gongzzang-worker" -Message "lakehouse registry auth source_service mismatch"
+    Assert-Equals -Actual $identity.target_service -Expected "platform-core-api" -Message "lakehouse registry auth target_service mismatch"
+    Assert-Equals -Actual $identity.token_metadata.required_scope -Expected "lakehouse:write" -Message "lakehouse registry auth required_scope mismatch"
+    Assert-Equals -Actual $identity.authorization_policy.default_decision -Expected "deny" -Message "lakehouse registry auth default decision mismatch"
+    Assert-Equals `
+        -Actual $identity.authorization_policy.allowed_call_id `
+        -Expected ([string] $Policy.platform_core_registry.allowed_call_id) `
+        -Message "lakehouse registry auth allowed_call_id mismatch"
+    foreach ($runtimeFile in @(
+            "services/api/src/platform_core_auth.rs",
+            "services/api/src/platform_core_lakehouse_registry.rs"
+        )) {
+        Assert-ContainsString `
+            -Values @($identity.runtime_files | ForEach-Object { [string] $_ }) `
+            -Expected $runtimeFile `
+            -Message "lakehouse registry auth runtime_files"
     }
 }
 
@@ -373,12 +409,14 @@ $policy = Read-JsonFile -RelativePath $PolicyPath
 $index = Read-JsonFile -RelativePath $IndexPath
 $boundary = Read-JsonFile -RelativePath $BoundaryPath
 $allowedCallMatrix = Read-JsonFile -RelativePath $AllowedCallMatrixPath
+$serviceAuthPolicy = Read-JsonFile -RelativePath $ServiceAuthPolicyPath
 
 Assert-PolicyShape -Policy $policy
 Assert-NamespacePolicy -Namespaces @($policy.storage_namespaces)
 Assert-AssetPolicy -Assets @($policy.governed_assets)
 Assert-IndexAndBoundary -Index $index -Boundary $boundary
 Assert-AllowedCallMatrix -Policy $policy -AllowedCallMatrix $allowedCallMatrix
+Assert-ServiceAuthPolicy -Policy $policy -ServiceAuthPolicy $serviceAuthPolicy
 Assert-EnvContract -Policy $policy
 Assert-NoUnmanagedSharedRootWrites
 Assert-ListingPhotoNamespace

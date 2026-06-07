@@ -61,6 +61,62 @@
         "services/api/src/building_reader.rs",
         "services/api/src/startup.rs"
       ]
+    },
+    {
+      "id": "gongzzang_worker_to_platform_core_api",
+      "source_service": "gongzzang-worker",
+      "target_service": "platform-core-api",
+      "current_method": "workload_identity_token_file_or_bearer_service_token",
+      "required_env": "PLATFORM_CORE_SERVICE_TOKEN",
+      "production_required": true,
+      "future_method": "mtls_or_short_lived_workload_identity",
+      "workload_identity_token_file": {
+        "preferred_in_production": true,
+        "required_env": "PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE",
+        "refresh_behavior": "read_before_each_request",
+        "fallback_static_token_policy": "allowed_only_with_metadata_until_cutover"
+      },
+      "token_metadata": {
+        "required_in_production": true,
+        "required_scope": "lakehouse:write",
+        "max_ttl_days": 90,
+        "required_env": [
+          "PLATFORM_CORE_SERVICE_TOKEN_SCOPE",
+          "PLATFORM_CORE_SERVICE_TOKEN_ISSUED_AT",
+          "PLATFORM_CORE_SERVICE_TOKEN_EXPIRES_AT",
+          "PLATFORM_CORE_SERVICE_TOKEN_ROTATION_OWNER"
+        ],
+        "runtime_headers": [
+          "x-gongzzang-service-auth-policy-id",
+          "x-gongzzang-service-auth-source",
+          "x-gongzzang-service-auth-target",
+          "x-gongzzang-allowed-call-id",
+          "x-gongzzang-service-auth-scope",
+          "x-gongzzang-service-auth-issued-at",
+          "x-gongzzang-service-auth-expires-at",
+          "x-gongzzang-service-auth-rotation-owner"
+        ],
+        "rotation_runbook": "docs/runbooks/platform-core-service-token-rotation.md",
+        "production_dev_token_policy": "forbidden"
+      },
+      "authorization_policy": {
+        "default_decision": "deny",
+        "allow_source": "docs/architecture/platform-integration/allowed-call-matrix.v1.json",
+        "allowed_call_id": "gongzzang_pipeline_to_platform_core_lakehouse_registry"
+      },
+      "workload_identity_cutover": {
+        "target": "spiffe_spire_or_cloud_workload_identity",
+        "required_before_token_removal": [
+          "default_deny_authorization_policy",
+          "short_lived_workload_identity",
+          "mtls_transport",
+          "policy_id_audit_attribute"
+        ]
+      },
+      "runtime_files": [
+        "services/api/src/platform_core_auth.rs",
+        "services/api/src/platform_core_lakehouse_registry.rs"
+      ]
     }
   ],
   "inbound_identities": [

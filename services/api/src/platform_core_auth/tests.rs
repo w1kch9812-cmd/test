@@ -148,6 +148,78 @@ fn production_service_auth_applies_default_deny_identity_headers() {
 }
 
 #[test]
+fn production_service_auth_accepts_lakehouse_registry_write_scope_for_worker_call_policy() {
+    let auth = PlatformCoreServiceAuth::new_for_environment_at_with_call_policy(
+        "platform-core-service-token-32-valid",
+        PlatformCoreServiceAuthMetadataConfig {
+            scope: Some("lakehouse:write".to_owned()),
+            issued_at: Some("2026-05-01T00:00:00Z".to_owned()),
+            expires_at: Some("2026-06-01T00:00:00Z".to_owned()),
+            rotation_owner: Some("platform-security".to_owned()),
+        },
+        true,
+        "2026-05-02T00:00:00Z".parse().expect("now"),
+        PlatformCoreServiceCallPolicy::gongzzang_worker_lakehouse_registry_write(),
+    )
+    .expect("service auth");
+
+    let request = auth
+        .apply(reqwest::Client::new().get("http://127.0.0.1/health"))
+        .expect("apply auth")
+        .build()
+        .expect("request");
+
+    assert_eq!(
+        request.headers().get("x-gongzzang-service-auth-policy-id"),
+        Some(
+            &"gongzzang_worker_to_platform_core_api"
+                .parse()
+                .expect("header")
+        )
+    );
+    assert_eq!(
+        request.headers().get("x-gongzzang-service-auth-source"),
+        Some(&"gongzzang-worker".parse().expect("header"))
+    );
+    assert_eq!(
+        request.headers().get("x-gongzzang-service-auth-scope"),
+        Some(&"lakehouse:write".parse().expect("header"))
+    );
+    assert_eq!(
+        request.headers().get("x-gongzzang-allowed-call-id"),
+        Some(
+            &"gongzzang_pipeline_to_platform_core_lakehouse_registry"
+                .parse()
+                .expect("header")
+        )
+    );
+}
+
+#[test]
+fn production_service_auth_rejects_scope_that_does_not_match_call_policy() {
+    let result = PlatformCoreServiceAuth::new_for_environment_at_with_call_policy(
+        "platform-core-service-token-32-valid",
+        PlatformCoreServiceAuthMetadataConfig {
+            scope: Some("catalog:read".to_owned()),
+            issued_at: Some("2026-05-01T00:00:00Z".to_owned()),
+            expires_at: Some("2026-06-01T00:00:00Z".to_owned()),
+            rotation_owner: Some("platform-security".to_owned()),
+        },
+        true,
+        "2026-05-02T00:00:00Z".parse().expect("now"),
+        PlatformCoreServiceCallPolicy::gongzzang_worker_lakehouse_registry_write(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(PlatformCoreServiceAuthConfigError::UnsupportedScope {
+            scope,
+            required_scope
+        }) if scope == "catalog:read" && required_scope == "lakehouse:write"
+    ));
+}
+
+#[test]
 fn workload_identity_token_file_is_read_before_each_request() {
     let token_file = std::env::temp_dir().join(format!(
         "gongzzang-platform-core-token-{}-{}.txt",

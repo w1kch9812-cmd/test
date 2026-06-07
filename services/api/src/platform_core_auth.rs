@@ -8,7 +8,8 @@ use std::{
 use chrono::{DateTime, Duration, Utc};
 use thiserror::Error;
 
-const REQUIRED_SCOPE: &str = "catalog:read";
+const CATALOG_READ_SCOPE: &str = "catalog:read";
+const LAKEHOUSE_WRITE_SCOPE: &str = "lakehouse:write";
 const POLICY_ID_HEADER: &str = "x-gongzzang-service-auth-policy-id";
 const SOURCE_SERVICE_HEADER: &str = "x-gongzzang-service-auth-source";
 const TARGET_SERVICE_HEADER: &str = "x-gongzzang-service-auth-target";
@@ -17,10 +18,9 @@ const SCOPE_HEADER: &str = "x-gongzzang-service-auth-scope";
 const ISSUED_AT_HEADER: &str = "x-gongzzang-service-auth-issued-at";
 const EXPIRES_AT_HEADER: &str = "x-gongzzang-service-auth-expires-at";
 const ROTATION_OWNER_HEADER: &str = "x-gongzzang-service-auth-rotation-owner";
-const POLICY_ID: &str = "gongzzang_api_to_platform_core_api";
-const SOURCE_SERVICE: &str = "gongzzang-api";
+const API_POLICY_ID: &str = "gongzzang_api_to_platform_core_api";
+const WORKER_POLICY_ID: &str = "gongzzang_worker_to_platform_core_api";
 const TARGET_SERVICE: &str = "platform-core-api";
-const ALLOWED_CALL_ID: &str = "gongzzang_api_to_platform_core_catalog_read";
 const WORKLOAD_IDENTITY_REFRESH_BEHAVIOR: &str = "read_before_each_request";
 const MAX_TOKEN_TTL_DAYS: i64 = 90;
 
@@ -29,6 +29,45 @@ const MAX_TOKEN_TTL_DAYS: i64 = 90;
 pub struct PlatformCoreServiceAuth {
     token_source: PlatformCoreServiceAuthTokenSource,
     metadata: Option<PlatformCoreServiceAuthMetadata>,
+    call_policy: PlatformCoreServiceCallPolicy,
+}
+
+/// Default-deny call policy attached to each Platform Core service request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PlatformCoreServiceCallPolicy {
+    policy_id: &'static str,
+    source_service: &'static str,
+    target_service: &'static str,
+    allowed_call_id: &'static str,
+    required_scope: &'static str,
+}
+
+impl PlatformCoreServiceCallPolicy {
+    /// Gongzzang API read access to Platform Core Catalog.
+    pub const fn gongzzang_api_catalog_read() -> Self {
+        Self {
+            policy_id: API_POLICY_ID,
+            source_service: "gongzzang-api",
+            target_service: TARGET_SERVICE,
+            allowed_call_id: "gongzzang_api_to_platform_core_catalog_read",
+            required_scope: CATALOG_READ_SCOPE,
+        }
+    }
+
+    /// Gongzzang pipeline write access to Platform Core Lakehouse Registry.
+    pub const fn gongzzang_worker_lakehouse_registry_write() -> Self {
+        Self {
+            policy_id: WORKER_POLICY_ID,
+            source_service: "gongzzang-worker",
+            target_service: TARGET_SERVICE,
+            allowed_call_id: "gongzzang_pipeline_to_platform_core_lakehouse_registry",
+            required_scope: LAKEHOUSE_WRITE_SCOPE,
+        }
+    }
+
+    fn required_scope(self) -> &'static str {
+        self.required_scope
+    }
 }
 
 /// Source for the outbound Platform Core bearer credential.
@@ -50,7 +89,7 @@ struct PlatformCoreServiceAuthMetadata {
 /// Environment-sourced Platform Core service token metadata.
 #[derive(Clone, Debug, Default)]
 pub struct PlatformCoreServiceAuthMetadataConfig {
-    /// Token scope. Production requires `catalog:read`.
+    /// Token scope. Production requires the active Platform Core call scope.
     pub scope: Option<String>,
     /// RFC3339 timestamp when the token was issued.
     pub issued_at: Option<String>,
@@ -73,6 +112,7 @@ impl PlatformCoreServiceAuth {
         Ok(Self {
             token_source: PlatformCoreServiceAuthTokenSource::Static(Arc::from(token)),
             metadata: None,
+            call_policy: PlatformCoreServiceCallPolicy::gongzzang_api_catalog_read(),
         })
     }
 
@@ -96,6 +136,7 @@ impl PlatformCoreServiceAuth {
                 token_file,
             )),
             metadata: None,
+            call_policy: PlatformCoreServiceCallPolicy::gongzzang_api_catalog_read(),
         })
     }
 
@@ -117,12 +158,41 @@ impl PlatformCoreServiceAuth {
         is_production: bool,
         now: DateTime<Utc>,
     ) -> Result<Self, PlatformCoreServiceAuthConfigError> {
+        Self::new_for_environment_at_with_call_policy(
+            token,
+            metadata,
+            is_production,
+            now,
+            PlatformCoreServiceCallPolicy::gongzzang_api_catalog_read(),
+        )
+    }
+
+    fn new_for_environment_at_with_call_policy(
+        token: &str,
+        metadata: PlatformCoreServiceAuthMetadataConfig,
+        is_production: bool,
+        now: DateTime<Utc>,
+        call_policy: PlatformCoreServiceCallPolicy,
+    ) -> Result<Self, PlatformCoreServiceAuthConfigError> {
         let token = validate_token(token)?;
-        let metadata = PlatformCoreServiceAuthMetadata::from_config(metadata, is_production, now)?;
+        let metadata = PlatformCoreServiceAuthMetadata::from_config(
+            metadata,
+            is_production,
+            now,
+            call_policy.required_scope(),
+        )?;
         Ok(Self {
             token_source: PlatformCoreServiceAuthTokenSource::Static(Arc::from(token)),
             metadata,
+            call_policy,
         })
+    }
+
+    /// Attach a different default-deny call policy to this auth handle.
+    #[must_use]
+    pub fn with_call_policy(mut self, call_policy: PlatformCoreServiceCallPolicy) -> Self {
+        self.call_policy = call_policy;
+        self
     }
 
     /// Apply the service token to an outgoing Platform Core HTTP request.
@@ -138,10 +208,10 @@ impl PlatformCoreServiceAuth {
         let token = self.token_for_request()?;
         let request = request
             .bearer_auth(token)
-            .header(POLICY_ID_HEADER, POLICY_ID)
-            .header(SOURCE_SERVICE_HEADER, SOURCE_SERVICE)
-            .header(TARGET_SERVICE_HEADER, TARGET_SERVICE)
-            .header(ALLOWED_CALL_ID_HEADER, ALLOWED_CALL_ID);
+            .header(POLICY_ID_HEADER, self.call_policy.policy_id)
+            .header(SOURCE_SERVICE_HEADER, self.call_policy.source_service)
+            .header(TARGET_SERVICE_HEADER, self.call_policy.target_service)
+            .header(ALLOWED_CALL_ID_HEADER, self.call_policy.allowed_call_id);
         if let Some(metadata) = &self.metadata {
             return Ok(request
                 .header(SCOPE_HEADER, metadata.scope.as_ref())
@@ -169,6 +239,7 @@ impl PlatformCoreServiceAuthMetadata {
         config: PlatformCoreServiceAuthMetadataConfig,
         is_production: bool,
         now: DateTime<Utc>,
+        required_scope: &'static str,
     ) -> Result<Option<Self>, PlatformCoreServiceAuthConfigError> {
         let any_metadata = config.scope.is_some()
             || config.issued_at.is_some()
@@ -199,8 +270,11 @@ impl PlatformCoreServiceAuthMetadata {
             is_production,
         )?;
 
-        if scope != REQUIRED_SCOPE {
-            return Err(PlatformCoreServiceAuthConfigError::UnsupportedScope { scope });
+        if scope != required_scope {
+            return Err(PlatformCoreServiceAuthConfigError::UnsupportedScope {
+                scope,
+                required_scope,
+            });
         }
         let issued_at =
             parse_metadata_timestamp("PLATFORM_CORE_SERVICE_TOKEN_ISSUED_AT", &issued_at)?;
@@ -300,6 +374,7 @@ impl std::fmt::Debug for PlatformCoreServiceAuth {
             .debug_struct("PlatformCoreServiceAuth")
             .field("token_source", &self.token_source)
             .field("metadata", &self.metadata.as_ref().map(|_| "<redacted>"))
+            .field("call_policy", &self.call_policy)
             .finish()
     }
 }
@@ -369,11 +444,15 @@ pub enum PlatformCoreServiceAuthConfigError {
         /// Parse or validation detail.
         detail: String,
     },
-    /// Token scope is not the only supported Platform Core read scope.
-    #[error("PLATFORM_CORE_SERVICE_TOKEN_SCOPE must be catalog:read, got {scope}")]
+    /// Token scope is not valid for the active Platform Core call policy.
+    #[error(
+        "PLATFORM_CORE_SERVICE_TOKEN_SCOPE must be {required_scope} for this Platform Core call policy, got {scope}"
+    )]
     UnsupportedScope {
         /// Configured scope.
         scope: String,
+        /// Required scope for the active call policy.
+        required_scope: &'static str,
     },
     /// Token issue timestamp is after or equal to expiry.
     #[error("PLATFORM_CORE_SERVICE_TOKEN_ISSUED_AT must be before PLATFORM_CORE_SERVICE_TOKEN_EXPIRES_AT")]
