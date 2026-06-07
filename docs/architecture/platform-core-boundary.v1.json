@@ -33,6 +33,11 @@
       "kind": "immutable_anchor_artifact",
       "direction": "gongzzang_to_platform_core",
       "purpose": "PNU anchor read-model import"
+    },
+    {
+      "kind": "lakehouse_registry_registration",
+      "direction": "gongzzang_to_platform_core",
+      "purpose": "Gongzzang-owned governed lakehouse artifact registration after verified writes"
     }
   ],
   "forbidden_integration_contracts": [

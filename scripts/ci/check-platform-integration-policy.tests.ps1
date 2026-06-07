@@ -88,10 +88,12 @@ function Write-MinimalRepo {
     {"id":"platform_integration.webhook","path":"docs/architecture/platform-integration/webhook-policy.v1.json","schema_version":"gongzzang.platform_integration.webhook_policy.v1"},
     {"id":"platform_integration.supply_chain","path":"docs/architecture/platform-integration/supply-chain-policy.v1.json","schema_version":"gongzzang.platform_integration.supply_chain_policy.v1"},
     {"id":"platform_integration.operations","path":"docs/architecture/platform-integration/operations-policy.v1.json","schema_version":"gongzzang.platform_integration.operations_policy.v1"},
-    {"id":"platform_integration.exception_policy","path":"docs/architecture/platform-integration/exception-policy.v1.json","schema_version":"gongzzang.platform_integration.exception_policy.v1"}
+    {"id":"platform_integration.exception_policy","path":"docs/architecture/platform-integration/exception-policy.v1.json","schema_version":"gongzzang.platform_integration.exception_policy.v1"},
+    {"id":"platform_integration.lakehouse_registry","path":"docs/architecture/platform-integration/lakehouse-registry-policy.v1.json","schema_version":"gongzzang.platform_integration.lakehouse_registry_policy.v1"}
   ],
   "required_guardrails": [
     "scripts/ci/check-platform-integration-policy.ps1",
+    "scripts/ci/check-lakehouse-registry-integration.ps1",
     "scripts/ci/check-traffic-auth-policy-registry.ps1",
     "scripts/ci/check-platform-core-boundary.ps1",
     "scripts/ci/check-platform-core-event-receiver-contract.ps1",
@@ -116,6 +118,8 @@ function Write-MinimalRepo {
     "cargo-deny-action",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
+    "check-lakehouse-registry-integration.ps1",
+    "check-lakehouse-registry-integration.tests.ps1",
     "check-migration-version-prefixes.ps1",
     "check-platform-core-anchor-inbox-db-approval.ps1",
     "supply-chain-provenance",
@@ -567,6 +571,11 @@ $productionEdgeAdmissionJson
   ]
 }
 "@
+    Write-File -Root $Root -RelativePath "docs\architecture\platform-integration\lakehouse-registry-policy.v1.json" -Content @'
+{
+  "schema_version": "gongzzang.platform_integration.lakehouse_registry_policy.v1"
+}
+'@
     Write-File -Root $Root -RelativePath "docs\architecture\traffic-auth-policy-registry.v1.json" -Content @'
 {
   "schema_version": "gongzzang.traffic_auth_policy_registry.v1",
@@ -614,6 +623,7 @@ PLATFORM_CORE_WEBHOOK_SECRET=fixture-platform-core-webhook-secret
     Write-File -Root $Root -RelativePath ".gitleaks.toml" -Content "gitleaks"
     foreach ($guardrailScript in @(
         "scripts\ci\check-platform-integration-policy.ps1",
+        "scripts\ci\check-lakehouse-registry-integration.ps1",
         "scripts\ci\check-traffic-auth-policy-registry.ps1",
         "scripts\ci\check-platform-core-boundary.ps1",
         "scripts\ci\check-platform-core-event-receiver-contract.ps1",
@@ -628,6 +638,9 @@ PLATFORM_CORE_WEBHOOK_SECRET=fixture-platform-core-webhook-secret
         Write-File -Root $Root -RelativePath $guardrailScript -Content "guardrail"
     }
     $integrationCi = if ($OmitCiWiring) { "" } else { "check-platform-integration-policy.ps1" }
+    $lakehouseRegistryCi = if ($OmitCiWiring) { "" } else {
+        "check-lakehouse-registry-integration.ps1`ncheck-lakehouse-registry-integration.tests.ps1"
+    }
     $migrationPrefixCi = if ($OmitMigrationPrefixCi) { "" } else { "check-migration-version-prefixes.ps1" }
     $supplyChainCi = if ($OmitSupplyChainCi) {
         ""
@@ -658,6 +671,7 @@ pnpm audit --audit-level moderate
 cargo-deny-action
 gitleaks-action
 $integrationCi
+$lakehouseRegistryCi
 $supplyChainCi
 "@
     if (!$OmitDeployAdmissionWorkflow) {
@@ -752,6 +766,7 @@ RequiredScenarios
     $migrationPrefixLefthook = if ($OmitMigrationPrefixLefthook) { "" } else { "check-migration-version-prefixes.ps1" }
     Write-File -Root $Root -RelativePath "lefthook.yml" -Content @"
 check-platform-integration-policy.ps1
+check-lakehouse-registry-integration.ps1
 $migrationPrefixLefthook
 check-platform-core-anchor-inbox-db-approval.ps1
 gitleaks protect --staged --redact -v

@@ -71,6 +71,9 @@ case "$task" in
   platform-integration-policy)
     run_pwsh scripts/ci/check-platform-integration-policy.ps1 -Root "$repo_root"
     ;;
+  lakehouse-registry-integration)
+    run_pwsh scripts/ci/check-lakehouse-registry-integration.ps1 -Root "$repo_root"
+    ;;
   traffic-auth-policy-registry)
     run_pwsh scripts/ci/check-traffic-auth-policy-registry.ps1 -Root "$repo_root"
     ;;

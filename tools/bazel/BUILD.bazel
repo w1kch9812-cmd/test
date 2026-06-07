@@ -160,6 +160,13 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "guardrail_lakehouse_registry_integration",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["lakehouse-registry-integration"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_traffic_auth_policy_registry",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["traffic-auth-policy-registry"],

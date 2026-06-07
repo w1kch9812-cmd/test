@@ -84,6 +84,37 @@
         "default_deny_authorization",
         "policy_id_audit_attribute"
       ]
+    },
+    {
+      "id": "gongzzang_pipeline_to_platform_core_lakehouse_registry",
+      "status": "planned",
+      "direction": "outbound",
+      "source_repo": "gongzzang",
+      "source_service": "gongzzang-worker",
+      "target_repo": "platform-core",
+      "target_service": "platform-core-api",
+      "protocol": "https",
+      "methods": ["GET", "POST"],
+      "allowed_surfaces": [
+        "POST /internal/lakehouse/ingestion-runs",
+        "POST /internal/lakehouse/artifacts",
+        "POST /internal/lakehouse/quality-checks",
+        "POST /internal/lakehouse/lineage",
+        "POST /internal/lakehouse/promotions",
+        "GET /internal/lakehouse/assets/{qualified_name}/active"
+      ],
+      "decision_reference": "docs/adr/0039-service-owned-lakehouse-registry-integration.md",
+      "current_required_controls": [
+        "registry_contract_defined",
+        "object_checksum_verified",
+        "no_direct_database"
+      ],
+      "target_required_controls": [
+        "short_lived_workload_identity",
+        "mtls",
+        "default_deny_authorization",
+        "policy_id_audit_attribute"
+      ]
     }
   ],
   "prohibited_calls": [

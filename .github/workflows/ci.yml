@@ -70,6 +70,12 @@ jobs:
       - name: Platform Integration policy guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-integration-policy.ps1
+      - name: Lakehouse Registry integration guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-lakehouse-registry-integration.ps1
+      - name: Lakehouse Registry integration guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-lakehouse-registry-integration.tests.ps1
       - name: Platform Core boundary guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-core-boundary.ps1

@@ -11,7 +11,8 @@ $RequiredContracts = @(
     "http_api:gongzzang_to_platform_core",
     "runtime_vector_tile_manifest:gongzzang_to_platform_core",
     "outbox_webhook_event:platform_core_to_gongzzang",
-    "immutable_anchor_artifact:gongzzang_to_platform_core"
+    "immutable_anchor_artifact:gongzzang_to_platform_core",
+    "lakehouse_registry_registration:gongzzang_to_platform_core"
 )
 $RequiredCiGates = @(
     "scripts/ci/check-platform-core-boundary.ps1",

@@ -168,7 +168,8 @@ function New-BoundaryJson {
     {"kind":"http_api","direction":"gongzzang_to_platform_core"},
     {"kind":"runtime_vector_tile_manifest","direction":"gongzzang_to_platform_core"},
     {"kind":"outbox_webhook_event","direction":"platform_core_to_gongzzang"},
-    {"kind":"immutable_anchor_artifact","direction":"gongzzang_to_platform_core"}
+    {"kind":"immutable_anchor_artifact","direction":"gongzzang_to_platform_core"},
+    {"kind":"lakehouse_registry_registration","direction":"gongzzang_to_platform_core"}
   ],
   "forbidden_integration_contracts": [
     {"kind":"direct_platform_core_database"},

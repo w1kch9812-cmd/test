@@ -48,6 +48,8 @@ pre-commit:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
     platform-core-boundary:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
+    lakehouse-registry-integration:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-lakehouse-registry-integration.ps1
     platform-core-event-receiver-contract:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
     platform-core-catalog-api-contract:
@@ -114,6 +116,11 @@ pre-push:
         - rebase
     platform-integration-policy:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1
+      skip:
+        - merge
+        - rebase
+    lakehouse-registry-integration:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-lakehouse-registry-integration.ps1
       skip:
         - merge
         - rebase

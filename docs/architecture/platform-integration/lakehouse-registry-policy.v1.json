@@ -1,0 +1,84 @@
+{
+  "schema_version": "gongzzang.platform_integration.lakehouse_registry_policy.v1",
+  "repo_slug": "gongzzang",
+  "owner": "gongzzang-platform",
+  "status": "active",
+  "owner_service": "gongzzang",
+  "decision_sources": [
+    "docs/adr/0039-service-owned-lakehouse-registry-integration.md",
+    "docs/research/2026-06-07-enterprise-lakehouse-media-registry-benchmark.md",
+    "../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md"
+  ],
+  "platform_core_registry": {
+    "contract_ref": "../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md",
+    "allowed_call_id": "gongzzang_pipeline_to_platform_core_lakehouse_registry",
+    "api_surfaces": [
+      "POST /internal/lakehouse/ingestion-runs",
+      "POST /internal/lakehouse/artifacts",
+      "POST /internal/lakehouse/quality-checks",
+      "POST /internal/lakehouse/lineage",
+      "POST /internal/lakehouse/promotions",
+      "GET /internal/lakehouse/assets/{qualified_name}/active"
+    ]
+  },
+  "storage_namespaces": [
+    {
+      "id": "gongzzang_r2_production",
+      "provider": "r2",
+      "environment": "production",
+      "owner_service": "gongzzang",
+      "bucket_name": "gongzzang-lakehouse-prod",
+      "root_prefix": null,
+      "catalog_provider": "r2_data_catalog",
+      "status": "active",
+      "allowed_root_prefixes": ["bronze/", "silver/", "gold/", "media/", "__r2_data_catalog/"]
+    }
+  ],
+  "governed_assets": [
+    {
+      "qualified_name": "gongzzang.bronze.onbid_sale",
+      "layer": "bronze",
+      "asset_kind": "raw_object_set",
+      "namespace_id": "gongzzang_r2_production",
+      "allowed_object_prefixes": ["bronze/source=onbid-sale/"],
+      "registry_required": true
+    },
+    {
+      "qualified_name": "gongzzang.bronze.court_auction",
+      "layer": "bronze",
+      "asset_kind": "raw_object_set",
+      "namespace_id": "gongzzang_r2_production",
+      "allowed_object_prefixes": ["bronze/source=court-auction/"],
+      "registry_required": true
+    },
+    {
+      "qualified_name": "gongzzang.gold.listing_marker_tiles",
+      "layer": "gold",
+      "asset_kind": "pbf_tile_set",
+      "namespace_id": "gongzzang_r2_production",
+      "allowed_object_prefixes": ["gold/listing-marker-tiles/"],
+      "registry_required": true
+    },
+    {
+      "qualified_name": "gongzzang.gold.listing_marker_serving_index",
+      "layer": "gold",
+      "asset_kind": "manifest",
+      "namespace_id": "gongzzang_r2_production",
+      "allowed_object_prefixes": ["gold/listing-marker-serving-index/"],
+      "registry_required": true
+    },
+    {
+      "qualified_name": "gongzzang.gold.listing_photo_media",
+      "layer": "gold",
+      "asset_kind": "media_set",
+      "namespace_id": "gongzzang_r2_production",
+      "allowed_object_prefixes": ["media/listing-photo/"],
+      "registry_required": true
+    }
+  ],
+  "forbidden_unowned_root_prefix_writes": ["bronze/", "silver/", "gold/"],
+  "required_env_contract": {
+    "GONGZZANG_LAKEHOUSE_R2_BUCKET": "gongzzang-lakehouse-prod",
+    "LISTING_PHOTO_R2_BUCKET": "gongzzang-lakehouse-prod"
+  }
+}

@@ -7,6 +7,7 @@
 | Preceded by | [ADR 0030](./0030-three-service-architecture.md), [ADR 0034](./0034-catalog-ownership-handover-to-platform-core.md), [ADR 0036](./0036-static-vector-tile-runtime-contract.md), [ADR 0038](./0038-listing-marker-serving-index-filter-mask.md) |
 | Platform Core counterpart | `../../../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md` |
 | Enterprise benchmark | [2026-06-07 enterprise lakehouse/media/registry benchmark](../research/2026-06-07-enterprise-lakehouse-media-registry-benchmark.md) |
+| Gongzzang policy SSOT | [Lakehouse Registry integration policy](../architecture/platform-integration/lakehouse-registry-policy.v1.json) |
 
 ## Context
 
@@ -127,3 +128,11 @@ Cost:
 3. Add Platform Core Registry registration to Gongzzang pipeline completion.
 4. Add CI checks that reject new shared root medallion prefixes without explicit owner namespace.
 5. Keep Platform Core Catalog consumption through published API/event/artifact contracts.
+
+## Enforcement
+
+Gongzzang's local guardrail is
+`scripts/ci/check-lakehouse-registry-integration.ps1`. It verifies the policy SSOT, platform
+integration index wiring, Platform Core boundary contract, required R2 env bucket names, listing
+photo media namespace, and absence of unmanaged root `gongzzang/bronze`, `gongzzang/silver`, or
+`gongzzang/gold` writes in active implementation paths.

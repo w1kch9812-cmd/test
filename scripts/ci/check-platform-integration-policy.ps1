@@ -109,6 +109,7 @@ $webhookPath = "docs/architecture/platform-integration/webhook-policy.v1.json"
 $supplyChainPath = "docs/architecture/platform-integration/supply-chain-policy.v1.json"
 $operationsPath = "docs/architecture/platform-integration/operations-policy.v1.json"
 $exceptionPath = "docs/architecture/platform-integration/exception-policy.v1.json"
+$lakehouseRegistryPath = "docs/architecture/platform-integration/lakehouse-registry-policy.v1.json"
 $trafficPath = "docs/architecture/traffic-auth-policy-registry.v1.json"
 $boundaryPath = "docs/architecture/platform-core-boundary.v1.json"
 
@@ -120,6 +121,7 @@ $webhookPolicy = Read-JsonFile -RelativePath $webhookPath
 $supplyChainPolicy = Read-JsonFile -RelativePath $supplyChainPath
 $operationsPolicy = Read-JsonFile -RelativePath $operationsPath
 $exceptionPolicy = Read-JsonFile -RelativePath $exceptionPath
+$lakehouseRegistryPolicy = Read-JsonFile -RelativePath $lakehouseRegistryPath
 $trafficPolicy = Read-JsonFile -RelativePath $trafficPath
 $boundary = Read-JsonFile -RelativePath $boundaryPath
 
@@ -131,11 +133,12 @@ Assert-Equals -Actual $webhookPolicy.schema_version -Expected "gongzzang.platfor
 Assert-Equals -Actual $supplyChainPolicy.schema_version -Expected "gongzzang.platform_integration.supply_chain_policy.v1" -Message "supply chain policy schema_version mismatch"
 Assert-Equals -Actual $operationsPolicy.schema_version -Expected "gongzzang.platform_integration.operations_policy.v1" -Message "operations policy schema_version mismatch"
 Assert-Equals -Actual $exceptionPolicy.schema_version -Expected "gongzzang.platform_integration.exception_policy.v1" -Message "exception policy schema_version mismatch"
+Assert-Equals -Actual $lakehouseRegistryPolicy.schema_version -Expected "gongzzang.platform_integration.lakehouse_registry_policy.v1" -Message "lakehouse registry policy schema_version mismatch"
 Assert-Equals -Actual $trafficPolicy.schema_version -Expected "gongzzang.traffic_auth_policy_registry.v1" -Message "traffic policy schema_version mismatch"
 Assert-Equals -Actual $boundary.schema_version -Expected "gongzzang.platform_core_boundary.v1" -Message "boundary schema_version mismatch"
 
 $components = @($index.components)
-Assert-Equals -Actual $components.Count -Expected 9 -Message "platform integration component count mismatch"
+Assert-Equals -Actual $components.Count -Expected 10 -Message "platform integration component count mismatch"
 Assert-Unique -Values ($components | ForEach-Object { $_.id }) -Message "platform integration component ids must be unique"
 foreach ($component in $components) {
     Assert-FileExists -RelativePath ([string] $component.path)
@@ -152,7 +155,8 @@ foreach ($required in @(
     "platform_integration.webhook",
     "platform_integration.supply_chain",
     "platform_integration.operations",
-    "platform_integration.exception_policy"
+    "platform_integration.exception_policy",
+    "platform_integration.lakehouse_registry"
 )) {
     if (!(@($components | ForEach-Object { [string] $_.id }) -contains $required)) {
         throw "platform integration index missing component '$required'"
@@ -161,6 +165,7 @@ foreach ($required in @(
 
 $requiredIndexGuardrails = @(
     "scripts/ci/check-platform-integration-policy.ps1",
+    "scripts/ci/check-lakehouse-registry-integration.ps1",
     "scripts/ci/check-traffic-auth-policy-registry.ps1",
     "scripts/ci/check-platform-core-boundary.ps1",
     "scripts/ci/check-platform-core-event-receiver-contract.ps1",
@@ -898,6 +903,8 @@ foreach ($needle in @(
     "cargo-deny-action",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
+    "check-lakehouse-registry-integration.ps1",
+    "check-lakehouse-registry-integration.tests.ps1",
     "supply-chain-provenance:",
     "id-token: write",
     "attestations: write",
@@ -943,6 +950,7 @@ if ($IncludeProductionPromotion) {
 
 $lefthook = Read-TextFile -RelativePath "lefthook.yml"
 Assert-Contains -Content $lefthook -Needle "check-platform-integration-policy.ps1" -Message "lefthook platform integration gate"
+Assert-Contains -Content $lefthook -Needle "check-lakehouse-registry-integration.ps1" -Message "lefthook lakehouse registry integration gate"
 Assert-Contains -Content $lefthook -Needle "check-migration-version-prefixes.ps1" -Message "lefthook migration prefix gate"
 Assert-Contains -Content $lefthook -Needle "check-platform-core-anchor-inbox-db-approval.ps1" -Message "lefthook anchor inbox DB approval gate"
 Assert-Contains -Content $lefthook -Needle "gitleaks protect --staged --redact -v" -Message "lefthook gitleaks gate"

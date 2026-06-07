@@ -5,6 +5,7 @@ Date: 2026-06-05
 Owner: `gongzzang`
 Counterpart: `../../../../platform-core/docs/adr/0009-cross-service-lakehouse-registry-control-plane.md`
 Enterprise benchmark: `../../research/2026-06-07-enterprise-lakehouse-media-registry-benchmark.md`
+Policy SSOT: `../../architecture/platform-integration/lakehouse-registry-policy.v1.json`
 
 ## Summary
 
@@ -91,6 +92,8 @@ the media object.
 - No raw Bronze body in Postgres JSONB as primary archive.
 - No direct guessing of Platform Core R2 keys.
 - No writes to shared root `bronze/` or `gold/` without owner namespace.
+- `scripts/ci/check-lakehouse-registry-integration.ps1` must pass before Gongzzang-owned lakehouse
+  artifact writers or media namespace changes are accepted.
 
 ## Implementation Order
 

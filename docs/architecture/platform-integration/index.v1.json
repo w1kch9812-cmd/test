@@ -8,6 +8,7 @@
     "docs/adr/0034-catalog-ownership-handover-to-platform-core.md",
     "docs/adr/0037-pnu-anchor-pbf-marker-tiles.md",
     "docs/adr/0038-listing-marker-serving-index-filter-mask.md",
+    "docs/adr/0039-service-owned-lakehouse-registry-integration.md",
     "docs/adr/0028-supply-chain-sha-pin-and-cleanup-cron.md"
   ],
   "components": [
@@ -64,10 +65,17 @@
       "path": "docs/architecture/platform-integration/exception-policy.v1.json",
       "schema_version": "gongzzang.platform_integration.exception_policy.v1",
       "primary_guardrail": "scripts/ci/check-platform-integration-policy.ps1"
+    },
+    {
+      "id": "platform_integration.lakehouse_registry",
+      "path": "docs/architecture/platform-integration/lakehouse-registry-policy.v1.json",
+      "schema_version": "gongzzang.platform_integration.lakehouse_registry_policy.v1",
+      "primary_guardrail": "scripts/ci/check-lakehouse-registry-integration.ps1"
     }
   ],
   "required_guardrails": [
     "scripts/ci/check-platform-integration-policy.ps1",
+    "scripts/ci/check-lakehouse-registry-integration.ps1",
     "scripts/ci/check-traffic-auth-policy-registry.ps1",
     "scripts/ci/check-platform-core-boundary.ps1",
     "scripts/ci/check-platform-core-event-receiver-contract.ps1",
@@ -88,6 +96,8 @@
     "cargo-deny-action",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
+    "check-lakehouse-registry-integration.ps1",
+    "check-lakehouse-registry-integration.tests.ps1",
     "check-migration-version-prefixes.ps1",
     "check-platform-core-anchor-inbox-db-approval.ps1",
     "supply-chain-provenance",
