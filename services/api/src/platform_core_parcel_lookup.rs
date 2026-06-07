@@ -19,7 +19,7 @@ use shared_kernel::pnu::Pnu;
 use thiserror::Error;
 use tracing::instrument;
 
-use crate::platform_core_auth::PlatformCoreServiceAuth;
+use auth::platform_core_service::PlatformCoreServiceAuth;
 
 const PLATFORM_CORE_API_BASE_URL_ENV: &str = "PLATFORM_CORE_API_BASE_URL";
 
@@ -148,7 +148,7 @@ enum PlatformCoreParcelHttpError {
     #[error("Platform Core parcel lookup service auth failed: {source}")]
     ServiceAuth {
         #[source]
-        source: crate::platform_core_auth::PlatformCoreServiceAuthConfigError,
+        source: auth::platform_core_service::PlatformCoreServiceAuthConfigError,
     },
 }
 
@@ -259,7 +259,9 @@ mod tests {
 
     use shared_kernel::land_use_type::LandUseType;
 
-    use crate::platform_core_auth::PlatformCoreServiceAuth;
+    use auth::platform_core_service::{
+        PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig,
+    };
 
     use super::*;
 
@@ -323,8 +325,7 @@ mod tests {
             "HTTP/1.1 200 OK",
             &platform_core_parcel_json(REQUEST_PNU, "factory"),
         );
-        let auth = PlatformCoreServiceAuth::new("platform-core-service-token-32-valid")
-            .expect("service auth");
+        let auth = test_service_auth();
         let lookup =
             PlatformCoreParcelInfoLookup::new(&base_url, Some(auth)).expect("valid base url");
         let pnu = Pnu::try_new(REQUEST_PNU).unwrap();
@@ -346,6 +347,15 @@ mod tests {
         let (base_url, _requests) =
             spawn_platform_core_response_capture(expected_pnu, status_line, body);
         base_url
+    }
+
+    fn test_service_auth() -> PlatformCoreServiceAuth {
+        PlatformCoreServiceAuth::new_for_environment(
+            "platform-core-service-token-32-valid",
+            PlatformCoreServiceAuthMetadataConfig::default(),
+            false,
+        )
+        .expect("service auth")
     }
 
     fn spawn_platform_core_response_capture(

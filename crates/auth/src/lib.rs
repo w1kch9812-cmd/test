@@ -19,5 +19,6 @@ pub mod extractor;
 pub mod jti_denylist;
 pub mod jwks_cache;
 pub mod middleware;
+pub mod platform_core_service;
 pub mod role_guard;
 pub mod verifier;

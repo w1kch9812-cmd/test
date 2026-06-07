@@ -300,8 +300,10 @@ function Assert-ServiceAuthPolicy {
         -Expected ([string] $Policy.platform_core_registry.allowed_call_id) `
         -Message "lakehouse registry auth allowed_call_id mismatch"
     foreach ($runtimeFile in @(
-            "services/api/src/platform_core_auth.rs",
-            "services/api/src/platform_core_lakehouse_registry.rs"
+            "crates/auth/src/platform_core_service.rs",
+            "services/outbox-publisher/src/main.rs",
+            "services/outbox-publisher/src/listing_photo_lakehouse.rs",
+            "services/outbox-publisher/src/platform_core_lakehouse_registry.rs"
         )) {
         Assert-ContainsString `
             -Values @($identity.runtime_files | ForEach-Object { [string] $_ }) `

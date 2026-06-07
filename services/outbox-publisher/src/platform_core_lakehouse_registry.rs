@@ -7,7 +7,7 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::platform_core_auth::PlatformCoreServiceAuth;
+use auth::platform_core_service::PlatformCoreServiceAuth;
 
 const PLATFORM_CORE_API_BASE_URL_ENV: &str = "PLATFORM_CORE_API_BASE_URL";
 
@@ -50,7 +50,7 @@ impl PlatformCoreLakehouseRegistryClient {
     ///
     /// Returns an error when local artifact invariants fail, the Platform Core
     /// request fails, or the registry returns a non-success status.
-    pub async fn register_object_artifact(
+    pub async fn register_object_artifact_http(
         &self,
         artifact: LakehouseObjectArtifactRegistration,
     ) -> Result<LakehouseArtifactRegistrationReceipt, PlatformCoreLakehouseRegistryError> {
@@ -83,10 +83,17 @@ impl PlatformCoreLakehouseRegistryClient {
             return Err(PlatformCoreLakehouseRegistryError::Status { status });
         }
 
-        response
+        let receipt = response
             .json::<LakehouseArtifactRegistrationReceipt>()
             .await
-            .map_err(|source| PlatformCoreLakehouseRegistryError::Decode { source })
+            .map_err(|source| PlatformCoreLakehouseRegistryError::Decode { source })?;
+        tracing::info!(
+            artifact_id = %receipt.artifact_id,
+            qualified_name = %receipt.qualified_name,
+            object_key = %receipt.object_key,
+            "Platform Core Lakehouse artifact registered"
+        );
+        Ok(receipt)
     }
 }
 
@@ -187,7 +194,7 @@ pub enum PlatformCoreLakehouseRegistryError {
     ServiceAuth {
         /// Underlying service auth error.
         #[source]
-        source: crate::platform_core_auth::PlatformCoreServiceAuthConfigError,
+        source: auth::platform_core_service::PlatformCoreServiceAuthConfigError,
     },
     /// Response body did not match the expected registry receipt contract.
     #[error("decode Platform Core Lakehouse Registry response: {source}")]
@@ -314,7 +321,7 @@ fn is_lower_snake_token(value: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
 }
 
-fn invalid_artifact<T>(
+const fn invalid_artifact<T>(
     field: &'static str,
     reason: &'static str,
 ) -> Result<T, PlatformCoreLakehouseRegistryError> {
@@ -331,7 +338,10 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use crate::platform_core_auth::{PlatformCoreServiceAuth, PlatformCoreServiceCallPolicy};
+    use auth::platform_core_service::{
+        PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig,
+        PlatformCoreServiceCallPolicy,
+    };
 
     use super::*;
 
@@ -341,15 +351,11 @@ mod tests {
             "HTTP/1.1 201 Created",
             r#"{"artifact_id":"artifact-01","qualified_name":"gongzzang.bronze.onbid_sale","object_key":"bronze/source=onbid-sale/run=20260607/page-000001.json"}"#,
         );
-        let auth = PlatformCoreServiceAuth::new("platform-core-service-token-32-valid")
-            .expect("service auth")
-            .with_call_policy(
-                PlatformCoreServiceCallPolicy::gongzzang_worker_lakehouse_registry_write(),
-            );
+        let auth = worker_service_auth();
         let client = PlatformCoreLakehouseRegistryClient::new(&base_url, auth).expect("client");
 
         let receipt = client
-            .register_object_artifact(LakehouseObjectArtifactRegistration {
+            .register_object_artifact_http(LakehouseObjectArtifactRegistration {
                 qualified_name: "gongzzang.bronze.onbid_sale".to_owned(),
                 namespace_id: "gongzzang_r2_production".to_owned(),
                 object_key: "bronze/source=onbid-sale/run=20260607/page-000001.json".to_owned(),
@@ -391,15 +397,11 @@ mod tests {
             "HTTP/1.1 201 Created",
             r#"{"artifact_id":"artifact-01","qualified_name":"gongzzang.bronze.onbid_sale","object_key":"ignored"}"#,
         );
-        let auth = PlatformCoreServiceAuth::new("platform-core-service-token-32-valid")
-            .expect("service auth")
-            .with_call_policy(
-                PlatformCoreServiceCallPolicy::gongzzang_worker_lakehouse_registry_write(),
-            );
+        let auth = worker_service_auth();
         let client = PlatformCoreLakehouseRegistryClient::new(&base_url, auth).expect("client");
 
         let error = client
-            .register_object_artifact(LakehouseObjectArtifactRegistration {
+            .register_object_artifact_http(LakehouseObjectArtifactRegistration {
                 qualified_name: "gongzzang.bronze.onbid_sale".to_owned(),
                 namespace_id: "gongzzang_r2_production".to_owned(),
                 object_key: "../bronze/source=onbid-sale/page-000001.json".to_owned(),
@@ -439,5 +441,15 @@ mod tests {
         });
 
         (format!("http://{addr}"), rx)
+    }
+
+    fn worker_service_auth() -> PlatformCoreServiceAuth {
+        PlatformCoreServiceAuth::new_for_environment_with_call_policy(
+            "platform-core-service-token-32-valid",
+            PlatformCoreServiceAuthMetadataConfig::default(),
+            false,
+            PlatformCoreServiceCallPolicy::gongzzang_worker_lakehouse_registry_write(),
+        )
+        .expect("service auth")
     }
 }

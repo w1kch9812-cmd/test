@@ -793,7 +793,7 @@ PLATFORM_CORE_WORKLOAD_IDENTITY_TOKEN_FILE
 read_before_each_request
 '@
     }
-    Write-File -Root $Root -RelativePath "services\api\src\platform_core_auth.rs" -Content @"
+    Write-File -Root $Root -RelativePath "crates\auth\src\platform_core_service.rs" -Content @"
 pub fn apply(request: reqwest::RequestBuilder) { request.bearer_auth("token"); }
 pub fn fmt() { "<redacted>"; }
 new_for_environment

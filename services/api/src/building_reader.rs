@@ -14,10 +14,10 @@ use serde::Deserialize;
 use shared_kernel::pnu::Pnu;
 use thiserror::Error;
 
-use crate::platform_core_auth::PlatformCoreServiceAuth;
 use crate::routes::buildings::{
     BuildingRegisterError, BuildingRegisterReader, BuildingRegisterRecord,
 };
+use auth::platform_core_service::PlatformCoreServiceAuth;
 
 /// Configuration error for the Platform Core building reader.
 #[derive(Debug, Error)]
@@ -47,7 +47,7 @@ enum PlatformCoreBuildingReaderError {
     #[error("Platform Core building lookup service auth failed: {source}")]
     ServiceAuth {
         #[source]
-        source: crate::platform_core_auth::PlatformCoreServiceAuthConfigError,
+        source: auth::platform_core_service::PlatformCoreServiceAuthConfigError,
     },
     #[error(
         "Platform Core building stories value is outside Gongzzang route contract: id={id} stories={stories}"
@@ -250,7 +250,9 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use crate::platform_core_auth::PlatformCoreServiceAuth;
+    use auth::platform_core_service::{
+        PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig,
+    };
 
     use super::*;
 
@@ -365,8 +367,7 @@ mod tests {
 ]
 "#;
         let (base_url, requests) = spawn_platform_core_request_capture("HTTP/1.1 200 OK", body);
-        let auth = PlatformCoreServiceAuth::new("platform-core-service-token-32-valid")
-            .expect("service auth");
+        let auth = test_service_auth();
         let reader =
             PlatformCoreBuildingRegisterReader::new(&base_url, Some(auth)).expect("reader");
         let pnu = Pnu::try_new("1168010100107370000").expect("valid pnu");
@@ -386,6 +387,15 @@ mod tests {
 
     fn spawn_platform_core_response(status_line: &str, body: &str) -> (String, Receiver<String>) {
         spawn_platform_core_responses(status_line, body, 1)
+    }
+
+    fn test_service_auth() -> PlatformCoreServiceAuth {
+        PlatformCoreServiceAuth::new_for_environment(
+            "platform-core-service-token-32-valid",
+            PlatformCoreServiceAuthMetadataConfig::default(),
+            false,
+        )
+        .expect("service auth")
     }
 
     fn spawn_platform_core_responses(

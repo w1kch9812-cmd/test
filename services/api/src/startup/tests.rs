@@ -4,7 +4,7 @@ use auth::verifier::Verifier;
 use chrono::{Duration, Utc};
 
 use crate::photo_upload::ListingPhotoUploadConfigError;
-use crate::platform_core_auth::PlatformCoreServiceAuthMetadataConfig;
+use auth::platform_core_service::PlatformCoreServiceAuthMetadataConfig;
 
 use super::{
     build_building_reader_from_platform_core_base_url,

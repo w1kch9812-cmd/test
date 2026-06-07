@@ -24,24 +24,34 @@ pub struct ListingPhotoUploadConfirmed {
     occurred_at: DateTime<Utc>,
 }
 
+/// Input facts for [`ListingPhotoUploadConfirmed`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ListingPhotoUploadConfirmedFacts {
+    /// Listing photo id.
+    pub photo_id: Id<ListingPhotoMarker>,
+    /// Owning listing id.
+    pub listing_id: Id<ListingMarker>,
+    /// Verified R2 object key.
+    pub r2_key: String,
+    /// Verified object MIME type.
+    pub content_type: PhotoContentType,
+    /// Verified object size in bytes.
+    pub file_size_bytes: i64,
+    /// Domain event occurrence time.
+    pub occurred_at: DateTime<Utc>,
+}
+
 impl ListingPhotoUploadConfirmed {
     /// Build the event from a verified storage object and its owning listing photo.
     #[must_use]
-    pub const fn new(
-        photo_id: Id<ListingPhotoMarker>,
-        listing_id: Id<ListingMarker>,
-        r2_key: String,
-        content_type: PhotoContentType,
-        file_size_bytes: i64,
-        occurred_at: DateTime<Utc>,
-    ) -> Self {
+    pub fn new(facts: ListingPhotoUploadConfirmedFacts) -> Self {
         Self {
-            photo_id,
-            listing_id,
-            r2_key,
-            content_type,
-            file_size_bytes,
-            occurred_at,
+            photo_id: facts.photo_id,
+            listing_id: facts.listing_id,
+            r2_key: facts.r2_key,
+            content_type: facts.content_type,
+            file_size_bytes: facts.file_size_bytes,
+            occurred_at: facts.occurred_at,
         }
     }
 }

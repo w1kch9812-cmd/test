@@ -9,9 +9,9 @@ use sqlx::postgres::PgPoolOptions;
 
 use crate::building_reader;
 use crate::photo_upload;
-use crate::platform_core_auth::{PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig};
 use crate::platform_core_parcel_lookup;
 use crate::routes;
+use auth::platform_core_service::{PlatformCoreServiceAuth, PlatformCoreServiceAuthMetadataConfig};
 
 /// Dev-only building reader fallback.
 /// Production requires Platform Core Catalog because canonical building data is

@@ -225,8 +225,10 @@ $guardrailLine
         "allowed_call_id": "gongzzang_pipeline_to_platform_core_lakehouse_registry"
       },
       "runtime_files": [
-        "services/api/src/platform_core_auth.rs",
-        "services/api/src/platform_core_lakehouse_registry.rs"
+        "crates/auth/src/platform_core_service.rs",
+        "services/outbox-publisher/src/main.rs",
+        "services/outbox-publisher/src/listing_photo_lakehouse.rs",
+        "services/outbox-publisher/src/platform_core_lakehouse_registry.rs"
       ]
     }
   ]

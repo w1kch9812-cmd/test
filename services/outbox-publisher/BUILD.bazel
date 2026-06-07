@@ -8,8 +8,11 @@ gongzzang_rust_binary_with_unit_test(
     crate_root = "src/main.rs",
     srcs = glob(["src/**/*.rs"]),
     internal_deps = [
+        "//crates/auth:auth",
+        "//crates/circuit-breaker:circuit_breaker",
         "//crates/db:db",
         "//crates/domain/audit/outbox-event:outbox_event_domain",
+        "//crates/domain/core/shared-kernel:shared_kernel",
         "//crates/outbox-publisher:outbox_publisher",
     ],
 )

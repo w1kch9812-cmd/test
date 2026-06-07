@@ -44,6 +44,7 @@ pub struct PlatformCoreServiceCallPolicy {
 
 impl PlatformCoreServiceCallPolicy {
     /// Gongzzang API read access to Platform Core Catalog.
+    #[must_use]
     pub const fn gongzzang_api_catalog_read() -> Self {
         Self {
             policy_id: API_POLICY_ID,
@@ -55,6 +56,7 @@ impl PlatformCoreServiceCallPolicy {
     }
 
     /// Gongzzang pipeline write access to Platform Core Lakehouse Registry.
+    #[must_use]
     pub const fn gongzzang_worker_lakehouse_registry_write() -> Self {
         Self {
             policy_id: WORKER_POLICY_ID,
@@ -65,7 +67,7 @@ impl PlatformCoreServiceCallPolicy {
         }
     }
 
-    fn required_scope(self) -> &'static str {
+    const fn required_scope(self) -> &'static str {
         self.required_scope
     }
 }
@@ -89,24 +91,20 @@ struct PlatformCoreServiceAuthMetadata {
 /// Environment-sourced Platform Core service token metadata.
 #[derive(Clone, Debug, Default)]
 pub struct PlatformCoreServiceAuthMetadataConfig {
-    /// Token scope. Production requires the active Platform Core call scope.
+    /// Token scope for the active Platform Core call.
     pub scope: Option<String>,
-    /// RFC3339 timestamp when the token was issued.
+    /// Token issue time, RFC3339.
     pub issued_at: Option<String>,
-    /// RFC3339 timestamp when the token expires.
+    /// Token expiry time, RFC3339.
     pub expires_at: Option<String>,
     /// Team or operator responsible for rotation.
     pub rotation_owner: Option<String>,
 }
 
 impl PlatformCoreServiceAuth {
-    /// Build service auth from a secret token.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the token is blank or too short to be an
-    /// operator-managed secret.
+    /// Build test service auth from a secret token.
     #[cfg(test)]
+    #[allow(clippy::missing_errors_doc)]
     pub fn new(token: &str) -> Result<Self, PlatformCoreServiceAuthConfigError> {
         let token = validate_token(token)?;
         Ok(Self {
@@ -118,9 +116,13 @@ impl PlatformCoreServiceAuth {
 
     /// Build service auth from a short-lived workload identity token file.
     ///
-    /// The token file is read before each outgoing request so service-mesh or
-    /// cloud workload identity rotation can take effect without restarting the
-    /// API process.
+    /// The file is read before each outgoing request so rotation takes effect
+    /// without restarting the process.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token file path is empty, cannot be read, or
+    /// contains an invalid token.
     pub fn new_from_workload_identity_token_file(
         token_file: impl AsRef<Path>,
     ) -> Result<Self, PlatformCoreServiceAuthConfigError> {
@@ -142,14 +144,40 @@ impl PlatformCoreServiceAuth {
 
     /// Build service auth with metadata enforcement for the current runtime.
     ///
-    /// Production requires scope, issued-at, expires-at, and rotation-owner
-    /// metadata so static bearer tokens cannot become unbounded credentials.
+    /// Production requires scope, issued-at, expires-at, and rotation owner.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token or production metadata is invalid.
     pub fn new_for_environment(
         token: &str,
         metadata: PlatformCoreServiceAuthMetadataConfig,
         is_production: bool,
     ) -> Result<Self, PlatformCoreServiceAuthConfigError> {
         Self::new_for_environment_at(token, metadata, is_production, Utc::now())
+    }
+
+    /// Build service auth with an explicit Platform Core call policy.
+    ///
+    /// Use this for non-Catalog scopes so production metadata is validated
+    /// against the exact operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the token or policy-scoped metadata is invalid.
+    pub fn new_for_environment_with_call_policy(
+        token: &str,
+        metadata: PlatformCoreServiceAuthMetadataConfig,
+        is_production: bool,
+        call_policy: PlatformCoreServiceCallPolicy,
+    ) -> Result<Self, PlatformCoreServiceAuthConfigError> {
+        Self::new_for_environment_at_with_call_policy(
+            token,
+            metadata,
+            is_production,
+            Utc::now(),
+            call_policy,
+        )
     }
 
     fn new_for_environment_at(
@@ -190,7 +218,7 @@ impl PlatformCoreServiceAuth {
 
     /// Attach a different default-deny call policy to this auth handle.
     #[must_use]
-    pub fn with_call_policy(mut self, call_policy: PlatformCoreServiceCallPolicy) -> Self {
+    pub const fn with_call_policy(mut self, call_policy: PlatformCoreServiceCallPolicy) -> Self {
         self.call_policy = call_policy;
         self
     }

@@ -366,7 +366,7 @@ foreach ($needle in @(
 }
 Assert-Contains -Content $envExample -Needle "PLATFORM_CORE_WEBHOOK_SECRET=" -Message ".env.example webhook secret placeholder"
 
-$apiAuth = Read-TextFile -RelativePath "services/api/src/platform_core_auth.rs"
+$apiAuth = Read-TextFile -RelativePath "crates/auth/src/platform_core_service.rs"
 Assert-Contains -Content $apiAuth -Needle "bearer_auth" -Message "Platform Core outbound bearer auth"
 Assert-Contains -Content $apiAuth -Needle "<redacted>" -Message "Platform Core auth debug redaction"
 foreach ($needle in @(
