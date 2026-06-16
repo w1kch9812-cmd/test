@@ -8,11 +8,12 @@ const runtime = resolvePlaywrightRuntime({
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  outputDir: runtime.outputDir,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: [["list"], ["html", { open: "never", outputFolder: runtime.reportDir }]],
   use: {
     baseURL: runtime.baseURL,
     trace: "on-first-retry",

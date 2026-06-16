@@ -9,11 +9,12 @@ const runtime = resolvePlaywrightRuntime({
 export default defineConfig({
   testDir: "./tests/probes",
   testMatch: "**/*.probe.ts",
+  outputDir: runtime.outputDir,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  reporter: [["list"], ["html", { open: "never" }]],
+  reporter: [["list"], ["html", { open: "never", outputFolder: runtime.reportDir }]],
   use: {
     baseURL: runtime.baseURL,
     trace: "retain-on-failure",

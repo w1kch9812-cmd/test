@@ -4,6 +4,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 
 const withNextIntl = createNextIntlPlugin("./i18n.ts");
 const isBazelNextBuild = process.env.GONGZZANG_BAZEL_NEXT_BUILD === "1";
+const bazelNextDistDir = process.env.GONGZZANG_BAZEL_NEXT_DIST_DIR?.trim();
 
 const baseHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
@@ -20,6 +21,7 @@ const productionHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  ...(bazelNextDistDir ? { distDir: bazelNextDistDir } : {}),
   // Naver Maps gl 이 React Strict Mode 의 이중 마운트와 호환 안 됨 (지도 이중 렌더링).
   // Reference: gongzzang-design-lab 의 next.config 패턴 따름.
   reactStrictMode: false,

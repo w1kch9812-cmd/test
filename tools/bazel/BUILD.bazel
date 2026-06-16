@@ -65,15 +65,45 @@ transition_shell_test(
     tags = FRONTEND_TRANSITION_TAGS,
 )
 
-transition_shell_test(
+test_suite(
+    name = "frontend_bundle_bazel",
+    tags = [
+        "manual",
+        "local",
+    ],
+    tests = ["//apps/web:bundle_size_test"],
+)
+
+test_suite(
     name = "frontend_bundle",
+    tags = [
+        "manual",
+        "local",
+    ],
+    tests = [":frontend_bundle_bazel"],
+)
+
+transition_shell_test(
+    name = "frontend_bundle_transition",
     srcs = ["run_pnpm_task.sh"],
     script_args = ["bundle"],
     tags = FRONTEND_TRANSITION_TAGS,
 )
 
-transition_shell_test(
+test_suite(
+    name = "frontend_e2e_playwright",
+    tags = FRONTEND_TRANSITION_TAGS,
+    tests = ["//apps/web:playwright_e2e_test"],
+)
+
+test_suite(
     name = "frontend_e2e",
+    tags = FRONTEND_TRANSITION_TAGS,
+    tests = [":frontend_e2e_playwright"],
+)
+
+transition_shell_test(
+    name = "frontend_e2e_transition",
     srcs = ["run_pnpm_task.sh"],
     script_args = ["e2e"],
     tags = FRONTEND_TRANSITION_TAGS,

@@ -41,10 +41,10 @@ pnpm dev
 | `pnpm build` | production 빌드 |
 | `pnpm typecheck` | TypeScript 검증 |
 | `pnpm test` | Vitest unit |
-| `pnpm test:e2e` | Playwright e2e + a11y |
+| `bazelisk test //:frontend_e2e --config=ci` | Playwright e2e + a11y |
 | `pnpm lint` | Biome lint |
 | `pnpm format` | Biome format |
-| `pnpm --filter=@gongzzang/web test:bundle` | size-limit bundle budget |
+| `bazelisk test //:frontend_bundle --config=ci` | size-limit bundle budget |
 | `pnpm --filter=@gongzzang/api-types generate` | utoipa OpenAPI → TS types |
 
 ## 한국어 UI 컨벤션 (해요체)
@@ -74,9 +74,9 @@ pnpm dev
 | Lint | Biome | `pnpm lint` |
 | TypeScript | tsc --noEmit | `pnpm typecheck` |
 | Unit | Vitest | `pnpm test` |
-| E2E | Playwright | `pnpm test:e2e` |
-| a11y | @axe-core/playwright | `pnpm test:e2e` (a11y.spec.ts) |
-| Bundle | size-limit | `pnpm --filter=@gongzzang/web test:bundle` |
+| E2E | Playwright | `bazelisk test //:frontend_e2e --config=ci` |
+| a11y | @axe-core/playwright | `bazelisk test //:frontend_e2e --config=ci` (a11y.spec.ts) |
+| Bundle | size-limit | `bazelisk test //:frontend_bundle --config=ci` |
 | Format | Biome | `pnpm format --write` |
 
 ## 비목표 (다른 sub-project)

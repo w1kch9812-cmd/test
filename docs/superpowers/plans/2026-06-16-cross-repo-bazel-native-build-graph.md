@@ -177,10 +177,34 @@ Observed on 2026-06-16:
   until each class has a declared integration harness.
 - Verified `//tools/bazel:frontend_unit_test_vitest` on WSL/Linux.
 
-- [ ] **Step 3: Replace bundle and Playwright wrappers**
+- [x] **Step 3: Replace bundle and Playwright wrappers**
 
 Browser binaries, app startup, auth dependencies, and reports become declared test inputs and
 outputs.
+
+Observed on 2026-06-16:
+
+- Added `//apps/web:bundle_size_test` as the Bazel direct size-limit lane. It consumes
+  `//apps/web:next_production_build`, uses the Bazel-linked `size-limit` package, and keeps
+  bundle budgets in `.size-limit.mjs`.
+- Added `//apps/web:playwright_e2e_test` as the Bazel direct Playwright lane. It invokes the
+  Bazel-linked `@playwright/test` package, starts the app with the Bazel Next CLI instead of a
+  pnpm script, writes Playwright reports/test results under Bazel undeclared outputs, and accepts
+  `PLAYWRIGHT_BROWSERS_PATH` through the Bazel test environment.
+- Repointed `//tools/bazel:frontend_bundle` and `//tools/bazel:frontend_e2e` to the direct Bazel
+  lanes. The legacy pnpm script paths remain only as explicit transition targets:
+  `//tools/bazel:frontend_bundle_transition` and `//tools/bazel:frontend_e2e_transition`.
+- Updated frontend CI to run `bazelisk test //:frontend_bundle` and
+  `bazelisk test //:frontend_e2e`. The browser install step now writes to
+  `${{ runner.temp }}/ms-playwright`, which is passed into Bazel as `PLAYWRIGHT_BROWSERS_PATH`.
+- Verified on WSL2/Linux:
+  - `bazelisk test //:frontend_bundle --config=ci --verbose_failures`
+  - `bazelisk test //:frontend_e2e --config=ci --verbose_failures --test_arg=--list`
+  - `bazelisk test //... --config=ci --verbose_failures`
+
+Local full Playwright execution was not claimed because this WSL environment does not have Linux
+Playwright browser binaries installed. The target reaches Playwright execution and reports the
+missing browser path; CI installs browsers before invoking the Bazel e2e lane.
 
 ## Task 5: Dawneer Protected Bootstrap
 
