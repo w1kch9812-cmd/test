@@ -150,7 +150,7 @@ pre-push:
         - merge
         - rebase
     typecheck:
-      run: pnpm install --frozen-lockfile --reporter=silent && pnpm typecheck
+      run: bash scripts/ci/check-workspace-typecheck-coverage.sh && bash scripts/ci/run-bazel-workspace-typecheck.sh
       skip:
         - merge
         - rebase

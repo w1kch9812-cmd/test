@@ -244,6 +244,10 @@ Observed on 2026-06-16:
 - Updated the main CI `typecheck` job to run
   `bazelisk test //:workspace_typecheck --config=ci --verbose_failures` instead of
   `pnpm typecheck`.
+- Updated the local `pnpm typecheck` script and pre-push `typecheck` hook to run the same Bazel
+  workspace suite after the coverage guardrail. Windows shells delegate through
+  `scripts/ci/run-bazel-workspace-typecheck.sh` so local verification does not use the native
+  Windows Bazel npm lifecycle path.
 
 ## Task 5: Dawneer Protected Bootstrap
 
