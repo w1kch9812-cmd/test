@@ -90,6 +90,16 @@ The final build architecture for `gongzzang`, `platform-core`, and `dawneer` is 
 - Windows direct Bazel execution still reproduces the known `crate_universe` symlink privilege
   failure and is not the canonical verification path.
 
+2026-06-16 Platform Core Rust graph expansion:
+
+- Added Bazel targets for all current Platform Core Cargo workspace members.
+- Added `//:rust_fast` as the current Platform Core Rust verification suite.
+- Added declared runtime data for the service API pipeline graph tests.
+- Made pipeline graph default artifact resolution aware of Bazel test runfiles.
+- Verified on WSL2/Linux:
+  - `~/.local/bin/bazelisk query //...`
+  - `~/.local/bin/bazelisk test //:rust_fast --verbose_failures`
+
 ## References
 
 - ADR-0040: `docs/adr/0040-bazel-first-build-verification-control-plane.md`

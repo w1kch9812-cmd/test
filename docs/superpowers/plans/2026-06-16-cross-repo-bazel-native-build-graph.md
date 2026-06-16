@@ -79,10 +79,31 @@ Observed on 2026-06-16:
 - Create or modify: `../platform-core/crates/**/BUILD.bazel`
 - Create or modify: `../platform-core/services/**/BUILD.bazel`
 
-- [ ] **Step 1: Add package-local targets for every Cargo workspace member**
+- [x] **Step 1: Add package-local targets for every Cargo workspace member**
 
 Each workspace crate gets explicit library and test targets. Each service gets an explicit
 binary target and unit-test target where the local crate structure supports it.
+
+Observed on 2026-06-16:
+
+- Added Bazel targets for every current Platform Core Cargo workspace member:
+  `shared-kernel`, `api-types`, Catalog crates, Workforce crates, `outbox-publisher`,
+  `services/api`, and `services/outbox-publisher`.
+- Added `//:rust_fast` as the Platform Core Rust suite.
+- Added `pipeline_graph_runtime_artifacts` as declared Bazel test data for service API tests.
+- Made the service API pipeline graph artifact loader Bazel test runfiles-aware while preserving
+  the existing Cargo repository-root path.
+
+- [x] **Step 1 verification**
+
+Run:
+
+```bash
+~/.local/bin/bazelisk query //...
+~/.local/bin/bazelisk test //:rust_fast --verbose_failures
+```
+
+Observed: query listed 26 targets and `//:rust_fast` passed with 11 passing test targets.
 
 - [ ] **Step 2: Move guardrails into Bazel entrypoints**
 
