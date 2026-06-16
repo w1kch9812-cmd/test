@@ -100,6 +100,25 @@ The final build architecture for `gongzzang`, `platform-core`, and `dawneer` is 
   - `~/.local/bin/bazelisk query //...`
   - `~/.local/bin/bazelisk test //:rust_fast --verbose_failures`
 
+2026-06-16 Platform Core Bazel CI and guardrail entrypoints:
+
+- Added Platform Core Bazel PowerShell runner compatibility under `tools/bazel`.
+- Added `//:guardrails_fast` for portable guardrail runner self-tests.
+- Added explicit transition suites for environment-dependent guardrail runner checks.
+- Added the CI `bazel-fast-graph` job for `//:rust_fast` and `//:guardrails_fast`.
+- Added Bazel BEP/profile output under `target/bazel/`.
+- Updated the Platform Core file line-limit guardrail to ignore Bazel generated output symlink
+  directories.
+- Verified on WSL2/Linux:
+  - `~/.local/bin/bazelisk test //:rust_fast --config=ci --verbose_failures`
+  - `~/.local/bin/bazelisk test //:guardrails_fast --config=ci --verbose_failures`
+- Verified with Windows PowerShell:
+  - `scripts\ci\run-sss-guardrails.tests.ps1`
+  - `scripts\ci\check-ci-workflow-coverage.tests.ps1`
+  - `scripts\ci\check-ci-workflow-coverage.ps1`
+  - `scripts\ci\check-file-line-limits.tests.ps1`
+  - `scripts\ci\check-file-line-limits.ps1`
+
 ## References
 
 - ADR-0040: `docs/adr/0040-bazel-first-build-verification-control-plane.md`

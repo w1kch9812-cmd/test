@@ -105,14 +105,43 @@ Run:
 
 Observed: query listed 26 targets and `//:rust_fast` passed with 11 passing test targets.
 
-- [ ] **Step 2: Move guardrails into Bazel entrypoints**
+- [x] **Step 2: Move guardrails into Bazel entrypoints**
 
 Represent existing cutover, supply-chain, and readiness checks as Bazel targets. PowerShell
 may remain as the script body during migration, but Bazel owns the invocation graph.
 
-- [ ] **Step 3: Make CI call Bazel**
+Observed on 2026-06-16:
+
+- Added Platform Core Bazel PowerShell guardrail runner compatibility under `tools/bazel`.
+- Added portable guardrail runner self-test suite:
+  `//:guardrails_fast` -> lakehouse/R2 runner self-tests.
+- Added explicit transition suites for cargo/environment-dependent runner checks:
+  `//:guardrails_transition_checks` and `//tools/bazel:guardrail_cargo_runner_tests`.
+- Updated the Platform Core file line-limit guardrail to ignore Bazel generated output
+  symlink directories.
+- Kept the actual legacy CI runner invocations in place until all underlying PowerShell tests are
+  Linux-portable under Bazel. WSL evidence showed actual lakehouse/R2 runner checks still fail in
+  existing subtests, while their runner self-tests pass.
+- Verified:
+  - `~/.local/bin/bazelisk test //:guardrails_fast --config=ci --verbose_failures`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails.tests.ps1`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.tests.ps1`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.ps1`
+
+- [x] **Step 3: Make CI call Bazel**
 
 Add CI jobs that call Platform Core Bazel targets directly and upload BEP/profile evidence.
+
+Observed on 2026-06-16:
+
+- Added `bazel-fast-graph` to Platform Core CI.
+- CI installs Bazelisk from the pinned `BAZELISK_VERSION` environment value.
+- CI runs:
+  - `bazelisk test //:rust_fast --config=ci --verbose_failures`
+  - `bazelisk test //:guardrails_fast --config=ci --verbose_failures`
+- CI uploads Bazel BEP/profile evidence from `target/bazel/`.
+- Existing direct Cargo/clippy/full guardrail jobs remain as transition coverage until their
+  Bazel-native equivalents are complete.
 
 ## Task 4: Gongzzang Remaining Wrapper Exit
 
