@@ -184,6 +184,20 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "guardrail_verification_control_plane",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["verification-control-plane"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_verification_control_plane_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["verification-control-plane-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_platform_core_boundary",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-boundary"],

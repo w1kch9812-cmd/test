@@ -249,6 +249,25 @@ Observed on 2026-06-16:
   `scripts/ci/run-bazel-workspace-typecheck.sh` so local verification does not use the native
   Windows Bazel npm lifecycle path.
 
+- [x] **Step 6: Add verification control-plane guardrail**
+
+Verification policy must be data, not tribal knowledge in workflow files.
+
+Observed on 2026-06-17:
+
+- Added `docs/architecture/verification-control-plane.v1.json` as the SSOT for forbidden direct
+  verification commands and structured transition allowlist entries.
+- Added `scripts/ci/check-verification-control-plane.ps1` and tests to reject direct
+  verification commands such as `pnpm test` and `cargo clippy` unless explicitly allowlisted.
+- Added Bazel targets:
+  `//tools/bazel:guardrail_verification_control_plane` and
+  `//tools/bazel:guardrail_verification_control_plane_tests`.
+- Wired the guardrail into root guardrail suites, lefthook, and the Bazel fast graph CI job.
+- Verified:
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.tests.ps1`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1`
+  - `bazelisk test //tools/bazel:guardrail_verification_control_plane //tools/bazel:guardrail_verification_control_plane_tests --config=ci --verbose_failures`
+
 ## Task 5: Dawneer Protected Bootstrap
 
 **Files:**

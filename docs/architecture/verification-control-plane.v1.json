@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "forbidden_direct_verification_commands": [
+    {
+      "id": "pnpm-audit",
+      "pattern": "\\bpnpm\\s+audit\\b"
+    },
+    {
+      "id": "pnpm-biome-check",
+      "pattern": "\\bpnpm\\s+biome\\s+check\\b"
+    },
+    {
+      "id": "pnpm-markdownlint",
+      "pattern": "\\bpnpm\\s+markdownlint-cli2\\b"
+    },
+    {
+      "id": "pnpm-lint",
+      "pattern": "\\bpnpm\\s+lint\\b"
+    },
+    {
+      "id": "pnpm-test",
+      "pattern": "\\bpnpm(?:\\s+--filter(?:=|\\s+)\\S+)?\\s+test\\b"
+    },
+    {
+      "id": "pnpm-build",
+      "pattern": "\\bpnpm(?:\\s+--filter(?:=|\\s+)\\S+)?\\s+build\\b"
+    },
+    {
+      "id": "pnpm-typecheck",
+      "pattern": "\\bpnpm\\s+typecheck\\b"
+    },
+    {
+      "id": "cargo-fmt",
+      "pattern": "\\bcargo\\s+fmt\\b"
+    },
+    {
+      "id": "cargo-check",
+      "pattern": "\\bcargo\\s+check\\b"
+    },
+    {
+      "id": "cargo-clippy",
+      "pattern": "\\bcargo\\s+clippy\\b"
+    },
+    {
+      "id": "cargo-test",
+      "pattern": "\\bcargo\\s+test\\b"
+    },
+    {
+      "id": "cargo-build",
+      "pattern": "\\bcargo\\s+build\\b"
+    },
+    {
+      "id": "cargo-sqlx-prepare",
+      "pattern": "\\bcargo\\s+sqlx\\s+prepare\\b"
+    },
+    {
+      "id": "cargo-tarpaulin",
+      "pattern": "\\bcargo\\s+tarpaulin\\b"
+    }
+  ],
+  "allowed_direct_commands": [
+    {
+      "id": "workflow-pnpm-install-bootstrap",
+      "pattern": "\\bpnpm\\s+install\\s+--frozen-lockfile\\b",
+      "scope": ".github/workflows/*.yml",
+      "owner": "build-platform",
+      "reason": "Dependency bootstrap, not verification semantics.",
+      "exit_target": "Keep until Bazel toolchain bootstrap covers package manager fetch.",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "workflow-playwright-browser-install",
+      "pattern": "\\bpnpm\\s+--filter[=\\s]@gongzzang/web\\s+exec\\s+playwright\\s+install\\b",
+      "scope": ".github/workflows/frontend.yml",
+      "owner": "build-platform",
+      "reason": "Runtime browser bootstrap before Bazel Playwright execution.",
+      "exit_target": "//:frontend_e2e",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-node-audit",
+      "pattern": "\\bpnpm\\s+audit\\s+--audit-level\\s+moderate\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until Node dependency audit is represented by a Bazel audit target.",
+      "exit_target": "//:verify_supply_chain",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-workflow-biome",
+      "pattern": "\\bpnpm\\s+biome\\s+check\\s+\\.",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until repository Biome lint is represented only through Bazel suites.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-workflow-markdownlint",
+      "pattern": "\\bpnpm\\s+markdownlint-cli2\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until markdown lint is represented by a Bazel lint target.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-workflow-cargo-fmt",
+      "pattern": "\\bcargo\\s+fmt\\s+--all\\s+--\\s+--check\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until Rust formatting is represented by a Bazel lint target.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-workflow-cargo-clippy",
+      "pattern": "\\bcargo\\s+clippy\\s+--workspace\\s+--all-features\\s+--all-targets\\s+--\\s+-D\\s+warnings\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until Rust clippy is represented by a Bazel lint target.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-workflow-cargo-check",
+      "pattern": "\\bcargo\\s+check\\s+--workspace\\s+--all-features\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until Rust check is represented by a Bazel Rust verification target.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-web-release-build",
+      "pattern": "\\bpnpm\\s+--filter\\s+@gongzzang/web\\s+build\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until release packaging consumes Bazel Next build outputs.",
+      "exit_target": "//:verify_release",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-api-release-build",
+      "pattern": "\\bcargo\\s+build\\s+-p\\s+api\\s+--release\\s+--locked\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until API release artifact is a Bazel output.",
+      "exit_target": "//:verify_release",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-cargo-tarpaulin",
+      "pattern": "\\bcargo\\s+tarpaulin\\b",
+      "scope": ".github/workflows/ci.yml",
+      "owner": "build-platform",
+      "reason": "Transition until coverage is represented by a Bazel coverage target.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-sqlx-prepare",
+      "pattern": "\\bcargo\\s+sqlx\\s+prepare\\b",
+      "scope": ".github/workflows/*.yml",
+      "owner": "build-platform",
+      "reason": "Transition until SQLx prepare checks are represented by Bazel guardrails.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-walking-skeleton-test",
+      "pattern": "\\bcargo\\s+test\\s+--workspace\\s+--features\\s+integration\\b",
+      "scope": ".github/workflows/walking-skeleton.yml",
+      "owner": "build-platform",
+      "reason": "Transition until integration walking-skeleton tests are represented by Bazel.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-walking-skeleton-build",
+      "pattern": "\\bcargo\\s+build\\s+--package\\s+api\\s+--release\\b",
+      "scope": ".github/workflows/walking-skeleton.yml",
+      "owner": "build-platform",
+      "reason": "Transition until walking-skeleton release build is a Bazel output.",
+      "exit_target": "//:verify_release",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-biome",
+      "pattern": "\\bpnpm\\s+biome\\s+check\\s+--write\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-commit formatter transition until staged-file linting is represented through Bazel.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-cargo-fmt",
+      "pattern": "\\bcargo\\s+fmt\\s+--\\s+\\{staged_files\\}",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-commit formatter transition until Rust formatting is represented through Bazel.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-markdownlint",
+      "pattern": "\\bpnpm\\s+markdownlint-cli2\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-commit markdown lint transition until represented through Bazel.",
+      "exit_target": "//:verify_fast",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-cargo-check",
+      "pattern": "\\bcargo\\s+check\\s+--workspace\\s+--all-features\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-push Rust check transition until represented through Bazel.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-cargo-clippy",
+      "pattern": "\\bcargo\\s+clippy\\s+--workspace\\s+--all-features\\s+--all-targets\\s+--\\s+-D\\s+warnings\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-push Rust clippy transition until represented through Bazel.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    },
+    {
+      "id": "transition-hook-sqlx-prepare",
+      "pattern": "\\bcargo\\s+sqlx\\s+prepare\\s+--workspace\\s+--check\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Pre-push SQLx prepare transition until represented through Bazel.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    }
+  ]
+}

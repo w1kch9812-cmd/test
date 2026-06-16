@@ -314,6 +314,7 @@ test_suite(
         "//tools/bazel:guardrail_platform_integration_policy",
         "//tools/bazel:guardrail_pnu_anchor_pbf_marker_contract",
         "//tools/bazel:guardrail_traffic_auth_policy_registry",
+        "//tools/bazel:guardrail_verification_control_plane",
     ],
     tags = ["manual"],
 )
@@ -325,6 +326,7 @@ test_suite(
         "//tools/bazel:guardrail_load_test_assets_tests",
         "//tools/bazel:guardrail_traffic_auth_api_control_plane_tests",
         "//tools/bazel:guardrail_traffic_auth_policy_registry_tests",
+        "//tools/bazel:guardrail_verification_control_plane_tests",
     ],
     tags = ["manual"],
 )

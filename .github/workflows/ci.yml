@@ -41,6 +41,9 @@ jobs:
             --build_event_json_file=target/bazel/bep/ci-test.json \
             --profile=target/bazel/profile/ci-test.gz
 
+      - name: Verification control plane guardrail
+        run: bazelisk test //tools/bazel:guardrail_verification_control_plane //tools/bazel:guardrail_verification_control_plane_tests --config=ci --verbose_failures
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
         with:

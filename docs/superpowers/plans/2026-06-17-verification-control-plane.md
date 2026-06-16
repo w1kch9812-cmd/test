@@ -8,6 +8,12 @@
 
 **Tech Stack:** Bazel, PowerShell guardrails, JSON policy, lefthook, GitHub Actions.
 
+**Status:** Implemented on 2026-06-17. Targeted guardrail tests, real-repo guardrail execution,
+and the default Bazel `//...` graph passed. The broader manual `//:guardrails_all` suite exposed
+pre-existing WSL Bazel runner issues outside this guardrail: missing `rg` for
+`guardrail_forbidden_implementation_markers` and timeout behavior in two traffic/auth policy
+targets.
+
 ---
 
 ## File Structure

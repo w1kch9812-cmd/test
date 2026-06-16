@@ -60,6 +60,8 @@ pre-commit:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
     platform-core-anchor-inbox-db-approval:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
+    verification-control-plane:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1
 
 pre-push:
   parallel: false
@@ -146,6 +148,11 @@ pre-push:
         - rebase
     platform-core-anchor-inbox-db-approval:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
+      skip:
+        - merge
+        - rebase
+    verification-control-plane:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1
       skip:
         - merge
         - rebase

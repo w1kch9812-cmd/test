@@ -47,6 +47,12 @@ case "$task" in
   workspace-typecheck-coverage)
     exec bash scripts/ci/check-workspace-typecheck-coverage.sh "$repo_root"
     ;;
+  verification-control-plane)
+    run_pwsh scripts/ci/check-verification-control-plane.ps1 -Root "$repo_root"
+    ;;
+  verification-control-plane-tests)
+    run_pwsh scripts/ci/check-verification-control-plane.tests.ps1
+    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;
