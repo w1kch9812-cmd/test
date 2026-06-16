@@ -255,6 +255,20 @@ js_test(
     ],
 )
 
+js_test(
+    name = "next_production_build_smoke_test",
+    chdir = package_name(),
+    copy_data_to_bin = False,
+    data = [
+        ":next_production_build",
+    ],
+    entry_point = "bazel/next-build-smoke.mjs",
+    tags = [
+        "manual",
+        "local",
+    ],
+)
+
 js_library(
     name = "pkg",
     srcs = WEB_SOURCES + WEB_ASSETS + WEB_STATIC + [

@@ -206,6 +206,26 @@ Local full Playwright execution was not claimed because this WSL environment doe
 Playwright browser binaries installed. The target reaches Playwright execution and reports the
 missing browser path; CI installs browsers before invoking the Bazel e2e lane.
 
+- [x] **Step 4: Replace typecheck and build public wrappers**
+
+Public frontend verification labels must not hide pnpm/Turbo transition shells when direct Bazel
+targets already exist.
+
+Observed on 2026-06-16:
+
+- Added `//tools/bazel:frontend_typecheck_bazel` as the direct typecheck suite over
+  `//:web_typecheck_typecheck_test`,
+  `//packages/api-types:api_types_typecheck_typecheck_test`, and
+  `//packages/ui:ui_typecheck_typecheck_test`.
+- Added `//apps/web:next_production_build_smoke_test` to verify the declared
+  `//apps/web:next_production_build` output contains the required Next production manifests.
+- Repointed `//tools/bazel:frontend_typecheck` and `//tools/bazel:frontend_build` to direct
+  Bazel lanes. The pnpm shell paths remain only as explicit transition targets:
+  `//tools/bazel:frontend_typecheck_transition` and
+  `//tools/bazel:frontend_build_transition`.
+- Updated frontend CI to run public Bazel labels for lint, typecheck, unit, build, bundle, and e2e
+  instead of direct pnpm verification commands.
+
 ## Task 5: Dawneer Protected Bootstrap
 
 **Files:**

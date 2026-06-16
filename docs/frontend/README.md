@@ -38,11 +38,11 @@ pnpm dev
 | 명령어 | 설명 |
 |---|---|
 | `pnpm dev` | 개발 서버 (turbo) |
-| `pnpm build` | production 빌드 |
-| `pnpm typecheck` | TypeScript 검증 |
-| `pnpm test` | Vitest unit |
+| `bazelisk test //:frontend_build --config=ci` | production 빌드 |
+| `bazelisk test //:frontend_typecheck --config=ci` | TypeScript 검증 |
+| `bazelisk test //:frontend_unit_test --config=ci` | Vitest unit |
 | `bazelisk test //:frontend_e2e --config=ci` | Playwright e2e + a11y |
-| `pnpm lint` | Biome lint |
+| `bazelisk test //:frontend_lint --config=ci` | Biome lint |
 | `pnpm format` | Biome format |
 | `bazelisk test //:frontend_bundle --config=ci` | size-limit bundle budget |
 | `pnpm --filter=@gongzzang/api-types generate` | utoipa OpenAPI → TS types |
@@ -71,9 +71,9 @@ pnpm dev
 
 | 게이트 | 도구 | CI step |
 |---|---|---|
-| Lint | Biome | `pnpm lint` |
-| TypeScript | tsc --noEmit | `pnpm typecheck` |
-| Unit | Vitest | `pnpm test` |
+| Lint | Biome | `bazelisk test //:frontend_lint --config=ci` |
+| TypeScript | tsc --noEmit | `bazelisk test //:frontend_typecheck --config=ci` |
+| Unit | Vitest | `bazelisk test //:frontend_unit_test --config=ci` |
 | E2E | Playwright | `bazelisk test //:frontend_e2e --config=ci` |
 | a11y | @axe-core/playwright | `bazelisk test //:frontend_e2e --config=ci` (a11y.spec.ts) |
 | Bundle | size-limit | `bazelisk test //:frontend_bundle --config=ci` |
