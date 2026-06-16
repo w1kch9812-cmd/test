@@ -162,10 +162,20 @@ Observed on 2026-06-16:
 - Repointed root frontend wrapper names to `test_suite` targets so `bazel test //:frontend_*`
   continues to use the public target names while executing actual test targets.
 
-- [ ] **Step 2: Replace Vitest wrapper with Bazel-compatible test lanes**
+- [x] **Step 2: Replace Vitest wrapper with Bazel-compatible test lanes**
 
 Split pure unit tests from Redis/browser/service-backed tests. Service-backed lanes need an
 explicit integration-test harness.
+
+Observed on 2026-06-16:
+
+- Added `//apps/web:vitest_unit_test` as the Bazel direct Vitest pure unit lane.
+- Repointed `//tools/bazel:frontend_unit_test` and root `//:frontend_unit_test` to the
+  Bazel direct Vitest lane.
+- Kept `//tools/bazel:frontend_unit_test_transition` as the explicit legacy full `pnpm test`
+  transition target for Redis, Next server-runtime, workflow-file, and registry-bootstrap tests
+  until each class has a declared integration harness.
+- Verified `//tools/bazel:frontend_unit_test_vitest` on WSL/Linux.
 
 - [ ] **Step 3: Replace bundle and Playwright wrappers**
 
