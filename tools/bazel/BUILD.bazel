@@ -1,6 +1,9 @@
+load("@aspect_rules_js//js:defs.bzl", "js_test")
 load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
+
+exports_files(["run_biome_check.mjs"])
 
 filegroup(
     name = "sqlx_cargo_metadata_stub",
@@ -19,11 +22,16 @@ GUARDRAIL_TRANSITION_TAGS = [
     "no-sandbox",
 ]
 
-transition_shell_test(
+js_test(
     name = "frontend_lint",
-    srcs = ["run_pnpm_task.sh"],
-    script_args = ["lint"],
-    tags = FRONTEND_TRANSITION_TAGS,
+    chdir = ".",
+    copy_data_to_bin = False,
+    data = [
+        "//:biome_lint_inputs",
+        "//:node_modules/@biomejs/biome",
+    ],
+    entry_point = "run_biome_check.mjs",
+    fixed_args = ["check"],
 )
 
 transition_shell_test(

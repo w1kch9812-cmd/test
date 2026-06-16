@@ -34,39 +34,114 @@ filegroup(
     srcs = glob([".sqlx/*.json"]),
 )
 
-alias(
+filegroup(
+    name = "biome_lint_inputs",
+    srcs = glob(
+        [
+            "apps/**/*.cjs",
+            "apps/**/*.css",
+            "apps/**/*.js",
+            "apps/**/*.json",
+            "apps/**/*.jsonc",
+            "apps/**/*.jsx",
+            "apps/**/*.mjs",
+            "apps/**/*.ts",
+            "apps/**/*.tsx",
+            "docs/**/*.json",
+            "docs/**/*.jsonc",
+            "infrastructure/**/*.cjs",
+            "infrastructure/**/*.js",
+            "infrastructure/**/*.json",
+            "infrastructure/**/*.jsonc",
+            "infrastructure/**/*.mjs",
+            "infrastructure/**/*.ts",
+            "packages/**/*.cjs",
+            "packages/**/*.css",
+            "packages/**/*.js",
+            "packages/**/*.json",
+            "packages/**/*.jsonc",
+            "packages/**/*.jsx",
+            "packages/**/*.mjs",
+            "packages/**/*.ts",
+            "packages/**/*.tsx",
+            "scripts/**/*.cjs",
+            "scripts/**/*.js",
+            "scripts/**/*.json",
+            "scripts/**/*.jsonc",
+            "scripts/**/*.mjs",
+            "scripts/**/*.ts",
+            "tests/**/*.cjs",
+            "tests/**/*.js",
+            "tests/**/*.json",
+            "tests/**/*.jsonc",
+            "tests/**/*.mjs",
+            "tests/**/*.ts",
+            "tools/**/*.cjs",
+            "tools/**/*.js",
+            "tools/**/*.json",
+            "tools/**/*.jsonc",
+            "tools/**/*.mjs",
+            "tools/**/*.ts",
+        ],
+        exclude = [
+            "**/.next/**",
+            "**/.turbo/**",
+            "**/_archive/**",
+            "**/coverage/**",
+            "**/dist/**",
+            "**/node_modules/**",
+            "**/playwright-report/**",
+            "**/reference/**",
+            "**/target/**",
+            "**/test-results/**",
+        ],
+        allow_empty = True,
+    ) + [
+        ".gitignore",
+        ".markdownlint-cli2.jsonc",
+        ".markdownlint.json",
+        ".mcp.json",
+        "biome.json",
+        "package.json",
+        "renovate.json",
+        "tsconfig.base.json",
+        "turbo.json",
+    ],
+)
+
+test_suite(
     name = "frontend_lint",
-    actual = "//tools/bazel:frontend_lint",
+    tests = ["//tools/bazel:frontend_lint"],
     tags = ["manual"],
 )
 
-alias(
+test_suite(
     name = "frontend_typecheck",
-    actual = "//tools/bazel:frontend_typecheck",
+    tests = ["//tools/bazel:frontend_typecheck"],
     tags = ["manual"],
 )
 
-alias(
+test_suite(
     name = "frontend_unit_test",
-    actual = "//tools/bazel:frontend_unit_test",
+    tests = ["//tools/bazel:frontend_unit_test"],
     tags = ["manual"],
 )
 
-alias(
+test_suite(
     name = "frontend_build",
-    actual = "//tools/bazel:frontend_build",
+    tests = ["//tools/bazel:frontend_build"],
     tags = ["manual"],
 )
 
-alias(
+test_suite(
     name = "frontend_bundle",
-    actual = "//tools/bazel:frontend_bundle",
+    tests = ["//tools/bazel:frontend_bundle"],
     tags = ["manual"],
 )
 
-alias(
+test_suite(
     name = "frontend_e2e",
-    actual = "//tools/bazel:frontend_e2e",
+    tests = ["//tools/bazel:frontend_e2e"],
     tags = ["manual"],
 )
 

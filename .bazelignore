@@ -20,6 +20,10 @@ dist
 playwright-report
 test-results
 node_modules
+bazel-bin
+bazel-gongzzang
+bazel-out
+bazel-testlogs
 target
 target-test
 var

@@ -150,9 +150,17 @@ Observed on 2026-06-16:
 - Modify: `tools/bazel/BUILD.bazel`
 - Modify: package/app BUILD files as needed
 
-- [ ] **Step 1: Replace Biome wrapper with a declared Bazel target**
+- [x] **Step 1: Replace Biome wrapper with a declared Bazel target**
 
 Biome config, source inputs, and npm toolchain inputs must be declared.
+
+Observed on 2026-06-16:
+
+- Added `//:biome_lint_inputs` as the declared Biome source/config input set.
+- Replaced `//tools/bazel:frontend_lint` with a `js_test` that runs the Bazel-linked
+  `@biomejs/biome` package without `pnpm lint`.
+- Repointed root frontend wrapper names to `test_suite` targets so `bazel test //:frontend_*`
+  continues to use the public target names while executing actual test targets.
 
 - [ ] **Step 2: Replace Vitest wrapper with Bazel-compatible test lanes**
 
