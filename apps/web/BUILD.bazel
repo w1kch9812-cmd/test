@@ -269,6 +269,11 @@ js_test(
     ],
 )
 
+test_suite(
+    name = "typecheck",
+    tests = ["//:web_typecheck_typecheck_test"],
+)
+
 js_library(
     name = "pkg",
     srcs = WEB_SOURCES + WEB_ASSETS + WEB_STATIC + [

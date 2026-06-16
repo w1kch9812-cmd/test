@@ -50,6 +50,15 @@ write_package_json() {
 JSON
 }
 
+write_build_bazel() {
+  local path="$1"
+  local body="$2"
+  mkdir -p "$(dirname "$path")"
+  cat > "$path" <<BAZEL
+$body
+BAZEL
+}
+
 assert_success_contains() {
   local name="$1"
   local expected="$2"
@@ -89,9 +98,18 @@ assert_failure_contains() {
 reset_tmp_root
 write_package_json "$tmp_root/apps/web/package.json" '{"typecheck": "tsc --noEmit"}'
 write_package_json "$tmp_root/packages/ui/package.json" '{"typecheck": "tsc --noEmit"}'
+write_build_bazel "$tmp_root/apps/web/BUILD.bazel" 'test_suite(name = "typecheck")'
+write_build_bazel "$tmp_root/packages/ui/BUILD.bazel" 'test_suite(name = "typecheck")'
 assert_success_contains "accepts full workspace typecheck coverage" "workspace-typecheck-coverage-ok packages=2" "$python_bin" "$script" "$tmp_root"
 
 reset_tmp_root
 write_package_json "$tmp_root/apps/web/package.json" '{"typecheck": "tsc --noEmit"}'
 write_package_json "$tmp_root/packages/ui/package.json" '{}'
+write_build_bazel "$tmp_root/apps/web/BUILD.bazel" 'test_suite(name = "typecheck")'
 assert_failure_contains "rejects package missing typecheck script" "missing typecheck script: packages/ui/package.json" "$python_bin" "$script" "$tmp_root"
+
+reset_tmp_root
+write_package_json "$tmp_root/apps/web/package.json" '{"typecheck": "tsc --noEmit"}'
+write_package_json "$tmp_root/packages/ui/package.json" '{"typecheck": "tsc --noEmit"}'
+write_build_bazel "$tmp_root/apps/web/BUILD.bazel" 'test_suite(name = "typecheck")'
+assert_failure_contains "rejects package missing Bazel typecheck target" "missing Bazel typecheck target: packages/ui/BUILD.bazel:typecheck" "$python_bin" "$script" "$tmp_root"

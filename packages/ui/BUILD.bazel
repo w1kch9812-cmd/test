@@ -82,3 +82,8 @@ ts_project(
     preserve_jsx = True,
     tsconfig = ":tsconfig_declarations",
 )
+
+test_suite(
+    name = "typecheck",
+    tests = [":ui_typecheck_typecheck_test"],
+)

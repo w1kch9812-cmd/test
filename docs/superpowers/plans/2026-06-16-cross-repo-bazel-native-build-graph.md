@@ -226,6 +226,25 @@ Observed on 2026-06-16:
 - Updated frontend CI to run public Bazel labels for lint, typecheck, unit, build, bundle, and e2e
   instead of direct pnpm verification commands.
 
+- [x] **Step 5: Move workspace typecheck coverage to Bazel**
+
+Repo-wide TypeScript verification must be a Bazel graph concern, not a Turbo/pnpm side lane.
+
+Observed on 2026-06-16:
+
+- Added package-local `:typecheck` Bazel targets for every `pnpm-workspace.yaml` package that
+  exposes a `typecheck` script: `apps/web`, `infrastructure`, `packages/api-types`, and
+  `packages/ui`.
+- Added `//:workspace_typecheck` as the public workspace typecheck suite over the package-local
+  convention targets.
+- Added `//infrastructure:infrastructure_typecheck` so Pulumi TypeScript is checked by Bazel with
+  the same `NodeNext` and root `tsconfig.base.json` inputs used by `pnpm typecheck`.
+- Upgraded `scripts/ci/check-workspace-typecheck-coverage.py` from script-presence checking to
+  package-local Bazel `:typecheck` convention enforcement.
+- Updated the main CI `typecheck` job to run
+  `bazelisk test //:workspace_typecheck --config=ci --verbose_failures` instead of
+  `pnpm typecheck`.
+
 ## Task 5: Dawneer Protected Bootstrap
 
 **Files:**

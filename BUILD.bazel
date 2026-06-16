@@ -1,4 +1,4 @@
-load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config", "ts_project")
 load("@npm//:defs.bzl", "npm_link_all_packages")
 
 package(default_visibility = ["//visibility:public"])
@@ -109,6 +109,11 @@ filegroup(
     ],
 )
 
+ts_config(
+    name = "tsconfig_base",
+    src = "tsconfig.base.json",
+)
+
 test_suite(
     name = "frontend_lint",
     tests = ["//tools/bazel:frontend_lint"],
@@ -118,6 +123,15 @@ test_suite(
 test_suite(
     name = "frontend_typecheck",
     tests = ["//tools/bazel:frontend_typecheck"],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "workspace_typecheck",
+    tests = [
+        ":frontend_typecheck",
+        "//infrastructure:typecheck",
+    ],
     tags = ["manual"],
 )
 
@@ -165,12 +179,25 @@ alias(
     actual = "//apps/web:next_production_build",
 )
 
+alias(
+    name = "infrastructure_typecheck_bazel",
+    actual = "//infrastructure:infrastructure_typecheck",
+)
+
 filegroup(
     name = "frontend_hermetic_typechecks",
     srcs = [
         ":api_types_typecheck_bazel",
         ":ui_typecheck_bazel",
         ":web_typecheck_bazel",
+    ],
+)
+
+filegroup(
+    name = "workspace_hermetic_typechecks",
+    srcs = [
+        ":frontend_hermetic_typechecks",
+        ":infrastructure_typecheck_bazel",
     ],
 )
 

@@ -37,9 +37,9 @@ js_test(
 test_suite(
     name = "frontend_typecheck_bazel",
     tests = [
-        "//:web_typecheck_typecheck_test",
-        "//packages/api-types:api_types_typecheck_typecheck_test",
-        "//packages/ui:ui_typecheck_typecheck_test",
+        "//apps/web:typecheck",
+        "//packages/api-types:typecheck",
+        "//packages/ui:typecheck",
     ],
 )
 

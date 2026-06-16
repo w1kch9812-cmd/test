@@ -72,3 +72,8 @@ ts_project(
     emit_declaration_only = True,
     tsconfig = ":tsconfig_declarations",
 )
+
+test_suite(
+    name = "typecheck",
+    tests = [":api_types_typecheck_typecheck_test"],
+)
