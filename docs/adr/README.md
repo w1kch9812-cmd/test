@@ -88,3 +88,4 @@
 | [0039](./0039-service-owned-lakehouse-registry-integration.md) | Service-Owned Lakehouse With Platform Core Registry | Accepted |
 | [0040](./0040-bazel-first-build-verification-control-plane.md) | Bazel-first build and verification control plane | Accepted |
 | [0041](./0041-hermetic-javascript-package-bazel-rules.md) | Hermetic JavaScript package Bazel rules | Accepted |
+| [0042](./0042-cross-repo-bazel-native-build-graph.md) | Cross-Repo Bazel-Native Build Graph | Accepted |
