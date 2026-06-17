@@ -46,6 +46,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
 
@@ -59,116 +65,8 @@ jobs:
           sudo apt-get install -y postgresql-client
           cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
 
-      - name: Wait for Postgres
-        run: |
-          for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U gongzzang && break
-            sleep 1
-          done
-
-      - name: Apply gongzzang migrations
-        run: sqlx migrate run --source migrations
-
-      - name: Run integration tests (DB Repository)
-        env:
-          DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
-        run: cargo test --workspace --features integration --no-fail-fast -- --test-threads=1
-
-      - name: Reset DB after integration tests (clean slate for E2E)
-        run: |
-          PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang \
-            -c 'truncate "user", listing, listing_photo cascade;'
-
-      - name: Build API
-        run: cargo build --package api --release
-
-      - name: Run API in background (AUTH_DEV_MODE=true)
-        env:
-          AUTH_DEV_MODE: "true"
-        run: |
-          ./target/release/api > /tmp/api.log 2>&1 &
-          API_PID=$!
-          echo "API_PID=$API_PID" >> $GITHUB_ENV
-          for i in {1..30}; do
-            if curl -sf http://localhost:8080/healthz >/dev/null 2>&1; then
-              echo "API ready after ${i}s"
-              break
-            fi
-            sleep 1
-          done
-          curl -sf http://localhost:8080/healthz || (echo "API failed to start"; cat /tmp/api.log; exit 1)
-
-      - name: E2E [1/6] — public /healthz no auth
-        run: |
-          BODY=$(curl -sf http://localhost:8080/healthz)
-          STATUS=$(echo "$BODY" | python3 -c "import json,sys;print(json.load(sys.stdin).get('status', ''))")
-          if [ "$STATUS" != "ok" ]; then echo "FAIL: /healthz expected status=ok, got '$BODY'"; exit 1; fi
-          echo "PASS: /healthz.status=ok"
-
-      - name: E2E [2/6] — protected without token returns 401
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/users/me)
-          if [ "$STATUS" != "401" ]; then
-            echo "FAIL: /users/me expected 401, got $STATUS"
-            cat /tmp/api.log
-            exit 1
-          fi
-          echo "PASS: /users/me without auth returns 401"
-
-      - name: E2E [3/6] — invalid token returns 401
-        run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer bogus.token" http://localhost:8080/users/me)
-          if [ "$STATUS" != "401" ]; then
-            echo "FAIL: bad token expected 401, got $STATUS"
-            cat /tmp/api.log
-            exit 1
-          fi
-          echo "PASS: bad token returns 401"
-
-      - name: E2E [4/6] — first sign-in auto-creates User (DEV.<sub> token)
-        run: |
-          TOKEN="DEV.test-user-1"
-          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me) || {
-            echo "FAIL: GET /users/me with mock token failed"
-            cat /tmp/api.log
-            exit 1
-          }
-          echo "$RESP"
-          USER_ID=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
-          ZSUB=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['zitadel_sub'])")
-          if [ -z "$USER_ID" ]; then echo "FAIL: no id"; exit 1; fi
-          if [ "$ZSUB" != "test-user-1" ]; then echo "FAIL: zitadel_sub mismatch: $ZSUB"; exit 1; fi
-          echo "USER_ID=$USER_ID" >> $GITHUB_ENV
-          echo "PASS: first sign-in id=$USER_ID sub=$ZSUB"
-
-      - name: E2E [5/6] — second call returns same User (no duplicate)
-        run: |
-          TOKEN="DEV.test-user-1"
-          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN" http://localhost:8080/users/me)
-          USER_ID2=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
-          if [ "$USER_ID2" != "$USER_ID" ]; then
-            echo "FAIL: duplicate user — first=$USER_ID second=$USER_ID2"
-            exit 1
-          fi
-          ROW_COUNT=$(PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang -t -A -c 'select count(*) from "user";')
-          if [ "$ROW_COUNT" != "1" ]; then
-            echo "FAIL: expected 1 user row, got $ROW_COUNT"
-            exit 1
-          fi
-          echo "PASS: same id, 1 user row"
-
-      - name: E2E [6/6] — different sub creates different User
-        run: |
-          TOKEN2="DEV.test-user-2"
-          RESP=$(curl -sf -H "Authorization: Bearer $TOKEN2" http://localhost:8080/users/me)
-          USER_ID3=$(echo "$RESP" | python3 -c "import json,sys;print(json.load(sys.stdin)['id'])")
-          if [ "$USER_ID3" = "$USER_ID" ]; then echo "FAIL: different sub should create different user"; exit 1; fi
-          ROW_COUNT=$(PGPASSWORD=ci_only_changeme psql -h localhost -U gongzzang -d gongzzang -t -A -c 'select count(*) from "user";')
-          if [ "$ROW_COUNT" != "2" ]; then
-            echo "FAIL: expected 2 user rows, got $ROW_COUNT"
-            exit 1
-          fi
-          echo "PASS: different sub creates different user, 2 rows"
+      - name: Run walking-skeleton E2E
+        run: bazelisk test //tools/bazel:ci_walking_skeleton_e2e_transition --config=ci --verbose_failures
 
       - name: Dump API log on failure
         if: failure()
@@ -178,11 +76,4 @@ jobs:
             cat /tmp/api.log
           else
             echo "api.log missing"
-          fi
-
-      - name: Stop API
-        if: always()
-        run: |
-          if [ -n "${API_PID:-}" ] && kill -0 "$API_PID" 2>/dev/null; then
-            kill "$API_PID"
           fi

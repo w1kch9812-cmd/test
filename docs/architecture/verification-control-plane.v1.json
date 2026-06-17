@@ -56,6 +56,14 @@
     {
       "id": "cargo-tarpaulin",
       "pattern": "\\bcargo\\s+tarpaulin\\b"
+    },
+    {
+      "id": "sqlx-migrate",
+      "pattern": "\\bsqlx\\s+migrate\\s+run\\b"
+    },
+    {
+      "id": "migration-smoke-script",
+      "pattern": "\\bbash\\s+tests/migrations/test_[^\\s]+\\.sh\\b"
     }
   ],
   "allowed_direct_commands": [
@@ -75,60 +83,6 @@
       "owner": "build-platform",
       "reason": "Runtime browser bootstrap before Bazel Playwright execution.",
       "exit_target": "//:frontend_e2e",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-web-release-build",
-      "pattern": "\\bpnpm\\s+--filter\\s+@gongzzang/web\\s+build\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until release packaging consumes Bazel Next build outputs.",
-      "exit_target": "//:verify_release",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-api-release-build",
-      "pattern": "\\bcargo\\s+build\\s+-p\\s+api\\s+--release\\s+--locked\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until API release artifact is a Bazel output.",
-      "exit_target": "//:verify_release",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-cargo-tarpaulin",
-      "pattern": "\\bcargo\\s+tarpaulin\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until coverage is represented by a Bazel coverage target.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-sqlx-prepare",
-      "pattern": "\\bcargo\\s+sqlx\\s+prepare\\b",
-      "scope": ".github/workflows/*.yml",
-      "owner": "build-platform",
-      "reason": "Transition until SQLx prepare checks are represented by Bazel guardrails.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-walking-skeleton-test",
-      "pattern": "\\bcargo\\s+test\\s+--workspace\\s+--features\\s+integration\\b",
-      "scope": ".github/workflows/walking-skeleton.yml",
-      "owner": "build-platform",
-      "reason": "Transition until integration walking-skeleton tests are represented by Bazel.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-walking-skeleton-build",
-      "pattern": "\\bcargo\\s+build\\s+--package\\s+api\\s+--release\\b",
-      "scope": ".github/workflows/walking-skeleton.yml",
-      "owner": "build-platform",
-      "reason": "Transition until walking-skeleton release build is a Bazel output.",
-      "exit_target": "//:verify_release",
       "sunset": "2026-07-31"
     },
     {

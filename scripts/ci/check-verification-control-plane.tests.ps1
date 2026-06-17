@@ -51,7 +51,13 @@ function Write-Policy {
     { "id": "pnpm-build", "pattern": "\\bpnpm(?:\\s+--filter(?:=|\\s+)\\S+)?\\s+build\\b" },
     { "id": "pnpm-typecheck", "pattern": "\\bpnpm\\s+typecheck\\b" },
     { "id": "pnpm-lint", "pattern": "\\bpnpm\\s+lint\\b" },
-    { "id": "cargo-clippy", "pattern": "\\bcargo\\s+clippy\\b" }
+    { "id": "cargo-clippy", "pattern": "\\bcargo\\s+clippy\\b" },
+    { "id": "cargo-test", "pattern": "\\bcargo\\s+test\\b" },
+    { "id": "cargo-build", "pattern": "\\bcargo\\s+build\\b" },
+    { "id": "cargo-sqlx-prepare", "pattern": "\\bcargo\\s+sqlx\\s+prepare\\b" },
+    { "id": "cargo-tarpaulin", "pattern": "\\bcargo\\s+tarpaulin\\b" },
+    { "id": "sqlx-migrate", "pattern": "\\bsqlx\\s+migrate\\s+run\\b" },
+    { "id": "migration-smoke-script", "pattern": "\\bbash\\s+tests/migrations/test_[^\\s]+\\.sh\\b" }
   ],
   "allowed_direct_commands": [
     $allowedBlock
@@ -144,6 +150,71 @@ jobs:
       - run: cargo clippy --workspace --all-features
 "@
     Assert-Failure -Result (Invoke-Checker -Root $cargoRoot) -ExpectedText "cargo clippy"
+
+    $directTarpaulinRoot = Join-Path $TempRoot "direct-tarpaulin-fails"
+    Write-Policy -Root $directTarpaulinRoot
+    Write-File $directTarpaulinRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo tarpaulin --workspace --out Lcov
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $directTarpaulinRoot) -ExpectedText "cargo tarpaulin"
+
+    $directCargoBuildRoot = Join-Path $TempRoot "direct-cargo-build-fails"
+    Write-Policy -Root $directCargoBuildRoot
+    Write-File $directCargoBuildRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo build -p api --release --locked
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $directCargoBuildRoot) -ExpectedText "cargo build"
+
+    $directSqlxPrepareRoot = Join-Path $TempRoot "direct-sqlx-prepare-fails"
+    Write-Policy -Root $directSqlxPrepareRoot
+    Write-File $directSqlxPrepareRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo sqlx prepare --workspace --check
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $directSqlxPrepareRoot) -ExpectedText "cargo sqlx prepare"
+
+    $directSqlxMigrateRoot = Join-Path $TempRoot "direct-sqlx-migrate-fails"
+    Write-Policy -Root $directSqlxMigrateRoot
+    Write-File $directSqlxMigrateRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sqlx migrate run --source migrations
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $directSqlxMigrateRoot) -ExpectedText "sqlx migrate run"
+
+    $directMigrationSmokeRoot = Join-Path $TempRoot "direct-migration-smoke-fails"
+    Write-Policy -Root $directMigrationSmokeRoot
+    Write-File $directMigrationSmokeRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash tests/migrations/test_v001_full.sh
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $directMigrationSmokeRoot) -ExpectedText "bash tests/migrations/test_v001_full.sh"
 
     $allowRoot = Join-Path $TempRoot "allow-bootstrap"
     Write-Policy -Root $allowRoot -IncludeBootstrapAllowlist

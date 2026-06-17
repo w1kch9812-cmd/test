@@ -46,6 +46,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
 
@@ -64,7 +70,7 @@ jobs:
           done
 
       - name: Apply full migration chain + schema invariants
-        run: bash tests/migrations/test_v001_full.sh
+        run: bazelisk test //tools/bazel:ci_migration_v001_full_transition --config=ci --verbose_failures
 
       - name: Apply V002 migrations + audit immutable
-        run: bash tests/migrations/test_v002_audit_immutable.sh
+        run: bazelisk test //tools/bazel:ci_migration_v002_audit_immutable_transition --config=ci --verbose_failures

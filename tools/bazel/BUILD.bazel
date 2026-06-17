@@ -177,6 +177,55 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "ci_web_release_candidate_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["web-release-candidate"],
+    tags = FRONTEND_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_api_release_candidate_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["api-release-candidate"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_coverage_tarpaulin_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["coverage-tarpaulin"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_sqlx_prepare_check_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["sqlx-prepare-check"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_migration_v001_full_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["migration-v001-full"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_migration_v002_audit_immutable_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["migration-v002-audit-immutable"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "ci_walking_skeleton_e2e_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["walking-skeleton-e2e"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_no_fake_pass",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["no-fake-pass"],

@@ -207,6 +207,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
         with: { version: 9.12.0 }
 
@@ -223,17 +229,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Build web release candidate
-        run: |
-          pnpm --filter @gongzzang/web build
-          mkdir -p target/supply-chain/gongzzang-web-next-build
-          cp -R apps/web/.next target/supply-chain/gongzzang-web-next-build/.next
-          tar -czf target/supply-chain/gongzzang-web-next-build.tgz -C target/supply-chain gongzzang-web-next-build
+        run: bazelisk test //tools/bazel:ci_web_release_candidate_transition --config=ci --verbose_failures
 
       - name: Build API release candidate
-        run: |
-          cargo build -p api --release --locked
-          mkdir -p target/supply-chain/gongzzang-api-release
-          cp target/release/api target/supply-chain/gongzzang-api-release/api
+        run: bazelisk test //tools/bazel:ci_api_release_candidate_transition --config=ci --verbose_failures
 
       - name: Generate Node workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
@@ -298,6 +297,11 @@ jobs:
       RUST_BACKTRACE: 1
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
@@ -306,7 +310,7 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --version "^0.31" --locked
       - name: Run tarpaulin
-        run: cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90 --exclude-files '*/tests.rs'
+        run: bazelisk test //tools/bazel:ci_coverage_tarpaulin_transition --config=ci --verbose_failures
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
         with:

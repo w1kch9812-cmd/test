@@ -46,6 +46,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
+      - name: Install Bazelisk
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bazelisk"
+          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
+          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
+
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
 
@@ -63,8 +69,5 @@ jobs:
             sleep 1
           done
 
-      - name: Apply migrations
-        run: sqlx migrate run --source migrations
-
       - name: Check committed SQLx metadata
-        run: cargo sqlx prepare --workspace --check
+        run: bazelisk test //tools/bazel:ci_sqlx_prepare_check_transition --config=ci --verbose_failures

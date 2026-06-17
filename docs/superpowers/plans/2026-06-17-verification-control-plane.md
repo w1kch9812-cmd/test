@@ -18,6 +18,9 @@ invocations in favor of a Bazel-owned workspace graph entrypoint. A later 2026-0
 moved CI fast verification commands for Node audit, Biome, markdown links, Rust fmt, Rust
 clippy, Rust check, and cargo-deny behind Bazel transition targets, and tightened the
 verification-control-plane guardrail so unused allowlist entries fail closed.
+A later continuation moved release candidate packaging, coverage, SQLx drift checks, migration
+smoke checks, and the walking-skeleton E2E body behind Bazel transition targets; CI workflows now
+retain bootstrap/orchestration steps while Bazel owns those verification entrypoints.
 
 ---
 

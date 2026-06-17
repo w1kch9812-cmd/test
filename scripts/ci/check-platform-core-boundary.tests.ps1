@@ -371,7 +371,7 @@ jobs:
     env:
       DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
     steps:
-      - run: bash tests/migrations/test_v001_full.sh
+      - run: bazelisk test //tools/bazel:ci_migration_v001_full_transition --config=ci --verbose_failures
 '@
         }
         Write-File -Root $Root -RelativePath ".github\workflows\db-migrations.yml" -Content $migrationWorkflow

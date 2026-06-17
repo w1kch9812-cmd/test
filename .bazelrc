@@ -18,7 +18,24 @@ build --guard_against_concurrent_changes
 
 test --test_output=errors
 test --test_summary=detailed
+test --test_env=CI
+test --test_env=SQLX_OFFLINE
 test --test_env=RUST_BACKTRACE=1
+test --test_env=DATABASE_URL
+test --test_env=POSTGRES_USER
+test --test_env=POSTGRES_PASSWORD
+test --test_env=POSTGRES_DB
+test --test_env=NEXT_PUBLIC_API_BASE_URL
+test --test_env=NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID
+test --test_env=NEXT_PUBLIC_PLATFORM_CORE_BASE_URL
+test --test_env=ZITADEL_ISSUER
+test --test_env=ZITADEL_CLIENT_ID
+test --test_env=ZITADEL_AUDIENCE
+test --test_env=ZITADEL_REDIRECT_URI
+test --test_env=REDIS_URL
+test --test_env=SESSION_SECRET
+test --test_env=INTERNAL_AUTH_SECRET
+test --test_env=PLATFORM_CORE_WEBHOOK_SECRET
 test --test_env=PLAYWRIGHT_BROWSERS_PATH
 
 build:dev --remote_download_toplevel

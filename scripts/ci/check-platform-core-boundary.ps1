@@ -85,6 +85,7 @@ $RequiredForbiddenCanonicalCatalogTables = @(
 $RequiredCleanupMigrationPath = "migrations/30015_drop_platform_core_legacy_schema.sql"
 $RequiredMigrationSmokePath = "tests/migrations/test_v001_full.sh"
 $RequiredMigrationSmokeWorkflowPath = ".github/workflows/db-migrations.yml"
+$RequiredMigrationSmokeBazelTarget = "//tools/bazel:ci_migration_v001_full_transition"
 $RequiredCleanupMigrationDrops = @(
     "api_health_check",
     "parcel_external_data",
@@ -867,8 +868,10 @@ function Assert-MigrationSmokeWorkflowContract {
         }
     }
 
-    if (![regex]::IsMatch($content, "(?im)^\s*-?\s*run:\s+bash\s+tests/migrations/test_v001_full\.sh\s*$")) {
-        throw "platform-core-boundary: migration smoke workflow must run bash tests/migrations/test_v001_full.sh"
+    $runsLegacySmokeScript = [regex]::IsMatch($content, "(?im)^\s*-?\s*run:\s+bash\s+tests/migrations/test_v001_full\.sh\s*$")
+    $runsBazelSmokeTarget = $content.Contains($RequiredMigrationSmokeBazelTarget)
+    if (!$runsLegacySmokeScript -and !$runsBazelSmokeTarget) {
+        throw "platform-core-boundary: migration smoke workflow must run $RequiredMigrationSmokeBazelTarget or bash tests/migrations/test_v001_full.sh"
     }
 }
 
