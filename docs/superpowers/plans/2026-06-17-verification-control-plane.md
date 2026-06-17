@@ -21,6 +21,9 @@ verification-control-plane guardrail so unused allowlist entries fail closed.
 A later continuation moved release candidate packaging, coverage, SQLx drift checks, migration
 smoke checks, and the walking-skeleton E2E body behind Bazel transition targets; CI workflows now
 retain bootstrap/orchestration steps while Bazel owns those verification entrypoints.
+A subsequent release hardening step promoted web/API release candidates from transition
+side-effects to declared Bazel outputs under `bazel-bin`, added `//:verify_release`, and made
+the supply-chain policy/admission workflow consume those Bazel-owned subjects.
 
 ---
 

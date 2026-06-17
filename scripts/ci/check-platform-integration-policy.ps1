@@ -540,6 +540,19 @@ Assert-Equals `
     -Expected "//tools/bazel:ci_cargo_deny_transition" `
     -Message "supply chain Rust SCA Bazel target mismatch"
 
+$releaseArtifacts = @($supplyChainPolicy.release_artifacts)
+Assert-Equals -Actual $releaseArtifacts.Count -Expected 2 -Message "supply chain release artifact count mismatch"
+Assert-Unique -Values ($releaseArtifacts | ForEach-Object { $_.id }) -Message "supply chain release artifact ids must be unique"
+foreach ($artifact in $releaseArtifacts) {
+    Assert-NotEmptyString -Value $artifact.ecosystem -Message "supply chain release artifact ecosystem for $($artifact.id)"
+    Assert-NotEmptyString -Value $artifact.bazel_target -Message "supply chain release artifact Bazel target for $($artifact.id)"
+    Assert-NotEmptyString -Value $artifact.subject_path -Message "supply chain release artifact subject_path for $($artifact.id)"
+    Assert-NotEmptyString -Value $artifact.sbom_source_path -Message "supply chain release artifact sbom_source_path for $($artifact.id)"
+}
+foreach ($requiredEcosystem in @("node", "rust")) {
+    Assert-JsonArrayContains -Values @($releaseArtifacts | ForEach-Object { [string] $_.ecosystem }) -Expected $requiredEcosystem -Message "supply chain release artifact ecosystems"
+}
+
 $sbomPolicy = $supplyChainPolicy.sbom
 Assert-Equals -Actual $sbomPolicy.required -Expected $true -Message "supply chain SBOM requirement mismatch"
 Assert-Equals -Actual $sbomPolicy.format -Expected "cyclonedx-json" -Message "supply chain SBOM format mismatch"
@@ -568,10 +581,7 @@ Assert-Equals -Actual $provenancePolicy.pinned_ref -Expected "281a49d4cbb0a72c95
 foreach ($permission in @("contents: read", "id-token: write", "attestations: write", "artifact-metadata: write")) {
     Assert-JsonArrayContains -Values @($provenancePolicy.required_permissions) -Expected $permission -Message "supply chain provenance permissions"
 }
-foreach ($subjectPath in @(
-    "target/supply-chain/gongzzang-web-next-build.tgz",
-    "target/release/api"
-)) {
+foreach ($subjectPath in @($releaseArtifacts | ForEach-Object { [string] $_.subject_path })) {
     Assert-JsonArrayContains -Values @($provenancePolicy.production_subjects) -Expected $subjectPath -Message "supply chain provenance production subjects"
 }
 
@@ -808,6 +818,9 @@ if ($IncludeProductionPromotion) {
     )) {
         Assert-Contains -Content $deployGateWorkflow -Needle $needle -Message "supply chain deploy admission workflow"
     }
+    foreach ($releaseArtifact in $releaseArtifacts) {
+        Assert-Contains -Content $deployGateWorkflow -Needle ([string] $releaseArtifact.subject_path) -Message "supply chain deploy admission subject path"
+    }
 }
 
 $telemetryPolicy = $operationsPolicy.telemetry
@@ -928,12 +941,15 @@ foreach ($needle in @(
     "format: cyclonedx-json",
     "output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
     "output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
-    "subject-path: target/supply-chain/gongzzang-web-next-build.tgz",
-    "subject-path: target/release/api",
     "sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
     "sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
 )) {
     Assert-Contains -Content $ci -Needle $needle -Message "CI platform integration gate"
+}
+foreach ($releaseArtifact in $releaseArtifacts) {
+    Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.bazel_target) -Message "CI release artifact Bazel target"
+    Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.subject_path) -Message "CI release artifact subject path"
+    Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.sbom_source_path) -Message "CI release artifact SBOM source path"
 }
 
 if ($IncludeProductionPromotion) {

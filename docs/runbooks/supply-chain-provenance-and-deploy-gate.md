@@ -33,8 +33,8 @@ Each production candidate must have:
 
 Current subjects:
 
-- `target/supply-chain/gongzzang-web-next-build.tgz`
-- `target/release/api`
+- `bazel-bin/gongzzang-web-next-build.tgz`
+- `bazel-bin/gongzzang-api-release/api`
 
 Current SBOM files:
 
@@ -87,12 +87,12 @@ Manual verification uses the same script:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File scripts/ci/verify-production-deploy-candidate.ps1 `
-  -ArtifactPath target/supply-chain/gongzzang-web-next-build.tgz `
+  -ArtifactPath bazel-bin/gongzzang-web-next-build.tgz `
   -Repository <owner>/gongzzang
 
 powershell -NoProfile -ExecutionPolicy Bypass `
   -File scripts/ci/verify-production-deploy-candidate.ps1 `
-  -ArtifactPath target/release/api `
+  -ArtifactPath bazel-bin/gongzzang-api-release/api `
   -Repository <owner>/gongzzang
 ```
 
@@ -100,21 +100,21 @@ The script rejects artifacts not built by the approved workflow or approved
 source ref. Manual verification commands are:
 
 ```bash
-gh attestation verify target/supply-chain/gongzzang-web-next-build.tgz \
+gh attestation verify bazel-bin/gongzzang-web-next-build.tgz \
   -R <owner>/gongzzang
 
-gh attestation verify target/release/api \
+gh attestation verify bazel-bin/gongzzang-api-release/api \
   -R <owner>/gongzzang
 ```
 
 Then verify the SBOM attestations:
 
 ```bash
-gh attestation verify target/supply-chain/gongzzang-web-next-build.tgz \
+gh attestation verify bazel-bin/gongzzang-web-next-build.tgz \
   -R <owner>/gongzzang \
   --predicate-type https://cyclonedx.org/bom
 
-gh attestation verify target/release/api \
+gh attestation verify bazel-bin/gongzzang-api-release/api \
   -R <owner>/gongzzang \
   --predicate-type https://cyclonedx.org/bom
 ```

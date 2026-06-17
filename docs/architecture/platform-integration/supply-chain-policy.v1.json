@@ -17,6 +17,22 @@
     "config": "deny.toml",
     "bazel_target": "//tools/bazel:ci_cargo_deny_transition"
   },
+  "release_artifacts": [
+    {
+      "id": "web_next_build_archive",
+      "ecosystem": "node",
+      "bazel_target": "//:web_release_candidate_archive",
+      "subject_path": "bazel-bin/gongzzang-web-next-build.tgz",
+      "sbom_source_path": "bazel-bin/apps/web/.next"
+    },
+    {
+      "id": "api_binary",
+      "ecosystem": "rust",
+      "bazel_target": "//:api_release_candidate_binary",
+      "subject_path": "bazel-bin/gongzzang-api-release/api",
+      "sbom_source_path": "bazel-bin/gongzzang-api-release"
+    }
+  ],
   "secret_scanning": {
     "tool": "gitleaks",
     "config": ".gitleaks.toml",
@@ -36,16 +52,16 @@
       {
         "id": "gongzzang_node_workspace_sbom",
         "ecosystem": "node",
-        "source_path": "pnpm-lock.yaml",
+        "source_path": "bazel-bin/apps/web/.next",
         "output_file": "target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
-        "subject_path": "target/supply-chain/gongzzang-web-next-build.tgz"
+        "subject_path": "bazel-bin/gongzzang-web-next-build.tgz"
       },
       {
         "id": "gongzzang_rust_workspace_sbom",
         "ecosystem": "rust",
-        "source_path": "Cargo.lock",
+        "source_path": "bazel-bin/gongzzang-api-release",
         "output_file": "target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
-        "subject_path": "target/release/api"
+        "subject_path": "bazel-bin/gongzzang-api-release/api"
       }
     ]
   },
@@ -63,8 +79,8 @@
       "artifact-metadata: write"
     ],
     "production_subjects": [
-      "target/supply-chain/gongzzang-web-next-build.tgz",
-      "target/release/api"
+      "bazel-bin/gongzzang-web-next-build.tgz",
+      "bazel-bin/gongzzang-api-release/api"
     ]
   },
   "deploy_gate": {

@@ -49,25 +49,6 @@ wait_for_postgres() {
   exit 1
 }
 
-build_web_release_candidate() {
-  require_command pnpm
-  require_node_modules
-  export CI="${CI:-true}"
-  pnpm --filter @gongzzang/web build
-  rm -rf target/supply-chain/gongzzang-web-next-build target/supply-chain/gongzzang-web-next-build.tgz
-  mkdir -p target/supply-chain/gongzzang-web-next-build
-  cp -R apps/web/.next target/supply-chain/gongzzang-web-next-build/.next
-  tar -czf target/supply-chain/gongzzang-web-next-build.tgz -C target/supply-chain gongzzang-web-next-build
-}
-
-build_api_release_candidate() {
-  require_command cargo
-  cargo build -p api --release --locked
-  rm -rf target/supply-chain/gongzzang-api-release
-  mkdir -p target/supply-chain/gongzzang-api-release
-  cp target/release/api target/supply-chain/gongzzang-api-release/api
-}
-
 run_coverage_tarpaulin() {
   require_command cargo
   cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90 --exclude-files '*/tests.rs'
@@ -226,12 +207,6 @@ case "$task" in
   cargo-deny)
     require_command cargo
     exec cargo deny check
-    ;;
-  web-release-candidate)
-    build_web_release_candidate
-    ;;
-  api-release-candidate)
-    build_api_release_candidate
     ;;
   coverage-tarpaulin)
     run_coverage_tarpaulin

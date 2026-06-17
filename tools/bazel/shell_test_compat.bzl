@@ -23,15 +23,20 @@ exec bash "$script_path" {args}
         script_short_path = script.short_path,
     )
     ctx.actions.write(executable, content, is_executable = True)
+    data_files = []
+    for target in ctx.attr.data:
+        data_files.extend(target[DefaultInfo].files.to_list())
+
     return [DefaultInfo(
         executable = executable,
-        runfiles = ctx.runfiles(files = [script]),
+        runfiles = ctx.runfiles(files = [script] + data_files),
     )]
 
 transition_shell_test = rule(
     implementation = _transition_shell_test_impl,
     attrs = {
         "script_args": attr.string_list(),
+        "data": attr.label_list(allow_files = True),
         "srcs": attr.label_list(allow_files = True, mandatory = True),
     },
     test = True,

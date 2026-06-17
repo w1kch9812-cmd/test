@@ -1,5 +1,6 @@
 load("@aspect_rules_ts//ts:defs.bzl", "ts_config", "ts_project")
 load("@npm//:defs.bzl", "npm_link_all_packages")
+load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -208,6 +209,63 @@ filegroup(
     ],
 )
 
+genrule(
+    name = "web_release_candidate_archive",
+    srcs = ["//apps/web:next_production_build"],
+    outs = ["gongzzang-web-next-build.tgz"],
+    cmd = """
+set -euo pipefail
+staging="$(@D)/web_release_candidate_staging"
+rm -rf "$$staging"
+mkdir -p "$$staging/gongzzang-web-next-build"
+cp -R "$(location //apps/web:next_production_build)" "$$staging/gongzzang-web-next-build/.next"
+tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+    -czf "$@" -C "$$staging" gongzzang-web-next-build
+""",
+    tags = [
+        "manual",
+        "local",
+    ],
+)
+
+genrule(
+    name = "api_release_candidate_binary",
+    srcs = ["//services/api:api_service"],
+    outs = ["gongzzang-api-release/api"],
+    cmd = """
+set -euo pipefail
+mkdir -p "$(@D)"
+cp "$(location //services/api:api_service)" "$@"
+chmod +x "$@"
+""",
+    tags = [
+        "manual",
+        "local",
+    ],
+)
+
+filegroup(
+    name = "release_candidate_artifacts",
+    srcs = [
+        ":api_release_candidate_binary",
+        ":web_release_candidate_archive",
+    ],
+    tags = ["manual"],
+)
+
+transition_shell_test(
+    name = "release_artifact_contract_test",
+    srcs = ["//tools/bazel:check_release_artifacts.sh"],
+    data = [
+        ":api_release_candidate_binary",
+        ":web_release_candidate_archive",
+    ],
+    tags = [
+        "manual",
+        "local",
+    ],
+)
+
 WEB_TYPECHECK_DEPS = [
     "//apps/web:node_modules/@axe-core/playwright",
     "//apps/web:node_modules/@gongzzang/api-types",
@@ -284,6 +342,14 @@ test_suite(
         ":frontend_build",
         ":frontend_bundle",
         ":frontend_e2e",
+    ],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "verify_release",
+    tests = [
+        ":release_artifact_contract_test",
     ],
     tags = ["manual"],
 )

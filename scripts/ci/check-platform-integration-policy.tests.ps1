@@ -358,6 +358,22 @@ function Write-MinimalRepo {
     "config": "deny.toml",
     "bazel_target": "//tools/bazel:ci_cargo_deny_transition"
   },
+  "release_artifacts": [
+    {
+      "id": "web_next_build_archive",
+      "ecosystem": "node",
+      "bazel_target": "//:web_release_candidate_archive",
+      "subject_path": "bazel-bin/gongzzang-web-next-build.tgz",
+      "sbom_source_path": "bazel-bin/apps/web/.next"
+    },
+    {
+      "id": "api_binary",
+      "ecosystem": "rust",
+      "bazel_target": "//:api_release_candidate_binary",
+      "subject_path": "bazel-bin/gongzzang-api-release/api",
+      "sbom_source_path": "bazel-bin/gongzzang-api-release"
+    }
+  ],
   "sbom": {
     "required": true,
     "format": "cyclonedx-json",
@@ -371,16 +387,16 @@ function Write-MinimalRepo {
       {
         "id": "gongzzang_node_workspace_sbom",
         "ecosystem": "node",
-        "source_path": "pnpm-lock.yaml",
+        "source_path": "bazel-bin/apps/web/.next",
         "output_file": "target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
-        "subject_path": "target/supply-chain/gongzzang-web-next-build.tgz"
+        "subject_path": "bazel-bin/gongzzang-web-next-build.tgz"
       },
       {
         "id": "gongzzang_rust_workspace_sbom",
         "ecosystem": "rust",
-        "source_path": "Cargo.lock",
+        "source_path": "bazel-bin/gongzzang-api-release",
         "output_file": "target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
-        "subject_path": "target/release/api"
+        "subject_path": "bazel-bin/gongzzang-api-release/api"
       }
     ]
   },
@@ -398,8 +414,8 @@ function Write-MinimalRepo {
       "artifact-metadata: write"
     ],
     "production_subjects": [
-      "target/supply-chain/gongzzang-web-next-build.tgz",
-      "target/release/api"
+      "bazel-bin/gongzzang-web-next-build.tgz",
+      "bazel-bin/gongzzang-api-release/api"
     ]
   },
   "deploy_gate": {
@@ -659,10 +675,12 @@ artifact-metadata: write
 anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
 actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb
 format: cyclonedx-json
+path: bazel-bin/apps/web/.next
+path: bazel-bin/gongzzang-api-release
 output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
-subject-path: target/supply-chain/gongzzang-web-next-build.tgz
-subject-path: target/release/api
+subject-path: bazel-bin/gongzzang-web-next-build.tgz
+subject-path: bazel-bin/gongzzang-api-release/api
 sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 check-production-edge-admission.ps1
@@ -675,6 +693,8 @@ verify-load-test-capacity-evidence.tests.ps1
     Write-File -Root $Root -RelativePath ".github\workflows\ci.yml" -Content @"
 //tools/bazel:ci_node_audit_transition
 //tools/bazel:ci_cargo_deny_transition
+//:web_release_candidate_archive
+//:api_release_candidate_binary
 gitleaks-action
 $integrationCi
 $lakehouseRegistryCi
@@ -709,6 +729,8 @@ workflow_call:
 workflow_dispatch:
 verify-production-deploy-candidates:
 environment: production
+bazel-bin/gongzzang-web-next-build.tgz
+bazel-bin/gongzzang-api-release/api
 actions: read
 attestations: read
 actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093

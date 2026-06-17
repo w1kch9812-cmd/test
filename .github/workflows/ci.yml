@@ -228,54 +228,51 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Build web release candidate
-        run: bazelisk test //tools/bazel:ci_web_release_candidate_transition --config=ci --verbose_failures
-
-      - name: Build API release candidate
-        run: bazelisk test //tools/bazel:ci_api_release_candidate_transition --config=ci --verbose_failures
+      - name: Build release candidate artifacts
+        run: bazelisk build //:web_release_candidate_archive //:api_release_candidate_binary --config=ci --verbose_failures
 
       - name: Generate Node workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
         with:
-          path: target/supply-chain/gongzzang-web-next-build
+          path: bazel-bin/apps/web/.next
           format: cyclonedx-json
           output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 
       - name: Generate Rust workspace SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610  # v0.24.0 (Round 5 SHA pin, ADR 0028)
         with:
-          path: target/supply-chain/gongzzang-api-release
+          path: bazel-bin/gongzzang-api-release
           format: cyclonedx-json
           output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 
       - name: Attest web provenance
         uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
         with:
-          subject-path: target/supply-chain/gongzzang-web-next-build.tgz
+          subject-path: bazel-bin/gongzzang-web-next-build.tgz
 
       - name: Attest API provenance
         uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
         with:
-          subject-path: target/release/api
+          subject-path: bazel-bin/gongzzang-api-release/api
 
       - name: Attest web SBOM
         uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
         with:
-          subject-path: target/supply-chain/gongzzang-web-next-build.tgz
+          subject-path: bazel-bin/gongzzang-web-next-build.tgz
           sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
 
       - name: Attest API SBOM
         uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
         with:
-          subject-path: target/release/api
+          subject-path: bazel-bin/gongzzang-api-release/api
           sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         with:
           name: supply-chain-release-candidates
           path: |
-            target/supply-chain/gongzzang-web-next-build.tgz
-            target/release/api
+            bazel-bin/gongzzang-web-next-build.tgz
+            bazel-bin/gongzzang-api-release/api
             target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
             target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
           if-no-files-found: error

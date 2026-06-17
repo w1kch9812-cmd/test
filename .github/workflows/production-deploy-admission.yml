@@ -24,11 +24,11 @@ on:
       web-artifact-path:
         type: string
         required: false
-        default: target/supply-chain/gongzzang-web-next-build.tgz
+        default: bazel-bin/gongzzang-web-next-build.tgz
       api-artifact-path:
         type: string
         required: false
-        default: target/release/api
+        default: bazel-bin/gongzzang-api-release/api
   workflow_dispatch:
     inputs:
       artifact-name:
@@ -56,11 +56,11 @@ on:
       web-artifact-path:
         type: string
         required: false
-        default: target/supply-chain/gongzzang-web-next-build.tgz
+        default: bazel-bin/gongzzang-web-next-build.tgz
       api-artifact-path:
         type: string
         required: false
-        default: target/release/api
+        default: bazel-bin/gongzzang-api-release/api
 
 permissions:
   contents: read

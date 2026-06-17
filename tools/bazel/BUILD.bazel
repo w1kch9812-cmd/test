@@ -3,7 +3,10 @@ load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["run_biome_check.mjs"])
+exports_files([
+    "check_release_artifacts.sh",
+    "run_biome_check.mjs",
+])
 
 filegroup(
     name = "sqlx_cargo_metadata_stub",
@@ -173,20 +176,6 @@ transition_shell_test(
     name = "ci_cargo_deny_transition",
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["cargo-deny"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "ci_web_release_candidate_transition",
-    srcs = ["run_ci_transition_task.sh"],
-    script_args = ["web-release-candidate"],
-    tags = FRONTEND_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "ci_api_release_candidate_transition",
-    srcs = ["run_ci_transition_task.sh"],
-    script_args = ["api-release-candidate"],
     tags = GUARDRAIL_TRANSITION_TAGS,
 )
 
