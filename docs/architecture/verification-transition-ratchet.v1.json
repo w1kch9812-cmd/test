@@ -2,7 +2,10 @@
   "schema_version": "gongzzang.verification_transition_ratchet.v1",
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
-  "retired_transition_targets": ["//tools/bazel:ci_rustfmt_transition"],
+  "retired_transition_targets": [
+    "//tools/bazel:ci_rust_check_transition",
+    "//tools/bazel:ci_rustfmt_transition"
+  ],
   "transition_targets": [
     {
       "bazel_target": "//tools/bazel:frontend_typecheck_transition",
@@ -64,15 +67,6 @@
       "owner": "build-platform",
       "reason": "cargo clippy transition retained until Rust linting is represented by native Bazel rules.",
       "exit_target": "//:rust_lint_verification",
-      "sunset": "2026-07-31",
-      "external_collection_approval_required": false
-    },
-    {
-      "bazel_target": "//tools/bazel:ci_rust_check_transition",
-      "category": "rust-verification",
-      "owner": "build-platform",
-      "reason": "cargo check transition retained until Rust workspace checking is represented by native Bazel rules.",
-      "exit_target": "//:rust_check_verification",
       "sunset": "2026-07-31",
       "external_collection_approval_required": false
     },

@@ -1,5 +1,6 @@
 load("@aspect_rules_js//js:defs.bzl", "js_test")
 load("@rules_rust//rust:defs.bzl", "rustfmt_test")
+load("//tools/bazel:rust_targets.bzl", "RUST_CRATE_TARGETS", "RUST_UNIT_TEST_TARGETS")
 load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -27,35 +28,6 @@ GUARDRAIL_TRANSITION_TAGS = [
     "manual",
     "local",
     "no-sandbox",
-]
-
-RUSTFMT_TARGETS = [
-    "//crates/auth:auth",
-    "//crates/circuit-breaker:circuit_breaker",
-    "//crates/db:db",
-    "//crates/domain/audit/audit-log:audit_log_domain",
-    "//crates/domain/audit/outbox-event:outbox_event_domain",
-    "//crates/domain/core/listing-photo:listing_photo_domain",
-    "//crates/domain/core/listing:listing_domain",
-    "//crates/domain/core/shared-kernel:shared_kernel",
-    "//crates/domain/core/user:user_domain",
-    "//crates/domain/insights/analysis-report:analysis_report_domain",
-    "//crates/domain/insights/bookmark:bookmark_domain",
-    "//crates/domain/insights/notification:notification_domain",
-    "//crates/domain/insights/search-history:search_history_domain",
-    "//crates/domain/market/court-auction:court_auction_domain",
-    "//crates/domain/market/real-transaction:real_transaction_domain",
-    "//crates/operations/admin-action:admin_action_domain",
-    "//crates/operations/business-verification-queue:business_verification_queue_domain",
-    "//crates/operations/listing-report:listing_report_domain",
-    "//crates/operations/listing-review-queue:lrq_domain",
-    "//crates/operations/operations-meta:operations_meta_domain",
-    "//crates/outbox-publisher:outbox_publisher",
-    "//crates/parcel-lookup:parcel_lookup",
-    "//services/api:api_service",
-    "//services/api:platform_core_anchor_import",
-    "//services/etl-base-layer:etl_base_layer_service",
-    "//services/outbox-publisher:outbox_publisher_service",
 ]
 
 js_test(
@@ -186,24 +158,22 @@ transition_shell_test(
 
 rustfmt_test(
     name = "rustfmt_check",
-    targets = RUSTFMT_TARGETS,
+    targets = RUST_CRATE_TARGETS,
     tags = [
         "manual",
         "local",
     ],
 )
 
+test_suite(
+    name = "rust_check",
+    tests = RUST_UNIT_TEST_TARGETS,
+)
+
 transition_shell_test(
     name = "ci_rust_clippy_transition",
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["rust-clippy"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "ci_rust_check_transition",
-    srcs = ["run_ci_transition_task.sh"],
-    script_args = ["rust-check"],
     tags = GUARDRAIL_TRANSITION_TAGS,
 )
 

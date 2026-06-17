@@ -196,10 +196,6 @@ case "$task" in
     require_command cargo
     exec cargo clippy --workspace --all-features --all-targets -- -D warnings
     ;;
-  rust-check)
-    require_command cargo
-    exec cargo check --workspace --all-features
-    ;;
   cargo-deny)
     require_command cargo
     exec cargo deny check

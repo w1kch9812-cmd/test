@@ -50,3 +50,9 @@
   - Replace `//tools/bazel:ci_rustfmt_transition` with `//tools/bazel:rustfmt_check`.
   - Move `//tools/bazel:ci_rustfmt_transition` to `retired_transition_targets`.
   - Re-run targeted ratchet tests, rustfmt Bazel target, guardrails, and full Bazel graph.
+
+- [x] **Task 6: Retire Rust Check Transition**
+  - Replace `//tools/bazel:ci_rust_check_transition` with `//:rust_check_verification`.
+  - Move `//tools/bazel:ci_rust_check_transition` to `retired_transition_targets`.
+  - Use `//tools/bazel:rust_targets.bzl` as the Rust verification target set for format and check suites.
+  - Re-run targeted ratchet tests, Rust check Bazel target, guardrails, and full Bazel graph.

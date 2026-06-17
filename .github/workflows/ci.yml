@@ -146,7 +146,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
         with: { toolchain: "1.91.1", components: "rustfmt, clippy" }
       - name: cargo fmt
-        run: bazelisk test //tools/bazel:rustfmt_check --config=ci --verbose_failures
+        run: bazelisk test //:rust_format_verification --config=ci --verbose_failures
       - name: cargo clippy
         run: bazelisk test //tools/bazel:ci_rust_clippy_transition --config=ci --verbose_failures
 
@@ -180,7 +180,7 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.19.8 --locked
       - name: Rust check
-        run: bazelisk test //tools/bazel:ci_rust_check_transition --config=ci --verbose_failures
+        run: bazelisk test //:rust_check_verification --config=ci --verbose_failures
       - name: Cargo deny
         run: bazelisk test //tools/bazel:ci_cargo_deny_transition --config=ci --verbose_failures
 

@@ -452,6 +452,17 @@ test_suite(
 )
 
 test_suite(
+    name = "rust_format_verification",
+    tests = ["//tools/bazel:rustfmt_check"],
+    tags = ["manual"],
+)
+
+test_suite(
+    name = "rust_check_verification",
+    tests = ["//tools/bazel:rust_check"],
+)
+
+test_suite(
     name = "guardrails_fast",
     tests = [
         "//tools/bazel:guardrail_catalog_m1_boundary",
