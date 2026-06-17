@@ -72,6 +72,12 @@ TS
 assert_failure_contains "rejects TEMP identifiers" "forbidden implementation marker" bash "$script" "$tmp_root"
 
 reset_tmp_root
+write_file "apps/web/lib/session/cookie.ts" <<'TS'
+export const TEMP_COOKIE_NAME = "auth-tmp";
+TS
+assert_failure_contains "rejects TEMP identifiers without rg" "forbidden implementation marker" env PATH="/usr/bin:/bin" bash "$script" "$tmp_root"
+
+reset_tmp_root
 write_file "services/api/src/startup.rs" <<'RS'
 // HACK: bypass production startup.
 fn main() {}

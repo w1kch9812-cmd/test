@@ -9,10 +9,12 @@
 **Tech Stack:** Bazel, PowerShell guardrails, JSON policy, lefthook, GitHub Actions.
 
 **Status:** Implemented on 2026-06-17. Targeted guardrail tests, real-repo guardrail execution,
-and the default Bazel `//...` graph passed. The broader manual `//:guardrails_all` suite exposed
-pre-existing WSL Bazel runner issues outside this guardrail: missing `rg` for
-`guardrail_forbidden_implementation_markers` and timeout behavior in two traffic/auth policy
-targets.
+and the default Bazel `//...` graph passed. Follow-up hardening on 2026-06-17 removed the
+pre-existing `//:guardrails_all` blockers by making forbidden-marker scanning independent of
+`rg`, isolating the traffic/auth API-control-plane fixture from the live repo, and making the
+Bazel WSL PowerShell runner prefer Windows PowerShell for `/mnt/<drive>` workspaces. The same
+follow-up removed pre-push direct `cargo check`, `cargo clippy`, and `cargo sqlx prepare`
+invocations in favor of a Bazel-owned workspace graph entrypoint.
 
 ---
 

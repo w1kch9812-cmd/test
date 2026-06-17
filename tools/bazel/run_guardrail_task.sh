@@ -15,14 +15,54 @@ repo_root="$(cd "$(dirname "$script_path")/../.." && pwd)"
 
 cd "$repo_root"
 
+to_windows_path() {
+  local path="$1"
+  if [[ "$path" =~ ^/mnt/([A-Za-z])/(.*)$ ]]; then
+    local drive="${BASH_REMATCH[1]^^}"
+    local rest="${BASH_REMATCH[2]//\//\\}"
+    printf '%s:\\%s' "$drive" "$rest"
+    return
+  fi
+  printf '%s' "$path"
+}
+
+resolve_windows_powershell() {
+  if command -v powershell.exe >/dev/null 2>&1; then
+    command -v powershell.exe
+    return
+  fi
+  if [ -x /mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe ]; then
+    printf '%s\n' /mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/powershell.exe
+    return
+  fi
+  if [ -x /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe ]; then
+    printf '%s\n' /mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+    return
+  fi
+}
+
 run_pwsh() {
   local script="$1"
   shift
+  local windows_powershell
+  windows_powershell="$(resolve_windows_powershell || true)"
+  if [[ "$repo_root" =~ ^/mnt/[A-Za-z]/ ]] && [ -n "$windows_powershell" ]; then
+    local script_path="$script"
+    if [[ "$script_path" != /* ]]; then
+      script_path="${repo_root}/${script_path}"
+    fi
+    local converted_args=()
+    local arg
+    for arg in "$@"; do
+      converted_args+=("$(to_windows_path "$arg")")
+    done
+    exec "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$(to_windows_path "$script_path")" "${converted_args[@]}"
+  fi
   if command -v pwsh >/dev/null 2>&1; then
     exec pwsh -NoProfile -ExecutionPolicy Bypass -File "$script" "$@"
   fi
-  if command -v powershell.exe >/dev/null 2>&1; then
-    exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$script" "$@"
+  if [ -n "$windows_powershell" ]; then
+    exec "$windows_powershell" -NoProfile -ExecutionPolicy Bypass -File "$script" "$@"
   fi
   printf 'run-guardrail-task: PowerShell is required for %s\n' "$script" >&2
   exit 127

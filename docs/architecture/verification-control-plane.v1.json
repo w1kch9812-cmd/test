@@ -211,33 +211,6 @@
       "reason": "Pre-commit markdown lint transition until represented through Bazel.",
       "exit_target": "//:verify_fast",
       "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-hook-cargo-check",
-      "pattern": "\\bcargo\\s+check\\s+--workspace\\s+--all-features\\b",
-      "scope": "lefthook.yml",
-      "owner": "build-platform",
-      "reason": "Pre-push Rust check transition until represented through Bazel.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-hook-cargo-clippy",
-      "pattern": "\\bcargo\\s+clippy\\s+--workspace\\s+--all-features\\s+--all-targets\\s+--\\s+-D\\s+warnings\\b",
-      "scope": "lefthook.yml",
-      "owner": "build-platform",
-      "reason": "Pre-push Rust clippy transition until represented through Bazel.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-hook-sqlx-prepare",
-      "pattern": "\\bcargo\\s+sqlx\\s+prepare\\s+--workspace\\s+--check\\b",
-      "scope": "lefthook.yml",
-      "owner": "build-platform",
-      "reason": "Pre-push SQLx prepare transition until represented through Bazel.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
     }
   ]
 }

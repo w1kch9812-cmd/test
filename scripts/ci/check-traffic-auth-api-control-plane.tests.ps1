@@ -4,7 +4,68 @@ $ErrorActionPreference = "Stop"
 $ScriptPath = Join-Path $PSScriptRoot "check-traffic-auth-policy-registry.ps1"
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh" } else { "powershell.exe" }
-$FixturePath = Join-Path $RepoRoot "apps\web\lib\api\raw-api-transport-fixture.ts"
+$TempParent = Join-Path $RepoRoot "target\check-traffic-auth-api-control-plane-tests"
+$FixtureRoot = Join-Path $TempParent ([guid]::NewGuid().ToString("N"))
+$FixturePath = Join-Path $FixtureRoot "apps\web\lib\api\raw-api-transport-fixture.ts"
+
+function Copy-RepoFile {
+    param([string] $RelativePath)
+    $source = Join-Path $RepoRoot ($RelativePath -replace "/", "\")
+    if (!(Test-Path -LiteralPath $source -PathType Leaf)) {
+        throw "Required fixture source is missing: $RelativePath"
+    }
+    $destination = Join-Path $FixtureRoot ($RelativePath -replace "/", "\")
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+    Copy-Item -LiteralPath $source -Destination $destination -Force
+}
+
+function Copy-RepoDirectoryFiles {
+    param([string] $RelativePath, [string] $Filter)
+    $sourceRoot = Join-Path $RepoRoot ($RelativePath -replace "/", "\")
+    if (!(Test-Path -LiteralPath $sourceRoot -PathType Container)) {
+        throw "Required fixture source directory is missing: $RelativePath"
+    }
+    $sourceFiles = @(
+        Get-ChildItem -LiteralPath $sourceRoot -File -Filter $Filter -Recurse |
+            Sort-Object FullName
+    )
+    if ($sourceFiles.Count -eq 0) {
+        throw "Required fixture source directory has no files: $RelativePath"
+    }
+    foreach ($sourceFile in $sourceFiles) {
+        $relativeFromSourceRoot = $sourceFile.FullName.Substring($sourceRoot.Length).TrimStart("\", "/")
+        $destination = Join-Path (Join-Path $FixtureRoot ($RelativePath -replace "/", "\")) $relativeFromSourceRoot
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
+        Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination -Force
+    }
+}
+
+function Write-FixtureRepo {
+    New-Item -ItemType Directory -Force -Path $FixtureRoot | Out-Null
+    foreach ($relativePath in @(
+            "docs/architecture/traffic-auth-policy-registry.v1.json",
+            "docs/architecture/platform-core-boundary.v1.json",
+            ".github/workflows/ci.yml",
+            "apps/web/proxy.ts",
+            "apps/web/lib/routes.ts",
+            "apps/web/app/api/proxy/[...path]/route.ts",
+            "apps/web/lib/policies/traffic-auth-policy.generated.ts",
+            "services/api/src/listing_marker_policy.rs",
+            "services/api/src/traffic_auth_policy.rs",
+            "services/api/src/main.rs",
+            "services/api/src/app.rs",
+            "services/api/src/routes/health.rs"
+        )) {
+        Copy-RepoFile -RelativePath $relativePath
+    }
+
+    $flatListingMarkerServing = Join-Path $RepoRoot "services\api\src\listing_marker_serving.rs"
+    if (Test-Path -LiteralPath $flatListingMarkerServing -PathType Leaf) {
+        Copy-RepoFile -RelativePath "services/api/src/listing_marker_serving.rs"
+    } else {
+        Copy-RepoDirectoryFiles -RelativePath "services/api/src/listing_marker_serving" -Filter "*.rs"
+    }
+}
 
 function Invoke-Checker {
     $previousErrorActionPreference = $ErrorActionPreference
@@ -13,7 +74,7 @@ function Invoke-Checker {
         -NoProfile `
         -ExecutionPolicy Bypass `
         -File $ScriptPath `
-        -Root $RepoRoot `
+        -Root $FixtureRoot `
         2>&1
     $ErrorActionPreference = $previousErrorActionPreference
     [pscustomobject]@{
@@ -39,6 +100,7 @@ function Assert-Contains {
 }
 
 try {
+    Write-FixtureRepo
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $FixturePath) | Out-Null
     Set-Content -LiteralPath $FixturePath -Encoding UTF8 -Value @'
 import { api } from "@/lib/api";
@@ -56,7 +118,7 @@ export async function rawApiTransportFixture(): Promise<unknown> {
     Write-Host "traffic-auth-api-control-plane-tests-ok"
     exit 0
 } finally {
-    if (Test-Path -LiteralPath $FixturePath -PathType Leaf) {
-        Remove-Item -LiteralPath $FixturePath -Force
+    if (Test-Path -LiteralPath $FixtureRoot -PathType Container) {
+        Remove-Item -LiteralPath $FixtureRoot -Recurse -Force
     }
 }

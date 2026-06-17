@@ -161,18 +161,8 @@ pre-push:
       skip:
         - merge
         - rebase
-    cargo-check:
-      run: cargo check --workspace --all-features
-      skip:
-        - merge
-        - rebase
-    cargo-clippy:
-      run: cargo clippy --workspace --all-features --all-targets -- -D warnings
-      skip:
-        - merge
-        - rebase
-    sqlx-prepare-check:
-      run: cargo sqlx prepare --workspace --check
+    bazel-workspace-graph:
+      run: bash scripts/ci/run-bazel.sh test //... --config=ci --verbose_failures
       skip:
         - merge
         - rebase
