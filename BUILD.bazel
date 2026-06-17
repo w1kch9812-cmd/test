@@ -253,6 +253,81 @@ filegroup(
     tags = ["manual"],
 )
 
+genrule(
+    name = "web_release_sbom",
+    srcs = ["//apps/web:next_production_build"],
+    outs = ["supply-chain/gongzzang-node-workspace-sbom.cdx.json"],
+    cmd = """
+set -euo pipefail
+bash "$(location //tools/bazel:generate_release_file_sbom.sh)" \
+    "$(location //apps/web:next_production_build)" \
+    "$@" \
+    "gongzzang-web-next-build" \
+    "bazel-bin/gongzzang-web-next-build.tgz"
+""",
+    tags = [
+        "manual",
+        "local",
+    ],
+    tools = ["//tools/bazel:generate_release_file_sbom.sh"],
+)
+
+genrule(
+    name = "api_release_sbom",
+    srcs = [":api_release_candidate_binary"],
+    outs = ["supply-chain/gongzzang-rust-workspace-sbom.cdx.json"],
+    cmd = """
+set -euo pipefail
+bash "$(location //tools/bazel:generate_release_file_sbom.sh)" \
+    "$(location :api_release_candidate_binary)" \
+    "$@" \
+    "gongzzang-api-release" \
+    "bazel-bin/gongzzang-api-release/api"
+""",
+    tags = [
+        "manual",
+        "local",
+    ],
+    tools = ["//tools/bazel:generate_release_file_sbom.sh"],
+)
+
+genrule(
+    name = "supply_chain_evidence_manifest",
+    srcs = [
+        ":api_release_candidate_binary",
+        ":api_release_sbom",
+        ":web_release_candidate_archive",
+        ":web_release_sbom",
+    ],
+    outs = ["supply-chain/evidence-manifest.json"],
+    cmd = """
+set -euo pipefail
+bash "$(location //tools/bazel:generate_supply_chain_evidence_manifest.sh)" \
+    "$@" \
+    "bazel-bin/gongzzang-web-next-build.tgz" \
+    "bazel-bin/gongzzang-api-release/api" \
+    "bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json" \
+    "bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+""",
+    tags = [
+        "manual",
+        "local",
+    ],
+    tools = ["//tools/bazel:generate_supply_chain_evidence_manifest.sh"],
+)
+
+filegroup(
+    name = "supply_chain_evidence_artifacts",
+    srcs = [
+        ":api_release_candidate_binary",
+        ":api_release_sbom",
+        ":supply_chain_evidence_manifest",
+        ":web_release_candidate_archive",
+        ":web_release_sbom",
+    ],
+    tags = ["manual"],
+)
+
 transition_shell_test(
     name = "release_artifact_contract_test",
     srcs = ["//tools/bazel:check_release_artifacts.sh"],
@@ -264,6 +339,26 @@ transition_shell_test(
         "manual",
         "local",
     ],
+)
+
+transition_shell_test(
+    name = "supply_chain_evidence_contract_test",
+    srcs = ["//tools/bazel:check_supply_chain_evidence.sh"],
+    data = [
+        ":api_release_sbom",
+        ":supply_chain_evidence_manifest",
+        ":web_release_sbom",
+    ],
+    tags = [
+        "manual",
+        "local",
+    ],
+)
+
+test_suite(
+    name = "verify_supply_chain",
+    tests = [":supply_chain_evidence_contract_test"],
+    tags = ["manual"],
 )
 
 WEB_TYPECHECK_DEPS = [

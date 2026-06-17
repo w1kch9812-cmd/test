@@ -556,21 +556,49 @@ foreach ($requiredEcosystem in @("node", "rust")) {
 $sbomPolicy = $supplyChainPolicy.sbom
 Assert-Equals -Actual $sbomPolicy.required -Expected $true -Message "supply chain SBOM requirement mismatch"
 Assert-Equals -Actual $sbomPolicy.format -Expected "cyclonedx-json" -Message "supply chain SBOM format mismatch"
-Assert-Equals -Actual $sbomPolicy.generator.tool -Expected "syft" -Message "supply chain SBOM generator mismatch"
-Assert-Equals -Actual $sbomPolicy.generator.ci_action -Expected "anchore/sbom-action" -Message "supply chain SBOM action mismatch"
-Assert-Equals -Actual $sbomPolicy.generator.pinned_ref -Expected "e22c389904149dbc22b58101806040fa8d37a610" -Message "supply chain SBOM action pin mismatch"
+Assert-Equals -Actual $sbomPolicy.generator.tool -Expected "bazel_release_file_sbom" -Message "supply chain SBOM generator mismatch"
+Assert-Equals `
+    -Actual $sbomPolicy.generator.implementation `
+    -Expected "tools/bazel/generate_release_file_sbom.sh" `
+    -Message "supply chain SBOM generator implementation mismatch"
+Assert-FileExists -RelativePath ([string] $sbomPolicy.generator.implementation)
 $sbomArtifacts = @($sbomPolicy.artifacts)
 Assert-Equals -Actual $sbomArtifacts.Count -Expected 2 -Message "supply chain SBOM artifact count mismatch"
 Assert-Unique -Values ($sbomArtifacts | ForEach-Object { $_.id }) -Message "supply chain SBOM artifact ids must be unique"
 foreach ($artifact in $sbomArtifacts) {
     Assert-NotEmptyString -Value $artifact.ecosystem -Message "supply chain SBOM ecosystem for $($artifact.id)"
     Assert-NotEmptyString -Value $artifact.source_path -Message "supply chain SBOM source_path for $($artifact.id)"
+    Assert-NotEmptyString -Value $artifact.bazel_target -Message "supply chain SBOM Bazel target for $($artifact.id)"
     Assert-NotEmptyString -Value $artifact.output_file -Message "supply chain SBOM output_file for $($artifact.id)"
     Assert-NotEmptyString -Value $artifact.subject_path -Message "supply chain SBOM subject_path for $($artifact.id)"
+    if (!([string] $artifact.output_file).StartsWith("bazel-bin/")) {
+        throw "supply chain SBOM output_file must be a Bazel output for $($artifact.id)"
+    }
 }
 foreach ($requiredEcosystem in @("node", "rust")) {
     Assert-JsonArrayContains -Values @($sbomArtifacts | ForEach-Object { [string] $_.ecosystem }) -Expected $requiredEcosystem -Message "supply chain SBOM ecosystems"
 }
+
+$evidenceManifest = Get-JsonProperty -Object $supplyChainPolicy -Name "evidence_manifest"
+if ($null -eq $evidenceManifest) {
+    throw "supply chain evidence manifest policy missing"
+}
+Assert-Equals `
+    -Actual $evidenceManifest.bazel_target `
+    -Expected "//:supply_chain_evidence_manifest" `
+    -Message "supply chain evidence manifest Bazel target mismatch"
+Assert-Equals `
+    -Actual $evidenceManifest.artifact_group_target `
+    -Expected "//:supply_chain_evidence_artifacts" `
+    -Message "supply chain evidence artifact group target mismatch"
+Assert-Equals `
+    -Actual $evidenceManifest.contract_target `
+    -Expected "//:verify_supply_chain" `
+    -Message "supply chain evidence contract target mismatch"
+Assert-Equals `
+    -Actual $evidenceManifest.output_file `
+    -Expected "bazel-bin/supply-chain/evidence-manifest.json" `
+    -Message "supply chain evidence manifest output mismatch"
 
 $provenancePolicy = $supplyChainPolicy.provenance
 Assert-Equals -Actual $provenancePolicy.required -Expected $true -Message "supply chain provenance requirement mismatch"
@@ -621,7 +649,7 @@ if ($IncludeProductionPromotion) {
     Assert-Equals -Actual $deployGate.admission_job -Expected "verify-production-deploy-candidates" -Message "supply chain deploy gate admission job mismatch"
     Assert-Equals -Actual $deployGate.admission_environment -Expected "production" -Message "supply chain deploy gate admission environment mismatch"
     Assert-Equals -Actual $deployGate.download_artifact_action.ci_action -Expected "actions/download-artifact" -Message "supply chain deploy gate download action mismatch"
-    Assert-Equals -Actual $deployGate.download_artifact_action.pinned_ref -Expected "d3f86a106a0bac45b974a628896c90dbdf5c8093" -Message "supply chain deploy gate download action pin mismatch"
+    Assert-Equals -Actual $deployGate.download_artifact_action.pinned_ref -Expected "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" -Message "supply chain deploy gate download action pin mismatch"
     Assert-FileExists -RelativePath ([string] $deployGate.admission_workflow)
 
     $loadTestCapacityAdmission = Get-JsonProperty -Object $deployGate -Name "load_test_capacity_admission"
@@ -801,7 +829,7 @@ if ($IncludeProductionPromotion) {
         "environment: production",
         "actions: read",
         "attestations: read",
-        "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+        "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
         "pnpm install --frozen-lockfile",
         "verify-production-deploy-candidate.ps1",
         "check-production-edge-admission.ps1",
@@ -936,20 +964,27 @@ foreach ($needle in @(
     "id-token: write",
     "attestations: write",
     "artifact-metadata: write",
-    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "//:supply_chain_evidence_artifacts",
+    "//:verify_supply_chain",
     "actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb",
-    "format: cyclonedx-json",
-    "output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
-    "output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
-    "sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
-    "sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+    "sbom-path: bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
+    "sbom-path: bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
+    "bazel-bin/supply-chain/evidence-manifest.json"
 )) {
     Assert-Contains -Content $ci -Needle $needle -Message "CI platform integration gate"
 }
 foreach ($releaseArtifact in $releaseArtifacts) {
-    Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.bazel_target) -Message "CI release artifact Bazel target"
     Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.subject_path) -Message "CI release artifact subject path"
-    Assert-Contains -Content $ci -Needle ([string] $releaseArtifact.sbom_source_path) -Message "CI release artifact SBOM source path"
+}
+foreach ($sbomArtifact in $sbomArtifacts) {
+    Assert-Contains -Content $ci -Needle ([string] $sbomArtifact.output_file) -Message "CI SBOM output path"
+}
+foreach ($needle in @(
+    [string] $evidenceManifest.artifact_group_target,
+    [string] $evidenceManifest.contract_target,
+    [string] $evidenceManifest.output_file
+)) {
+    Assert-Contains -Content $ci -Needle $needle -Message "CI supply chain evidence manifest wiring"
 }
 
 if ($IncludeProductionPromotion) {

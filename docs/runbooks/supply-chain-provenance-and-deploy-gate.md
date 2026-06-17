@@ -38,13 +38,23 @@ Current subjects:
 
 Current SBOM files:
 
-- `target/supply-chain/gongzzang-node-workspace-sbom.cdx.json`
-- `target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json`
+- `bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json`
+- `bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json`
+
+Current evidence manifest:
+
+- `bazel-bin/supply-chain/evidence-manifest.json`
 
 ## Verification
 
 Before promotion, download the candidate artifact from the approved workflow
-run and verify provenance:
+run and verify provenance. The approved workflow must build and validate the
+Bazel-owned evidence graph first:
+
+```bash
+bazelisk build //:supply_chain_evidence_artifacts --config=ci --verbose_failures
+bazelisk test //:verify_supply_chain --config=ci --verbose_failures
+```
 
 ```bash
 gh workflow run "Production Deploy Admission" \

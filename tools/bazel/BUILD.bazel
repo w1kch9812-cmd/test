@@ -5,6 +5,9 @@ package(default_visibility = ["//visibility:public"])
 
 exports_files([
     "check_release_artifacts.sh",
+    "check_supply_chain_evidence.sh",
+    "generate_release_file_sbom.sh",
+    "generate_supply_chain_evidence_manifest.sh",
     "run_biome_check.mjs",
 ])
 

@@ -68,6 +68,7 @@ function Write-MinimalRepo {
         [switch] $OmitDefaultDenyIdentityRuntime,
         [switch] $OmitCatalogRuntimeSurfaces,
         [switch] $OmitWorkloadIdentityTokenFileSupport,
+        [switch] $LegacyCiGeneratedSbomOutput,
         [switch] $ExpiredException
     )
 
@@ -123,7 +124,8 @@ function Write-MinimalRepo {
     "check-migration-version-prefixes.ps1",
     "check-platform-core-anchor-inbox-db-approval.ps1",
     "supply-chain-provenance",
-    "anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610",
+    "//:supply_chain_evidence_artifacts",
+    "//:verify_supply_chain",
     "actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb"
   ],
   "production_promotion_jobs_or_steps": [
@@ -341,6 +343,16 @@ function Write-MinimalRepo {
     }
 '@
     }
+    $nodeSbomOutputFile = if ($LegacyCiGeneratedSbomOutput) {
+        "target/supply-chain/gongzzang-node-workspace-sbom.cdx.json"
+    } else {
+        "bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json"
+    }
+    $rustSbomOutputFile = if ($LegacyCiGeneratedSbomOutput) {
+        "target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+    } else {
+        "bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+    }
     Write-File -Root $Root -RelativePath "docs\architecture\platform-integration\supply-chain-policy.v1.json" -Content @"
 {
   "schema_version": "gongzzang.platform_integration.supply_chain_policy.v1",
@@ -378,27 +390,33 @@ function Write-MinimalRepo {
     "required": true,
     "format": "cyclonedx-json",
     "generator": {
-      "tool": "syft",
-      "ci_action": "anchore/sbom-action",
-      "upstream_tag": "v0.24.0",
-      "pinned_ref": "e22c389904149dbc22b58101806040fa8d37a610"
+      "tool": "bazel_release_file_sbom",
+      "implementation": "tools/bazel/generate_release_file_sbom.sh"
     },
     "artifacts": [
       {
         "id": "gongzzang_node_workspace_sbom",
         "ecosystem": "node",
         "source_path": "bazel-bin/apps/web/.next",
-        "output_file": "target/supply-chain/gongzzang-node-workspace-sbom.cdx.json",
+        "bazel_target": "//:web_release_sbom",
+        "output_file": "$nodeSbomOutputFile",
         "subject_path": "bazel-bin/gongzzang-web-next-build.tgz"
       },
       {
         "id": "gongzzang_rust_workspace_sbom",
         "ecosystem": "rust",
         "source_path": "bazel-bin/gongzzang-api-release",
-        "output_file": "target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json",
+        "bazel_target": "//:api_release_sbom",
+        "output_file": "$rustSbomOutputFile",
         "subject_path": "bazel-bin/gongzzang-api-release/api"
       }
     ]
+  },
+  "evidence_manifest": {
+    "bazel_target": "//:supply_chain_evidence_manifest",
+    "artifact_group_target": "//:supply_chain_evidence_artifacts",
+    "contract_target": "//:verify_supply_chain",
+    "output_file": "bazel-bin/supply-chain/evidence-manifest.json"
   },
   "provenance": {
     "required": $provenanceRequired,
@@ -430,8 +448,8 @@ function Write-MinimalRepo {
     "admission_environment": "production",
     "download_artifact_action": {
       "ci_action": "actions/download-artifact",
-      "upstream_tag": "v4.3.0",
-      "pinned_ref": "d3f86a106a0bac45b974a628896c90dbdf5c8093"
+      "upstream_tag": "v8.0.1",
+      "pinned_ref": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
     },
     "runbook": "docs/runbooks/supply-chain-provenance-and-deploy-gate.md",
     "forbidden": [
@@ -659,6 +677,7 @@ PLATFORM_CORE_WEBHOOK_SECRET=fixture-platform-core-webhook-secret
     )) {
         Write-File -Root $Root -RelativePath $guardrailScript -Content "guardrail"
     }
+    Write-File -Root $Root -RelativePath "tools\bazel\generate_release_file_sbom.sh" -Content "generate-release-file-sbom"
     $integrationCi = if ($OmitCiWiring) { "" } else { "check-platform-integration-policy.ps1" }
     $lakehouseRegistryCi = if ($OmitCiWiring) { "" } else {
         "check-lakehouse-registry-integration.ps1`ncheck-lakehouse-registry-integration.tests.ps1"
@@ -672,17 +691,18 @@ supply-chain-provenance:
 id-token: write
 attestations: write
 artifact-metadata: write
-anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+//:supply_chain_evidence_artifacts
+//:verify_supply_chain
 actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb
-format: cyclonedx-json
 path: bazel-bin/apps/web/.next
 path: bazel-bin/gongzzang-api-release
-output-file: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
-output-file: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
+bazel-bin/supply-chain/evidence-manifest.json
+//:web_release_sbom
+//:api_release_sbom
 subject-path: bazel-bin/gongzzang-web-next-build.tgz
 subject-path: bazel-bin/gongzzang-api-release/api
-sbom-path: target/supply-chain/gongzzang-node-workspace-sbom.cdx.json
-sbom-path: target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
+sbom-path: bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json
+sbom-path: bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
 check-production-edge-admission.ps1
 $migrationPrefixCi
 check-platform-core-anchor-inbox-db-approval.ps1
@@ -733,7 +753,7 @@ bazel-bin/gongzzang-web-next-build.tgz
 bazel-bin/gongzzang-api-release/api
 actions: read
 attestations: read
-actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
 verify-production-deploy-candidate.ps1
 -PredicateType https://cyclonedx.org/bom
 run-id
@@ -971,6 +991,12 @@ try {
     $missingSupplyChainCi = Invoke-Checker -Root $missingSupplyChainCiRoot
     Assert-Equals $missingSupplyChainCi.ExitCode 1 "missing supply chain CI exit code mismatch"
     Assert-Contains $missingSupplyChainCi.Output "CI required jobs or steps"
+
+    $ciGeneratedSbomRoot = Join-Path $TempRoot "ci-generated-sbom-output"
+    Write-MinimalRepo -Root $ciGeneratedSbomRoot -LegacyCiGeneratedSbomOutput
+    $ciGeneratedSbom = Invoke-Checker -Root $ciGeneratedSbomRoot
+    Assert-Equals $ciGeneratedSbom.ExitCode 1 "CI-generated SBOM output path exit code mismatch"
+    Assert-Contains $ciGeneratedSbom.Output "supply chain SBOM output_file must be a Bazel output"
 
     $missingMigrationPrefixCiRoot = Join-Path $TempRoot "missing-migration-prefix-ci"
     Write-MinimalRepo -Root $missingMigrationPrefixCiRoot -OmitMigrationPrefixCi
