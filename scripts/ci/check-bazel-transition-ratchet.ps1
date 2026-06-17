@@ -180,6 +180,22 @@ if ($policyEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($policyEntries | ForEach-Object { [string] $_.bazel_target }) -Message "transition ratchet policy target"
 
+$retiredTransitionTargets = @()
+if ($policy.PSObject.Properties.Name -contains "retired_transition_targets") {
+    $retiredTransitionTargets = @($policy.retired_transition_targets | ForEach-Object { [string] $_ })
+}
+Assert-Unique -Values $retiredTransitionTargets -Message "retired transition target"
+$retiredTransitionTargetSet = @{}
+foreach ($target in $retiredTransitionTargets) {
+    if ([string]::IsNullOrWhiteSpace($target)) {
+        throw "retired transition target must not be empty"
+    }
+    if ($target -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+_transition$') {
+        throw "retired transition target must be a Bazel _transition label: $target"
+    }
+    $retiredTransitionTargetSet[$target] = $true
+}
+
 $policyByTarget = @{}
 foreach ($entry in $policyEntries) {
     $context = "transition policy"
@@ -215,6 +231,9 @@ Assert-Unique -Values $actualTargets -Message "Bazel transition target"
 $actualTargetSet = @{}
 foreach ($target in $actualTargets) {
     $actualTargetSet[$target] = $true
+    if ($retiredTransitionTargetSet.ContainsKey($target)) {
+        throw "retired transition target still exists: $target"
+    }
     if (!$policyByTarget.ContainsKey($target)) {
         throw "missing transition policy for $target"
     }
@@ -227,6 +246,9 @@ foreach ($target in $policyByTarget.Keys) {
 
 $ciReferences = @(Get-CiTransitionReferences)
 foreach ($target in $ciReferences) {
+    if ($retiredTransitionTargetSet.ContainsKey($target)) {
+        throw "CI references retired transition target: $target"
+    }
     if (!$policyByTarget.ContainsKey($target)) {
         throw "CI references transition target without policy: $target"
     }

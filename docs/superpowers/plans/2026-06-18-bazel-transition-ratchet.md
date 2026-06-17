@@ -45,3 +45,8 @@
 
 - [x] **Task 4: Verify, commit, push**
   - Run targeted tests, guardrails, full Bazel graph, hooks, commit, push, and confirm clean status.
+
+- [x] **Task 5: Retire Rustfmt Transition**
+  - Replace `//tools/bazel:ci_rustfmt_transition` with `//tools/bazel:rustfmt_check`.
+  - Move `//tools/bazel:ci_rustfmt_transition` to `retired_transition_targets`.
+  - Re-run targeted ratchet tests, rustfmt Bazel target, guardrails, and full Bazel graph.

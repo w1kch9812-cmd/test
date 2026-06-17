@@ -2,6 +2,7 @@
   "schema_version": "gongzzang.verification_transition_ratchet.v1",
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
+  "retired_transition_targets": ["//tools/bazel:ci_rustfmt_transition"],
   "transition_targets": [
     {
       "bazel_target": "//tools/bazel:frontend_typecheck_transition",
@@ -56,15 +57,6 @@
       "exit_target": "//:dependency_sca_evidence",
       "sunset": "2026-07-31",
       "external_collection_approval_required": true
-    },
-    {
-      "bazel_target": "//tools/bazel:ci_rustfmt_transition",
-      "category": "rust-verification",
-      "owner": "build-platform",
-      "reason": "cargo fmt transition retained until Rust formatting is represented by a native Bazel target.",
-      "exit_target": "//:rust_format_verification",
-      "sunset": "2026-07-31",
-      "external_collection_approval_required": false
     },
     {
       "bazel_target": "//tools/bazel:ci_rust_clippy_transition",

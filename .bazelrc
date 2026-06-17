@@ -38,6 +38,8 @@ test --test_env=INTERNAL_AUTH_SECRET
 test --test_env=PLATFORM_CORE_WEBHOOK_SECRET
 test --test_env=PLAYWRIGHT_BROWSERS_PATH
 
+build --@rules_rust//rust/settings:rustfmt.toml=//:rustfmt.toml
+
 build:dev --remote_download_toplevel
 
 build:ci --remote_download_minimal

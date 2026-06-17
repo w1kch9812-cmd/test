@@ -192,10 +192,6 @@ case "$task" in
     require_command pnpm
     exec pnpm audit --audit-level moderate
     ;;
-  rustfmt-check)
-    require_command cargo
-    exec cargo fmt --all -- --check
-    ;;
   rust-clippy)
     require_command cargo
     exec cargo clippy --workspace --all-features --all-targets -- -D warnings

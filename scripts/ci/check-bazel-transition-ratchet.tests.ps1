@@ -55,6 +55,7 @@ function Write-MinimalRepo {
         [switch] $AddStalePolicy,
         [switch] $ExpiredSunset,
         [switch] $MissingExternalCollectionFlag,
+        [switch] $RetiredRustfmtTransition,
         [switch] $UntrackedCiTransition
     )
 
@@ -71,6 +72,12 @@ transition_shell_test(
     name = "ci_rust_check_transition",
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["rust-check"],
+)
+
+transition_shell_test(
+    name = "ci_rustfmt_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["rustfmt-check"],
 )
 '@
 
@@ -106,11 +113,23 @@ transition_shell_test(
     } else {
         ""
     }
+    $retiredTargets = if ($RetiredRustfmtTransition) {
+        @'
+  "retired_transition_targets": [
+    "//tools/bazel:ci_rustfmt_transition"
+  ],
+'@
+    } else {
+        @'
+  "retired_transition_targets": [],
+'@
+    }
     Write-File -Root $Root -RelativePath "docs\architecture\verification-transition-ratchet.v1.json" -Content @"
 {
   "schema_version": "gongzzang.verification_transition_ratchet.v1",
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
+$retiredTargets
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
       "bazel_target": "//tools/bazel:ci_rust_check_transition",
@@ -118,6 +137,15 @@ $nodeAuditPolicy$stalePolicy    {
       "owner": "build-platform",
       "reason": "cargo check transition until Rust check is a native Bazel rule target.",
       "exit_target": "//:rust_verification",
+      "sunset": "$sunset",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_rustfmt_transition",
+      "category": "rust-verification",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_target": "//tools/bazel:rustfmt_check",
       "sunset": "$sunset",
       "external_collection_approval_required": false
     }
@@ -172,6 +200,12 @@ try {
     $missingExternalFlag = Invoke-Checker -Root $missingExternalFlagRoot
     Assert-Equals $missingExternalFlag.ExitCode 1 "missing external collection flag exit code mismatch"
     Assert-Contains $missingExternalFlag.Output "external advisory collection transition must require approval"
+
+    $retiredRustfmtRoot = Join-Path $TempRoot "retired-rustfmt"
+    Write-MinimalRepo -Root $retiredRustfmtRoot -RetiredRustfmtTransition
+    $retiredRustfmt = Invoke-Checker -Root $retiredRustfmtRoot
+    Assert-Equals $retiredRustfmt.ExitCode 1 "retired rustfmt transition exit code mismatch"
+    Assert-Contains $retiredRustfmt.Output "retired transition target still exists"
 
     $untrackedCiRoot = Join-Path $TempRoot "untracked-ci"
     Write-MinimalRepo -Root $untrackedCiRoot -UntrackedCiTransition
