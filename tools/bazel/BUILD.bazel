@@ -274,6 +274,20 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "guardrail_bazel_transition_ratchet",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["bazel-transition-ratchet"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_bazel_transition_ratchet_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["bazel-transition-ratchet-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_platform_core_boundary",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-boundary"],

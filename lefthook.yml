@@ -62,6 +62,8 @@ pre-commit:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
     verification-control-plane:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1
+    bazel-transition-ratchet:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-bazel-transition-ratchet.ps1
 
 pre-push:
   parallel: false
@@ -153,6 +155,11 @@ pre-push:
         - rebase
     verification-control-plane:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1
+      skip:
+        - merge
+        - rebase
+    bazel-transition-ratchet:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-bazel-transition-ratchet.ps1
       skip:
         - merge
         - rebase

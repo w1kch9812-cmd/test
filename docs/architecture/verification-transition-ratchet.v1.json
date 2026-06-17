@@ -1,0 +1,142 @@
+{
+  "schema_version": "gongzzang.verification_transition_ratchet.v1",
+  "repo_slug": "gongzzang",
+  "default_decision": "deny_new_transition_without_policy",
+  "transition_targets": [
+    {
+      "bazel_target": "//tools/bazel:frontend_typecheck_transition",
+      "category": "frontend-verification",
+      "owner": "build-platform",
+      "reason": "pnpm typecheck transition retained until all frontend typecheck entrypoints are native Bazel targets.",
+      "exit_target": "//:frontend_typecheck",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:frontend_unit_test_transition",
+      "category": "frontend-verification",
+      "owner": "build-platform",
+      "reason": "pnpm test transition retained until all frontend test entrypoints are native Bazel targets.",
+      "exit_target": "//:frontend_unit_test",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:frontend_build_transition",
+      "category": "frontend-release-verification",
+      "owner": "build-platform",
+      "reason": "pnpm build transition retained until the Next.js production build is fully represented by native Bazel rules.",
+      "exit_target": "//:frontend_build",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:frontend_bundle_transition",
+      "category": "frontend-release-verification",
+      "owner": "build-platform",
+      "reason": "bundle verification transition retained until bundle budget evidence is a native Bazel output.",
+      "exit_target": "//:frontend_bundle",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:frontend_e2e_transition",
+      "category": "frontend-release-verification",
+      "owner": "build-platform",
+      "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
+      "exit_target": "//:frontend_e2e",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_node_audit_transition",
+      "category": "external-advisory-sca",
+      "owner": "build-platform",
+      "reason": "pnpm audit reads external advisory data; keep behind an explicit transition target until advisory SCA evidence is a pinned Bazel output.",
+      "exit_target": "//:dependency_sca_evidence",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": true
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_rustfmt_transition",
+      "category": "rust-verification",
+      "owner": "build-platform",
+      "reason": "cargo fmt transition retained until Rust formatting is represented by a native Bazel target.",
+      "exit_target": "//:rust_format_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_rust_clippy_transition",
+      "category": "rust-verification",
+      "owner": "build-platform",
+      "reason": "cargo clippy transition retained until Rust linting is represented by native Bazel rules.",
+      "exit_target": "//:rust_lint_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_rust_check_transition",
+      "category": "rust-verification",
+      "owner": "build-platform",
+      "reason": "cargo check transition retained until Rust workspace checking is represented by native Bazel rules.",
+      "exit_target": "//:rust_check_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_cargo_deny_transition",
+      "category": "external-advisory-sca",
+      "owner": "build-platform",
+      "reason": "cargo-deny may read advisory data; keep behind an explicit transition target until Rust SCA evidence is a pinned Bazel output.",
+      "exit_target": "//:dependency_sca_evidence",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": true
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_coverage_tarpaulin_transition",
+      "category": "coverage-verification",
+      "owner": "build-platform",
+      "reason": "cargo tarpaulin transition retained until coverage reports are native Bazel outputs.",
+      "exit_target": "//:coverage_evidence",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_sqlx_prepare_check_transition",
+      "category": "database-verification",
+      "owner": "build-platform",
+      "reason": "sqlx prepare transition retained until query metadata drift checking is a native Bazel target.",
+      "exit_target": "//:sqlx_prepare_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_migration_v001_full_transition",
+      "category": "database-verification",
+      "owner": "build-platform",
+      "reason": "migration smoke transition retained until DB migration execution is a native Bazel test target.",
+      "exit_target": "//:migration_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_migration_v002_audit_immutable_transition",
+      "category": "database-verification",
+      "owner": "build-platform",
+      "reason": "audit immutability migration transition retained until DB migration execution is a native Bazel test target.",
+      "exit_target": "//:migration_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_walking_skeleton_e2e_transition",
+      "category": "service-e2e-verification",
+      "owner": "build-platform",
+      "reason": "walking-skeleton service e2e transition retained until service orchestration is a native Bazel test target.",
+      "exit_target": "//:service_e2e_verification",
+      "sunset": "2026-07-31",
+      "external_collection_approval_required": false
+    }
+  ]
+}

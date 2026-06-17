@@ -93,6 +93,12 @@ case "$task" in
   verification-control-plane-tests)
     run_pwsh scripts/ci/check-verification-control-plane.tests.ps1
     ;;
+  bazel-transition-ratchet)
+    run_pwsh scripts/ci/check-bazel-transition-ratchet.ps1 -Root "$repo_root"
+    ;;
+  bazel-transition-ratchet-tests)
+    run_pwsh scripts/ci/check-bazel-transition-ratchet.tests.ps1
+    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;

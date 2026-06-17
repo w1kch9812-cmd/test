@@ -464,6 +464,7 @@ test_suite(
 test_suite(
     name = "guardrails_policy",
     tests = [
+        "//tools/bazel:guardrail_bazel_transition_ratchet",
         "//tools/bazel:guardrail_github_actions_node_runtime",
         "//tools/bazel:guardrail_load_test_assets",
         "//tools/bazel:guardrail_migration_version_prefixes",
@@ -483,6 +484,7 @@ test_suite(
 test_suite(
     name = "guardrails_policy_tests",
     tests = [
+        "//tools/bazel:guardrail_bazel_transition_ratchet_tests",
         "//tools/bazel:guardrail_github_actions_node_runtime_tests",
         "//tools/bazel:guardrail_load_test_assets_tests",
         "//tools/bazel:guardrail_traffic_auth_api_control_plane_tests",
