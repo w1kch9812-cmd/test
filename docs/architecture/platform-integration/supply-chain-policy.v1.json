@@ -5,7 +5,7 @@
   "status": "active",
   "npm": {
     "manager": "pnpm",
-    "audit_command": "pnpm audit --audit-level moderate",
+    "audit_bazel_target": "//tools/bazel:ci_node_audit_transition",
     "required_overrides": {
       "brace-expansion": "5.0.6",
       "postcss": "8.5.15",
@@ -15,7 +15,7 @@
   "rust": {
     "sca": "cargo-deny",
     "config": "deny.toml",
-    "ci_action": "EmbarkStudios/cargo-deny-action"
+    "bazel_target": "//tools/bazel:ci_cargo_deny_transition"
   },
   "secret_scanning": {
     "tool": "gitleaks",

@@ -17,13 +17,31 @@ function Write-File {
 }
 
 function Write-Policy {
-    param([string] $Root, [string] $AllowedCommands = "")
+    param([string] $Root, [string] $AllowedCommands = "", [switch] $IncludeBootstrapAllowlist)
 
-    $allowedBlock = if ([string]::IsNullOrWhiteSpace($AllowedCommands)) {
-        ""
-    } else {
-        "," + $AllowedCommands
+    $allowedEntries = @()
+    $bootstrapAllowlist = if ($IncludeBootstrapAllowlist) {
+        @"
+    {
+      "id": "bootstrap-pnpm-install",
+      "pattern": "\\bpnpm\\s+install\\s+--frozen-lockfile\\b",
+      "scope": ".github/workflows/*.yml",
+      "owner": "build-platform",
+      "reason": "Dependency bootstrap, not verification semantics.",
+      "exit_target": "Keep until Bazel toolchain bootstrap covers package manager fetch.",
+      "sunset": "2026-07-31"
     }
+"@
+    } else {
+        ""
+    }
+    if (![string]::IsNullOrWhiteSpace($bootstrapAllowlist)) {
+        $allowedEntries += $bootstrapAllowlist
+    }
+    if (![string]::IsNullOrWhiteSpace($AllowedCommands)) {
+        $allowedEntries += $AllowedCommands
+    }
+    $allowedBlock = $allowedEntries -join ","
 
     Write-File $Root "docs\architecture\verification-control-plane.v1.json" @"
 {
@@ -36,15 +54,7 @@ function Write-Policy {
     { "id": "cargo-clippy", "pattern": "\\bcargo\\s+clippy\\b" }
   ],
   "allowed_direct_commands": [
-    {
-      "id": "bootstrap-pnpm-install",
-      "pattern": "\\bpnpm\\s+install\\s+--frozen-lockfile\\b",
-      "scope": ".github/workflows/*.yml",
-      "owner": "build-platform",
-      "reason": "Dependency bootstrap, not verification semantics.",
-      "exit_target": "Keep until Bazel toolchain bootstrap covers package manager fetch.",
-      "sunset": "2026-07-31"
-    }$allowedBlock
+    $allowedBlock
   ]
 }
 "@
@@ -136,7 +146,7 @@ jobs:
     Assert-Failure -Result (Invoke-Checker -Root $cargoRoot) -ExpectedText "cargo clippy"
 
     $allowRoot = Join-Path $TempRoot "allow-bootstrap"
-    Write-Policy -Root $allowRoot
+    Write-Policy -Root $allowRoot -IncludeBootstrapAllowlist
     Write-File $allowRoot ".github\workflows\ci.yml" @"
 name: CI
 on: [push]
@@ -167,6 +177,29 @@ pre-push:
       run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 "@
     Assert-Success -Result (Invoke-Checker -Root $allowTransitionRoot) -ExpectedText "allowlisted=1"
+
+    $unusedAllowlistRoot = Join-Path $TempRoot "unused-allowlist-fails"
+    Write-Policy -Root $unusedAllowlistRoot -AllowedCommands @'
+    {
+      "id": "transition-unused-cargo-clippy",
+      "pattern": "\\bcargo\\s+clippy\\b",
+      "scope": "lefthook.yml",
+      "owner": "build-platform",
+      "reason": "Transition until Rust clippy is represented as a Bazel target.",
+      "exit_target": "//:verify_pr",
+      "sunset": "2026-07-31"
+    }
+'@
+    Write-File $unusedAllowlistRoot ".github\workflows\ci.yml" @"
+name: CI
+on: [push]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bazelisk test //:verify_pr --config=ci --verbose_failures
+"@
+    Assert-Failure -Result (Invoke-Checker -Root $unusedAllowlistRoot) -ExpectedText "unused allowlist entry"
 
     Write-Host "verification-control-plane-tests-ok"
     exit 0

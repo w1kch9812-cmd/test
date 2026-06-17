@@ -78,60 +78,6 @@
       "sunset": "2026-07-31"
     },
     {
-      "id": "transition-node-audit",
-      "pattern": "\\bpnpm\\s+audit\\s+--audit-level\\s+moderate\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until Node dependency audit is represented by a Bazel audit target.",
-      "exit_target": "//:verify_supply_chain",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-workflow-biome",
-      "pattern": "\\bpnpm\\s+biome\\s+check\\s+\\.",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until repository Biome lint is represented only through Bazel suites.",
-      "exit_target": "//:verify_fast",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-workflow-markdownlint",
-      "pattern": "\\bpnpm\\s+markdownlint-cli2\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until markdown lint is represented by a Bazel lint target.",
-      "exit_target": "//:verify_fast",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-workflow-cargo-fmt",
-      "pattern": "\\bcargo\\s+fmt\\s+--all\\s+--\\s+--check\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until Rust formatting is represented by a Bazel lint target.",
-      "exit_target": "//:verify_fast",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-workflow-cargo-clippy",
-      "pattern": "\\bcargo\\s+clippy\\s+--workspace\\s+--all-features\\s+--all-targets\\s+--\\s+-D\\s+warnings\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until Rust clippy is represented by a Bazel lint target.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
-      "id": "transition-workflow-cargo-check",
-      "pattern": "\\bcargo\\s+check\\s+--workspace\\s+--all-features\\b",
-      "scope": ".github/workflows/ci.yml",
-      "owner": "build-platform",
-      "reason": "Transition until Rust check is represented by a Bazel Rust verification target.",
-      "exit_target": "//:verify_pr",
-      "sunset": "2026-07-31"
-    },
-    {
       "id": "transition-web-release-build",
       "pattern": "\\bpnpm\\s+--filter\\s+@gongzzang/web\\s+build\\b",
       "scope": ".github/workflows/ci.yml",

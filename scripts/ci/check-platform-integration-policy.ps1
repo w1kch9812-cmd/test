@@ -526,6 +526,20 @@ foreach ($forbiddenType in @(
     Assert-JsonArrayContains -Values @($exceptionPolicy.forbidden_exception_types) -Expected $forbiddenType -Message "exception policy forbidden exception types"
 }
 
+$npmSupplyChainPolicy = $supplyChainPolicy.npm
+Assert-Equals `
+    -Actual $npmSupplyChainPolicy.audit_bazel_target `
+    -Expected "//tools/bazel:ci_node_audit_transition" `
+    -Message "supply chain npm audit Bazel target mismatch"
+
+$rustSupplyChainPolicy = $supplyChainPolicy.rust
+Assert-Equals -Actual $rustSupplyChainPolicy.sca -Expected "cargo-deny" -Message "supply chain Rust SCA tool mismatch"
+Assert-Equals -Actual $rustSupplyChainPolicy.config -Expected "deny.toml" -Message "supply chain Rust SCA config mismatch"
+Assert-Equals `
+    -Actual $rustSupplyChainPolicy.bazel_target `
+    -Expected "//tools/bazel:ci_cargo_deny_transition" `
+    -Message "supply chain Rust SCA Bazel target mismatch"
+
 $sbomPolicy = $supplyChainPolicy.sbom
 Assert-Equals -Actual $sbomPolicy.required -Expected $true -Message "supply chain SBOM requirement mismatch"
 Assert-Equals -Actual $sbomPolicy.format -Expected "cyclonedx-json" -Message "supply chain SBOM format mismatch"
@@ -899,8 +913,8 @@ foreach ($requiredCiJobOrStep in $requiredCiJobsOrSteps) {
         -Message "CI required jobs or steps"
 }
 foreach ($needle in @(
-    "pnpm audit --audit-level moderate",
-    "cargo-deny-action",
+    "//tools/bazel:ci_node_audit_transition",
+    "//tools/bazel:ci_cargo_deny_transition",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
     "check-lakehouse-registry-integration.ps1",

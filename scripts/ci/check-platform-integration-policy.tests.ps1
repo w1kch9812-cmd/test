@@ -114,8 +114,8 @@ function Write-MinimalRepo {
     "scripts/ci/verify-load-test-capacity-evidence.ps1"
   ],
   "required_ci_jobs_or_steps": [
-    "pnpm audit --audit-level moderate",
-    "cargo-deny-action",
+    "//tools/bazel:ci_node_audit_transition",
+    "//tools/bazel:ci_cargo_deny_transition",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
     "check-lakehouse-registry-integration.ps1",
@@ -346,11 +346,17 @@ function Write-MinimalRepo {
   "schema_version": "gongzzang.platform_integration.supply_chain_policy.v1",
   "repo_slug": "gongzzang",
   "npm": {
+    "audit_bazel_target": "//tools/bazel:ci_node_audit_transition",
     "required_overrides": {
       "brace-expansion": "5.0.6",
       "postcss": "8.5.15",
       "vite": "6.4.2"
     }
+  },
+  "rust": {
+    "sca": "cargo-deny",
+    "config": "deny.toml",
+    "bazel_target": "//tools/bazel:ci_cargo_deny_transition"
   },
   "sbom": {
     "required": true,
@@ -667,8 +673,8 @@ verify-load-test-capacity-evidence.tests.ps1
 "@
     }
     Write-File -Root $Root -RelativePath ".github\workflows\ci.yml" -Content @"
-pnpm audit --audit-level moderate
-cargo-deny-action
+//tools/bazel:ci_node_audit_transition
+//tools/bazel:ci_cargo_deny_transition
 gitleaks-action
 $integrationCi
 $lakehouseRegistryCi

@@ -14,7 +14,10 @@ pre-existing `//:guardrails_all` blockers by making forbidden-marker scanning in
 `rg`, isolating the traffic/auth API-control-plane fixture from the live repo, and making the
 Bazel WSL PowerShell runner prefer Windows PowerShell for `/mnt/<drive>` workspaces. The same
 follow-up removed pre-push direct `cargo check`, `cargo clippy`, and `cargo sqlx prepare`
-invocations in favor of a Bazel-owned workspace graph entrypoint.
+invocations in favor of a Bazel-owned workspace graph entrypoint. A later 2026-06-17 batch
+moved CI fast verification commands for Node audit, Biome, markdown links, Rust fmt, Rust
+clippy, Rust check, and cargo-deny behind Bazel transition targets, and tightened the
+verification-control-plane guardrail so unused allowlist entries fail closed.
 
 ---
 

@@ -120,7 +120,7 @@ function Get-CommandLines {
 }
 
 function Test-AllowedCommand {
-    param([object] $Command, [object[]] $AllowedCommands)
+    param([object] $Command, [object[]] $AllowedCommands, [hashtable] $AllowedUsageById)
 
     foreach ($allowed in $AllowedCommands) {
         Assert-NotEmptyString -Value $allowed.id -Message "allowed_direct_commands.id"
@@ -141,6 +141,8 @@ function Test-AllowedCommand {
 
         if ((Test-ScopedPath -RelativePath $Command.File -Scope ([string] $allowed.scope)) -and
             $Command.Command -match ([string] $allowed.pattern)) {
+            $allowedId = [string] $allowed.id
+            $AllowedUsageById[$allowedId] = [int] $AllowedUsageById[$allowedId] + 1
             return $true
         }
     }
@@ -167,9 +169,14 @@ if ($files.Count -eq 0) {
 
 $violations = @()
 $allowlisted = 0
+$allowedUsageById = @{}
+foreach ($allowed in $allowedCommands) {
+    Assert-NotEmptyString -Value $allowed.id -Message "allowed_direct_commands.id"
+    $allowedUsageById[[string] $allowed.id] = 0
+}
 foreach ($file in $files) {
     foreach ($command in Get-CommandLines -File $file) {
-        if (Test-AllowedCommand -Command $command -AllowedCommands $allowedCommands) {
+        if (Test-AllowedCommand -Command $command -AllowedCommands $allowedCommands -AllowedUsageById $allowedUsageById) {
             $allowlisted += 1
             continue
         }
@@ -189,6 +196,19 @@ foreach ($file in $files) {
     }
 }
 
+$unusedAllowlistEntries = @(
+    foreach ($allowed in $allowedCommands) {
+        $allowedId = [string] $allowed.id
+        if ([int] $allowedUsageById[$allowedId] -eq 0) {
+            $allowedId
+        }
+    }
+)
+
+foreach ($unusedId in $unusedAllowlistEntries) {
+    Write-Error "verification-control-plane: unused allowlist entry $unusedId"
+}
+
 foreach ($violation in $violations) {
     Write-Error (
         "verification-control-plane: forbidden direct verification command " +
@@ -196,7 +216,7 @@ foreach ($violation in $violations) {
     )
 }
 
-if ($violations.Count -gt 0) {
+if ($violations.Count -gt 0 -or $unusedAllowlistEntries.Count -gt 0) {
     exit 1
 }
 

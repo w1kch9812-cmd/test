@@ -92,8 +92,8 @@
     "scripts/ci/verify-load-test-capacity-evidence.ps1"
   ],
   "required_ci_jobs_or_steps": [
-    "pnpm audit --audit-level moderate",
-    "cargo-deny-action",
+    "//tools/bazel:ci_node_audit_transition",
+    "//tools/bazel:ci_cargo_deny_transition",
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
     "check-lakehouse-registry-integration.ps1",
