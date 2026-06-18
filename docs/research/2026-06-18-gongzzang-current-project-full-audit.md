@@ -369,6 +369,12 @@ approval gates covered by the exit target's `blocking_approval_gates`; implement
 point at the exact evidence requirement they block. This keeps the remaining planned transitions
 from degrading into free-text promises.
 
+Seventh follow-up status: transition approval gate decisions are now document-backed. ADR 0043
+records the provisioning decisions for external advisory collection, browser runtime provisioning,
+toolchain provisioning, database service provisioning, and service orchestration. The transition
+ratchet checker now rejects approval gate `decision_reference` values unless they point to an
+existing tracked file under `docs/`, preventing free-text decision drift.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.

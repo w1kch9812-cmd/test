@@ -11,7 +11,17 @@ foreach ($entry in $approvalGateRegistryEntries) {
     }
     [void] (Get-RequiredString -Object $entry -Name "owner" -Context "approval gate registry $approvalGate")
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "approval gate registry $approvalGate")
-    [void] (Get-RequiredString -Object $entry -Name "decision_reference" -Context "approval gate registry $approvalGate")
+    $decisionReference = Get-RequiredString `
+        -Object $entry `
+        -Name "decision_reference" `
+        -Context "approval gate registry $approvalGate"
+    if ($decisionReference -notmatch '^docs/[A-Za-z0-9_./-]+\.(md|json|jsonc)$') {
+        throw "approval gate decision_reference must point to a docs file: $approvalGate -> $decisionReference"
+    }
+    $decisionReferencePath = Resolve-RepoPath -RelativePath $decisionReference
+    if (!(Test-Path -LiteralPath $decisionReferencePath -PathType Leaf)) {
+        throw "approval gate decision_reference file is missing: $approvalGate -> $decisionReference"
+    }
     $requiresHumanApproval = Get-RequiredBoolean `
         -Object $entry `
         -Name "requires_human_approval" `

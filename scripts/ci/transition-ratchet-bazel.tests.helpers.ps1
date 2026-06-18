@@ -48,6 +48,7 @@ function Write-MinimalRepo {
         [switch] $MissingExternalCollectionFlag,
         [switch] $MissingApprovalGates,
         [switch] $UnknownApprovalGate,
+        [switch] $InvalidApprovalGateDecisionReference,
         [switch] $MissingAdvisoryApprovalGate,
         [switch] $MissingBrowserRuntimeGate,
         [switch] $MissingRunnerTask,

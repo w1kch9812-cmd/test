@@ -189,3 +189,9 @@
   - Require every planned `evidence_status` entry to declare non-empty registered blockers instead of only free-text reasons.
   - Bind approval blockers to registered approval gates and implementation blockers to their exact evidence requirement.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 29: Require Decision References As Tracked Documents**
+  - Add an ADR for Bazel transition provisioning decisions covering toolchains, DB service provisioning, service orchestration, and external advisory approval boundaries.
+  - Require every approval gate `decision_reference` to point to a tracked repository document instead of free text.
+  - Verify the referenced document exists and is inside `docs/`.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

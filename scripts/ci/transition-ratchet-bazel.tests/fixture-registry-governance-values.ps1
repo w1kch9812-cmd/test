@@ -1,38 +1,44 @@
-    $externalAdvisoryGateEntry = @'
+    $fixtureDecisionReference = "docs/adr/0043-bazel-transition-provisioning-decisions.md"
+    $browserRuntimeDecisionReference = if ($InvalidApprovalGateDecisionReference) {
+        "fixture"
+    } else {
+        $fixtureDecisionReference
+    }
+    $externalAdvisoryGateEntry = @"
     {
       "id": "external_advisory_collection",
       "owner": "build-platform",
       "reason": "fixture",
-      "decision_reference": "fixture",
+      "decision_reference": "$fixtureDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": true
     },
-'@
+"@
     $browserRuntimeGateEntry = if ($MissingRegisteredApprovalGate) {
         ""
     } else {
-        @'
+        @"
     {
       "id": "browser_runtime_provisioning",
       "owner": "build-platform",
       "reason": "fixture",
-      "decision_reference": "fixture",
+      "decision_reference": "$browserRuntimeDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
-'@
+"@
     }
     $duplicateApprovalGateEntry = if ($DuplicateApprovalGateRegistry) {
-        @'
+        @"
     {
       "id": "toolchain_provisioning",
       "owner": "build-platform",
       "reason": "fixture duplicate",
-      "decision_reference": "fixture duplicate",
+      "decision_reference": "$fixtureDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
-'@
+"@
     } else {
         ""
     }
@@ -46,7 +52,7 @@ $externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
       "id": "toolchain_provisioning",
       "owner": "build-platform",
       "reason": "fixture",
-      "decision_reference": "fixture",
+      "decision_reference": "$fixtureDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
@@ -54,7 +60,7 @@ $externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
       "id": "database_service_provisioning",
       "owner": "build-platform",
       "reason": "fixture",
-      "decision_reference": "fixture",
+      "decision_reference": "$fixtureDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
@@ -62,7 +68,7 @@ $externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
       "id": "service_orchestration_provisioning",
       "owner": "build-platform",
       "reason": "fixture",
-      "decision_reference": "fixture",
+      "decision_reference": "$fixtureDecisionReference",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     }

@@ -87,3 +87,7 @@ $approvalGatesLine
   ]
 }
 "@
+    Write-File `
+        -Root $Root `
+        -RelativePath "docs\adr\0043-bazel-transition-provisioning-decisions.md" `
+        -Content "# ADR-0043: Fixture Bazel Transition Provisioning Decisions`n"

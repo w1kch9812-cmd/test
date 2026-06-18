@@ -85,6 +85,12 @@ try {
     Assert-Equals $unknownApprovalGate.ExitCode 1 "unknown approval gate exit code mismatch"
     Assert-Contains $unknownApprovalGate.Output "transition approval gate is not registered"
 
+    $invalidApprovalGateDecisionReferenceRoot = Join-Path $TempRoot "invalid-approval-gate-decision-reference"
+    Write-MinimalRepo -Root $invalidApprovalGateDecisionReferenceRoot -InvalidApprovalGateDecisionReference
+    $invalidApprovalGateDecisionReference = Invoke-Checker -Root $invalidApprovalGateDecisionReferenceRoot
+    Assert-Equals $invalidApprovalGateDecisionReference.ExitCode 1 "invalid approval gate decision reference exit code mismatch"
+    Assert-Contains $invalidApprovalGateDecisionReference.Output "approval gate decision_reference must point to a docs file"
+
     $missingAdvisoryApprovalGateRoot = Join-Path $TempRoot "missing-advisory-approval-gate"
     Write-MinimalRepo -Root $missingAdvisoryApprovalGateRoot -MissingAdvisoryApprovalGate
     $missingAdvisoryApprovalGate = Invoke-Checker -Root $missingAdvisoryApprovalGateRoot

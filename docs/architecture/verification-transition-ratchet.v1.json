@@ -135,7 +135,7 @@
       "id": "external_advisory_collection",
       "owner": "build-platform",
       "reason": "External advisory reads must remain explicit until advisory evidence is pinned as Bazel-owned data.",
-      "decision_reference": "User approval is required before external advisory collection.",
+      "decision_reference": "docs/adr/0043-bazel-transition-provisioning-decisions.md",
       "requires_human_approval": true,
       "external_collection_approval_required": true
     },
@@ -143,7 +143,7 @@
       "id": "browser_runtime_provisioning",
       "owner": "build-platform",
       "reason": "Browser runtime provisioning must remain explicit until browser execution is native Bazel evidence.",
-      "decision_reference": "Browser runtime provisioning decision is required before retirement.",
+      "decision_reference": "docs/adr/0043-bazel-transition-provisioning-decisions.md",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
@@ -151,7 +151,7 @@
       "id": "toolchain_provisioning",
       "owner": "build-platform",
       "reason": "Toolchain provisioning must remain explicit until tools are native Bazel toolchains or pinned evidence.",
-      "decision_reference": "Toolchain provisioning decision is required before retirement.",
+      "decision_reference": "docs/adr/0043-bazel-transition-provisioning-decisions.md",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
@@ -159,7 +159,7 @@
       "id": "database_service_provisioning",
       "owner": "build-platform",
       "reason": "Database service provisioning must remain explicit until DB tests are native Bazel service-backed tests.",
-      "decision_reference": "Database service provisioning decision is required before retirement.",
+      "decision_reference": "docs/adr/0043-bazel-transition-provisioning-decisions.md",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     },
@@ -167,7 +167,7 @@
       "id": "service_orchestration_provisioning",
       "owner": "build-platform",
       "reason": "Service orchestration must remain explicit until multi-service e2e is represented as native Bazel execution.",
-      "decision_reference": "Service orchestration provisioning decision is required before retirement.",
+      "decision_reference": "docs/adr/0043-bazel-transition-provisioning-decisions.md",
       "requires_human_approval": true,
       "external_collection_approval_required": false
     }
