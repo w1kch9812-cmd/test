@@ -140,3 +140,10 @@
   - Require blocking approval gates to match unresolved approval gates before a transition can remain active.
   - Keep external advisory and provisioning-dependent transitions blocked until explicit approval/evidence exists.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 21: Register Transition Exit Targets**
+  - Add a top-level `exit_targets` registry to the transition ratchet policy.
+  - Require every active transition `exit_target` to be registered exactly once with owner, reason, state, evidence requirements, and blocking gates.
+  - Require transition-level evidence and blocking gates to be covered by the registered exit target.
+  - Keep blocked transitions pointed at planned exit targets instead of pretending the final Bazel target exists.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

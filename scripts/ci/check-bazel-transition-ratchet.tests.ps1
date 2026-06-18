@@ -76,7 +76,10 @@ function Write-MinimalRepo {
         [switch] $MissingExitState,
         [switch] $UnknownExitState,
         [switch] $MissingExitEvidenceRequirements,
-        [switch] $MissingBlockingApprovalGate
+        [switch] $MissingBlockingApprovalGate,
+        [switch] $MissingExitTargetRegistry,
+        [switch] $MissingRegisteredExitTarget,
+        [switch] $MismatchedExitTargetEvidence
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -191,6 +194,109 @@ esac
     $exitStateLine = if ($MissingExitState) { "" } elseif ($UnknownExitState) { '"exit_state": "done",' } else { '"exit_state": "blocked",' }
     $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
+    $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $deletedExitTargetRegistryEntry = if ($AddStalePolicy) {
+        @'
+,
+    {
+      "bazel_target": "//:deleted",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": [],
+      "blocking_approval_gates": []
+    }
+'@
+    } else {
+        ""
+    }
+    $registeredExitTargets = if ($MissingExitTargetRegistry) {
+        ""
+    } elseif ($MissingRegisteredExitTarget) {
+        @"
+  "exit_targets": [
+    {
+      "bazel_target": "//:rust_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": []
+    },
+    {
+      "bazel_target": "//tools/bazel:rustfmt_check",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": []
+    },
+    {
+      "bazel_target": "//:frontend_e2e",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": ["browser_runtime_provisioning"]
+    },
+    {
+      "bazel_target": "//:migration_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
+    }
+$deletedExitTargetRegistryEntry
+  ],
+"@
+    } else {
+        @"
+  "exit_targets": [
+    {
+      "bazel_target": "//:dependency_sca_evidence",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": $dependencyScaExitEvidenceRequirements,
+      "blocking_approval_gates": ["external_advisory_collection"]
+    },
+    {
+      "bazel_target": "//:rust_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": []
+    },
+    {
+      "bazel_target": "//tools/bazel:rustfmt_check",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": []
+    },
+    {
+      "bazel_target": "//:frontend_e2e",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": ["browser_runtime_provisioning"]
+    },
+    {
+      "bazel_target": "//:migration_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
+    }
+$deletedExitTargetRegistryEntry
+  ],
+"@
+    }
     $nodeAuditPolicy = if ($OmitNodeAuditPolicy) {
         ""
     } else {
@@ -255,6 +361,7 @@ $exitStateLine
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
 $retiredTargets
+$registeredExitTargets
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
       "bazel_target": "//tools/bazel:ci_rust_check_transition",
@@ -533,6 +640,24 @@ try {
     $missingBlockingApprovalGate = Invoke-Checker -Root $missingBlockingApprovalGateRoot
     Assert-Equals $missingBlockingApprovalGate.ExitCode 1 "missing blocking approval gate exit code mismatch"
     Assert-Contains $missingBlockingApprovalGate.Output "transition policy blocking_approval_gates"
+
+    $missingExitTargetRegistryRoot = Join-Path $TempRoot "missing-exit-target-registry"
+    Write-MinimalRepo -Root $missingExitTargetRegistryRoot -MissingExitTargetRegistry
+    $missingExitTargetRegistry = Invoke-Checker -Root $missingExitTargetRegistryRoot
+    Assert-Equals $missingExitTargetRegistry.ExitCode 1 "missing exit target registry exit code mismatch"
+    Assert-Contains $missingExitTargetRegistry.Output "transition ratchet policy must declare exit_targets"
+
+    $missingRegisteredExitTargetRoot = Join-Path $TempRoot "missing-registered-exit-target"
+    Write-MinimalRepo -Root $missingRegisteredExitTargetRoot -MissingRegisteredExitTarget
+    $missingRegisteredExitTarget = Invoke-Checker -Root $missingRegisteredExitTargetRoot
+    Assert-Equals $missingRegisteredExitTarget.ExitCode 1 "missing registered exit target exit code mismatch"
+    Assert-Contains $missingRegisteredExitTarget.Output "transition exit_target is not registered"
+
+    $mismatchedExitTargetEvidenceRoot = Join-Path $TempRoot "mismatched-exit-target-evidence"
+    Write-MinimalRepo -Root $mismatchedExitTargetEvidenceRoot -MismatchedExitTargetEvidence
+    $mismatchedExitTargetEvidence = Invoke-Checker -Root $mismatchedExitTargetEvidenceRoot
+    Assert-Equals $mismatchedExitTargetEvidence.ExitCode 1 "mismatched exit target evidence exit code mismatch"
+    Assert-Contains $mismatchedExitTargetEvidence.Output "exit target registry exit_evidence_requirements"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

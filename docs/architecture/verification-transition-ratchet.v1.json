@@ -13,6 +13,53 @@
     "//tools/bazel:ci_sqlx_prepare_check_transition",
     "//tools/bazel:frontend_e2e_transition"
   ],
+  "exit_targets": [
+    {
+      "bazel_target": "//:dependency_sca_evidence",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "Dependency SCA exit target is blocked until advisory inputs are pinned as Bazel-owned evidence.",
+      "exit_evidence_requirements": ["native_bazel_evidence_target", "pinned_advisory_evidence"],
+      "blocking_approval_gates": ["external_advisory_collection"]
+    },
+    {
+      "bazel_target": "//:coverage_evidence",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "Coverage exit target is blocked until tarpaulin/toolchain provisioning is represented as native Bazel evidence.",
+      "exit_evidence_requirements": [
+        "native_bazel_coverage_evidence",
+        "toolchain_provisioning_decision"
+      ],
+      "blocking_approval_gates": ["toolchain_provisioning"]
+    },
+    {
+      "bazel_target": "//:migration_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "Migration verification exit target is blocked until DB provisioning and sqlx migration execution are native Bazel tests.",
+      "exit_evidence_requirements": [
+        "database_service_provisioning_decision",
+        "native_bazel_database_test"
+      ],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
+    },
+    {
+      "bazel_target": "//:service_e2e_verification",
+      "state": "planned",
+      "owner": "build-platform",
+      "reason": "Service e2e exit target is blocked until service orchestration is represented as a native Bazel test.",
+      "exit_evidence_requirements": [
+        "native_bazel_service_orchestration",
+        "service_orchestration_provisioning_decision"
+      ],
+      "blocking_approval_gates": [
+        "toolchain_provisioning",
+        "database_service_provisioning",
+        "service_orchestration_provisioning"
+      ]
+    }
+  ],
   "transition_targets": [
     {
       "bazel_target": "//tools/bazel:ci_node_audit_transition",

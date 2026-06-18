@@ -459,7 +459,17 @@ foreach ($target in $retiredTransitionTargets) {
     $retiredTransitionTargetSet[$target] = $true
 }
 
+$exitTargetEntries = @()
+if ($policy.PSObject.Properties.Name -contains "exit_targets") {
+    $exitTargetEntries = @($policy.exit_targets)
+}
+if ($exitTargetEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare exit_targets"
+}
+Assert-Unique -Values @($exitTargetEntries | ForEach-Object { [string] $_.bazel_target }) -Message "transition ratchet exit target"
+
 $policyByTarget = @{}
+$exitTargetByLabel = @{}
 $allowedApprovalGates = @{
     external_advisory_collection  = $true
     browser_runtime_provisioning  = $true
@@ -505,6 +515,10 @@ $categoryExitEvidenceRequirements = @{
     "service-e2e-verification"      = @("native_bazel_service_orchestration", "service_orchestration_provisioning_decision")
     "stale-fixture"                 = @()
 }
+$allowedExitTargetStates = @{
+    planned   = $true
+    available = $true
+}
 $runnerTaskRequirements = @{
     "cargo-deny"                     = [pscustomobject]@{ Commands = @("cargo", "cargo-deny"); Services = @() }
     "coverage-tarpaulin"             = [pscustomobject]@{ Commands = @("cargo", "cargo-tarpaulin"); Services = @() }
@@ -519,6 +533,43 @@ $runnerTaskRequirements = @{
         Commands = @("cargo", "curl", "pg_isready", "psql", "python3", "sqlx")
         Services = @("postgres")
     }
+}
+foreach ($entry in $exitTargetEntries) {
+    $context = "exit target registry"
+    $exitTarget = Get-RequiredString -Object $entry -Name "bazel_target" -Context $context
+    if ($exitTarget -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+$') {
+        throw "exit target registry target must be a Bazel label: $exitTarget"
+    }
+    if ($exitTarget -match '_transition$') {
+        throw "exit target registry target must not be a transition: $exitTarget"
+    }
+    $exitTargetState = Get-RequiredString -Object $entry -Name "state" -Context "exit target registry $exitTarget"
+    if (!$allowedExitTargetStates.ContainsKey($exitTargetState)) {
+        throw "unknown exit target registry state for ${exitTarget}: $exitTargetState"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "exit target registry $exitTarget")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "exit target registry $exitTarget")
+    $exitTargetEvidenceRequirements = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "exit_evidence_requirements" `
+        -Context "exit target registry $exitTarget")
+    Assert-Unique -Values $exitTargetEvidenceRequirements -Message "exit target registry $exitTarget evidence requirement"
+    foreach ($exitTargetEvidenceRequirement in $exitTargetEvidenceRequirements) {
+        if (!$allowedExitEvidenceRequirements.ContainsKey($exitTargetEvidenceRequirement)) {
+            throw "unknown exit target registry evidence requirement for ${exitTarget}: $exitTargetEvidenceRequirement"
+        }
+    }
+    $exitTargetBlockingApprovalGates = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "blocking_approval_gates" `
+        -Context "exit target registry $exitTarget")
+    Assert-Unique -Values $exitTargetBlockingApprovalGates -Message "exit target registry $exitTarget blocking approval gate"
+    foreach ($exitTargetBlockingApprovalGate in $exitTargetBlockingApprovalGates) {
+        if (!$allowedApprovalGates.ContainsKey($exitTargetBlockingApprovalGate)) {
+            throw "unknown exit target registry blocking approval gate for ${exitTarget}: $exitTargetBlockingApprovalGate"
+        }
+    }
+    $exitTargetByLabel[$exitTarget] = $entry
 }
 foreach ($entry in $policyEntries) {
     $context = "transition policy"
@@ -536,6 +587,10 @@ foreach ($entry in $policyEntries) {
     if ($exitTarget -match '_transition$') {
         throw "transition policy exit_target must not be another transition: $target -> $exitTarget"
     }
+    if (!$exitTargetByLabel.ContainsKey($exitTarget)) {
+        throw "transition exit_target is not registered: $target -> $exitTarget"
+    }
+    $registeredExitTarget = $exitTargetByLabel[$exitTarget]
     $exitState = Get-RequiredString -Object $entry -Name "exit_state" -Context "transition policy $target"
     if (!$allowedExitStates.ContainsKey($exitState)) {
         throw "unknown transition exit_state for ${target}: $exitState"
@@ -557,6 +612,10 @@ foreach ($entry in $policyEntries) {
         -Actual $exitEvidenceRequirements `
         -Expected @($categoryExitEvidenceRequirements[$category]) `
         -Message "transition policy exit_evidence_requirements for $target"
+    Assert-ContainsAll `
+        -Actual @($registeredExitTarget.exit_evidence_requirements | ForEach-Object { [string] $_ }) `
+        -Expected $exitEvidenceRequirements `
+        -Message "exit target registry exit_evidence_requirements for $exitTarget"
     $blockingApprovalGates = @(Get-RequiredStringArray `
         -Object $entry `
         -Name "blocking_approval_gates" `
@@ -566,6 +625,17 @@ foreach ($entry in $policyEntries) {
         if (!$allowedApprovalGates.ContainsKey($blockingApprovalGate)) {
             throw "unknown transition blocking approval gate for ${target}: $blockingApprovalGate"
         }
+    }
+    Assert-ContainsAll `
+        -Actual @($registeredExitTarget.blocking_approval_gates | ForEach-Object { [string] $_ }) `
+        -Expected $blockingApprovalGates `
+        -Message "exit target registry blocking_approval_gates for $exitTarget"
+    $registeredExitTargetState = [string] $registeredExitTarget.state
+    if ($exitState -eq "blocked" -and $registeredExitTargetState -ne "planned") {
+        throw "blocked transition must point at a planned exit target: $target -> $exitTarget"
+    }
+    if ($exitState -eq "ready_to_retire" -and $registeredExitTargetState -ne "available") {
+        throw "ready_to_retire transition must point at an available exit target: $target -> $exitTarget"
     }
     $runnerScript = Get-RequiredString -Object $entry -Name "runner_script" -Context "transition policy $target"
     $runnerTask = Get-RequiredString -Object $entry -Name "runner_task" -Context "transition policy $target"
