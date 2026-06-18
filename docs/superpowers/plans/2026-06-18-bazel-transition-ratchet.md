@@ -133,3 +133,10 @@
   - Fail CI when a job runs a transition without provisioning its required commands or services in that same job.
   - Make DB and walking-skeleton workflows explicitly install the required client tools instead of relying on runner image defaults.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 20: Model Transition Exit State**
+  - Add `exit_state`, `exit_evidence_requirements`, and `blocking_approval_gates` to every active transition policy entry.
+  - Require category-specific evidence requirements for external advisory, coverage, database, and service-e2e transitions.
+  - Require blocking approval gates to match unresolved approval gates before a transition can remain active.
+  - Keep external advisory and provisioning-dependent transitions blocked until explicit approval/evidence exists.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

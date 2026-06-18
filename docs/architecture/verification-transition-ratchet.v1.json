@@ -20,6 +20,9 @@
       "owner": "build-platform",
       "reason": "pnpm audit reads external advisory data; keep behind an explicit transition target until advisory SCA evidence is a pinned Bazel output.",
       "exit_target": "//:dependency_sca_evidence",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": ["native_bazel_evidence_target", "pinned_advisory_evidence"],
+      "blocking_approval_gates": ["external_advisory_collection"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "node-audit",
       "required_commands": ["pnpm"],
@@ -34,6 +37,9 @@
       "owner": "build-platform",
       "reason": "cargo-deny may read advisory data; keep behind an explicit transition target until Rust SCA evidence is a pinned Bazel output.",
       "exit_target": "//:dependency_sca_evidence",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": ["native_bazel_evidence_target", "pinned_advisory_evidence"],
+      "blocking_approval_gates": ["external_advisory_collection"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "cargo-deny",
       "required_commands": ["cargo", "cargo-deny"],
@@ -48,6 +54,12 @@
       "owner": "build-platform",
       "reason": "cargo tarpaulin transition retained until coverage reports are native Bazel outputs.",
       "exit_target": "//:coverage_evidence",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": [
+        "native_bazel_coverage_evidence",
+        "toolchain_provisioning_decision"
+      ],
+      "blocking_approval_gates": ["toolchain_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "coverage-tarpaulin",
       "required_commands": ["cargo", "cargo-tarpaulin"],
@@ -62,6 +74,12 @@
       "owner": "build-platform",
       "reason": "migration smoke transition retained until DB migration execution is a native Bazel test target.",
       "exit_target": "//:migration_verification",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": [
+        "database_service_provisioning_decision",
+        "native_bazel_database_test"
+      ],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "migration-v001-full",
       "required_commands": ["pg_isready", "psql", "sqlx"],
@@ -76,6 +94,12 @@
       "owner": "build-platform",
       "reason": "audit immutability migration transition retained until DB migration execution is a native Bazel test target.",
       "exit_target": "//:migration_verification",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": [
+        "database_service_provisioning_decision",
+        "native_bazel_database_test"
+      ],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "migration-v002-audit-immutable",
       "required_commands": ["pg_isready", "psql", "sqlx"],
@@ -90,6 +114,16 @@
       "owner": "build-platform",
       "reason": "walking-skeleton service e2e transition retained until service orchestration is a native Bazel test target.",
       "exit_target": "//:service_e2e_verification",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": [
+        "native_bazel_service_orchestration",
+        "service_orchestration_provisioning_decision"
+      ],
+      "blocking_approval_gates": [
+        "toolchain_provisioning",
+        "database_service_provisioning",
+        "service_orchestration_provisioning"
+      ],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "walking-skeleton-e2e",
       "required_commands": ["cargo", "curl", "pg_isready", "psql", "python3", "sqlx"],

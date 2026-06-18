@@ -72,7 +72,11 @@ function Write-MinimalRepo {
         [switch] $UntrackedCiTransition,
         [switch] $UnreferencedTransitionPolicy,
         [switch] $MissingWorkflowCommandProvisioning,
-        [switch] $MissingWorkflowServiceProvisioning
+        [switch] $MissingWorkflowServiceProvisioning,
+        [switch] $MissingExitState,
+        [switch] $UnknownExitState,
+        [switch] $MissingExitEvidenceRequirements,
+        [switch] $MissingBlockingApprovalGate
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -184,6 +188,9 @@ esac
     $rustCheckRunnerTaskLine = if ($MissingRunnerTask) { "" } elseif ($MismatchedRunnerTask) { '"runner_task": "rustfmt-check",' } else { '"runner_task": "rust-check",' }
     $nodeAuditRequiredCommands = if ($MissingRequiredCommand) { "[]" } else { '["pnpm"]' }
     $migrationRequiredServices = if ($MissingRequiredService) { "[]" } else { '["postgres"]' }
+    $exitStateLine = if ($MissingExitState) { "" } elseif ($UnknownExitState) { '"exit_state": "done",' } else { '"exit_state": "blocked",' }
+    $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
+    $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $nodeAuditPolicy = if ($OmitNodeAuditPolicy) {
         ""
     } else {
@@ -195,6 +202,9 @@ esac
       "owner": "build-platform",
       "reason": "pnpm audit still shells out until advisory SCA is represented by a pinned Bazel evidence target.",
       "exit_target": "//:dependency_sca_evidence",
+$exitStateLine
+      "exit_evidence_requirements": ["native_bazel_evidence_target", "pinned_advisory_evidence"],
+      "blocking_approval_gates": $nodeAuditBlockingApprovalGates,
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "node-audit",
       "required_commands": $nodeAuditRequiredCommands,
@@ -213,6 +223,9 @@ esac
       "owner": "build-platform",
       "reason": "fixture",
       "exit_target": "//:deleted",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": [],
+      "blocking_approval_gates": [],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "deleted",
       "required_commands": [],
@@ -249,6 +262,9 @@ $nodeAuditPolicy$stalePolicy    {
       "owner": "build-platform",
       "reason": "cargo check transition until Rust check is a native Bazel rule target.",
       "exit_target": "$rustCheckExitTarget",
+$exitStateLine
+      "exit_evidence_requirements": $rustCheckEvidenceRequirements,
+      "blocking_approval_gates": [],
 $rustCheckRunnerTaskLine
       "runner_script": "run_ci_transition_task.sh",
       "required_commands": ["cargo"],
@@ -263,6 +279,9 @@ $approvalGatesLine
       "owner": "build-platform",
       "reason": "fixture",
       "exit_target": "//tools/bazel:rustfmt_check",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": [],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "rustfmt-check",
       "required_commands": ["cargo"],
@@ -277,6 +296,9 @@ $approvalGatesLine
       "owner": "build-platform",
       "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
       "exit_target": "//:frontend_e2e",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "blocking_approval_gates": $frontendE2eApprovalGates,
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "frontend-e2e",
       "required_commands": ["pnpm"],
@@ -291,6 +313,9 @@ $approvalGatesLine
       "owner": "build-platform",
       "reason": "fixture",
       "exit_target": "//:migration_verification",
+      "exit_state": "blocked",
+      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "migration-v001-full",
       "required_commands": ["pg_isready", "psql", "sqlx"],
@@ -484,6 +509,30 @@ try {
     $missingWorkflowServiceProvisioning = Invoke-Checker -Root $missingWorkflowServiceProvisioningRoot
     Assert-Equals $missingWorkflowServiceProvisioning.ExitCode 1 "missing workflow service provisioning exit code mismatch"
     Assert-Contains $missingWorkflowServiceProvisioning.Output "workflow job missing required service provisioning"
+
+    $missingExitStateRoot = Join-Path $TempRoot "missing-exit-state"
+    Write-MinimalRepo -Root $missingExitStateRoot -MissingExitState
+    $missingExitState = Invoke-Checker -Root $missingExitStateRoot
+    Assert-Equals $missingExitState.ExitCode 1 "missing exit state exit code mismatch"
+    Assert-Contains $missingExitState.Output "missing 'exit_state'"
+
+    $unknownExitStateRoot = Join-Path $TempRoot "unknown-exit-state"
+    Write-MinimalRepo -Root $unknownExitStateRoot -UnknownExitState
+    $unknownExitState = Invoke-Checker -Root $unknownExitStateRoot
+    Assert-Equals $unknownExitState.ExitCode 1 "unknown exit state exit code mismatch"
+    Assert-Contains $unknownExitState.Output "unknown transition exit_state"
+
+    $missingExitEvidenceRoot = Join-Path $TempRoot "missing-exit-evidence"
+    Write-MinimalRepo -Root $missingExitEvidenceRoot -MissingExitEvidenceRequirements
+    $missingExitEvidence = Invoke-Checker -Root $missingExitEvidenceRoot
+    Assert-Equals $missingExitEvidence.ExitCode 1 "missing exit evidence exit code mismatch"
+    Assert-Contains $missingExitEvidence.Output "transition policy exit_evidence_requirements"
+
+    $missingBlockingApprovalGateRoot = Join-Path $TempRoot "missing-blocking-approval-gate"
+    Write-MinimalRepo -Root $missingBlockingApprovalGateRoot -MissingBlockingApprovalGate
+    $missingBlockingApprovalGate = Invoke-Checker -Root $missingBlockingApprovalGateRoot
+    Assert-Equals $missingBlockingApprovalGate.ExitCode 1 "missing blocking approval gate exit code mismatch"
+    Assert-Contains $missingBlockingApprovalGate.Output "transition policy blocking_approval_gates"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

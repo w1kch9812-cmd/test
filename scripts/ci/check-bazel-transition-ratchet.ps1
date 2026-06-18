@@ -481,6 +481,30 @@ $allowedRequiredCommands = @{
 $allowedRequiredServices = @{
     postgres = $true
 }
+$allowedExitStates = @{
+    blocked         = $true
+    ready_to_retire = $true
+}
+$allowedExitEvidenceRequirements = @{
+    database_service_provisioning_decision     = $true
+    native_bazel_coverage_evidence             = $true
+    native_bazel_database_test                 = $true
+    native_bazel_evidence_target               = $true
+    native_bazel_service_orchestration         = $true
+    native_bazel_test_target                   = $true
+    pinned_advisory_evidence                   = $true
+    service_orchestration_provisioning_decision = $true
+    toolchain_provisioning_decision            = $true
+}
+$categoryExitEvidenceRequirements = @{
+    "coverage-verification"         = @("native_bazel_coverage_evidence", "toolchain_provisioning_decision")
+    "database-verification"         = @("database_service_provisioning_decision", "native_bazel_database_test")
+    "external-advisory-sca"         = @("native_bazel_evidence_target", "pinned_advisory_evidence")
+    "frontend-release-verification" = @("native_bazel_test_target")
+    "rust-verification"             = @("native_bazel_test_target")
+    "service-e2e-verification"      = @("native_bazel_service_orchestration", "service_orchestration_provisioning_decision")
+    "stale-fixture"                 = @()
+}
 $runnerTaskRequirements = @{
     "cargo-deny"                     = [pscustomobject]@{ Commands = @("cargo", "cargo-deny"); Services = @() }
     "coverage-tarpaulin"             = [pscustomobject]@{ Commands = @("cargo", "cargo-tarpaulin"); Services = @() }
@@ -511,6 +535,37 @@ foreach ($entry in $policyEntries) {
     }
     if ($exitTarget -match '_transition$') {
         throw "transition policy exit_target must not be another transition: $target -> $exitTarget"
+    }
+    $exitState = Get-RequiredString -Object $entry -Name "exit_state" -Context "transition policy $target"
+    if (!$allowedExitStates.ContainsKey($exitState)) {
+        throw "unknown transition exit_state for ${target}: $exitState"
+    }
+    $exitEvidenceRequirements = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "exit_evidence_requirements" `
+        -Context "transition policy $target")
+    Assert-Unique -Values $exitEvidenceRequirements -Message "transition policy $target exit evidence requirement"
+    foreach ($exitEvidenceRequirement in $exitEvidenceRequirements) {
+        if (!$allowedExitEvidenceRequirements.ContainsKey($exitEvidenceRequirement)) {
+            throw "unknown transition exit evidence requirement for ${target}: $exitEvidenceRequirement"
+        }
+    }
+    if (!$categoryExitEvidenceRequirements.ContainsKey($category)) {
+        throw "unknown transition category for exit evidence requirements: $target -> $category"
+    }
+    Assert-ContainsAll `
+        -Actual $exitEvidenceRequirements `
+        -Expected @($categoryExitEvidenceRequirements[$category]) `
+        -Message "transition policy exit_evidence_requirements for $target"
+    $blockingApprovalGates = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "blocking_approval_gates" `
+        -Context "transition policy $target")
+    Assert-Unique -Values $blockingApprovalGates -Message "transition policy $target blocking approval gate"
+    foreach ($blockingApprovalGate in $blockingApprovalGates) {
+        if (!$allowedApprovalGates.ContainsKey($blockingApprovalGate)) {
+            throw "unknown transition blocking approval gate for ${target}: $blockingApprovalGate"
+        }
     }
     $runnerScript = Get-RequiredString -Object $entry -Name "runner_script" -Context "transition policy $target"
     $runnerTask = Get-RequiredString -Object $entry -Name "runner_task" -Context "transition policy $target"
@@ -617,6 +672,19 @@ foreach ($entry in $policyEntries) {
         if (!(Test-ContainsValue -Values $approvalGates -Expected "service_orchestration_provisioning")) {
             throw "service e2e transition must declare service orchestration gate: $target"
         }
+    }
+    foreach ($approvalGate in $approvalGates) {
+        if (!(Test-ContainsValue -Values $blockingApprovalGates -Expected $approvalGate)) {
+            throw "transition policy blocking_approval_gates for $target missing '$approvalGate'"
+        }
+    }
+    foreach ($blockingApprovalGate in $blockingApprovalGates) {
+        if (!(Test-ContainsValue -Values $approvalGates -Expected $blockingApprovalGate)) {
+            throw "transition policy blocking_approval_gates for $target must be declared in approval_gates: $blockingApprovalGate"
+        }
+    }
+    if ($exitState -eq "ready_to_retire" -and $approvalGates.Count -gt 0) {
+        throw "ready_to_retire transition must not have unresolved approval_gates: $target"
     }
     $policyByTarget[$target] = $entry
 }
