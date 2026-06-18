@@ -224,6 +224,63 @@ function Get-BuildTransitionTargets {
     @(Get-BuildTransitionTargetMetadata).Keys | Sort-Object
 }
 
+function Get-BazelPackagePath {
+    param([string] $Label)
+
+    if ($Label -notmatch '^//([^:]*):[A-Za-z0-9_.-]+$') {
+        throw "invalid Bazel label: $Label"
+    }
+    [string] $Matches[1]
+}
+
+function Get-RunnerScriptRelativePath {
+    param([string] $Target, [string] $RunnerScript)
+
+    if ([System.IO.Path]::IsPathRooted($RunnerScript)) {
+        throw "transition policy runner_script must be package-relative: $Target -> $RunnerScript"
+    }
+    $packagePath = Get-BazelPackagePath -Label $Target
+    if ([string]::IsNullOrWhiteSpace($packagePath)) {
+        return $RunnerScript
+    }
+    "$packagePath/$RunnerScript"
+}
+
+function Test-RunnerScriptHasTaskCase {
+    param([string] $Content, [string] $RunnerTask)
+
+    $escapedTask = [regex]::Escape($RunnerTask)
+    $Content -match "(?m)^\s*$escapedTask\)\s*$"
+}
+
+function Test-RunnerScriptHasCommandGuard {
+    param([string] $Content, [string] $Command)
+
+    $escapedCommand = [regex]::Escape($Command)
+    if ($Content -match "(?m)^\s*require_command\s+['""]?$escapedCommand['""]?\s*(#.*)?$") {
+        return $true
+    }
+    if ($Command -eq "sqlx") {
+        return (
+            $Content -match '(?m)^\s*require_command\s+"\$\{SQLX_BIN:-sqlx\}"\s*(#.*)?$' -or
+            $Content -match '(?m)^\s*require_command\s+"\$sqlx_bin"\s*(#.*)?$'
+        )
+    }
+    $false
+}
+
+function Test-RunnerScriptHasServiceGuard {
+    param([string] $Content, [string] $Service)
+
+    if ($Service -eq "postgres") {
+        return (
+            $Content -match '(?m)^\s*wait_for_postgres\s*(#.*)?$' -and
+            (Test-RunnerScriptHasCommandGuard -Content $Content -Command "pg_isready")
+        )
+    }
+    $false
+}
+
 function Get-CiTransitionReferences {
     $references = New-Object System.Collections.Generic.List[string]
     $paths = New-Object System.Collections.Generic.List[string]
@@ -305,8 +362,8 @@ $runnerTaskRequirements = @{
     "coverage-tarpaulin"             = [pscustomobject]@{ Commands = @("cargo", "cargo-tarpaulin"); Services = @() }
     "deleted"                        = [pscustomobject]@{ Commands = @(); Services = @() }
     "frontend-e2e"                   = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
-    "migration-v001-full"            = [pscustomobject]@{ Commands = @("sqlx", "psql"); Services = @("postgres") }
-    "migration-v002-audit-immutable" = [pscustomobject]@{ Commands = @("sqlx", "psql"); Services = @("postgres") }
+    "migration-v001-full"            = [pscustomobject]@{ Commands = @("pg_isready", "psql", "sqlx"); Services = @("postgres") }
+    "migration-v002-audit-immutable" = [pscustomobject]@{ Commands = @("pg_isready", "psql", "sqlx"); Services = @("postgres") }
     "node-audit"                     = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
     "rust-check"                     = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
     "rustfmt-check"                  = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
@@ -468,6 +525,31 @@ foreach ($target in $policyByTarget.Keys) {
     }
     if (@($metadata.ScriptArgs).Count -ne 1 -or @($metadata.ScriptArgs)[0] -ne $runnerTask) {
         throw "transition policy runner_task does not match BUILD script_args: $target -> $runnerTask"
+    }
+}
+
+$runnerScriptContentByPath = @{}
+foreach ($target in $policyByTarget.Keys) {
+    $entry = $policyByTarget[$target]
+    $runnerScript = [string] $entry.runner_script
+    $runnerTask = [string] $entry.runner_task
+    $runnerScriptPath = Get-RunnerScriptRelativePath -Target $target -RunnerScript $runnerScript
+    if (!$runnerScriptContentByPath.ContainsKey($runnerScriptPath)) {
+        $runnerScriptContentByPath[$runnerScriptPath] = Read-TextFile -RelativePath $runnerScriptPath
+    }
+    $runnerScriptContent = [string] $runnerScriptContentByPath[$runnerScriptPath]
+    if (!(Test-RunnerScriptHasTaskCase -Content $runnerScriptContent -RunnerTask $runnerTask)) {
+        throw "runner script missing task case: $target -> $runnerScriptPath task=$runnerTask"
+    }
+    foreach ($requiredCommand in @($entry.required_commands | ForEach-Object { [string] $_ })) {
+        if (!(Test-RunnerScriptHasCommandGuard -Content $runnerScriptContent -Command $requiredCommand)) {
+            throw "runner script missing required command guard: $target -> $runnerScriptPath command=$requiredCommand"
+        }
+    }
+    foreach ($requiredService in @($entry.required_services | ForEach-Object { [string] $_ })) {
+        if (!(Test-RunnerScriptHasServiceGuard -Content $runnerScriptContent -Service $requiredService)) {
+            throw "runner script missing required service guard: $target -> $runnerScriptPath service=$requiredService"
+        }
     }
 }
 

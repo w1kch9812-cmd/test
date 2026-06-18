@@ -64,6 +64,7 @@ run_sqlx_migrate() {
 
 run_migration_v001_full() {
   require_database_url
+  wait_for_postgres
   require_command "${SQLX_BIN:-sqlx}"
   require_command psql
   exec bash tests/migrations/test_v001_full.sh
@@ -71,6 +72,7 @@ run_migration_v001_full() {
 
 run_migration_v002_audit_immutable() {
   require_database_url
+  wait_for_postgres
   require_command "${SQLX_BIN:-sqlx}"
   require_command psql
   exec bash tests/migrations/test_v002_audit_immutable.sh

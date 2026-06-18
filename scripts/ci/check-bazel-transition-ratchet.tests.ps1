@@ -63,6 +63,9 @@ function Write-MinimalRepo {
         [switch] $MismatchedRunnerTask,
         [switch] $MissingRequiredCommand,
         [switch] $MissingRequiredService,
+        [switch] $MissingRunnerCommandGuard,
+        [switch] $MissingRunnerServiceGuard,
+        [switch] $MissingRunnerTaskCase,
         [switch] $InvalidExitTarget,
         [switch] $TransitionExitTarget,
         [switch] $RetiredRustfmtTransition,
@@ -103,6 +106,73 @@ transition_shell_test(
     script_args = ["migration-v001-full"],
 )
 '@
+
+    $runnerPsqlGuard = if ($MissingRunnerCommandGuard) { "" } else { "  require_command psql" }
+    $runnerPostgresGuard = if ($MissingRunnerServiceGuard) { "" } else { "  wait_for_postgres" }
+    $runnerRustCheckCase = if ($MissingRunnerTaskCase) {
+        ""
+    } else {
+        @'
+  rust-check)
+    run_rust_check
+    ;;
+'@
+    }
+    Write-File -Root $Root -RelativePath "tools\bazel\run_ci_transition_task.sh" -Content @"
+#!/usr/bin/env bash
+set -euo pipefail
+
+task="`${1:-}"
+
+require_command() {
+  command -v "`$1" >/dev/null 2>&1
+}
+
+wait_for_postgres() {
+  require_command pg_isready
+}
+
+run_node_audit() {
+  require_command pnpm
+}
+
+run_rust_check() {
+  require_command cargo
+}
+
+run_rustfmt_check() {
+  require_command cargo
+}
+
+run_frontend_e2e() {
+  require_command pnpm
+}
+
+run_migration_v001_full() {
+  require_command sqlx
+$runnerPsqlGuard
+$runnerPostgresGuard
+}
+
+case "`$task" in
+  node-audit)
+    run_node_audit
+    ;;
+$runnerRustCheckCase
+  rustfmt-check)
+    run_rustfmt_check
+    ;;
+  frontend-e2e)
+    run_frontend_e2e
+    ;;
+  migration-v001-full)
+    run_migration_v001_full
+    ;;
+  *)
+    exit 2
+    ;;
+esac
+"@
 
     $sunset = if ($ExpiredSunset) { "2020-01-01" } else { "2026-07-31" }
     $nodeAuditApprovalGates = if ($MissingAdvisoryApprovalGate) { "[]" } elseif ($UnknownApprovalGate) { '["typo_gate"]' } else { '["external_advisory_collection"]' }
@@ -221,7 +291,7 @@ $approvalGatesLine
       "exit_target": "//:migration_verification",
       "runner_script": "run_ci_transition_task.sh",
       "runner_task": "migration-v001-full",
-      "required_commands": ["sqlx", "psql"],
+      "required_commands": ["pg_isready", "psql", "sqlx"],
       "required_services": $migrationRequiredServices,
       "sunset": "$sunset",
       "approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
@@ -334,6 +404,24 @@ try {
     $missingRequiredService = Invoke-Checker -Root $missingRequiredServiceRoot
     Assert-Equals $missingRequiredService.ExitCode 1 "missing required service exit code mismatch"
     Assert-Contains $missingRequiredService.Output "transition policy required_services for //tools/bazel:ci_migration_v001_full_transition missing 'postgres'"
+
+    $missingRunnerCommandGuardRoot = Join-Path $TempRoot "missing-runner-command-guard"
+    Write-MinimalRepo -Root $missingRunnerCommandGuardRoot -MissingRunnerCommandGuard
+    $missingRunnerCommandGuard = Invoke-Checker -Root $missingRunnerCommandGuardRoot
+    Assert-Equals $missingRunnerCommandGuard.ExitCode 1 "missing runner command guard exit code mismatch"
+    Assert-Contains $missingRunnerCommandGuard.Output "runner script missing required command guard"
+
+    $missingRunnerServiceGuardRoot = Join-Path $TempRoot "missing-runner-service-guard"
+    Write-MinimalRepo -Root $missingRunnerServiceGuardRoot -MissingRunnerServiceGuard
+    $missingRunnerServiceGuard = Invoke-Checker -Root $missingRunnerServiceGuardRoot
+    Assert-Equals $missingRunnerServiceGuard.ExitCode 1 "missing runner service guard exit code mismatch"
+    Assert-Contains $missingRunnerServiceGuard.Output "runner script missing required service guard"
+
+    $missingRunnerTaskCaseRoot = Join-Path $TempRoot "missing-runner-task-case"
+    Write-MinimalRepo -Root $missingRunnerTaskCaseRoot -MissingRunnerTaskCase
+    $missingRunnerTaskCase = Invoke-Checker -Root $missingRunnerTaskCaseRoot
+    Assert-Equals $missingRunnerTaskCase.ExitCode 1 "missing runner task case exit code mismatch"
+    Assert-Contains $missingRunnerTaskCase.Output "runner script missing task case"
 
     $invalidExitTargetRoot = Join-Path $TempRoot "invalid-exit-target"
     Write-MinimalRepo -Root $invalidExitTargetRoot -InvalidExitTarget

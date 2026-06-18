@@ -119,3 +119,10 @@
   - Verify policy metadata against BUILD `srcs` and `script_args` for each active transition.
   - Require known runner tasks to declare their command and service prerequisites.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 18: Verify Runner Guard Clauses**
+  - Read each active transition runner script from its Bazel package.
+  - Require a task case for every policy `runner_task`.
+  - Require every policy `required_commands` and `required_services` entry to have a matching runner guard.
+  - Make DB migration transition runners wait for Postgres directly and declare `pg_isready`.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
