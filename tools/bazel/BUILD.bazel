@@ -103,13 +103,6 @@ test_suite(
     tests = [":frontend_bundle_bazel"],
 )
 
-transition_shell_test(
-    name = "frontend_bundle_transition",
-    srcs = ["run_pnpm_task.sh"],
-    script_args = ["bundle"],
-    tags = FRONTEND_TRANSITION_TAGS,
-)
-
 test_suite(
     name = "frontend_e2e_playwright",
     tags = FRONTEND_TRANSITION_TAGS,

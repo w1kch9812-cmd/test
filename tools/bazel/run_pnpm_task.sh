@@ -36,9 +36,6 @@ case "$task" in
   lint)
     exec pnpm lint
     ;;
-  bundle)
-    exec pnpm --filter=@gongzzang/web test:bundle
-    ;;
   e2e)
     export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}"
     export NEXT_PUBLIC_PLATFORM_CORE_BASE_URL="${NEXT_PUBLIC_PLATFORM_CORE_BASE_URL:-http://localhost:18082}"

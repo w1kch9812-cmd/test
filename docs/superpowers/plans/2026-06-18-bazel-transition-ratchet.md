@@ -86,3 +86,9 @@
   - Move `//tools/bazel:frontend_build_transition` to `retired_transition_targets`.
   - Route root and app-level `pnpm build` through Bazel instead of the pnpm transition wrapper.
   - Re-run targeted ratchet tests, frontend build verification, guardrails, and full Bazel graph.
+
+- [x] **Task 12: Retire Frontend Bundle Transition**
+  - Replace `//tools/bazel:frontend_bundle_transition` with the existing `//:frontend_bundle` and `//apps/web:bundle_size_test` Bazel suites.
+  - Move `//tools/bazel:frontend_bundle_transition` to `retired_transition_targets`.
+  - Route app-level `pnpm test:bundle` through Bazel instead of the pnpm transition wrapper.
+  - Re-run targeted ratchet tests, bundle verification, guardrails, and full Bazel graph.
