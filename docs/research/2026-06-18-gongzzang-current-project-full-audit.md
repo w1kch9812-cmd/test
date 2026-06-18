@@ -306,6 +306,11 @@ files change. The transition ratchet checker now also enforces those tags in
 `GUARDRAIL_TRANSITION_TAGS`, so the cache-bypass contract is protected by tests instead of
 remaining a convention.
 
+Fourth follow-up status: coverage transition configuration is now guarded as SSOT. The
+`coverage-tarpaulin` transition must read threshold, output formats, skip-clean behavior, and
+exclude patterns from `tarpaulin.toml`; the runner may only invoke `cargo tarpaulin --workspace`.
+The new coverage SSOT guardrail is wired into Bazel, lefthook, and CI.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
@@ -335,6 +340,8 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
 - Guardrail transition targets are uncached/external, so policy/checker edits rerun the
   guardrails instead of relying on stale Bazel test results.
 - The uncached/external guardrail-tag contract is itself enforced by the Bazel transition ratchet.
+- Coverage transition configuration is centralized in `tarpaulin.toml` instead of duplicated in
+  shell runner flags.
 
 It is not yet a complete SSS final form because:
 

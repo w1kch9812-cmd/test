@@ -66,6 +66,8 @@ pre-commit:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-bazel-transition-ratchet.ps1
     generated-artifact-registry:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-generated-artifact-registry.ps1
+    coverage-transition-ssot:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-coverage-transition-ssot.ps1
 
 pre-push:
   parallel: false
@@ -172,6 +174,16 @@ pre-push:
         - rebase
     generated-artifact-registry-tests:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-generated-artifact-registry.tests.ps1
+      skip:
+        - merge
+        - rebase
+    coverage-transition-ssot:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-coverage-transition-ssot.ps1
+      skip:
+        - merge
+        - rebase
+    coverage-transition-ssot-tests:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-coverage-transition-ssot.tests.ps1
       skip:
         - merge
         - rebase

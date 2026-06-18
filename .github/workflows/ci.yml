@@ -120,6 +120,12 @@ jobs:
       - name: Generated artifact registry guardrail tests
         shell: pwsh
         run: ./scripts/ci/check-generated-artifact-registry.tests.ps1
+      - name: Coverage transition SSOT guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-coverage-transition-ssot.ps1
+      - name: Coverage transition SSOT guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-coverage-transition-ssot.tests.ps1
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1

@@ -274,6 +274,20 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "guardrail_coverage_transition_ssot",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["coverage-transition-ssot"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_coverage_transition_ssot_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["coverage-transition-ssot-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_platform_core_boundary",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-boundary"],

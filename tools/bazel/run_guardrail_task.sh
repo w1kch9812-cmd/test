@@ -105,6 +105,12 @@ case "$task" in
   generated-artifact-registry-tests)
     run_pwsh scripts/ci/check-generated-artifact-registry.tests.ps1
     ;;
+  coverage-transition-ssot)
+    run_pwsh scripts/ci/check-coverage-transition-ssot.ps1 -Root "$repo_root"
+    ;;
+  coverage-transition-ssot-tests)
+    run_pwsh scripts/ci/check-coverage-transition-ssot.tests.ps1
+    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;

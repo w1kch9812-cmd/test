@@ -52,7 +52,7 @@ wait_for_postgres() {
 run_coverage_tarpaulin() {
   require_command cargo
   require_command cargo-tarpaulin
-  cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90 --exclude-files '*/tests.rs'
+  cargo tarpaulin --workspace
 }
 
 run_sqlx_migrate() {
