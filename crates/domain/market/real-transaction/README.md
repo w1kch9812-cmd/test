@@ -19,7 +19,7 @@ Listing(현재 매물) 용, `TransactionKind`는 RealTransaction(과거 거래) 
 
 ## 의존
 
-- `shared-kernel` (`Pnu`, `MoneyKrw`, `AreaM2`, `BoundingBox`).
+- `shared-kernel` (`Pnu`, `MoneyKrw`, `AreaM2`, `SpatialScope`).
 - 다른 BC 의존 *없어요*.
 
 ## 예시

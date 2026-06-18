@@ -76,13 +76,20 @@ Forbidden:
 
 ## 5. Internal Spatial Queries
 
-Some internal market-domain reader ports still contain `fetch_in_bbox` methods.
+Internal market-domain reader ports use `shared_kernel::spatial_scope::SpatialScope`.
 
-Current status:
+Supported scope shapes:
 
-- this is not a public marker API violation;
-- it should be revisited before implementing real transaction or auction readers;
-- tile/PNU/admin-scope naming may be clearer if those readers become part of the map serving path.
+- `PNU`
+- `Sido`
+- `Sigungu`
+- `Eupmyeondong`
+- validated slippy-map tile coordinates
+
+The goal is to keep product-side query intent explicit without reintroducing public
+`bbox`/`bounds` marker request shapes. `BoundingBox` may still exist as a low-level geometry value
+object, but market reader contracts should prefer `SpatialScope` unless a future ADR approves a
+different contract.
 
 ## 6. Static Reference Tiles
 

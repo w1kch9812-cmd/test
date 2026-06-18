@@ -27,6 +27,7 @@ pub mod money;
 pub mod mutation;
 pub mod phone_kr;
 pub mod pnu;
+pub mod spatial_scope;
 pub mod srid;
 pub mod time;
 pub mod transaction_type;

@@ -54,14 +54,12 @@ Runtime/product ownership:
 
 - `apps/web` owns the Next.js user-facing product surface.
 - `services/api` owns the Rust API runtime.
-- `services/outbox-publisher` owns Gongzzang-side lakehouse/media publishing integration.
+- `services/outbox-publisher` owns Gongzzang-side lakehouse/media publishing integration
+  and Platform Core lakehouse registry notifications.
 - `crates/domain/core/{listing,listing-photo,user}` own product domain rules.
 - `crates/domain/market/*` and `crates/domain/insights/*` own Gongzzang product-side market/insight semantics.
 - `crates/db` owns Gongzzang persistence adapters.
 - `crates/auth` owns Gongzzang auth integration and Platform Core service-token application.
-- `services/outbox-publisher` owns Gongzzang-side listing photo lakehouse publication and
-  Platform Core lakehouse registry notifications.
-
 Platform Core-owned responsibilities remain outside Gongzzang:
 
 - canonical Catalog facts
@@ -277,16 +275,19 @@ The ratchet passes, but several transitions are intentionally still blocked beca
 
 This is structurally better than ad-hoc scripts, because the temporary state is explicit and guarded. It is not yet the final enterprise form.
 
-### Gap 5: Internal `fetch_in_bbox` Ports Need A Naming/Ownership Decision
+### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
 
-However, internal market-domain reader traits still include methods such as:
+The audit initially found internal market-domain reader traits with `fetch_in_bbox` methods:
 
 - `crates/domain/market/real-transaction/src/reader.rs`: `fetch_in_bbox`
 - `crates/domain/market/court-auction/src/reader.rs`: `fetch_in_bbox`
 
-This is not currently a public marker-contract violation. It may still be a clarity risk because the project direction has moved toward tile/PNU-anchor contracts. Before implementing these readers, decide whether the product-owned internal query language should remain bbox-based or move to tile, PNU, or administrative-scope terminology.
+Follow-up status: resolved after the audit by introducing `shared_kernel::spatial_scope`
+and changing both market reader ports to `fetch_in_scope`. The new scope contract supports
+`PNU`, administrative scopes, and validated tile coordinates without making `bbox` the product
+query language.
 
 ## 6. Quality Assessment
 
@@ -311,9 +312,8 @@ It is not yet a complete SSS final form because:
 Recommended order:
 
 1. Turn planned Bazel exit targets into native evidence targets one by one.
-2. Revisit internal market reader `fetch_in_bbox` terminology before implementing real transaction or auction readers.
-3. Decide whether the remaining generated JSON artifacts need separate generated-file handling in line-count reporting.
-4. Run a broader verification pass after docs and guardrail refactors.
+2. Decide whether the remaining generated JSON artifacts need separate generated-file handling in line-count reporting.
+3. Run a broader verification pass after docs and guardrail refactors.
 
 ## 8. Bottom Line
 
@@ -321,5 +321,5 @@ Gongzzang is not in a broken state.
 
 The main product/Catalog boundary is structurally enforced and currently passes.
 The next SSS-grade work should not be more public-data collection from this repo.
-It should be Bazel exit-target retirement, internal market query terminology cleanup, and
-broader runtime/build verification, while keeping Catalog ingestion in Platform Core.
+It should be Bazel exit-target retirement and broader runtime/build verification, while keeping
+Catalog ingestion in Platform Core.

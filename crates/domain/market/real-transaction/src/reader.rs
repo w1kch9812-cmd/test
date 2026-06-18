@@ -4,8 +4,8 @@
 
 use async_trait::async_trait;
 use chrono::NaiveDate;
-use shared_kernel::bounding_box::BoundingBox;
 use shared_kernel::pnu::Pnu;
+use shared_kernel::spatial_scope::SpatialScope;
 
 use crate::entity::RealTransaction;
 use crate::errors::ReaderError;
@@ -27,9 +27,9 @@ pub trait RealTransactionReader: Send + Sync {
     /// # Errors
     ///
     /// 네트워크 실패 → `Fetch`. 데이터 파싱 실패 → `Parse`.
-    async fn fetch_in_bbox(
+    async fn fetch_in_scope(
         &self,
-        bbox: &BoundingBox,
+        scope: &SpatialScope,
         since: NaiveDate,
     ) -> Result<Vec<RealTransaction>, ReaderError>;
 }
@@ -41,6 +41,14 @@ mod tests {
     /// `RealTransactionReader` is dyn-compatible (object-safe).
     #[allow(dead_code)]
     fn assert_obj_safe(_reader: &dyn RealTransactionReader) {}
+
+    #[allow(dead_code)]
+    async fn assert_spatial_scope_query(reader: &dyn RealTransactionReader, scope: &SpatialScope) {
+        let Some(since) = NaiveDate::from_ymd_opt(2024, 1, 1) else {
+            return;
+        };
+        let _ = reader.fetch_in_scope(scope, since).await;
+    }
 
     #[test]
     fn trait_is_object_safe() {

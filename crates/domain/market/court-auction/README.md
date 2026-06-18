@@ -15,7 +15,7 @@
 
 ## 의존
 
-- `shared-kernel` (`Pnu`, `MoneyKrw`, `PointSrid`, `BoundingBox`).
+- `shared-kernel` (`Pnu`, `MoneyKrw`, `PointSrid`, `SpatialScope`).
 - 다른 BC 의존 *없어요*.
 
 ## 예시
