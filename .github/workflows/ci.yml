@@ -126,6 +126,12 @@ jobs:
       - name: Coverage transition SSOT guardrail tests
         shell: pwsh
         run: ./scripts/ci/check-coverage-transition-ssot.tests.ps1
+      - name: Verification task registry guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-verification-task-registry.ps1
+      - name: Verification task registry guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-verification-task-registry.tests.ps1
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1

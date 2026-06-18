@@ -111,6 +111,12 @@ case "$task" in
   coverage-transition-ssot-tests)
     run_pwsh scripts/ci/check-coverage-transition-ssot.tests.ps1
     ;;
+  verification-task-registry)
+    run_pwsh scripts/ci/check-verification-task-registry.ps1 -Root "$repo_root"
+    ;;
+  verification-task-registry-tests)
+    run_pwsh scripts/ci/check-verification-task-registry.tests.ps1
+    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;

@@ -288,6 +288,20 @@ transition_shell_test(
 )
 
 transition_shell_test(
+    name = "guardrail_verification_task_registry",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["verification-task-registry"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
+    name = "guardrail_verification_task_registry_tests",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["verification-task-registry-tests"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+
+transition_shell_test(
     name = "guardrail_platform_core_boundary",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-boundary"],
