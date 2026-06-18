@@ -55,6 +55,56 @@
       "external_collection_approval_required": false
     }
   ],
+  "transition_category_registry": [
+    {
+      "id": "coverage-verification",
+      "owner": "build-platform",
+      "reason": "Coverage transitions require native Bazel coverage evidence and a resolved toolchain provisioning decision.",
+      "required_exit_evidence_requirements": [
+        "native_bazel_coverage_evidence",
+        "toolchain_provisioning_decision"
+      ],
+      "required_approval_gates": ["toolchain_provisioning"],
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "database-verification",
+      "owner": "build-platform",
+      "reason": "Database transitions require native Bazel DB tests and resolved DB/toolchain provisioning decisions.",
+      "required_exit_evidence_requirements": [
+        "database_service_provisioning_decision",
+        "native_bazel_database_test"
+      ],
+      "required_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "external-advisory-sca",
+      "owner": "build-platform",
+      "reason": "External advisory SCA transitions require pinned advisory evidence and explicit external collection approval.",
+      "required_exit_evidence_requirements": [
+        "native_bazel_evidence_target",
+        "pinned_advisory_evidence"
+      ],
+      "required_approval_gates": ["external_advisory_collection"],
+      "external_collection_approval_required": true
+    },
+    {
+      "id": "service-e2e-verification",
+      "owner": "build-platform",
+      "reason": "Service e2e transitions require native Bazel service orchestration evidence and resolved provisioning decisions.",
+      "required_exit_evidence_requirements": [
+        "native_bazel_service_orchestration",
+        "service_orchestration_provisioning_decision"
+      ],
+      "required_approval_gates": [
+        "toolchain_provisioning",
+        "database_service_provisioning",
+        "service_orchestration_provisioning"
+      ],
+      "external_collection_approval_required": false
+    }
+  ],
   "exit_targets": [
     {
       "bazel_target": "//:dependency_sca_evidence",

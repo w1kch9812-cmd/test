@@ -82,7 +82,10 @@ function Write-MinimalRepo {
         [switch] $MismatchedExitTargetEvidence,
         [switch] $MissingApprovalGateRegistry,
         [switch] $MissingRegisteredApprovalGate,
-        [switch] $DuplicateApprovalGateRegistry
+        [switch] $DuplicateApprovalGateRegistry,
+        [switch] $MissingTransitionCategoryRegistry,
+        [switch] $MissingRegisteredTransitionCategory,
+        [switch] $MismatchedCategoryEvidence
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -198,6 +201,7 @@ esac
     $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $externalAdvisoryCategoryEvidence = if ($MismatchedCategoryEvidence) { '["native_bazel_database_test"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
     $externalAdvisoryGateEntry = @'
     {
       "id": "external_advisory_collection",
@@ -264,6 +268,60 @@ $externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
       "reason": "fixture",
       "decision_reference": "fixture",
       "requires_human_approval": true,
+      "external_collection_approval_required": false
+    }
+  ],
+"@
+    }
+    $frontendReleaseCategoryEntry = if ($MissingRegisteredTransitionCategory) {
+        ""
+    } else {
+        @'
+    {
+      "id": "frontend-release-verification",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_exit_evidence_requirements": ["native_bazel_test_target"],
+      "required_approval_gates": ["browser_runtime_provisioning"],
+      "external_collection_approval_required": false
+    },
+'@
+    }
+    $registeredTransitionCategories = if ($MissingTransitionCategoryRegistry) {
+        ""
+    } else {
+        @"
+  "transition_category_registry": [
+    {
+      "id": "external-advisory-sca",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_exit_evidence_requirements": $externalAdvisoryCategoryEvidence,
+      "required_approval_gates": ["external_advisory_collection"],
+      "external_collection_approval_required": true
+    },
+    {
+      "id": "rust-verification",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_exit_evidence_requirements": ["native_bazel_test_target"],
+      "required_approval_gates": [],
+      "external_collection_approval_required": false
+    },
+$frontendReleaseCategoryEntry    {
+      "id": "database-verification",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "required_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "stale-fixture",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_exit_evidence_requirements": [],
+      "required_approval_gates": [],
       "external_collection_approval_required": false
     }
   ],
@@ -436,6 +494,7 @@ $exitStateLine
   "default_decision": "deny_new_transition_without_policy",
 $retiredTargets
 $registeredApprovalGates
+$registeredTransitionCategories
 $registeredExitTargets
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
@@ -582,7 +641,7 @@ try {
     Write-MinimalRepo -Root $missingExternalFlagRoot -MissingExternalCollectionFlag
     $missingExternalFlag = Invoke-Checker -Root $missingExternalFlagRoot
     Assert-Equals $missingExternalFlag.ExitCode 1 "missing external collection flag exit code mismatch"
-    Assert-Contains $missingExternalFlag.Output "external advisory collection transition must require approval"
+    Assert-Contains $missingExternalFlag.Output "transition category requires external collection approval"
 
     $missingApprovalGatesRoot = Join-Path $TempRoot "missing-approval-gates"
     Write-MinimalRepo -Root $missingApprovalGatesRoot -MissingApprovalGates
@@ -600,13 +659,13 @@ try {
     Write-MinimalRepo -Root $missingAdvisoryApprovalGateRoot -MissingAdvisoryApprovalGate
     $missingAdvisoryApprovalGate = Invoke-Checker -Root $missingAdvisoryApprovalGateRoot
     Assert-Equals $missingAdvisoryApprovalGate.ExitCode 1 "missing advisory approval gate exit code mismatch"
-    Assert-Contains $missingAdvisoryApprovalGate.Output "external advisory transition must declare approval gate"
+    Assert-Contains $missingAdvisoryApprovalGate.Output "transition category required_approval_gates"
 
     $missingBrowserRuntimeGateRoot = Join-Path $TempRoot "missing-browser-runtime-gate"
     Write-MinimalRepo -Root $missingBrowserRuntimeGateRoot -MissingBrowserRuntimeGate
     $missingBrowserRuntimeGate = Invoke-Checker -Root $missingBrowserRuntimeGateRoot
     Assert-Equals $missingBrowserRuntimeGate.ExitCode 1 "missing browser runtime gate exit code mismatch"
-    Assert-Contains $missingBrowserRuntimeGate.Output "frontend e2e transition must declare browser runtime provisioning gate"
+    Assert-Contains $missingBrowserRuntimeGate.Output "transition category required_approval_gates"
 
     $missingRunnerTaskRoot = Join-Path $TempRoot "missing-runner-task"
     Write-MinimalRepo -Root $missingRunnerTaskRoot -MissingRunnerTask
@@ -708,7 +767,7 @@ try {
     Write-MinimalRepo -Root $missingExitEvidenceRoot -MissingExitEvidenceRequirements
     $missingExitEvidence = Invoke-Checker -Root $missingExitEvidenceRoot
     Assert-Equals $missingExitEvidence.ExitCode 1 "missing exit evidence exit code mismatch"
-    Assert-Contains $missingExitEvidence.Output "transition policy exit_evidence_requirements"
+    Assert-Contains $missingExitEvidence.Output "transition category required_exit_evidence_requirements"
 
     $missingBlockingApprovalGateRoot = Join-Path $TempRoot "missing-blocking-approval-gate"
     Write-MinimalRepo -Root $missingBlockingApprovalGateRoot -MissingBlockingApprovalGate
@@ -751,6 +810,24 @@ try {
     $duplicateApprovalGateRegistry = Invoke-Checker -Root $duplicateApprovalGateRegistryRoot
     Assert-Equals $duplicateApprovalGateRegistry.ExitCode 1 "duplicate approval gate registry exit code mismatch"
     Assert-Contains $duplicateApprovalGateRegistry.Output "transition ratchet approval gate duplicate"
+
+    $missingTransitionCategoryRegistryRoot = Join-Path $TempRoot "missing-transition-category-registry"
+    Write-MinimalRepo -Root $missingTransitionCategoryRegistryRoot -MissingTransitionCategoryRegistry
+    $missingTransitionCategoryRegistry = Invoke-Checker -Root $missingTransitionCategoryRegistryRoot
+    Assert-Equals $missingTransitionCategoryRegistry.ExitCode 1 "missing transition category registry exit code mismatch"
+    Assert-Contains $missingTransitionCategoryRegistry.Output "transition ratchet policy must declare transition_category_registry"
+
+    $missingRegisteredTransitionCategoryRoot = Join-Path $TempRoot "missing-registered-transition-category"
+    Write-MinimalRepo -Root $missingRegisteredTransitionCategoryRoot -MissingRegisteredTransitionCategory
+    $missingRegisteredTransitionCategory = Invoke-Checker -Root $missingRegisteredTransitionCategoryRoot
+    Assert-Equals $missingRegisteredTransitionCategory.ExitCode 1 "missing registered transition category exit code mismatch"
+    Assert-Contains $missingRegisteredTransitionCategory.Output "transition category is not registered"
+
+    $mismatchedCategoryEvidenceRoot = Join-Path $TempRoot "mismatched-category-evidence"
+    Write-MinimalRepo -Root $mismatchedCategoryEvidenceRoot -MismatchedCategoryEvidence
+    $mismatchedCategoryEvidence = Invoke-Checker -Root $mismatchedCategoryEvidenceRoot
+    Assert-Equals $mismatchedCategoryEvidence.ExitCode 1 "mismatched category evidence exit code mismatch"
+    Assert-Contains $mismatchedCategoryEvidence.Output "transition category required_exit_evidence_requirements"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

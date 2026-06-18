@@ -477,8 +477,18 @@ if ($approvalGateRegistryEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($approvalGateRegistryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet approval gate"
 
+$transitionCategoryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "transition_category_registry") {
+    $transitionCategoryEntries = @($policy.transition_category_registry)
+}
+if ($transitionCategoryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare transition_category_registry"
+}
+Assert-Unique -Values @($transitionCategoryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet category"
+
 $policyByTarget = @{}
 $exitTargetByLabel = @{}
+$transitionCategoryById = @{}
 $allowedApprovalGates = @{}
 $externalCollectionApprovalGateSet = @{}
 foreach ($entry in $approvalGateRegistryEntries) {
@@ -538,14 +548,39 @@ $allowedExitEvidenceRequirements = @{
     service_orchestration_provisioning_decision = $true
     toolchain_provisioning_decision            = $true
 }
-$categoryExitEvidenceRequirements = @{
-    "coverage-verification"         = @("native_bazel_coverage_evidence", "toolchain_provisioning_decision")
-    "database-verification"         = @("database_service_provisioning_decision", "native_bazel_database_test")
-    "external-advisory-sca"         = @("native_bazel_evidence_target", "pinned_advisory_evidence")
-    "frontend-release-verification" = @("native_bazel_test_target")
-    "rust-verification"             = @("native_bazel_test_target")
-    "service-e2e-verification"      = @("native_bazel_service_orchestration", "service_orchestration_provisioning_decision")
-    "stale-fixture"                 = @()
+foreach ($entry in $transitionCategoryEntries) {
+    $context = "transition category registry"
+    $category = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($category -notmatch '^[a-z][a-z0-9-]*$') {
+        throw "transition category registry id must be lowercase kebab-case: $category"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "transition category registry $category")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "transition category registry $category")
+    $categoryEvidenceRequirements = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_exit_evidence_requirements" `
+        -Context "transition category registry $category")
+    Assert-Unique -Values $categoryEvidenceRequirements -Message "transition category registry $category evidence requirement"
+    foreach ($categoryEvidenceRequirement in $categoryEvidenceRequirements) {
+        if (!$allowedExitEvidenceRequirements.ContainsKey($categoryEvidenceRequirement)) {
+            throw "unknown transition category evidence requirement for ${category}: $categoryEvidenceRequirement"
+        }
+    }
+    $categoryApprovalGates = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_approval_gates" `
+        -Context "transition category registry $category")
+    Assert-Unique -Values $categoryApprovalGates -Message "transition category registry $category approval gate"
+    foreach ($categoryApprovalGate in $categoryApprovalGates) {
+        if (!$allowedApprovalGates.ContainsKey($categoryApprovalGate)) {
+            throw "transition category approval gate is not registered for ${category}: $categoryApprovalGate"
+        }
+    }
+    [void] (Get-RequiredBoolean `
+        -Object $entry `
+        -Name "external_collection_approval_required" `
+        -Context "transition category registry $category")
+    $transitionCategoryById[$category] = $entry
 }
 $allowedExitTargetStates = @{
     planned   = $true
@@ -610,6 +645,10 @@ foreach ($entry in $policyEntries) {
         throw "transition policy target must be a Bazel _transition label: $target"
     }
     $category = Get-RequiredString -Object $entry -Name "category" -Context "transition policy $target"
+    if (!$transitionCategoryById.ContainsKey($category)) {
+        throw "transition category is not registered: $target -> $category"
+    }
+    $registeredCategory = $transitionCategoryById[$category]
     [void] (Get-RequiredString -Object $entry -Name "owner" -Context "transition policy $target")
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "transition policy $target")
     $exitTarget = Get-RequiredString -Object $entry -Name "exit_target" -Context "transition policy $target"
@@ -637,13 +676,10 @@ foreach ($entry in $policyEntries) {
             throw "unknown transition exit evidence requirement for ${target}: $exitEvidenceRequirement"
         }
     }
-    if (!$categoryExitEvidenceRequirements.ContainsKey($category)) {
-        throw "unknown transition category for exit evidence requirements: $target -> $category"
-    }
     Assert-ContainsAll `
         -Actual $exitEvidenceRequirements `
-        -Expected @($categoryExitEvidenceRequirements[$category]) `
-        -Message "transition policy exit_evidence_requirements for $target"
+        -Expected @($registeredCategory.required_exit_evidence_requirements | ForEach-Object { [string] $_ }) `
+        -Message "transition category required_exit_evidence_requirements for $target"
     Assert-ContainsAll `
         -Actual @($registeredExitTarget.exit_evidence_requirements | ForEach-Object { [string] $_ }) `
         -Expected $exitEvidenceRequirements `
@@ -726,8 +762,13 @@ foreach ($entry in $policyEntries) {
         -Object $entry `
         -Name "external_collection_approval_required" `
         -Context "transition policy $target"
-    if ($category -eq "external-advisory-sca" -and !$externalCollection) {
-        throw "external advisory collection transition must require approval: $target"
+    Assert-ContainsAll `
+        -Actual $approvalGates `
+        -Expected @($registeredCategory.required_approval_gates | ForEach-Object { [string] $_ }) `
+        -Message "transition category required_approval_gates for $target"
+    $categoryExternalCollectionApprovalRequired = [bool] $registeredCategory.external_collection_approval_required
+    if ($categoryExternalCollectionApprovalRequired -and !$externalCollection) {
+        throw "transition category requires external collection approval: $target -> $category"
     }
     $hasExternalCollectionApprovalGate = $false
     foreach ($approvalGate in $approvalGates) {
@@ -735,49 +776,12 @@ foreach ($entry in $policyEntries) {
             $hasExternalCollectionApprovalGate = $true
         }
     }
-    if (
-        $category -eq "external-advisory-sca" -and
-        !$hasExternalCollectionApprovalGate
-    ) {
-        throw "external advisory transition must declare approval gate: $target"
-    }
     if ($externalCollection -and !$hasExternalCollectionApprovalGate) {
         throw "external collection transition must declare external advisory approval gate: $target"
     }
     foreach ($approvalGate in $approvalGates) {
         if ($externalCollectionApprovalGateSet.ContainsKey($approvalGate) -and !$externalCollection) {
             throw "external advisory approval gate must require external collection approval: $target"
-        }
-    }
-    if (
-        $target -eq "//tools/bazel:frontend_e2e_transition" -and
-        !(Test-ContainsValue -Values $approvalGates -Expected "browser_runtime_provisioning")
-    ) {
-        throw "frontend e2e transition must declare browser runtime provisioning gate: $target"
-    }
-    if (
-        $category -eq "coverage-verification" -and
-        !(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")
-    ) {
-        throw "coverage transition must declare toolchain provisioning gate: $target"
-    }
-    if ($category -eq "database-verification") {
-        if (!(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")) {
-            throw "database transition must declare toolchain provisioning gate: $target"
-        }
-        if (!(Test-ContainsValue -Values $approvalGates -Expected "database_service_provisioning")) {
-            throw "database transition must declare database service provisioning gate: $target"
-        }
-    }
-    if ($category -eq "service-e2e-verification") {
-        if (!(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")) {
-            throw "service e2e transition must declare toolchain provisioning gate: $target"
-        }
-        if (!(Test-ContainsValue -Values $approvalGates -Expected "database_service_provisioning")) {
-            throw "service e2e transition must declare database service provisioning gate: $target"
-        }
-        if (!(Test-ContainsValue -Values $approvalGates -Expected "service_orchestration_provisioning")) {
-            throw "service e2e transition must declare service orchestration gate: $target"
         }
     }
     foreach ($approvalGate in $approvalGates) {

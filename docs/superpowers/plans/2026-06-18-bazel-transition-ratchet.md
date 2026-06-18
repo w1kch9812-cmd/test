@@ -153,3 +153,9 @@
   - Require every approval gate referenced by transitions or exit targets to be registered exactly once with owner, reason, decision reference, and approval semantics.
   - Derive external collection approval gates from policy data instead of a checker-owned hardcoded gate list.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 23: Register Transition Categories**
+  - Add a top-level `transition_category_registry` to the transition ratchet policy.
+  - Require every transition category to be registered exactly once with owner, reason, required evidence, required approval gates, and external collection semantics.
+  - Derive category-specific evidence and gate requirements from policy data instead of checker-owned hardcoded category branches.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
