@@ -113,3 +113,9 @@
   - Require every transition `exit_target` to be a syntactically valid Bazel label.
   - Reject `exit_target` values that point to another `_transition` target.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 17: Bind Transition Policy To Runner Prerequisites**
+  - Add `runner_script`, `runner_task`, `required_commands`, and `required_services` to every active transition policy entry.
+  - Verify policy metadata against BUILD `srcs` and `script_args` for each active transition.
+  - Require known runner tasks to declare their command and service prerequisites.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

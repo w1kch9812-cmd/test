@@ -59,6 +59,10 @@ function Write-MinimalRepo {
         [switch] $UnknownApprovalGate,
         [switch] $MissingAdvisoryApprovalGate,
         [switch] $MissingBrowserRuntimeGate,
+        [switch] $MissingRunnerTask,
+        [switch] $MismatchedRunnerTask,
+        [switch] $MissingRequiredCommand,
+        [switch] $MissingRequiredService,
         [switch] $InvalidExitTarget,
         [switch] $TransitionExitTarget,
         [switch] $RetiredRustfmtTransition,
@@ -92,6 +96,12 @@ transition_shell_test(
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["frontend-e2e"],
 )
+
+transition_shell_test(
+    name = "ci_migration_v001_full_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["migration-v001-full"],
+)
 '@
 
     $sunset = if ($ExpiredSunset) { "2020-01-01" } else { "2026-07-31" }
@@ -99,6 +109,9 @@ transition_shell_test(
     $approvalGatesLine = if ($MissingApprovalGates) { "" } else { "`"approval_gates`": []," }
     $frontendE2eApprovalGates = if ($MissingBrowserRuntimeGate) { "[]" } else { '["browser_runtime_provisioning"]' }
     $rustCheckExitTarget = if ($InvalidExitTarget) { "rust_verification" } elseif ($TransitionExitTarget) { "//tools/bazel:next_transition" } else { "//:rust_verification" }
+    $rustCheckRunnerTaskLine = if ($MissingRunnerTask) { "" } elseif ($MismatchedRunnerTask) { '"runner_task": "rustfmt-check",' } else { '"runner_task": "rust-check",' }
+    $nodeAuditRequiredCommands = if ($MissingRequiredCommand) { "[]" } else { '["pnpm"]' }
+    $migrationRequiredServices = if ($MissingRequiredService) { "[]" } else { '["postgres"]' }
     $nodeAuditPolicy = if ($OmitNodeAuditPolicy) {
         ""
     } else {
@@ -110,6 +123,10 @@ transition_shell_test(
       "owner": "build-platform",
       "reason": "pnpm audit still shells out until advisory SCA is represented by a pinned Bazel evidence target.",
       "exit_target": "//:dependency_sca_evidence",
+      "runner_script": "run_ci_transition_task.sh",
+      "runner_task": "node-audit",
+      "required_commands": $nodeAuditRequiredCommands,
+      "required_services": [],
       "sunset": "$sunset",
       "approval_gates": $nodeAuditApprovalGates,
       "external_collection_approval_required": $externalCollection
@@ -124,6 +141,10 @@ transition_shell_test(
       "owner": "build-platform",
       "reason": "fixture",
       "exit_target": "//:deleted",
+      "runner_script": "run_ci_transition_task.sh",
+      "runner_task": "deleted",
+      "required_commands": [],
+      "required_services": [],
       "sunset": "2026-07-31",
       "approval_gates": [],
       "external_collection_approval_required": false
@@ -156,6 +177,10 @@ $nodeAuditPolicy$stalePolicy    {
       "owner": "build-platform",
       "reason": "cargo check transition until Rust check is a native Bazel rule target.",
       "exit_target": "$rustCheckExitTarget",
+$rustCheckRunnerTaskLine
+      "runner_script": "run_ci_transition_task.sh",
+      "required_commands": ["cargo"],
+      "required_services": [],
       "sunset": "$sunset",
 $approvalGatesLine
       "external_collection_approval_required": false
@@ -166,6 +191,10 @@ $approvalGatesLine
       "owner": "build-platform",
       "reason": "fixture",
       "exit_target": "//tools/bazel:rustfmt_check",
+      "runner_script": "run_ci_transition_task.sh",
+      "runner_task": "rustfmt-check",
+      "required_commands": ["cargo"],
+      "required_services": [],
       "sunset": "$sunset",
       "approval_gates": [],
       "external_collection_approval_required": false
@@ -176,8 +205,26 @@ $approvalGatesLine
       "owner": "build-platform",
       "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
       "exit_target": "//:frontend_e2e",
+      "runner_script": "run_ci_transition_task.sh",
+      "runner_task": "frontend-e2e",
+      "required_commands": ["pnpm"],
+      "required_services": [],
       "sunset": "$sunset",
       "approval_gates": $frontendE2eApprovalGates,
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:ci_migration_v001_full_transition",
+      "category": "database-verification",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_target": "//:migration_verification",
+      "runner_script": "run_ci_transition_task.sh",
+      "runner_task": "migration-v001-full",
+      "required_commands": ["sqlx", "psql"],
+      "required_services": $migrationRequiredServices,
+      "sunset": "$sunset",
+      "approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "external_collection_approval_required": false
     }
   ]
@@ -201,6 +248,7 @@ jobs:
       - run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci
       - run: bazelisk test //tools/bazel:ci_rust_check_transition --config=ci
       - run: bazelisk test //tools/bazel:ci_rustfmt_transition --config=ci
+      - run: bazelisk test //tools/bazel:ci_migration_v001_full_transition --config=ci
 $frontendE2eCi
 $extraCi
 "@
@@ -262,6 +310,30 @@ try {
     $missingBrowserRuntimeGate = Invoke-Checker -Root $missingBrowserRuntimeGateRoot
     Assert-Equals $missingBrowserRuntimeGate.ExitCode 1 "missing browser runtime gate exit code mismatch"
     Assert-Contains $missingBrowserRuntimeGate.Output "frontend e2e transition must declare browser runtime provisioning gate"
+
+    $missingRunnerTaskRoot = Join-Path $TempRoot "missing-runner-task"
+    Write-MinimalRepo -Root $missingRunnerTaskRoot -MissingRunnerTask
+    $missingRunnerTask = Invoke-Checker -Root $missingRunnerTaskRoot
+    Assert-Equals $missingRunnerTask.ExitCode 1 "missing runner task exit code mismatch"
+    Assert-Contains $missingRunnerTask.Output "transition policy //tools/bazel:ci_rust_check_transition missing 'runner_task'"
+
+    $mismatchedRunnerTaskRoot = Join-Path $TempRoot "mismatched-runner-task"
+    Write-MinimalRepo -Root $mismatchedRunnerTaskRoot -MismatchedRunnerTask
+    $mismatchedRunnerTask = Invoke-Checker -Root $mismatchedRunnerTaskRoot
+    Assert-Equals $mismatchedRunnerTask.ExitCode 1 "mismatched runner task exit code mismatch"
+    Assert-Contains $mismatchedRunnerTask.Output "transition policy runner_task does not match BUILD script_args"
+
+    $missingRequiredCommandRoot = Join-Path $TempRoot "missing-required-command"
+    Write-MinimalRepo -Root $missingRequiredCommandRoot -MissingRequiredCommand
+    $missingRequiredCommand = Invoke-Checker -Root $missingRequiredCommandRoot
+    Assert-Equals $missingRequiredCommand.ExitCode 1 "missing required command exit code mismatch"
+    Assert-Contains $missingRequiredCommand.Output "transition policy required_commands for //tools/bazel:ci_node_audit_transition missing 'pnpm'"
+
+    $missingRequiredServiceRoot = Join-Path $TempRoot "missing-required-service"
+    Write-MinimalRepo -Root $missingRequiredServiceRoot -MissingRequiredService
+    $missingRequiredService = Invoke-Checker -Root $missingRequiredServiceRoot
+    Assert-Equals $missingRequiredService.ExitCode 1 "missing required service exit code mismatch"
+    Assert-Contains $missingRequiredService.Output "transition policy required_services for //tools/bazel:ci_migration_v001_full_transition missing 'postgres'"
 
     $invalidExitTargetRoot = Join-Path $TempRoot "invalid-exit-target"
     Write-MinimalRepo -Root $invalidExitTargetRoot -InvalidExitTarget

@@ -51,22 +51,28 @@ wait_for_postgres() {
 
 run_coverage_tarpaulin() {
   require_command cargo
+  require_command cargo-tarpaulin
   cargo tarpaulin --workspace --skip-clean --out Lcov --fail-under 90 --exclude-files '*/tests.rs'
 }
 
 run_sqlx_migrate() {
   require_database_url
-  require_command sqlx
-  sqlx migrate run --source migrations
+  local sqlx_bin="${SQLX_BIN:-sqlx}"
+  require_command "$sqlx_bin"
+  "$sqlx_bin" migrate run --source migrations
 }
 
 run_migration_v001_full() {
   require_database_url
+  require_command "${SQLX_BIN:-sqlx}"
+  require_command psql
   exec bash tests/migrations/test_v001_full.sh
 }
 
 run_migration_v002_audit_immutable() {
   require_database_url
+  require_command "${SQLX_BIN:-sqlx}"
+  require_command psql
   exec bash tests/migrations/test_v002_audit_immutable.sh
 }
 
@@ -184,10 +190,12 @@ run_walking_skeleton_e2e() {
 case "$task" in
   node-audit)
     require_command pnpm
+    require_node_modules
     exec pnpm audit --audit-level moderate
     ;;
   cargo-deny)
     require_command cargo
+    require_command cargo-deny
     exec cargo deny check
     ;;
   coverage-tarpaulin)

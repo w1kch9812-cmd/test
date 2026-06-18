@@ -109,6 +109,16 @@ function Assert-Unique {
     }
 }
 
+function Assert-ContainsAll {
+    param([string[]] $Actual, [string[]] $Expected, [string] $Message)
+
+    foreach ($expectedValue in $Expected) {
+        if (!(Test-ContainsValue -Values $Actual -Expected $expectedValue)) {
+            throw "$Message missing '$expectedValue'"
+        }
+    }
+}
+
 function Test-ContainsValue {
     param([string[]] $Values, [string] $Expected)
 
@@ -118,6 +128,20 @@ function Test-ContainsValue {
         }
     }
     $false
+}
+
+function Get-ListLiteralValues {
+    param([string] $Line, [string] $Name)
+
+    $escapedName = [regex]::Escape($Name)
+    if ($Line -notmatch "^\s*$escapedName\s*=\s*\[(.*)\]\s*,?\s*$") {
+        return @()
+    }
+    $values = @()
+    foreach ($match in [regex]::Matches($Matches[1], '"([^"]+)"')) {
+        $values += [string] $match.Groups[1].Value
+    }
+    $values
 }
 
 function Test-IsIgnoredPath {
@@ -138,8 +162,8 @@ function Test-IsIgnoredPath {
     $false
 }
 
-function Get-BuildTransitionTargets {
-    $targets = New-Object System.Collections.Generic.List[string]
+function Get-BuildTransitionTargetMetadata {
+    $targets = @{}
     $buildFiles = @(
         Get-ChildItem -LiteralPath (Resolve-RepoPath -RelativePath ".") -Recurse -File -Filter "BUILD.bazel" |
             Sort-Object FullName
@@ -157,25 +181,47 @@ function Get-BuildTransitionTargets {
         }
 
         $insideTransitionShellTest = $false
+        $blockLines = New-Object System.Collections.Generic.List[string]
         foreach ($line in Get-Content -LiteralPath $file.FullName -Encoding UTF8) {
             if ($line -match '^\s*transition_shell_test\s*\(') {
                 $insideTransitionShellTest = $true
+                $blockLines.Clear()
                 continue
             }
-            if ($insideTransitionShellTest -and $line -match '^\s*name\s*=\s*"([^"]+_transition)"') {
-                $name = $Matches[1]
-                if ([string]::IsNullOrWhiteSpace($packagePath)) {
-                    $targets.Add("//:$name")
-                } else {
-                    $targets.Add("//${packagePath}:$name")
-                }
+            if ($insideTransitionShellTest) {
+                $blockLines.Add($line)
             }
             if ($insideTransitionShellTest -and $line -match '^\s*\),?\s*$') {
+                $name = $null
+                $srcs = @()
+                $scriptArgs = @()
+                foreach ($blockLine in $blockLines) {
+                    if ($blockLine -match '^\s*name\s*=\s*"([^"]+_transition)"') {
+                        $name = $Matches[1]
+                    }
+                    $srcs += @(Get-ListLiteralValues -Line $blockLine -Name "srcs")
+                    $scriptArgs += @(Get-ListLiteralValues -Line $blockLine -Name "script_args")
+                }
+                if (![string]::IsNullOrWhiteSpace($name)) {
+                    $label = if ([string]::IsNullOrWhiteSpace($packagePath)) {
+                        "//:$name"
+                    } else {
+                        "//${packagePath}:$name"
+                    }
+                    $targets[$label] = [pscustomobject]@{
+                        Srcs       = @($srcs)
+                        ScriptArgs = @($scriptArgs)
+                    }
+                }
                 $insideTransitionShellTest = $false
             }
         }
     }
-    $targets.ToArray()
+    $targets
+}
+
+function Get-BuildTransitionTargets {
+    @(Get-BuildTransitionTargetMetadata).Keys | Sort-Object
 }
 
 function Get-CiTransitionReferences {
@@ -240,6 +286,35 @@ $allowedApprovalGates = @{
     database_service_provisioning = $true
     service_orchestration_provisioning = $true
 }
+$allowedRequiredCommands = @{
+    cargo           = $true
+    "cargo-deny"    = $true
+    "cargo-tarpaulin" = $true
+    curl            = $true
+    pg_isready      = $true
+    pnpm            = $true
+    psql            = $true
+    python3         = $true
+    sqlx            = $true
+}
+$allowedRequiredServices = @{
+    postgres = $true
+}
+$runnerTaskRequirements = @{
+    "cargo-deny"                     = [pscustomobject]@{ Commands = @("cargo", "cargo-deny"); Services = @() }
+    "coverage-tarpaulin"             = [pscustomobject]@{ Commands = @("cargo", "cargo-tarpaulin"); Services = @() }
+    "deleted"                        = [pscustomobject]@{ Commands = @(); Services = @() }
+    "frontend-e2e"                   = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
+    "migration-v001-full"            = [pscustomobject]@{ Commands = @("sqlx", "psql"); Services = @("postgres") }
+    "migration-v002-audit-immutable" = [pscustomobject]@{ Commands = @("sqlx", "psql"); Services = @("postgres") }
+    "node-audit"                     = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
+    "rust-check"                     = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
+    "rustfmt-check"                  = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
+    "walking-skeleton-e2e"           = [pscustomobject]@{
+        Commands = @("cargo", "curl", "pg_isready", "psql", "python3", "sqlx")
+        Services = @("postgres")
+    }
+}
 foreach ($entry in $policyEntries) {
     $context = "transition policy"
     $target = Get-RequiredString -Object $entry -Name "bazel_target" -Context $context
@@ -256,6 +331,40 @@ foreach ($entry in $policyEntries) {
     if ($exitTarget -match '_transition$') {
         throw "transition policy exit_target must not be another transition: $target -> $exitTarget"
     }
+    $runnerScript = Get-RequiredString -Object $entry -Name "runner_script" -Context "transition policy $target"
+    $runnerTask = Get-RequiredString -Object $entry -Name "runner_task" -Context "transition policy $target"
+    if (!$runnerTaskRequirements.ContainsKey($runnerTask)) {
+        throw "unknown transition runner_task for ${target}: $runnerTask"
+    }
+    $requiredCommands = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_commands" `
+        -Context "transition policy $target")
+    Assert-Unique -Values $requiredCommands -Message "transition policy $target required command"
+    foreach ($requiredCommand in $requiredCommands) {
+        if (!$allowedRequiredCommands.ContainsKey($requiredCommand)) {
+            throw "unknown transition required command for ${target}: $requiredCommand"
+        }
+    }
+    $requiredServices = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_services" `
+        -Context "transition policy $target")
+    Assert-Unique -Values $requiredServices -Message "transition policy $target required service"
+    foreach ($requiredService in $requiredServices) {
+        if (!$allowedRequiredServices.ContainsKey($requiredService)) {
+            throw "unknown transition required service for ${target}: $requiredService"
+        }
+    }
+    $runnerRequirements = $runnerTaskRequirements[$runnerTask]
+    Assert-ContainsAll `
+        -Actual $requiredCommands `
+        -Expected @($runnerRequirements.Commands) `
+        -Message "transition policy required_commands for $target"
+    Assert-ContainsAll `
+        -Actual $requiredServices `
+        -Expected @($runnerRequirements.Services) `
+        -Message "transition policy required_services for $target"
     $approvalGates = @(Get-RequiredStringArray `
         -Object $entry `
         -Name "approval_gates" `
@@ -331,7 +440,8 @@ foreach ($entry in $policyEntries) {
     $policyByTarget[$target] = $entry
 }
 
-$actualTargets = @(Get-BuildTransitionTargets)
+$actualTargetMetadata = Get-BuildTransitionTargetMetadata
+$actualTargets = @($actualTargetMetadata.Keys | Sort-Object)
 Assert-Unique -Values $actualTargets -Message "Bazel transition target"
 $actualTargetSet = @{}
 foreach ($target in $actualTargets) {
@@ -346,6 +456,18 @@ foreach ($target in $actualTargets) {
 foreach ($target in $policyByTarget.Keys) {
     if (!$actualTargetSet.ContainsKey($target)) {
         throw "stale transition policy for $target"
+    }
+}
+foreach ($target in $policyByTarget.Keys) {
+    $entry = $policyByTarget[$target]
+    $metadata = $actualTargetMetadata[$target]
+    $runnerScript = [string] $entry.runner_script
+    $runnerTask = [string] $entry.runner_task
+    if (!(Test-ContainsValue -Values @($metadata.Srcs) -Expected $runnerScript)) {
+        throw "transition policy runner_script does not match BUILD srcs: $target -> $runnerScript"
+    }
+    if (@($metadata.ScriptArgs).Count -ne 1 -or @($metadata.ScriptArgs)[0] -ne $runnerTask) {
+        throw "transition policy runner_task does not match BUILD script_args: $target -> $runnerTask"
     }
 }
 
