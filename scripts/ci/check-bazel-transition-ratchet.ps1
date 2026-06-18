@@ -506,6 +506,28 @@ if ($runnerTaskRegistryEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($runnerTaskRegistryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet runner task"
 
+$requiredCommandRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "required_command_registry") {
+    $requiredCommandRegistryEntries = @($policy.required_command_registry)
+}
+if ($requiredCommandRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare required_command_registry"
+}
+Assert-Unique `
+    -Values @($requiredCommandRegistryEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet required command"
+
+$requiredServiceRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "required_service_registry") {
+    $requiredServiceRegistryEntries = @($policy.required_service_registry)
+}
+if ($requiredServiceRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare required_service_registry"
+}
+Assert-Unique `
+    -Values @($requiredServiceRegistryEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet required service"
+
 $policyByTarget = @{}
 $exitTargetByLabel = @{}
 $transitionCategoryById = @{}
@@ -539,19 +561,27 @@ foreach ($entry in $approvalGateRegistryEntries) {
 if ($externalCollectionApprovalGateSet.Count -eq 0) {
     throw "approval_gate_registry must declare an external collection approval gate"
 }
-$allowedRequiredCommands = @{
-    cargo           = $true
-    "cargo-deny"    = $true
-    "cargo-tarpaulin" = $true
-    curl            = $true
-    pg_isready      = $true
-    pnpm            = $true
-    psql            = $true
-    python3         = $true
-    sqlx            = $true
+$allowedRequiredCommands = @{}
+foreach ($entry in $requiredCommandRegistryEntries) {
+    $context = "required command registry"
+    $requiredCommand = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($requiredCommand -notmatch '^[a-z][a-z0-9_-]*$') {
+        throw "required command registry id must be lowercase command token: $requiredCommand"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "required command registry $requiredCommand")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "required command registry $requiredCommand")
+    $allowedRequiredCommands[$requiredCommand] = $true
 }
-$allowedRequiredServices = @{
-    postgres = $true
+$allowedRequiredServices = @{}
+foreach ($entry in $requiredServiceRegistryEntries) {
+    $context = "required service registry"
+    $requiredService = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($requiredService -notmatch '^[a-z][a-z0-9-]*$') {
+        throw "required service registry id must be lowercase kebab-case: $requiredService"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "required service registry $requiredService")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "required service registry $requiredService")
+    $allowedRequiredServices[$requiredService] = $true
 }
 $runnerTaskRequirements = @{}
 foreach ($entry in $runnerTaskRegistryEntries) {
@@ -569,7 +599,7 @@ foreach ($entry in $runnerTaskRegistryEntries) {
     Assert-Unique -Values $registeredRequiredCommands -Message "runner task registry $runnerTask required command"
     foreach ($registeredRequiredCommand in $registeredRequiredCommands) {
         if (!$allowedRequiredCommands.ContainsKey($registeredRequiredCommand)) {
-            throw "unknown runner task required command for ${runnerTask}: $registeredRequiredCommand"
+            throw "required command is not registered for ${runnerTask}: $registeredRequiredCommand"
         }
     }
     $registeredRequiredServices = @(Get-RequiredStringArray `
@@ -579,7 +609,7 @@ foreach ($entry in $runnerTaskRegistryEntries) {
     Assert-Unique -Values $registeredRequiredServices -Message "runner task registry $runnerTask required service"
     foreach ($registeredRequiredService in $registeredRequiredServices) {
         if (!$allowedRequiredServices.ContainsKey($registeredRequiredService)) {
-            throw "unknown runner task required service for ${runnerTask}: $registeredRequiredService"
+            throw "required service is not registered for ${runnerTask}: $registeredRequiredService"
         }
     }
     $runnerTaskRequirements[$runnerTask] = [pscustomobject]@{
@@ -774,7 +804,7 @@ foreach ($entry in $policyEntries) {
     Assert-Unique -Values $requiredCommands -Message "transition policy $target required command"
     foreach ($requiredCommand in $requiredCommands) {
         if (!$allowedRequiredCommands.ContainsKey($requiredCommand)) {
-            throw "unknown transition required command for ${target}: $requiredCommand"
+            throw "required command is not registered for ${target}: $requiredCommand"
         }
     }
     $requiredServices = @(Get-RequiredStringArray `
@@ -784,7 +814,7 @@ foreach ($entry in $policyEntries) {
     Assert-Unique -Values $requiredServices -Message "transition policy $target required service"
     foreach ($requiredService in $requiredServices) {
         if (!$allowedRequiredServices.ContainsKey($requiredService)) {
-            throw "unknown transition required service for ${target}: $requiredService"
+            throw "required service is not registered for ${target}: $requiredService"
         }
     }
     $runnerRequirements = $runnerTaskRequirements[$runnerTask]

@@ -161,6 +161,60 @@
       "external_collection_approval_required": false
     }
   ],
+  "required_command_registry": [
+    {
+      "id": "cargo",
+      "owner": "build-platform",
+      "reason": "Rust verification transitions require the Cargo toolchain until equivalent native Bazel Rust targets cover the task."
+    },
+    {
+      "id": "cargo-deny",
+      "owner": "build-platform",
+      "reason": "Rust advisory scanning requires cargo-deny until SCA evidence is pinned as a Bazel-owned target."
+    },
+    {
+      "id": "cargo-tarpaulin",
+      "owner": "build-platform",
+      "reason": "Coverage transitions require cargo-tarpaulin until coverage reports are native Bazel evidence."
+    },
+    {
+      "id": "curl",
+      "owner": "build-platform",
+      "reason": "Service e2e transitions require curl until HTTP readiness probing is native Bazel execution."
+    },
+    {
+      "id": "pg_isready",
+      "owner": "build-platform",
+      "reason": "Database transitions require pg_isready until Postgres readiness is native Bazel service orchestration."
+    },
+    {
+      "id": "pnpm",
+      "owner": "build-platform",
+      "reason": "Node advisory scanning requires pnpm until advisory evidence is pinned as a Bazel-owned target."
+    },
+    {
+      "id": "psql",
+      "owner": "build-platform",
+      "reason": "Database transitions require psql until migration verification is native Bazel database execution."
+    },
+    {
+      "id": "python3",
+      "owner": "build-platform",
+      "reason": "Service e2e transitions require python3 until orchestration support is native Bazel execution."
+    },
+    {
+      "id": "sqlx",
+      "owner": "build-platform",
+      "reason": "Database transitions require sqlx until migration verification is native Bazel database execution."
+    }
+  ],
+  "required_service_registry": [
+    {
+      "id": "postgres",
+      "owner": "build-platform",
+      "reason": "Database-backed transitions require Postgres until DB service provisioning is native Bazel orchestration."
+    }
+  ],
   "runner_task_registry": [
     {
       "id": "cargo-deny",

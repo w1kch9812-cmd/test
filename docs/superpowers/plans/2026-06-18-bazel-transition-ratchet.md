@@ -171,3 +171,9 @@
   - Require every transition `runner_task` to be registered exactly once with owner, reason, required commands, and required services.
   - Derive runner prerequisite expectations from policy data instead of checker-owned hardcoded runner task metadata.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 26: Register Required Commands And Services**
+  - Add top-level `required_command_registry` and `required_service_registry` entries to the transition ratchet policy.
+  - Require every command and service referenced by runner tasks or transition policies to be registered exactly once with owner and reason.
+  - Derive command and service taxonomy from policy data instead of checker-owned hardcoded allowlists.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

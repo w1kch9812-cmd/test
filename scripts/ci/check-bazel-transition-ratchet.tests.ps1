@@ -64,6 +64,12 @@ function Write-MinimalRepo {
         [switch] $MissingRunnerTaskRegistry,
         [switch] $MissingRegisteredRunnerTask,
         [switch] $DuplicateRunnerTaskRegistry,
+        [switch] $MissingRequiredCommandRegistry,
+        [switch] $MissingRegisteredRequiredCommand,
+        [switch] $DuplicateRequiredCommandRegistry,
+        [switch] $MissingRequiredServiceRegistry,
+        [switch] $MissingRegisteredRequiredService,
+        [switch] $DuplicateRequiredServiceRegistry,
         [switch] $MissingRequiredCommand,
         [switch] $MissingRequiredService,
         [switch] $MissingRunnerCommandGuard,
@@ -439,6 +445,93 @@ $frontendReleaseCategoryEntry    {
     } else {
         ""
     }
+    $pnpmRequiredCommandEntry = if ($MissingRegisteredRequiredCommand) {
+        ""
+    } else {
+        @'
+    {
+      "id": "pnpm",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+'@
+    }
+    $duplicateRequiredCommandEntry = if ($DuplicateRequiredCommandRegistry) {
+        @'
+    {
+      "id": "cargo",
+      "owner": "build-platform",
+      "reason": "fixture duplicate"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredRequiredCommands = if ($MissingRequiredCommandRegistry) {
+        ""
+    } else {
+        @"
+  "required_command_registry": [
+    {
+      "id": "cargo",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+$duplicateRequiredCommandEntry    {
+      "id": "pg_isready",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+$pnpmRequiredCommandEntry    {
+      "id": "psql",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "id": "sqlx",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+  ],
+"@
+    }
+    $postgresRequiredServiceEntry = if ($MissingRegisteredRequiredService) {
+        @'
+    {
+      "id": "redis",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+'@
+    } else {
+        @'
+    {
+      "id": "postgres",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+'@
+    }
+    $duplicateRequiredServiceEntry = if ($DuplicateRequiredServiceRegistry) {
+        @'
+    {
+      "id": "postgres",
+      "owner": "build-platform",
+      "reason": "fixture duplicate"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredRequiredServices = if ($MissingRequiredServiceRegistry) {
+        ""
+    } else {
+        @"
+  "required_service_registry": [
+$duplicateRequiredServiceEntry$postgresRequiredServiceEntry
+  ],
+"@
+    }
     $registeredRunnerTasks = if ($MissingRunnerTaskRegistry) {
         ""
     } else {
@@ -651,6 +744,8 @@ $retiredTargets
 $registeredApprovalGates
 $registeredExitEvidenceRequirements
 $registeredTransitionCategories
+$registeredRequiredCommands
+$registeredRequiredServices
 $registeredRunnerTasks
 $registeredExitTargets
   "transition_targets": [
@@ -853,6 +948,42 @@ try {
     $duplicateRunnerTaskRegistry = Invoke-Checker -Root $duplicateRunnerTaskRegistryRoot
     Assert-Equals $duplicateRunnerTaskRegistry.ExitCode 1 "duplicate runner task registry exit code mismatch"
     Assert-Contains $duplicateRunnerTaskRegistry.Output "transition ratchet runner task duplicate"
+
+    $missingRequiredCommandRegistryRoot = Join-Path $TempRoot "missing-required-command-registry"
+    Write-MinimalRepo -Root $missingRequiredCommandRegistryRoot -MissingRequiredCommandRegistry
+    $missingRequiredCommandRegistry = Invoke-Checker -Root $missingRequiredCommandRegistryRoot
+    Assert-Equals $missingRequiredCommandRegistry.ExitCode 1 "missing required command registry exit code mismatch"
+    Assert-Contains $missingRequiredCommandRegistry.Output "transition ratchet policy must declare required_command_registry"
+
+    $missingRegisteredRequiredCommandRoot = Join-Path $TempRoot "missing-registered-required-command"
+    Write-MinimalRepo -Root $missingRegisteredRequiredCommandRoot -MissingRegisteredRequiredCommand
+    $missingRegisteredRequiredCommand = Invoke-Checker -Root $missingRegisteredRequiredCommandRoot
+    Assert-Equals $missingRegisteredRequiredCommand.ExitCode 1 "missing registered required command exit code mismatch"
+    Assert-Contains $missingRegisteredRequiredCommand.Output "required command is not registered"
+
+    $duplicateRequiredCommandRegistryRoot = Join-Path $TempRoot "duplicate-required-command-registry"
+    Write-MinimalRepo -Root $duplicateRequiredCommandRegistryRoot -DuplicateRequiredCommandRegistry
+    $duplicateRequiredCommandRegistry = Invoke-Checker -Root $duplicateRequiredCommandRegistryRoot
+    Assert-Equals $duplicateRequiredCommandRegistry.ExitCode 1 "duplicate required command registry exit code mismatch"
+    Assert-Contains $duplicateRequiredCommandRegistry.Output "transition ratchet required command duplicate"
+
+    $missingRequiredServiceRegistryRoot = Join-Path $TempRoot "missing-required-service-registry"
+    Write-MinimalRepo -Root $missingRequiredServiceRegistryRoot -MissingRequiredServiceRegistry
+    $missingRequiredServiceRegistry = Invoke-Checker -Root $missingRequiredServiceRegistryRoot
+    Assert-Equals $missingRequiredServiceRegistry.ExitCode 1 "missing required service registry exit code mismatch"
+    Assert-Contains $missingRequiredServiceRegistry.Output "transition ratchet policy must declare required_service_registry"
+
+    $missingRegisteredRequiredServiceRoot = Join-Path $TempRoot "missing-registered-required-service"
+    Write-MinimalRepo -Root $missingRegisteredRequiredServiceRoot -MissingRegisteredRequiredService
+    $missingRegisteredRequiredService = Invoke-Checker -Root $missingRegisteredRequiredServiceRoot
+    Assert-Equals $missingRegisteredRequiredService.ExitCode 1 "missing registered required service exit code mismatch"
+    Assert-Contains $missingRegisteredRequiredService.Output "required service is not registered"
+
+    $duplicateRequiredServiceRegistryRoot = Join-Path $TempRoot "duplicate-required-service-registry"
+    Write-MinimalRepo -Root $duplicateRequiredServiceRegistryRoot -DuplicateRequiredServiceRegistry
+    $duplicateRequiredServiceRegistry = Invoke-Checker -Root $duplicateRequiredServiceRegistryRoot
+    Assert-Equals $duplicateRequiredServiceRegistry.ExitCode 1 "duplicate required service registry exit code mismatch"
+    Assert-Contains $duplicateRequiredServiceRegistry.Output "transition ratchet required service duplicate"
 
     $missingRequiredCommandRoot = Join-Path $TempRoot "missing-required-command"
     Write-MinimalRepo -Root $missingRequiredCommandRoot -MissingRequiredCommand
