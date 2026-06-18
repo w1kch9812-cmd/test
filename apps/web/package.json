@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "bash ../../scripts/ci/run-bazel.sh test //apps/web:next_production_build_smoke_test --config=ci --verbose_failures",
     "start": "next start",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",

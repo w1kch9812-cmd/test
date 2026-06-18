@@ -85,13 +85,6 @@ test_suite(
     tests = [":frontend_build_bazel"],
 )
 
-transition_shell_test(
-    name = "frontend_build_transition",
-    srcs = ["run_pnpm_task.sh"],
-    script_args = ["build"],
-    tags = FRONTEND_TRANSITION_TAGS,
-)
-
 test_suite(
     name = "frontend_bundle_bazel",
     tags = [

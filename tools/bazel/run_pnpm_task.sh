@@ -36,20 +36,6 @@ case "$task" in
   lint)
     exec pnpm lint
     ;;
-  build)
-    export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-https://api.gongzzang.example}"
-    export NEXT_PUBLIC_PLATFORM_CORE_BASE_URL="${NEXT_PUBLIC_PLATFORM_CORE_BASE_URL:-https://platform-core.gongzzang.example}"
-    export NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID="${NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID:-ci-build-naver-client}"
-    export ZITADEL_ISSUER="${ZITADEL_ISSUER:-https://auth.gongzzang.example}"
-    export ZITADEL_CLIENT_ID="${ZITADEL_CLIENT_ID:-ci-build-client}"
-    export ZITADEL_AUDIENCE="${ZITADEL_AUDIENCE:-ci-build-audience}"
-    export ZITADEL_REDIRECT_URI="${ZITADEL_REDIRECT_URI:-https://gongzzang.example/api/auth/callback}"
-    export REDIS_URL="${REDIS_URL:-rediss://redis.gongzzang.example:6379}"
-    export SESSION_SECRET="${SESSION_SECRET:-ci-build-session-secret-32-bytes-valid}"
-    export INTERNAL_AUTH_SECRET="${INTERNAL_AUTH_SECRET:-ci-build-internal-auth-secret-32-valid}"
-    export PLATFORM_CORE_WEBHOOK_SECRET="${PLATFORM_CORE_WEBHOOK_SECRET:-ci-build-platform-core-webhook-secret-32-valid}"
-    exec pnpm build
-    ;;
   bundle)
     exec pnpm --filter=@gongzzang/web test:bundle
     ;;

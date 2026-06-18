@@ -3,6 +3,7 @@
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
   "retired_transition_targets": [
+    "//tools/bazel:frontend_build_transition",
     "//tools/bazel:frontend_typecheck_transition",
     "//tools/bazel:frontend_unit_test_transition",
     "//tools/bazel:ci_rust_clippy_transition",
@@ -11,15 +12,6 @@
     "//tools/bazel:ci_sqlx_prepare_check_transition"
   ],
   "transition_targets": [
-    {
-      "bazel_target": "//tools/bazel:frontend_build_transition",
-      "category": "frontend-release-verification",
-      "owner": "build-platform",
-      "reason": "pnpm build transition retained until the Next.js production build is fully represented by native Bazel rules.",
-      "exit_target": "//:frontend_build",
-      "sunset": "2026-07-31",
-      "external_collection_approval_required": false
-    },
     {
       "bazel_target": "//tools/bazel:frontend_bundle_transition",
       "category": "frontend-release-verification",
