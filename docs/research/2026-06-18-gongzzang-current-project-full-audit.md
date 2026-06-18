@@ -7,11 +7,19 @@ Repo: `C:\Users\admin\Desktop\gongzzang`
 
 Current rescan status:
 
-- The repo is not clean: the current session has uncommitted generated-artifact guardrail work.
+- After the guardrail follow-up commits, the tracked code worktree was clean before this audit
+  note update.
+- The local branch may be ahead of `origin/main` when this note is edited; that is commit state,
+  not an uncommitted-code risk.
+- Untracked verification-task-registry draft files exist; this audit note does not include or
+  modify those drafts.
 - No public-data collection was started.
 - The main product/Catalog ownership guardrails pass.
 - The 1500-line hard gate passes.
-- Frontend typecheck/unit, Rust format/check/lint, Biome, markdown links, and the full guardrail suite pass.
+- Frontend typecheck/unit, Rust format/check/lint, Biome, markdown links, and the full guardrail
+  suite pass.
+- Runtime code search did not find direct V-World/data.go.kr Catalog endpoint usage in `apps/`,
+  `services/`, `crates/`, or `packages/`.
 - The prior red item was intentional maintainability ratcheting:
   `scripts/ci/check-platform-core-boundary.tests.ps1` now self-checks that the boundary
   checker and its modules stay <=600 lines.
@@ -19,9 +27,12 @@ Current rescan status:
   orchestrator is 12 lines, and every boundary checker module is <=201 lines.
 - The generated/compatibility aggregate large-file gap is now governed by an explicit registry
   and wired into Bazel, lefthook, and CI.
+- Coverage transition configuration is now governed by `tarpaulin.toml`; the transition runner
+  may only invoke `cargo tarpaulin --workspace`.
 
-쉽게 말하면, 현재 프로젝트가 망가진 상태는 아닙니다. 지금 dirty 상태인 이유는
-전수조사 중 발견한 생성 파일 관리 빈틈을 guardrail로 막는 변경이 아직 커밋되지 않았기 때문입니다.
+쉽게 말하면, 현재 프로젝트가 망가진 상태는 아닙니다. 이번 전수조사에서 발견된
+검증/생성물 관리 빈틈은 guardrail로 막았고, 남은 일은 planned transition을 실제
+Bazel evidence target으로 하나씩 끝내는 것입니다.
 
 ## 1. Scope
 
@@ -85,7 +96,7 @@ The following checks passed during this audit:
 
 | Check | Result |
 |---|---|
-| `git status --short --branch` | uncommitted generated-artifact guardrail changes present |
+| `git status --short --branch --ahead-behind` | tracked code clean before this audit note update; untracked verification-task-registry draft files present |
 | `check-platform-core-boundary.ps1` | `platform-core-boundary-ok entries=46 contracts=5 gates=6 legacy_schema_allowances=11` |
 | `check-platform-core-dependency-boundary.ps1` | `platform-core-dependency-boundary-ok manifests=26 allowances=0 source_allowances=0` |
 | `check-pnu-anchor-pbf-marker-contract.ps1` | `pnu-anchor-pbf-marker-contract-ok files=60` |
@@ -101,7 +112,9 @@ The following checks passed during this audit:
 | `check-markdown-links.sh` | passed |
 | `check-generated-artifact-registry.ps1` | `generated-artifact-registry-ok artifacts=2 sources=11` |
 | `check-generated-artifact-registry.tests.ps1` | `generated-artifact-registry-tests-ok` |
-| `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 26/26 passed |
+| `check-coverage-transition-ssot.ps1` | `coverage-transition-ssot-ok` |
+| `check-coverage-transition-ssot.tests.ps1` | `coverage-transition-ssot-tests-ok` |
+| `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 28/28 passed |
 | `bash scripts/ci/run-bazel.sh test //:workspace_typecheck //:workspace_hermetic_typechecks //:frontend_unit_test --config=ci --verbose_failures` | 5/5 passed |
 | `bash scripts/ci/run-bazel.sh test //:rust_format_verification //:rust_check_verification //:rust_lint_verification --config=ci --verbose_failures` | 27/27 passed |
 | `pnpm exec biome check .` | `Checked 260 files. No fixes applied.` |
@@ -143,6 +156,30 @@ Current status: acceptable guard/stub, not an active ETL pipeline.
 ### Korean Text Encoding
 
 Some files look broken when printed through Windows PowerShell `Get-Content`, but Node UTF-8 reads show the actual file contents are valid Korean. This is a console rendering issue, not file corruption.
+
+### Runtime Catalog Endpoint Search
+
+Focused runtime searches across `apps/`, `services/`, `crates/`, and `packages/` did not find
+direct `api.vworld.kr` or `apis.data.go.kr` endpoint usage.
+
+The remaining V-World/data.go.kr mentions are documentation, historical ADR/spec material,
+Platform Core boundary policy tokens, or user-facing source links. That matches the current
+ownership rule: Gongzzang consumes Platform Core contracts and must not own Catalog ingestion.
+
+### Tracked File Size Shape
+
+The largest tracked maintainability-relevant source files remain below the 1500-line hard gate.
+The largest tracked text files are lockfiles or governed generated/compatibility artifacts:
+
+- `pnpm-lock.yaml`
+- `Cargo.lock`
+- `docs/architecture/traffic-auth-policy-registry.v1.json`
+- `docs/architecture/platform-core-boundary.v1.json`
+- `docs/architecture/verification-transition-ratchet.v1.json`
+- `infrastructure/security/traffic-auth-edge-policy.generated.json`
+
+Generated and aggregate artifacts are now required to be registered in
+`docs/architecture/generated-artifacts.v1.json` and verified by guardrails.
 
 ## 5. Actual Gaps
 
