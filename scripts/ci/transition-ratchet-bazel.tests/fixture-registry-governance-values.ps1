@@ -83,7 +83,7 @@ $externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
       "id": "frontend-release-verification",
       "owner": "build-platform",
       "reason": "fixture",
-      "required_exit_evidence_requirements": ["native_bazel_test_target"],
+      "required_exit_evidence_requirements": ["browser_runtime_provisioning_decision", "native_bazel_test_target"],
       "required_approval_gates": ["browser_runtime_provisioning"],
       "external_collection_approval_required": false
     },
@@ -114,7 +114,7 @@ $frontendReleaseCategoryEntry    {
       "id": "database-verification",
       "owner": "build-platform",
       "reason": "fixture",
-      "required_exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "required_exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test", "toolchain_provisioning_decision"],
       "required_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "external_collection_approval_required": false
     },

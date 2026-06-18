@@ -268,6 +268,7 @@ foreach ($entry in $exitTargetEntries) {
     }
     $evidenceStatusEntries = @($entry.evidence_status)
     $evidenceStatusRequirements = @()
+    $coveredApprovalBlockers = @{}
     $hasPlannedEvidence = $false
     foreach ($evidenceStatus in $evidenceStatusEntries) {
         $context = "exit target registry evidence_status for $exitTarget"
@@ -316,6 +317,7 @@ foreach ($entry in $exitTargetEntries) {
                     if (!(Test-ContainsValue -Values $exitTargetBlockingApprovalGates -Expected $approvalGate)) {
                         throw "planned evidence approval blocker must be covered by exit target blocking_approval_gates: $exitTarget -> $plannedBlocker"
                     }
+                    $coveredApprovalBlockers[$approvalGate] = $true
                 }
                 if ($blockerEntry.PSObject.Properties.Name -contains "exit_evidence_requirement") {
                     $blockedRequirement = [string] $blockerEntry.exit_evidence_requirement
@@ -339,6 +341,11 @@ foreach ($entry in $exitTargetEntries) {
         -Message "exit target registry evidence_status requirements for $exitTarget"
     if ($exitTargetState -eq "available" -and $hasPlannedEvidence) {
         throw "available exit target must not have planned evidence_status: $exitTarget"
+    }
+    foreach ($blockingApprovalGate in $exitTargetBlockingApprovalGates) {
+        if (!$coveredApprovalBlockers.ContainsKey($blockingApprovalGate)) {
+            throw "exit target blocking_approval_gates must be covered by planned evidence blockers: $exitTarget -> $blockingApprovalGate"
+        }
     }
     $exitTargetByLabel[$exitTarget] = $entry
 }

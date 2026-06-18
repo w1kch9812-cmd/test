@@ -295,6 +295,12 @@ try {
     Assert-Equals $missingBlockingApprovalGate.ExitCode 1 "missing blocking approval gate exit code mismatch"
     Assert-Contains $missingBlockingApprovalGate.Output "transition policy blocking_approval_gates"
 
+    $extraUncoveredExitBlockingGateRoot = Join-Path $TempRoot "extra-uncovered-exit-blocking-gate"
+    Write-MinimalRepo -Root $extraUncoveredExitBlockingGateRoot -ExtraUncoveredExitBlockingGate
+    $extraUncoveredExitBlockingGate = Invoke-Checker -Root $extraUncoveredExitBlockingGateRoot
+    Assert-Equals $extraUncoveredExitBlockingGate.ExitCode 1 "extra uncovered exit blocking gate exit code mismatch"
+    Assert-Contains $extraUncoveredExitBlockingGate.Output "exit target blocking_approval_gates must be covered by planned evidence blockers"
+
     $missingExitTargetRegistryRoot = Join-Path $TempRoot "missing-exit-target-registry"
     Write-MinimalRepo -Root $missingExitTargetRegistryRoot -MissingExitTargetRegistry
     $missingExitTargetRegistry = Invoke-Checker -Root $missingExitTargetRegistryRoot

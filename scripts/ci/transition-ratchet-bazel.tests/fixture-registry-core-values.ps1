@@ -2,6 +2,7 @@
     $nodeAuditApprovalGates = if ($MissingAdvisoryApprovalGate) { "[]" } elseif ($UnknownApprovalGate) { '["typo_gate"]' } else { '["external_advisory_collection"]' }
     $approvalGatesLine = if ($MissingApprovalGates) { "" } else { "`"approval_gates`": []," }
     $frontendE2eApprovalGates = if ($MissingBrowserRuntimeGate) { "[]" } else { '["browser_runtime_provisioning"]' }
+    $frontendE2eEvidenceRequirements = '["browser_runtime_provisioning_decision", "native_bazel_test_target"]'
     $rustCheckExitTarget = if ($InvalidExitTarget) { "rust_verification" } elseif ($TransitionExitTarget) { "//tools/bazel:next_transition" } else { "//:rust_verification" }
     $rustCheckRunnerTaskLine = if ($MissingRunnerTask) { "" } elseif ($MismatchedRunnerTask) { '"runner_task": "rustfmt-check",' } else { '"runner_task": "rust-check",' }
     $nodeAuditRequiredCommands = if ($MissingRequiredCommand) { "[]" } else { '["pnpm"]' }
@@ -10,6 +11,13 @@
     $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $dependencyScaBlockingApprovalGates = if ($MismatchedExitTargetEvidence) {
+        "[]"
+    } elseif ($ExtraUncoveredExitBlockingGate) {
+        '["external_advisory_collection", "browser_runtime_provisioning"]'
+    } else {
+        '["external_advisory_collection"]'
+    }
     $externalAdvisoryCategoryEvidence = if ($MismatchedCategoryEvidence) { '["native_bazel_database_test"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
     $nativeBazelEvidenceKindEntry = if ($MissingRegisteredEvidenceKind) {
         ""
@@ -80,6 +88,12 @@ $duplicateEvidenceKindEntry    {
     } else {
         @"
   "exit_evidence_requirement_registry": [
+    {
+      "id": "browser_runtime_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "provisioning_decision"
+    },
     {
       "id": "database_service_provisioning_decision",
       "owner": "build-platform",
@@ -155,6 +169,18 @@ $nativeBazelTestEvidenceEntry    {
     } else {
         ""
     }
+    $browserRuntimeDecisionBlockerEntry = if ($MissingRegisteredApprovalGate) {
+        ""
+    } else {
+        @'
+    {
+      "id": "browser_runtime_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "approval_gate": "browser_runtime_provisioning"
+    },
+'@
+    }
     $registeredPlannedEvidenceBlockers = if ($MissingPlannedEvidenceBlockerRegistry) {
         ""
     } else {
@@ -172,7 +198,13 @@ $nativeBazelTestEvidenceEntry    {
       "reason": "fixture",
       "approval_gate": "database_service_provisioning"
     },
-$duplicatePlannedEvidenceBlockerEntry    {
+    {
+      "id": "toolchain_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "approval_gate": "toolchain_provisioning"
+    },
+$browserRuntimeDecisionBlockerEntry$duplicatePlannedEvidenceBlockerEntry    {
       "id": "native_bazel_database_test_missing",
       "owner": "build-platform",
       "reason": "fixture",

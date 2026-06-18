@@ -30,12 +30,36 @@
           "blocked_by": ["native_bazel_test_target_missing"]
 '@
     }
+    $frontendE2eBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["native_bazel_test_target_missing"]
+'@
+    }
+    $browserRuntimeDecisionBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["browser_runtime_provisioning_decision_required"]
+'@
+    }
     $databaseServiceDecisionBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
         ""
     } else {
         @'
 ,
           "blocked_by": ["database_service_provisioning_decision_required"]
+'@
+    }
+    $toolchainDecisionBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["toolchain_provisioning_decision_required"]
 '@
     }
     $nativeBazelDatabaseBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
@@ -109,6 +133,23 @@ $nativeTestBlockedBy
         }
       ]
 "@
+    $frontendE2eEvidenceStatus = @"
+,
+      "evidence_status": [
+        {
+          "requirement": "browser_runtime_provisioning_decision",
+          "state": "planned",
+          "reason": "fixture"
+$browserRuntimeDecisionBlockedBy
+        },
+        {
+          "requirement": "native_bazel_test_target",
+          "state": "planned",
+          "reason": "fixture"
+$frontendE2eBlockedBy
+        }
+      ]
+"@
     $rustVerificationEvidenceStatus = if ($AvailableMissingExitTarget) {
         @'
 ,
@@ -132,6 +173,12 @@ $nativeTestBlockedBy
           "state": "planned",
           "reason": "fixture"
 $databaseServiceDecisionBlockedBy
+        },
+        {
+          "requirement": "toolchain_provisioning_decision",
+          "state": "planned",
+          "reason": "fixture"
+$toolchainDecisionBlockedBy
         },
         {
           "requirement": "native_bazel_database_test",
@@ -169,16 +216,16 @@ $rustVerificationEvidenceStatus
       "state": "planned",
       "owner": "build-platform",
       "reason": "fixture",
-      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "exit_evidence_requirements": $frontendE2eEvidenceRequirements,
       "blocking_approval_gates": ["browser_runtime_provisioning"]
-$nativeTestEvidenceStatus
+$frontendE2eEvidenceStatus
     },
     {
       "bazel_target": "//:migration_verification",
       "state": "planned",
       "owner": "build-platform",
       "reason": "fixture",
-      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test", "toolchain_provisioning_decision"],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
 $databaseEvidenceStatus
     }
@@ -194,7 +241,7 @@ $deletedExitTargetRegistryEntry
       "owner": "build-platform",
       "reason": "fixture",
       "exit_evidence_requirements": $dependencyScaExitEvidenceRequirements,
-      "blocking_approval_gates": ["external_advisory_collection"]
+      "blocking_approval_gates": $dependencyScaBlockingApprovalGates
 $dependencyScaEvidenceStatus
     },
     {
@@ -220,16 +267,16 @@ $rustVerificationEvidenceStatus
       "state": "planned",
       "owner": "build-platform",
       "reason": "fixture",
-      "exit_evidence_requirements": ["native_bazel_test_target"],
+      "exit_evidence_requirements": $frontendE2eEvidenceRequirements,
       "blocking_approval_gates": ["browser_runtime_provisioning"]
-$nativeTestEvidenceStatus
+$frontendE2eEvidenceStatus
     },
     {
       "bazel_target": "//:migration_verification",
       "state": "planned",
       "owner": "build-platform",
       "reason": "fixture",
-      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
+      "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test", "toolchain_provisioning_decision"],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
 $databaseEvidenceStatus
     }

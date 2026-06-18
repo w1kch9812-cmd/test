@@ -375,6 +375,12 @@ toolchain provisioning, database service provisioning, and service orchestration
 ratchet checker now rejects approval gate `decision_reference` values unless they point to an
 existing tracked file under `docs/`, preventing free-text decision drift.
 
+Eighth follow-up status: exit target blocking gates are now evidence-backed. Every
+`blocking_approval_gates` entry must be covered by at least one planned `evidence_status.blocked_by`
+approval blocker. This forced migration and service e2e exit targets to declare the missing
+toolchain/database provisioning evidence requirements explicitly instead of carrying ungrounded
+blocking gates.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.

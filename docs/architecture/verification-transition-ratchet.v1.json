@@ -190,7 +190,8 @@
       "reason": "Database transitions require native Bazel DB tests and resolved DB/toolchain provisioning decisions.",
       "required_exit_evidence_requirements": [
         "database_service_provisioning_decision",
-        "native_bazel_database_test"
+        "native_bazel_database_test",
+        "toolchain_provisioning_decision"
       ],
       "required_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "external_collection_approval_required": false
@@ -211,8 +212,10 @@
       "owner": "build-platform",
       "reason": "Service e2e transitions require native Bazel service orchestration evidence and resolved provisioning decisions.",
       "required_exit_evidence_requirements": [
+        "database_service_provisioning_decision",
         "native_bazel_service_orchestration",
-        "service_orchestration_provisioning_decision"
+        "service_orchestration_provisioning_decision",
+        "toolchain_provisioning_decision"
       ],
       "required_approval_gates": [
         "toolchain_provisioning",
@@ -387,7 +390,8 @@
       "reason": "Migration verification exit target is blocked until DB provisioning and sqlx migration execution are native Bazel tests.",
       "exit_evidence_requirements": [
         "database_service_provisioning_decision",
-        "native_bazel_database_test"
+        "native_bazel_database_test",
+        "toolchain_provisioning_decision"
       ],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "evidence_status": [
@@ -396,6 +400,12 @@
           "state": "planned",
           "reason": "Migration retirement still needs an explicit native Bazel database service provisioning decision.",
           "blocked_by": ["database_service_provisioning_decision_required"]
+        },
+        {
+          "requirement": "toolchain_provisioning_decision",
+          "state": "planned",
+          "reason": "Migration retirement still needs an explicit toolchain provisioning decision.",
+          "blocked_by": ["toolchain_provisioning_decision_required"]
         },
         {
           "requirement": "native_bazel_database_test",
@@ -411,8 +421,10 @@
       "owner": "build-platform",
       "reason": "Service e2e exit target is blocked until service orchestration is represented as a native Bazel test.",
       "exit_evidence_requirements": [
+        "database_service_provisioning_decision",
         "native_bazel_service_orchestration",
-        "service_orchestration_provisioning_decision"
+        "service_orchestration_provisioning_decision",
+        "toolchain_provisioning_decision"
       ],
       "blocking_approval_gates": [
         "toolchain_provisioning",
@@ -420,6 +432,12 @@
         "service_orchestration_provisioning"
       ],
       "evidence_status": [
+        {
+          "requirement": "database_service_provisioning_decision",
+          "state": "planned",
+          "reason": "Service e2e retirement still needs an explicit native Bazel database service provisioning decision.",
+          "blocked_by": ["database_service_provisioning_decision_required"]
+        },
         {
           "requirement": "native_bazel_service_orchestration",
           "state": "planned",
@@ -431,6 +449,12 @@
           "state": "planned",
           "reason": "Service e2e retirement still needs an explicit service orchestration provisioning decision.",
           "blocked_by": ["service_orchestration_provisioning_decision_required"]
+        },
+        {
+          "requirement": "toolchain_provisioning_decision",
+          "state": "planned",
+          "reason": "Service e2e retirement still needs an explicit toolchain provisioning decision.",
+          "blocked_by": ["toolchain_provisioning_decision_required"]
         }
       ]
     }
@@ -511,7 +535,8 @@
       "exit_state": "blocked",
       "exit_evidence_requirements": [
         "database_service_provisioning_decision",
-        "native_bazel_database_test"
+        "native_bazel_database_test",
+        "toolchain_provisioning_decision"
       ],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
@@ -531,7 +556,8 @@
       "exit_state": "blocked",
       "exit_evidence_requirements": [
         "database_service_provisioning_decision",
-        "native_bazel_database_test"
+        "native_bazel_database_test",
+        "toolchain_provisioning_decision"
       ],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "runner_script": "run_ci_transition_task.sh",
@@ -550,8 +576,10 @@
       "exit_target": "//:service_e2e_verification",
       "exit_state": "blocked",
       "exit_evidence_requirements": [
+        "database_service_provisioning_decision",
         "native_bazel_service_orchestration",
-        "service_orchestration_provisioning_decision"
+        "service_orchestration_provisioning_decision",
+        "toolchain_provisioning_decision"
       ],
       "blocking_approval_gates": [
         "toolchain_provisioning",

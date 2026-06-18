@@ -195,3 +195,8 @@
   - Require every approval gate `decision_reference` to point to a tracked repository document instead of free text.
   - Verify the referenced document exists and is inside `docs/`.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 30: Bind Blocking Gates To Planned Evidence Blockers**
+  - Require every exit target `blocking_approval_gates` entry to appear in at least one planned `evidence_status.blocked_by` approval blocker.
+  - Keep implementation blockers separate from approval blockers.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

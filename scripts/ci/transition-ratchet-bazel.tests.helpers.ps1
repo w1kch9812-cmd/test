@@ -105,6 +105,7 @@ function Write-MinimalRepo {
         [switch] $MissingRegisteredPlannedEvidenceBlocker,
         [switch] $DuplicatePlannedEvidenceBlockerRegistry,
         [switch] $MissingPlannedEvidenceBlockedBy,
+        [switch] $ExtraUncoveredExitBlockingGate,
         [switch] $MissingExitEvidenceRequirementRegistry,
         [switch] $MissingRegisteredExitEvidenceRequirement,
         [switch] $DuplicateExitEvidenceRequirementRegistry
