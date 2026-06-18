@@ -11,8 +11,7 @@ Current rescan status:
   note update.
 - The local branch may be ahead of `origin/main` when this note is edited; that is commit state,
   not an uncommitted-code risk.
-- Untracked verification-task-registry draft files exist; this audit note does not include or
-  modify those drafts.
+- The verification-task-registry draft has been promoted into a committed guardrail.
 - No public-data collection was started.
 - The main product/Catalog ownership guardrails pass.
 - The 1500-line hard gate passes.
@@ -29,6 +28,9 @@ Current rescan status:
   and wired into Bazel, lefthook, and CI.
 - Coverage transition configuration is now governed by `tarpaulin.toml`; the transition runner
   may only invoke `cargo tarpaulin --workspace`.
+- Verification guardrail execution metadata is now governed by
+  `docs/architecture/verification-task-registry.v1.json`; the checker rejects unregistered
+  Bazel guardrail targets, root guardrail suite labels, and `run_guardrail_task.sh` cases.
 
 쉽게 말하면, 현재 프로젝트가 망가진 상태는 아닙니다. 이번 전수조사에서 발견된
 검증/생성물 관리 빈틈은 guardrail로 막았고, 남은 일은 planned transition을 실제
@@ -96,7 +98,7 @@ The following checks passed during this audit:
 
 | Check | Result |
 |---|---|
-| `git status --short --branch --ahead-behind` | tracked code clean before this audit note update; untracked verification-task-registry draft files present |
+| `git status --short --branch --ahead-behind` | tracked code clean before this audit note update |
 | `check-platform-core-boundary.ps1` | `platform-core-boundary-ok entries=46 contracts=5 gates=6 legacy_schema_allowances=11` |
 | `check-platform-core-dependency-boundary.ps1` | `platform-core-dependency-boundary-ok manifests=26 allowances=0 source_allowances=0` |
 | `check-pnu-anchor-pbf-marker-contract.ps1` | `pnu-anchor-pbf-marker-contract-ok files=60` |
@@ -114,7 +116,9 @@ The following checks passed during this audit:
 | `check-generated-artifact-registry.tests.ps1` | `generated-artifact-registry-tests-ok` |
 | `check-coverage-transition-ssot.ps1` | `coverage-transition-ssot-ok` |
 | `check-coverage-transition-ssot.tests.ps1` | `coverage-transition-ssot-tests-ok` |
-| `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 28/28 passed |
+| `check-verification-task-registry.ps1` | `verification-task-registry-ok tasks=32` |
+| `check-verification-task-registry.tests.ps1` | `verification-task-registry-tests-ok` |
+| `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 32/32 passed |
 | `bash scripts/ci/run-bazel.sh test //:workspace_typecheck //:workspace_hermetic_typechecks //:frontend_unit_test --config=ci --verbose_failures` | 5/5 passed |
 | `bash scripts/ci/run-bazel.sh test //:rust_format_verification //:rust_check_verification //:rust_lint_verification --config=ci --verbose_failures` | 27/27 passed |
 | `pnpm exec biome check .` | `Checked 260 files. No fixes applied.` |
@@ -348,6 +352,12 @@ Fourth follow-up status: coverage transition configuration is now guarded as SSO
 exclude patterns from `tarpaulin.toml`; the runner may only invoke `cargo tarpaulin --workspace`.
 The new coverage SSOT guardrail is wired into Bazel, lefthook, and CI.
 
+Fifth follow-up status: guardrail execution metadata is now registry-driven. The
+`verification-task-registry` lists 32 guardrail tasks and validates Bazel target definitions,
+root guardrail suites, `run_guardrail_task.sh`, lefthook, and CI projections. The checker is
+bidirectional for Bazel and runner projections: unregistered Bazel guardrail targets,
+root guardrail suite labels, and runner cases are rejected.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
@@ -379,6 +389,8 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
 - The uncached/external guardrail-tag contract is itself enforced by the Bazel transition ratchet.
 - Coverage transition configuration is centralized in `tarpaulin.toml` instead of duplicated in
   shell runner flags.
+- Guardrail execution metadata is centralized in `verification-task-registry.v1.json`, with
+  bidirectional checks preventing unregistered Bazel/runner guardrail projections.
 
 It is not yet a complete SSS final form because:
 

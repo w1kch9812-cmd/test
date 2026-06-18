@@ -3,6 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make guardrail execution metadata single-source by introducing a `verification-task-registry` that enforces Bazel, lefthook, and GitHub Actions wiring from one declarative policy document.
+The registry must be bidirectional: every registered task must be projected, and every Bazel
+guardrail target, root guardrail suite label, and `run_guardrail_task.sh` case must be registered.
 
 **Architecture:** Add `docs/architecture/verification-task-registry.v1.json` as the authoritative task registry. Add a PowerShell guardrail that reads the registry and validates the existing projections in `tools/bazel/BUILD.bazel`, root `BUILD.bazel`, `tools/bazel/run_guardrail_task.sh`, `lefthook.yml`, and `.github/workflows/ci.yml`.
 
@@ -84,6 +86,7 @@ foreach ($task in @($registry.tasks)) {
 ```
 
 Then validate the registry against Bazel, lefthook, and CI text projections.
+The checker also rejects orphan projections so guardrails cannot be added beside the registry.
 
 - [x] **Step 3: Run tests**
 
@@ -140,3 +143,10 @@ Verified on 2026-06-18:
 - `check-verification-task-registry.ps1` passes with `tasks=32`.
 - `bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_verification_task_registry //tools/bazel:guardrail_verification_task_registry_tests //:guardrails_all --config=ci --verbose_failures`
   passed with 32/32 guardrail targets.
+
+Follow-up hardening verified on 2026-06-18:
+
+- Added tests for unregistered Bazel guardrail targets, root guardrail suite labels, and
+  `run_guardrail_task.sh` cases.
+- The checker now rejects those orphan projections before validating per-task wiring.
+- The same Bazel command passed again with 32/32 guardrail targets.

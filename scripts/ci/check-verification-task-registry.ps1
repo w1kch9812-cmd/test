@@ -123,6 +123,54 @@ function Assert-LefthookProjection {
     }
 }
 
+function New-StringSet {
+    param([string[]] $Values)
+
+    $set = @{}
+    foreach ($value in $Values) {
+        $set[$value] = $true
+    }
+    $set
+}
+
+function Assert-BazelGuardrailTargetsAreRegistered {
+    param([string] $Content, [hashtable] $RegisteredTargets)
+
+    $pattern = '(?ms)transition_shell_test\(\s*name\s*=\s*"(?<name>guardrail_[^"]+)".*?script_args\s*=\s*\[\s*"(?<arg>[^"]+)"\s*\]'
+    foreach ($match in [regex]::Matches($Content, $pattern)) {
+        $label = "//tools/bazel:$($match.Groups["name"].Value)"
+        if (!$RegisteredTargets.ContainsKey($label)) {
+            throw "Bazel guardrail target is not registered: $label"
+        }
+    }
+}
+
+function Assert-RootGuardrailSuitesAreRegistered {
+    param([string] $Content, [hashtable] $RegisteredTargets)
+
+    $suitePattern = '(?ms)test_suite\(\s*name\s*=\s*"guardrails_(?:fast|policy|policy_tests)".*?tests\s*=\s*\[(?<body>.*?)\]'
+    foreach ($suite in [regex]::Matches($Content, $suitePattern)) {
+        $body = $suite.Groups["body"].Value
+        foreach ($label in [regex]::Matches($body, '"(?<label>//tools/bazel:guardrail_[^"]+)"')) {
+            $target = $label.Groups["label"].Value
+            if (!$RegisteredTargets.ContainsKey($target)) {
+                throw "root guardrail suite has unregistered target: $target"
+            }
+        }
+    }
+}
+
+function Assert-RunGuardrailCasesAreRegistered {
+    param([string] $Content, [hashtable] $RegisteredIds)
+
+    foreach ($match in [regex]::Matches($Content, '(?m)^\s{2}(?<id>[a-z][a-z0-9-]*)\)\s*$')) {
+        $id = $match.Groups["id"].Value
+        if (!$RegisteredIds.ContainsKey($id)) {
+            throw "run_guardrail_task.sh has unregistered task case: $id"
+        }
+    }
+}
+
 $registryPath = "docs/architecture/verification-task-registry.v1.json"
 $registryFile = Resolve-RepoPath -RelativePath $registryPath
 if (!(Test-Path -LiteralPath $registryFile -PathType Leaf)) {
@@ -143,6 +191,8 @@ if ($tasks.Count -eq 0) {
 }
 Assert-Unique -Values @($tasks | ForEach-Object { [string] $_.id }) -Message "verification task id"
 Assert-Unique -Values @($tasks | ForEach-Object { [string] $_.bazel_target }) -Message "verification task bazel_target"
+$registeredIds = New-StringSet -Values @($tasks | ForEach-Object { [string] $_.id })
+$registeredTargets = New-StringSet -Values @($tasks | ForEach-Object { [string] $_.bazel_target })
 
 $toolsBazelBuild = Read-TextFile -RelativePath "tools/bazel/BUILD.bazel"
 $rootBuild = Read-TextFile -RelativePath "BUILD.bazel"
@@ -151,6 +201,10 @@ $lefthook = Read-TextFile -RelativePath "lefthook.yml"
 $ciWorkflow = Read-TextFile -RelativePath ".github/workflows/ci.yml"
 $preCommit = Get-YamlTopLevelSection -Content $lefthook -Name "pre-commit"
 $prePush = Get-YamlTopLevelSection -Content $lefthook -Name "pre-push"
+
+Assert-BazelGuardrailTargetsAreRegistered -Content $toolsBazelBuild -RegisteredTargets $registeredTargets
+Assert-RootGuardrailSuitesAreRegistered -Content $rootBuild -RegisteredTargets $registeredTargets
+Assert-RunGuardrailCasesAreRegistered -Content $runGuardrailTask -RegisteredIds $registeredIds
 
 $taskCount = 0
 foreach ($task in $tasks) {

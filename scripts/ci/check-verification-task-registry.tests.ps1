@@ -40,7 +40,10 @@ function Write-MinimalRepo {
         [switch] $MissingRootSuiteLabel,
         [switch] $MissingRunGuardrailCase,
         [switch] $MissingLefthookPrePush,
-        [switch] $MissingCiStep
+        [switch] $MissingCiStep,
+        [switch] $ExtraBazelTarget,
+        [switch] $ExtraRootSuiteLabel,
+        [switch] $ExtraRunGuardrailCase
     )
 
     if (!$MissingRegistry) {
@@ -102,6 +105,19 @@ transition_shell_test(
 )
 '@
     }
+    $orphanTarget = if ($ExtraBazelTarget) {
+        @'
+
+transition_shell_test(
+    name = "guardrail_orphan",
+    srcs = ["run_guardrail_task.sh"],
+    script_args = ["orphan-guardrail"],
+    tags = GUARDRAIL_TRANSITION_TAGS,
+)
+'@
+    } else {
+        ""
+    }
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @"
 load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
@@ -114,14 +130,17 @@ GUARDRAIL_TRANSITION_TAGS = [
 ]
 
 $alphaTarget
+$orphanTarget
 "@
 
     $policySuiteAlpha = if ($MissingRootSuiteLabel) { "" } else { '        "//tools/bazel:guardrail_alpha",' }
+    $orphanSuiteLabel = if ($ExtraRootSuiteLabel) { '        "//tools/bazel:guardrail_orphan",' } else { "" }
     Write-File -Root $Root -RelativePath "BUILD.bazel" -Content @"
 test_suite(
     name = "guardrails_policy",
     tests = [
 $policySuiteAlpha
+$orphanSuiteLabel
     ],
 )
 
@@ -145,9 +164,19 @@ test_suite(
     ;;
 '@
     }
+    $orphanRunnerCase = if ($ExtraRunGuardrailCase) {
+        @'
+  orphan-guardrail)
+    run_pwsh scripts/ci/check-alpha.ps1 -Root "$repo_root"
+    ;;
+'@
+    } else {
+        ""
+    }
     Write-File -Root $Root -RelativePath "tools\bazel\run_guardrail_task.sh" -Content @"
 case "`$task" in
 $runnerCase
+$orphanRunnerCase
 esac
 "@
 
@@ -268,6 +297,24 @@ try {
     $missingCiStep = Invoke-Checker -Root $missingCiStepRoot
     Assert-Equals $missingCiStep.ExitCode 1 "missing CI step exit code mismatch"
     Assert-Contains $missingCiStep.Output "CI workflow is missing"
+
+    $extraBazelTargetRoot = Join-Path $TempRoot "extra-bazel-target"
+    Write-MinimalRepo -Root $extraBazelTargetRoot -ExtraBazelTarget
+    $extraBazelTarget = Invoke-Checker -Root $extraBazelTargetRoot
+    Assert-Equals $extraBazelTarget.ExitCode 1 "extra Bazel target exit code mismatch"
+    Assert-Contains $extraBazelTarget.Output "Bazel guardrail target is not registered"
+
+    $extraRootSuiteLabelRoot = Join-Path $TempRoot "extra-root-suite-label"
+    Write-MinimalRepo -Root $extraRootSuiteLabelRoot -ExtraRootSuiteLabel
+    $extraRootSuiteLabel = Invoke-Checker -Root $extraRootSuiteLabelRoot
+    Assert-Equals $extraRootSuiteLabel.ExitCode 1 "extra root suite label exit code mismatch"
+    Assert-Contains $extraRootSuiteLabel.Output "root guardrail suite has unregistered target"
+
+    $extraRunGuardrailCaseRoot = Join-Path $TempRoot "extra-run-guardrail-case"
+    Write-MinimalRepo -Root $extraRunGuardrailCaseRoot -ExtraRunGuardrailCase
+    $extraRunGuardrailCase = Invoke-Checker -Root $extraRunGuardrailCaseRoot
+    Assert-Equals $extraRunGuardrailCase.ExitCode 1 "extra runner case exit code mismatch"
+    Assert-Contains $extraRunGuardrailCase.Output "run_guardrail_task.sh has unregistered task case"
 
     Write-Host "verification-task-registry-tests-ok"
 } finally {
