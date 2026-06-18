@@ -193,6 +193,18 @@ try {
     Assert-Equals $missingRunnerTaskCase.ExitCode 1 "missing runner task case exit code mismatch"
     Assert-Contains $missingRunnerTaskCase.Output "runner script missing task case"
 
+    $missingGuardrailNoCacheTagRoot = Join-Path $TempRoot "missing-guardrail-no-cache-tag"
+    Write-MinimalRepo -Root $missingGuardrailNoCacheTagRoot -MissingGuardrailNoCacheTag
+    $missingGuardrailNoCacheTag = Invoke-Checker -Root $missingGuardrailNoCacheTagRoot
+    Assert-Equals $missingGuardrailNoCacheTag.ExitCode 1 "missing guardrail no-cache tag exit code mismatch"
+    Assert-Contains $missingGuardrailNoCacheTag.Output "GUARDRAIL_TRANSITION_TAGS missing 'no-cache'"
+
+    $missingGuardrailExternalTagRoot = Join-Path $TempRoot "missing-guardrail-external-tag"
+    Write-MinimalRepo -Root $missingGuardrailExternalTagRoot -MissingGuardrailExternalTag
+    $missingGuardrailExternalTag = Invoke-Checker -Root $missingGuardrailExternalTagRoot
+    Assert-Equals $missingGuardrailExternalTag.ExitCode 1 "missing guardrail external tag exit code mismatch"
+    Assert-Contains $missingGuardrailExternalTag.Output "GUARDRAIL_TRANSITION_TAGS missing 'external'"
+
     $invalidExitTargetRoot = Join-Path $TempRoot "invalid-exit-target"
     Write-MinimalRepo -Root $invalidExitTargetRoot -InvalidExitTarget
     $invalidExitTarget = Invoke-Checker -Root $invalidExitTargetRoot

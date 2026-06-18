@@ -1,5 +1,14 @@
 $actualTargetMetadata = Get-BuildTransitionTargetMetadata
 $actualBuildTargetSet = Get-BuildTargetSet
+$toolsBazelBuildContent = Read-TextFile -RelativePath "tools/bazel/BUILD.bazel"
+$guardrailTransitionTags = @(Get-NamedListLiteralValues `
+    -Content $toolsBazelBuildContent `
+    -Name "GUARDRAIL_TRANSITION_TAGS")
+foreach ($requiredGuardrailTag in @("manual", "local", "no-sandbox", "no-cache", "external")) {
+    if (!(Test-ContainsValue -Values $guardrailTransitionTags -Expected $requiredGuardrailTag)) {
+        throw "GUARDRAIL_TRANSITION_TAGS missing '$requiredGuardrailTag'"
+    }
+}
 $actualTargets = @($actualTargetMetadata.Keys | Sort-Object)
 Assert-Unique -Values $actualTargets -Message "Bazel transition target"
 $actualTargetSet = @{}

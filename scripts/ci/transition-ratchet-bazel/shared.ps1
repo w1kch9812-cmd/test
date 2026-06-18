@@ -137,6 +137,20 @@ function Get-ListLiteralValues {
     $values
 }
 
+function Get-NamedListLiteralValues {
+    param([string] $Content, [string] $Name)
+
+    $escapedName = [regex]::Escape($Name)
+    if ($Content -notmatch "(?ms)^\s*$escapedName\s*=\s*\[(.*?)\]") {
+        throw "missing list assignment: $Name"
+    }
+    $values = @()
+    foreach ($match in [regex]::Matches($Matches[1], '"([^"]+)"')) {
+        $values += [string] $match.Groups[1].Value
+    }
+    $values
+}
+
 function Test-IsIgnoredPath {
     param([string] $RelativePath)
 

@@ -1,5 +1,15 @@
-    Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
+    $guardrailNoCacheTag = if ($MissingGuardrailNoCacheTag) { "" } else { '    "no-cache",' }
+    $guardrailExternalTag = if ($MissingGuardrailExternalTag) { "" } else { '    "external",' }
+    Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @"
 load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
+
+GUARDRAIL_TRANSITION_TAGS = [
+    "manual",
+    "local",
+    "no-sandbox",
+$guardrailNoCacheTag
+$guardrailExternalTag
+]
 
 transition_shell_test(
     name = "ci_node_audit_transition",
@@ -30,7 +40,7 @@ transition_shell_test(
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["migration-v001-full"],
 )
-'@
+"@
 
     $rustVerificationTarget = if ($AvailableMissingExitTarget) {
         ""

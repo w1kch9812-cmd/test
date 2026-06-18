@@ -66,6 +66,8 @@ function Write-MinimalRepo {
         [switch] $MissingRunnerCommandGuard,
         [switch] $MissingRunnerServiceGuard,
         [switch] $MissingRunnerTaskCase,
+        [switch] $MissingGuardrailNoCacheTag,
+        [switch] $MissingGuardrailExternalTag,
         [switch] $InvalidExitTarget,
         [switch] $TransitionExitTarget,
         [switch] $RetiredRustfmtTransition,

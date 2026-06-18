@@ -302,7 +302,9 @@ planned until explicit advisory collection approval exists.
 
 Third follow-up status: guardrail transition targets are now tagged `no-cache` and `external`.
 This prevents repo-scanning guardrails from reporting cached success after checker or policy
-files change.
+files change. The transition ratchet checker now also enforces those tags in
+`GUARDRAIL_TRANSITION_TAGS`, so the cache-bypass contract is protected by tests instead of
+remaining a convention.
 
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
@@ -332,6 +334,7 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
   evidence cannot be mistaken for transition retirement.
 - Guardrail transition targets are uncached/external, so policy/checker edits rerun the
   guardrails instead of relying on stale Bazel test results.
+- The uncached/external guardrail-tag contract is itself enforced by the Bazel transition ratchet.
 
 It is not yet a complete SSS final form because:
 
