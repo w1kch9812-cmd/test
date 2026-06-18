@@ -249,7 +249,13 @@ foreach ($entry in $policyEntries) {
     $category = Get-RequiredString -Object $entry -Name "category" -Context "transition policy $target"
     [void] (Get-RequiredString -Object $entry -Name "owner" -Context "transition policy $target")
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "transition policy $target")
-    [void] (Get-RequiredString -Object $entry -Name "exit_target" -Context "transition policy $target")
+    $exitTarget = Get-RequiredString -Object $entry -Name "exit_target" -Context "transition policy $target"
+    if ($exitTarget -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+$') {
+        throw "transition policy exit_target must be a Bazel label: $target -> $exitTarget"
+    }
+    if ($exitTarget -match '_transition$') {
+        throw "transition policy exit_target must not be another transition: $target -> $exitTarget"
+    }
     $approvalGates = @(Get-RequiredStringArray `
         -Object $entry `
         -Name "approval_gates" `

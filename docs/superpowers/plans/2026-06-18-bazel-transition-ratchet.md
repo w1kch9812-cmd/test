@@ -108,3 +108,8 @@
   - Delete `tools/bazel/run_pnpm_task.sh` after all frontend transition wrappers have moved to retired policy.
   - Verify no BUILD, CI, hook, or package script still references the runner.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 16: Type Transition Exit Targets**
+  - Require every transition `exit_target` to be a syntactically valid Bazel label.
+  - Reject `exit_target` values that point to another `_transition` target.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

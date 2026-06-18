@@ -59,6 +59,8 @@ function Write-MinimalRepo {
         [switch] $UnknownApprovalGate,
         [switch] $MissingAdvisoryApprovalGate,
         [switch] $MissingBrowserRuntimeGate,
+        [switch] $InvalidExitTarget,
+        [switch] $TransitionExitTarget,
         [switch] $RetiredRustfmtTransition,
         [switch] $UntrackedCiTransition,
         [switch] $UnreferencedTransitionPolicy
@@ -96,6 +98,7 @@ transition_shell_test(
     $nodeAuditApprovalGates = if ($MissingAdvisoryApprovalGate) { "[]" } elseif ($UnknownApprovalGate) { '["typo_gate"]' } else { '["external_advisory_collection"]' }
     $approvalGatesLine = if ($MissingApprovalGates) { "" } else { "`"approval_gates`": []," }
     $frontendE2eApprovalGates = if ($MissingBrowserRuntimeGate) { "[]" } else { '["browser_runtime_provisioning"]' }
+    $rustCheckExitTarget = if ($InvalidExitTarget) { "rust_verification" } elseif ($TransitionExitTarget) { "//tools/bazel:next_transition" } else { "//:rust_verification" }
     $nodeAuditPolicy = if ($OmitNodeAuditPolicy) {
         ""
     } else {
@@ -152,7 +155,7 @@ $nodeAuditPolicy$stalePolicy    {
       "category": "rust-verification",
       "owner": "build-platform",
       "reason": "cargo check transition until Rust check is a native Bazel rule target.",
-      "exit_target": "//:rust_verification",
+      "exit_target": "$rustCheckExitTarget",
       "sunset": "$sunset",
 $approvalGatesLine
       "external_collection_approval_required": false
@@ -259,6 +262,18 @@ try {
     $missingBrowserRuntimeGate = Invoke-Checker -Root $missingBrowserRuntimeGateRoot
     Assert-Equals $missingBrowserRuntimeGate.ExitCode 1 "missing browser runtime gate exit code mismatch"
     Assert-Contains $missingBrowserRuntimeGate.Output "frontend e2e transition must declare browser runtime provisioning gate"
+
+    $invalidExitTargetRoot = Join-Path $TempRoot "invalid-exit-target"
+    Write-MinimalRepo -Root $invalidExitTargetRoot -InvalidExitTarget
+    $invalidExitTarget = Invoke-Checker -Root $invalidExitTargetRoot
+    Assert-Equals $invalidExitTarget.ExitCode 1 "invalid exit target exit code mismatch"
+    Assert-Contains $invalidExitTarget.Output "transition policy exit_target must be a Bazel label"
+
+    $transitionExitTargetRoot = Join-Path $TempRoot "transition-exit-target"
+    Write-MinimalRepo -Root $transitionExitTargetRoot -TransitionExitTarget
+    $transitionExitTarget = Invoke-Checker -Root $transitionExitTargetRoot
+    Assert-Equals $transitionExitTarget.ExitCode 1 "transition exit target exit code mismatch"
+    Assert-Contains $transitionExitTarget.Output "transition policy exit_target must not be another transition"
 
     $retiredRustfmtRoot = Join-Path $TempRoot "retired-rustfmt"
     Write-MinimalRepo -Root $retiredRustfmtRoot -RetiredRustfmtTransition
