@@ -1,0 +1,51 @@
+{
+  "service_call_policies": [
+    {
+      "id": "gongzzang_to_platform_core_catalog",
+      "source_service": "gongzzang-api",
+      "target_service": "platform-core-api",
+      "purpose": "Catalog published contract consumption without direct Platform Core database access.",
+      "current_auth_policy": {
+        "method": "service_token",
+        "env": "PLATFORM_CORE_SERVICE_TOKEN"
+      },
+      "target_auth_policy": {
+        "method": "mtls_or_short_lived_service_identity",
+        "service_identity": "gongzzang-api"
+      },
+      "allowed_contracts": [
+        "platform-core.catalog.parcel_by_pnu",
+        "platform-core.catalog.vector_tile_manifest",
+        "platform-core.catalog.marker_tile_contract"
+      ],
+      "required_resilience": {
+        "timeout_required": true,
+        "circuit_breaker_required": true,
+        "quota_policy_required": true
+      }
+    },
+    {
+      "id": "platform_core_to_gongzzang_events",
+      "source_service": "platform-core-outbox-publisher",
+      "target_service": "gongzzang-web",
+      "purpose": "Consumer cache invalidation and PNU anchor projection import events.",
+      "current_auth_policy": {
+        "method": "shared_webhook_secret",
+        "env": "PLATFORM_CORE_WEBHOOK_SECRET"
+      },
+      "target_auth_policy": {
+        "method": "mtls_or_signed_event_envelope",
+        "service_identity": "platform-core-outbox-publisher"
+      },
+      "allowed_contracts": [
+        "catalog.industrial_complex.gold_pointer.published.v1",
+        "catalog.parcel_marker_anchor.snapshot.published.v1"
+      ],
+      "required_resilience": {
+        "idempotency_required": true,
+        "ack_contract_required": true,
+        "cache_invalidation_effect_required": true
+      }
+    }
+  ]
+}

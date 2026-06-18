@@ -6,12 +6,13 @@
 
 | 파일 | 내용 | 상태 |
 |------|------|------|
-| data-flow.md | 사용자 요청 → Gongzzang API → Platform Core contract / Gongzzang DB → 응답 | TODO |
-| layers.md | Clean Architecture 계층 + 의존성 방향 | TODO |
-| mcp-vs-api.md | 에이전트 경로 vs 프로덕션 경로 상세 | TODO |
-| geo-pipeline.md | PostGIS 인덱싱·타일·공간쿼리 파이프라인 | TODO |
-| caching.md | Redis 레이어, Platform Core contract cache, 법령 캐시 | TODO |
-| observability.md | Sentry + OTel + 로깅 | TODO |
+| data-flow.md | 사용자 요청 → Gongzzang API → Platform Core contract / Gongzzang DB → 응답 | Active |
+| layers.md | Clean Architecture 계층 + 의존성 방향 | Active |
+| mcp-vs-api.md | 에이전트 경로 vs 프로덕션 경로 상세 | Active |
+| geo-pipeline.md | PostGIS 인덱싱·타일·공간쿼리 파이프라인 | Active |
+| caching.md | Redis 레이어, Platform Core contract cache, 법령 캐시 | Active |
+| observability.md | Sentry + OTel + 로깅 | Active |
+| traffic-auth-policy-registry/ | Traffic/Auth 정책 fragment SSOT. `traffic-auth-policy-registry.v1.json`은 생성 aggregate | Active |
 
 ## 현재 확정된 원칙
 

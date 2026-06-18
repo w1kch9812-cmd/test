@@ -1,0 +1,50 @@
+{
+  "exposure_classes": [
+    {
+      "class": "public_derived",
+      "description": "Browser-visible public surface for minimized data that is safe to treat as non-confidential.",
+      "browser_visible": true,
+      "direct_browser_access": "allowed",
+      "confidentiality_guarantee": "none",
+      "required_controls": [
+        "data_minimization",
+        "rate_limit",
+        "response_budget_or_aggregate_only",
+        "abuse_telemetry"
+      ],
+      "forbidden_data_classes": [
+        "raw_listing_detail",
+        "private_listing",
+        "business_verified_listing_detail",
+        "contact_data",
+        "raw_platform_core_catalog",
+        "bulk_listing_export"
+      ]
+    },
+    {
+      "class": "authenticated_user",
+      "description": "Browser-visible user API that requires a valid session and per-request authorization.",
+      "browser_visible": true,
+      "direct_browser_access": "session_required",
+      "confidentiality_guarantee": "authorization_enforced_per_request",
+      "required_controls": ["session", "authorization", "audit_log", "rate_limit"],
+      "forbidden_for_anonymous": true
+    },
+    {
+      "class": "privileged",
+      "description": "Staff, broker, owner, or business-verified workflow surface requiring stronger role or entitlement checks.",
+      "browser_visible": true,
+      "direct_browser_access": "session_and_role_required",
+      "confidentiality_guarantee": "authorization_enforced_per_request",
+      "required_controls": ["session", "role_or_entitlement", "audit_log", "abuse_detection"]
+    },
+    {
+      "class": "service_to_service",
+      "description": "Internal service API surface that must not be callable by arbitrary browsers.",
+      "browser_visible": false,
+      "direct_browser_access": "forbidden",
+      "required_controls": ["service_identity", "allow_list", "audit_log"],
+      "target_required_controls": ["mtls_or_short_lived_service_identity"]
+    }
+  ]
+}

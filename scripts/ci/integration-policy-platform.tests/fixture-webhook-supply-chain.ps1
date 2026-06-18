@@ -1,0 +1,201 @@
+    Write-File -Root $Root -RelativePath "docs\architecture\platform-integration\webhook-policy.v1.json" -Content @'
+{
+  "schema_version": "gongzzang.platform_integration.webhook_policy.v1",
+  "repo_slug": "gongzzang",
+  "receiver": {
+    "accepted_events": [
+      "catalog.industrial_complex.gold_pointer.published.v1",
+      "catalog.parcel_marker_anchor.snapshot.published.v1"
+    ],
+    "runtime_safety": {
+      "idempotency_key": "event_id",
+      "replay_ledger": "apps/web/lib/platform-core/event-inbox.ts",
+      "duplicate_policy": "ack_without_side_effects",
+      "dead_letter_queue": "redis_event_inbox_dead_letter_status",
+      "schema_compatibility": "accepted_events_must_have_zod_handler"
+    }
+  }
+}
+'@
+    $provenanceRequired = if ($OmitSupplyChainProvenance) { "false" } else { "true" }
+    $loadTestCapacityAdmissionJson = if ($OmitLoadEvidenceAdmission) {
+        ""
+    } else {
+        @'
+    ,
+    "load_test_capacity_admission": {
+      "required": true,
+      "verification_script": "scripts/ci/verify-load-test-capacity-evidence.ps1",
+      "evidence_artifact_name": "load-test-capacity-evidence",
+      "workflow_input_run_id": "load-evidence-run-id",
+      "workflow_input_artifact_name": "load-evidence-artifact-name",
+      "required_scenarios": ["api-read-mix", "map-marker-mix", "platform-core-events"],
+      "required_environments": ["perf", "staging"],
+      "target_host_by_environment": {
+        "perf": "perf.gongzzang.internal",
+        "staging": "staging.gongzzang.internal"
+      },
+      "forbidden_environments": ["local", "ci"],
+      "required_classification": "healthy",
+      "forbidden": [
+        "production_deploy_without_perf_or_staging_load_evidence",
+        "local_or_ci_smoke_used_as_launch_capacity_evidence",
+        "capacity_evidence_from_production_target"
+      ]
+    }
+'@
+    }
+    $productionEdgeAdmissionJson = if ($OmitProductionEdgeAdmission) {
+        ""
+    } else {
+        @'
+    ,
+    "edge_admission": {
+      "required": true,
+      "policy_source": "docs/architecture/traffic-auth-policy-registry.v1.json",
+      "generated_waf_manifest": "infrastructure/security/aws-wafv2-edge-policy.generated.json",
+      "pulumi_project": "infrastructure/Pulumi.yaml",
+      "pulumi_program": "infrastructure/index.ts",
+      "verification_script": "scripts/ci/check-production-edge-admission.ps1",
+      "regional_attachment": {
+        "supported": true,
+        "config_key": "wafRegionalResourceArn",
+        "required_env": "GONGZZANG_WAF_REGIONAL_RESOURCE_ARN",
+        "pulumi_association_preview": {
+          "required": true,
+          "preview_script": "scripts/ci/check-pulumi-local-preview.ps1",
+          "evidence": "regional_association=planned"
+        }
+      },
+      "cloudfront_attachment": {
+        "supported": false,
+        "required_before_production": true
+      },
+      "forbidden": [
+        "production_deploy_without_waf_attachment",
+        "edge_policy_not_from_traffic_auth_registry",
+        "manual_waf_console_change"
+      ]
+    }
+'@
+    }
+    $nodeSbomOutputFile = if ($LegacyCiGeneratedSbomOutput) {
+        "target/supply-chain/gongzzang-node-workspace-sbom.cdx.json"
+    } else {
+        "bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json"
+    }
+    $rustSbomOutputFile = if ($LegacyCiGeneratedSbomOutput) {
+        "target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+    } else {
+        "bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json"
+    }
+    Write-File -Root $Root -RelativePath "docs\architecture\platform-integration\supply-chain-policy.v1.json" -Content @"
+{
+  "schema_version": "gongzzang.platform_integration.supply_chain_policy.v1",
+  "repo_slug": "gongzzang",
+  "npm": {
+    "audit_bazel_target": "//tools/bazel:ci_node_audit_transition",
+    "required_overrides": {
+      "brace-expansion": "5.0.6",
+      "postcss": "8.5.15",
+      "vite": "6.4.2"
+    }
+  },
+  "rust": {
+    "sca": "cargo-deny",
+    "config": "deny.toml",
+    "bazel_target": "//tools/bazel:ci_cargo_deny_transition"
+  },
+  "release_artifacts": [
+    {
+      "id": "web_next_build_archive",
+      "ecosystem": "node",
+      "bazel_target": "//:web_release_candidate_archive",
+      "subject_path": "bazel-bin/gongzzang-web-next-build.tgz",
+      "sbom_source_path": "bazel-bin/apps/web/.next"
+    },
+    {
+      "id": "api_binary",
+      "ecosystem": "rust",
+      "bazel_target": "//:api_release_candidate_binary",
+      "subject_path": "bazel-bin/gongzzang-api-release/api",
+      "sbom_source_path": "bazel-bin/gongzzang-api-release"
+    }
+  ],
+  "sbom": {
+    "required": true,
+    "format": "cyclonedx-json",
+    "generator": {
+      "tool": "bazel_release_file_sbom",
+      "implementation": "tools/bazel/generate_release_file_sbom.sh"
+    },
+    "artifacts": [
+      {
+        "id": "gongzzang_node_workspace_sbom",
+        "ecosystem": "node",
+        "source_path": "bazel-bin/apps/web/.next",
+        "bazel_target": "//:web_release_sbom",
+        "output_file": "$nodeSbomOutputFile",
+        "subject_path": "bazel-bin/gongzzang-web-next-build.tgz"
+      },
+      {
+        "id": "gongzzang_rust_workspace_sbom",
+        "ecosystem": "rust",
+        "source_path": "bazel-bin/gongzzang-api-release",
+        "bazel_target": "//:api_release_sbom",
+        "output_file": "$rustSbomOutputFile",
+        "subject_path": "bazel-bin/gongzzang-api-release/api"
+      }
+    ]
+  },
+  "evidence_manifest": {
+    "bazel_target": "//:supply_chain_evidence_manifest",
+    "artifact_group_target": "//:supply_chain_evidence_artifacts",
+    "contract_target": "//:verify_supply_chain",
+    "output_file": "bazel-bin/supply-chain/evidence-manifest.json"
+  },
+  "provenance": {
+    "required": $provenanceRequired,
+    "provider": "github_artifact_attestations",
+    "predicate": "slsa_build_provenance",
+    "ci_action": "actions/attest",
+    "upstream_tag": "v4",
+    "pinned_ref": "281a49d4cbb0a72c9575a50d18f6deb515a11deb",
+    "required_permissions": [
+      "contents: read",
+      "id-token: write",
+      "attestations: write",
+      "artifact-metadata: write"
+    ],
+    "production_subjects": [
+      "bazel-bin/gongzzang-web-next-build.tgz",
+      "bazel-bin/gongzzang-api-release/api"
+    ]
+  },
+  "deploy_gate": {
+    "required": true,
+    "approved_workflow": ".github/workflows/ci.yml",
+    "approved_job": "supply-chain-provenance",
+    "candidate_policy": "production_candidates_must_be_built_on_main_by_approved_workflow",
+    "verification_command": "gh attestation verify <artifact> -R <owner>/gongzzang",
+    "verification_script": "scripts/ci/verify-production-deploy-candidate.ps1",
+    "admission_workflow": ".github/workflows/production-deploy-admission.yml",
+    "admission_job": "verify-production-deploy-candidates",
+    "admission_environment": "production",
+    "download_artifact_action": {
+      "ci_action": "actions/download-artifact",
+      "upstream_tag": "v8.0.1",
+      "pinned_ref": "3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"
+    },
+    "runbook": "docs/runbooks/supply-chain-provenance-and-deploy-gate.md",
+    "forbidden": [
+      "deploy_without_attestation",
+      "deploy_from_unapproved_workflow",
+      "deploy_from_unverified_subject_digest",
+      "mutable_image_tag_without_digest"
+    ]
+$loadTestCapacityAdmissionJson
+$productionEdgeAdmissionJson
+  }
+}
+"@

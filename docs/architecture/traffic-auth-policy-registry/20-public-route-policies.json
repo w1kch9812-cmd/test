@@ -1,0 +1,280 @@
+{
+  "public_route_policies": [
+    {
+      "id": "gongzzang.public_map.listing_marker_tile",
+      "description": "Anonymous browser access to Gongzzang-owned listing marker MVT/PBF tiles.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerTilesPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-tiles/listing",
+      "backend_route": "/map/v1/marker-tiles/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-tile",
+        "limit": 600,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["layer", "z", "x", "y", "filter_hash"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "response_budget": {
+        "max_tile_bytes": 262144,
+        "max_features": 10000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["derived_marker_tile"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_count",
+      "description": "Anonymous browser access to exact listing marker count for a registered filter hash.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "exact",
+      "proxy_path_source": "API.proxy.listingMarkerCounts",
+      "proxy_path": "/api/proxy/map/v1/marker-counts/listing",
+      "backend_route": "/map/v1/marker-counts/listing",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-count",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["filter_hash"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["aggregate_count"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_filter",
+      "description": "Anonymous browser registration of normalized listing marker filters.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "exact",
+      "proxy_path_source": "API.proxy.listingMarkerFilters",
+      "proxy_path": "/api/proxy/map/v1/marker-filters/listing",
+      "backend_route": "/map/v1/marker-filters/listing",
+      "methods": ["POST"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-filter",
+        "limit": 60,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "filter_policy": {
+        "normalized_hash_required": true,
+        "idempotent_upsert_required": true
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["opaque_filter_hash"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_mask",
+      "description": "Anonymous browser access to marker id masks for a loaded listing marker tile.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "LISTING_MARKER_MASK_PREFIX",
+      "proxy_path": "/api/proxy/map/v1/marker-masks/listing",
+      "backend_route": "/map/v1/marker-masks/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-mask",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "cache_policy": {
+        "server_cache": "redis",
+        "ttl_seconds": 30,
+        "cache_key_fields": ["z", "x", "y", "filter_hash", "base_version"]
+      },
+      "single_flight_policy": {
+        "required": true,
+        "lock_seconds": 5,
+        "wait_attempts": 10,
+        "wait_milliseconds": 50
+      },
+      "response_budget": {
+        "max_mask_ids": 20000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["marker_id_mask"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      }
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_tombstone",
+      "description": "Anonymous browser access to marker ids that must be hidden after a loaded listing marker tile becomes stale.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerTombstonesPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-tombstones/listing",
+      "backend_route": "/map/v1/marker-tombstones/listing/{z}/{x}/{y}",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-tombstone",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "response_budget": {
+        "max_mask_ids": 20000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["marker_id_mask"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
+    },
+    {
+      "id": "gongzzang.public_map.listing_marker_delta",
+      "description": "Anonymous browser access to short-lived listing marker MVT/PBF delta overlays.",
+      "owner": "gongzzang",
+      "exposure": "public_anonymous",
+      "proxy_path_kind": "prefix",
+      "proxy_path_source": "API.proxy.listingMarkerDeltasPrefix",
+      "proxy_path": "/api/proxy/map/v1/marker-deltas/listing",
+      "backend_route": "/map/v1/marker-deltas/listing/{z}/{x}/{y}.pbf",
+      "methods": ["GET"],
+      "auth_policy": {
+        "method": "anonymous_public",
+        "session_required": false
+      },
+      "rate_policy": {
+        "key_prefix": "public-map:listing-marker-delta",
+        "limit": 120,
+        "window_seconds": 60,
+        "rejection_status": 429,
+        "problem_type": "map/too-many-public-marker-requests"
+      },
+      "response_budget": {
+        "max_tile_bytes": 262144,
+        "max_features": 10000
+      },
+      "data_exposure_policy": {
+        "exposure_class": "public_derived",
+        "client_confidentiality_claim": "none",
+        "raw_record_access": "forbidden",
+        "bulk_export": "forbidden",
+        "allowed_data_classes": ["derived_marker_tile"],
+        "forbidden_data_classes": [
+          "raw_listing_detail",
+          "private_listing",
+          "business_verified_listing_detail",
+          "contact_data",
+          "raw_platform_core_catalog",
+          "bulk_listing_export"
+        ]
+      },
+      "forbidden_request_shapes": ["bbox", "bounds", "south", "west", "north", "east"]
+    }
+  ]
+}

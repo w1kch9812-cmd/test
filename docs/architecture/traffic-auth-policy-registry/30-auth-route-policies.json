@@ -1,0 +1,56 @@
+{
+  "auth_route_policies": [
+    {
+      "id": "gongzzang.auth.login",
+      "description": "Browser login start endpoint rate policy.",
+      "path_source": "API.auth.login",
+      "methods": ["POST"],
+      "rate_policy": {
+        "key_prefix": "auth:login",
+        "key_strategy": "client_ip",
+        "limit": 5,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "id": "gongzzang.auth.callback",
+      "description": "OIDC callback endpoint rate policy.",
+      "path_source": "API.auth.callback",
+      "methods": ["GET"],
+      "rate_policy": {
+        "key_prefix": "auth:callback",
+        "key_strategy": "client_ip",
+        "limit": 10,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "id": "gongzzang.auth.refresh",
+      "description": "Session refresh endpoint rate policy.",
+      "path_source": "API.auth.refresh",
+      "methods": ["POST"],
+      "rate_policy": {
+        "key_prefix": "auth:refresh",
+        "key_strategy": "session_or_anon",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    },
+    {
+      "id": "gongzzang.auth.logout",
+      "description": "Browser logout endpoint rate policy.",
+      "path_source": "API.auth.logout",
+      "methods": ["POST", "GET"],
+      "rate_policy": {
+        "key_prefix": "auth:logout",
+        "key_strategy": "client_ip",
+        "limit": 30,
+        "window_seconds": 60,
+        "problem_type": "auth/too-many-requests"
+      }
+    }
+  ]
+}

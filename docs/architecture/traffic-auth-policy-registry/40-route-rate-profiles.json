@@ -1,0 +1,31 @@
+{
+  "route_rate_profiles": [
+    {
+      "id": "api_proxy.authenticated_read",
+      "description": "Per-user read budget for authenticated API proxy routes.",
+      "key_prefix": "api-proxy:authenticated-read",
+      "key_strategy": "session_sub",
+      "limit": 240,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    },
+    {
+      "id": "api_proxy.authenticated_write",
+      "description": "Per-user mutation budget for authenticated API proxy routes.",
+      "key_prefix": "api-proxy:authenticated-write",
+      "key_strategy": "session_sub",
+      "limit": 120,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    },
+    {
+      "id": "api_proxy.privileged_write",
+      "description": "Per-user mutation budget for role-gated broker/operator API proxy routes.",
+      "key_prefix": "api-proxy:privileged-write",
+      "key_strategy": "session_sub",
+      "limit": 60,
+      "window_seconds": 60,
+      "problem_type": "proxy/too-many-requests"
+    }
+  ]
+}
