@@ -13,6 +13,62 @@
     "//tools/bazel:ci_sqlx_prepare_check_transition",
     "//tools/bazel:frontend_e2e_transition"
   ],
+  "exit_evidence_requirement_registry": [
+    {
+      "id": "database_service_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "DB-backed transition retirement requires an explicit decision for native Bazel database service provisioning.",
+      "evidence_kind": "provisioning_decision"
+    },
+    {
+      "id": "native_bazel_coverage_evidence",
+      "owner": "build-platform",
+      "reason": "Coverage transition retirement requires coverage output represented as Bazel-owned evidence.",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_database_test",
+      "owner": "build-platform",
+      "reason": "Migration transition retirement requires DB migration execution represented as a native Bazel test.",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_evidence_target",
+      "owner": "build-platform",
+      "reason": "SCA transition retirement requires a Bazel target that owns advisory evidence materialization.",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_service_orchestration",
+      "owner": "build-platform",
+      "reason": "Service e2e transition retirement requires multi-service orchestration represented as native Bazel execution.",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_test_target",
+      "owner": "build-platform",
+      "reason": "Generic transition retirement requires an equivalent native Bazel test target.",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "pinned_advisory_evidence",
+      "owner": "build-platform",
+      "reason": "External advisory SCA transition retirement requires advisory inputs pinned as reproducible evidence.",
+      "evidence_kind": "pinned_external_evidence"
+    },
+    {
+      "id": "service_orchestration_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "Service e2e transition retirement requires an explicit service orchestration provisioning decision.",
+      "evidence_kind": "provisioning_decision"
+    },
+    {
+      "id": "toolchain_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "Tool-dependent transition retirement requires an explicit toolchain provisioning decision.",
+      "evidence_kind": "provisioning_decision"
+    }
+  ],
   "approval_gate_registry": [
     {
       "id": "external_advisory_collection",

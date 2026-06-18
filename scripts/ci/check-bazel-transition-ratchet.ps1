@@ -477,6 +477,17 @@ if ($approvalGateRegistryEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($approvalGateRegistryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet approval gate"
 
+$exitEvidenceRequirementEntries = @()
+if ($policy.PSObject.Properties.Name -contains "exit_evidence_requirement_registry") {
+    $exitEvidenceRequirementEntries = @($policy.exit_evidence_requirement_registry)
+}
+if ($exitEvidenceRequirementEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare exit_evidence_requirement_registry"
+}
+Assert-Unique `
+    -Values @($exitEvidenceRequirementEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet exit evidence requirement"
+
 $transitionCategoryEntries = @()
 if ($policy.PSObject.Properties.Name -contains "transition_category_registry") {
     $transitionCategoryEntries = @($policy.transition_category_registry)
@@ -537,16 +548,34 @@ $allowedExitStates = @{
     blocked         = $true
     ready_to_retire = $true
 }
-$allowedExitEvidenceRequirements = @{
-    database_service_provisioning_decision     = $true
-    native_bazel_coverage_evidence             = $true
-    native_bazel_database_test                 = $true
-    native_bazel_evidence_target               = $true
-    native_bazel_service_orchestration         = $true
-    native_bazel_test_target                   = $true
-    pinned_advisory_evidence                   = $true
-    service_orchestration_provisioning_decision = $true
-    toolchain_provisioning_decision            = $true
+$allowedExitEvidenceRequirements = @{}
+$allowedExitEvidenceKinds = @{
+    native_bazel_evidence   = $true
+    pinned_external_evidence = $true
+    provisioning_decision   = $true
+}
+foreach ($entry in $exitEvidenceRequirementEntries) {
+    $context = "exit evidence requirement registry"
+    $evidenceRequirement = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($evidenceRequirement -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "exit evidence requirement registry id must be lowercase snake_case: $evidenceRequirement"
+    }
+    [void] (Get-RequiredString `
+        -Object $entry `
+        -Name "owner" `
+        -Context "exit evidence requirement registry $evidenceRequirement")
+    [void] (Get-RequiredString `
+        -Object $entry `
+        -Name "reason" `
+        -Context "exit evidence requirement registry $evidenceRequirement")
+    $evidenceKind = Get-RequiredString `
+        -Object $entry `
+        -Name "evidence_kind" `
+        -Context "exit evidence requirement registry $evidenceRequirement"
+    if (!$allowedExitEvidenceKinds.ContainsKey($evidenceKind)) {
+        throw "unknown exit evidence requirement kind for ${evidenceRequirement}: $evidenceKind"
+    }
+    $allowedExitEvidenceRequirements[$evidenceRequirement] = $true
 }
 foreach ($entry in $transitionCategoryEntries) {
     $context = "transition category registry"
@@ -563,7 +592,7 @@ foreach ($entry in $transitionCategoryEntries) {
     Assert-Unique -Values $categoryEvidenceRequirements -Message "transition category registry $category evidence requirement"
     foreach ($categoryEvidenceRequirement in $categoryEvidenceRequirements) {
         if (!$allowedExitEvidenceRequirements.ContainsKey($categoryEvidenceRequirement)) {
-            throw "unknown transition category evidence requirement for ${category}: $categoryEvidenceRequirement"
+            throw "transition category exit evidence requirement is not registered for ${category}: $categoryEvidenceRequirement"
         }
     }
     $categoryApprovalGates = @(Get-RequiredStringArray `
@@ -623,7 +652,7 @@ foreach ($entry in $exitTargetEntries) {
     Assert-Unique -Values $exitTargetEvidenceRequirements -Message "exit target registry $exitTarget evidence requirement"
     foreach ($exitTargetEvidenceRequirement in $exitTargetEvidenceRequirements) {
         if (!$allowedExitEvidenceRequirements.ContainsKey($exitTargetEvidenceRequirement)) {
-            throw "unknown exit target registry evidence requirement for ${exitTarget}: $exitTargetEvidenceRequirement"
+            throw "exit target exit evidence requirement is not registered for ${exitTarget}: $exitTargetEvidenceRequirement"
         }
     }
     $exitTargetBlockingApprovalGates = @(Get-RequiredStringArray `
@@ -673,7 +702,7 @@ foreach ($entry in $policyEntries) {
     Assert-Unique -Values $exitEvidenceRequirements -Message "transition policy $target exit evidence requirement"
     foreach ($exitEvidenceRequirement in $exitEvidenceRequirements) {
         if (!$allowedExitEvidenceRequirements.ContainsKey($exitEvidenceRequirement)) {
-            throw "unknown transition exit evidence requirement for ${target}: $exitEvidenceRequirement"
+            throw "transition exit evidence requirement is not registered for ${target}: $exitEvidenceRequirement"
         }
     }
     Assert-ContainsAll `

@@ -85,7 +85,10 @@ function Write-MinimalRepo {
         [switch] $DuplicateApprovalGateRegistry,
         [switch] $MissingTransitionCategoryRegistry,
         [switch] $MissingRegisteredTransitionCategory,
-        [switch] $MismatchedCategoryEvidence
+        [switch] $MismatchedCategoryEvidence,
+        [switch] $MissingExitEvidenceRequirementRegistry,
+        [switch] $MissingRegisteredExitEvidenceRequirement,
+        [switch] $DuplicateExitEvidenceRequirementRegistry
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -202,6 +205,86 @@ esac
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
     $externalAdvisoryCategoryEvidence = if ($MismatchedCategoryEvidence) { '["native_bazel_database_test"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $nativeBazelTestEvidenceEntry = if ($MissingRegisteredExitEvidenceRequirement) {
+        ""
+    } else {
+        @'
+    {
+      "id": "native_bazel_test_target",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "native_bazel_evidence"
+    },
+'@
+    }
+    $duplicateExitEvidenceRequirementEntry = if ($DuplicateExitEvidenceRequirementRegistry) {
+        @'
+    {
+      "id": "native_bazel_database_test",
+      "owner": "build-platform",
+      "reason": "fixture duplicate",
+      "evidence_kind": "native_bazel_evidence"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredExitEvidenceRequirements = if ($MissingExitEvidenceRequirementRegistry) {
+        ""
+    } else {
+        @"
+  "exit_evidence_requirement_registry": [
+    {
+      "id": "database_service_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "provisioning_decision"
+    },
+    {
+      "id": "native_bazel_coverage_evidence",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "native_bazel_evidence"
+    },
+$duplicateExitEvidenceRequirementEntry    {
+      "id": "native_bazel_database_test",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_evidence_target",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "native_bazel_evidence"
+    },
+    {
+      "id": "native_bazel_service_orchestration",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "native_bazel_evidence"
+    },
+$nativeBazelTestEvidenceEntry    {
+      "id": "pinned_advisory_evidence",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "pinned_external_evidence"
+    },
+    {
+      "id": "service_orchestration_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "provisioning_decision"
+    },
+    {
+      "id": "toolchain_provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "evidence_kind": "provisioning_decision"
+    }
+  ],
+"@
+    }
     $externalAdvisoryGateEntry = @'
     {
       "id": "external_advisory_collection",
@@ -494,6 +577,7 @@ $exitStateLine
   "default_decision": "deny_new_transition_without_policy",
 $retiredTargets
 $registeredApprovalGates
+$registeredExitEvidenceRequirements
 $registeredTransitionCategories
 $registeredExitTargets
   "transition_targets": [
@@ -828,6 +912,24 @@ try {
     $mismatchedCategoryEvidence = Invoke-Checker -Root $mismatchedCategoryEvidenceRoot
     Assert-Equals $mismatchedCategoryEvidence.ExitCode 1 "mismatched category evidence exit code mismatch"
     Assert-Contains $mismatchedCategoryEvidence.Output "transition category required_exit_evidence_requirements"
+
+    $missingExitEvidenceRequirementRegistryRoot = Join-Path $TempRoot "missing-exit-evidence-requirement-registry"
+    Write-MinimalRepo -Root $missingExitEvidenceRequirementRegistryRoot -MissingExitEvidenceRequirementRegistry
+    $missingExitEvidenceRequirementRegistry = Invoke-Checker -Root $missingExitEvidenceRequirementRegistryRoot
+    Assert-Equals $missingExitEvidenceRequirementRegistry.ExitCode 1 "missing exit evidence requirement registry exit code mismatch"
+    Assert-Contains $missingExitEvidenceRequirementRegistry.Output "transition ratchet policy must declare exit_evidence_requirement_registry"
+
+    $missingRegisteredExitEvidenceRequirementRoot = Join-Path $TempRoot "missing-registered-exit-evidence-requirement"
+    Write-MinimalRepo -Root $missingRegisteredExitEvidenceRequirementRoot -MissingRegisteredExitEvidenceRequirement
+    $missingRegisteredExitEvidenceRequirement = Invoke-Checker -Root $missingRegisteredExitEvidenceRequirementRoot
+    Assert-Equals $missingRegisteredExitEvidenceRequirement.ExitCode 1 "missing registered exit evidence requirement exit code mismatch"
+    Assert-Contains $missingRegisteredExitEvidenceRequirement.Output "exit evidence requirement is not registered"
+
+    $duplicateExitEvidenceRequirementRegistryRoot = Join-Path $TempRoot "duplicate-exit-evidence-requirement-registry"
+    Write-MinimalRepo -Root $duplicateExitEvidenceRequirementRegistryRoot -DuplicateExitEvidenceRequirementRegistry
+    $duplicateExitEvidenceRequirementRegistry = Invoke-Checker -Root $duplicateExitEvidenceRequirementRegistryRoot
+    Assert-Equals $duplicateExitEvidenceRequirementRegistry.ExitCode 1 "duplicate exit evidence requirement registry exit code mismatch"
+    Assert-Contains $duplicateExitEvidenceRequirementRegistry.Output "transition ratchet exit evidence requirement duplicate"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

@@ -159,3 +159,9 @@
   - Require every transition category to be registered exactly once with owner, reason, required evidence, required approval gates, and external collection semantics.
   - Derive category-specific evidence and gate requirements from policy data instead of checker-owned hardcoded category branches.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 24: Register Exit Evidence Requirements**
+  - Add a top-level `exit_evidence_requirement_registry` to the transition ratchet policy.
+  - Require every evidence requirement referenced by transition categories, exit targets, and transition policies to be registered exactly once with owner, reason, and evidence kind.
+  - Derive allowed evidence requirement taxonomy from policy data instead of a checker-owned hardcoded evidence list.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
