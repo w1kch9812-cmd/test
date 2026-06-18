@@ -362,6 +362,13 @@ root guardrail suites, `run_guardrail_task.sh`, lefthook, and CI projections. Th
 bidirectional for Bazel and runner projections: unregistered Bazel guardrail targets,
 root guardrail suite labels, and runner cases are rejected.
 
+Sixth follow-up status: planned Bazel exit evidence blockers are now structured. The transition
+ratchet policy has a `planned_evidence_blocker_registry`, and every planned `evidence_status`
+must declare non-empty registered `blocked_by` entries. Approval blockers must point at registered
+approval gates covered by the exit target's `blocking_approval_gates`; implementation blockers must
+point at the exact evidence requirement they block. This keeps the remaining planned transitions
+from degrading into free-text promises.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.

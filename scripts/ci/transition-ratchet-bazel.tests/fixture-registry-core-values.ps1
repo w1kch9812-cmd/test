@@ -131,3 +131,59 @@ $nativeBazelTestEvidenceEntry    {
   ],
 "@
     }
+    $nativeTestTargetMissingBlockerEntry = if ($MissingRegisteredPlannedEvidenceBlocker) {
+        ""
+    } else {
+        @'
+    {
+      "id": "native_bazel_test_target_missing",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirement": "native_bazel_test_target"
+    },
+'@
+    }
+    $duplicatePlannedEvidenceBlockerEntry = if ($DuplicatePlannedEvidenceBlockerRegistry) {
+        @'
+    {
+      "id": "native_bazel_database_test_missing",
+      "owner": "build-platform",
+      "reason": "fixture duplicate",
+      "exit_evidence_requirement": "native_bazel_database_test"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredPlannedEvidenceBlockers = if ($MissingPlannedEvidenceBlockerRegistry) {
+        ""
+    } else {
+        @"
+  "planned_evidence_blocker_registry": [
+    {
+      "id": "external_advisory_collection_required",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "approval_gate": "external_advisory_collection"
+    },
+    {
+      "id": "database_service_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "approval_gate": "database_service_provisioning"
+    },
+$duplicatePlannedEvidenceBlockerEntry    {
+      "id": "native_bazel_database_test_missing",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirement": "native_bazel_database_test"
+    },
+$nativeTestTargetMissingBlockerEntry    {
+      "id": "native_bazel_coverage_target_missing",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "exit_evidence_requirement": "native_bazel_coverage_evidence"
+    }
+  ],
+"@
+    }

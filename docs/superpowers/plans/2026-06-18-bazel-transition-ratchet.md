@@ -183,3 +183,9 @@
   - Require every evidence kind, exit target state, and transition exit state to be registered exactly once with owner and reason.
   - Derive exit/evidence taxonomy from policy data instead of checker-owned hardcoded enum maps.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 28: Structure Planned Evidence Blockers**
+  - Add a top-level planned evidence blocker registry to the transition ratchet policy.
+  - Require every planned `evidence_status` entry to declare non-empty registered blockers instead of only free-text reasons.
+  - Bind approval blockers to registered approval gates and implementation blockers to their exact evidence requirement.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

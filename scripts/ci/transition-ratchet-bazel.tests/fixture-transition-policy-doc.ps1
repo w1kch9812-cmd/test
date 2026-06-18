@@ -7,6 +7,7 @@ $retiredTargets
 $registeredEvidenceKinds
 $registeredApprovalGates
 $registeredExitEvidenceRequirements
+$registeredPlannedEvidenceBlockers
 $registeredTransitionCategories
 $registeredRequiredCommands
 $registeredRequiredServices

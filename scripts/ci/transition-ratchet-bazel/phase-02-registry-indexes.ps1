@@ -139,6 +139,40 @@ foreach ($entry in $exitEvidenceRequirementEntries) {
     }
     $allowedExitEvidenceRequirements[$evidenceRequirement] = $true
 }
+$plannedEvidenceBlockerById = @{}
+foreach ($entry in $plannedEvidenceBlockerEntries) {
+    $context = "planned evidence blocker registry"
+    $plannedEvidenceBlocker = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($plannedEvidenceBlocker -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "planned evidence blocker registry id must be lowercase snake_case: $plannedEvidenceBlocker"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "planned evidence blocker registry $plannedEvidenceBlocker")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "planned evidence blocker registry $plannedEvidenceBlocker")
+    $hasApprovalGate = $entry.PSObject.Properties.Name -contains "approval_gate"
+    $hasEvidenceRequirement = $entry.PSObject.Properties.Name -contains "exit_evidence_requirement"
+    if ($hasApprovalGate -eq $hasEvidenceRequirement) {
+        throw "planned evidence blocker must declare exactly one of approval_gate or exit_evidence_requirement: $plannedEvidenceBlocker"
+    }
+    if ($hasApprovalGate) {
+        $approvalGate = Get-RequiredString `
+            -Object $entry `
+            -Name "approval_gate" `
+            -Context "planned evidence blocker registry $plannedEvidenceBlocker"
+        if (!$allowedApprovalGates.ContainsKey($approvalGate)) {
+            throw "planned evidence blocker approval_gate is not registered for ${plannedEvidenceBlocker}: $approvalGate"
+        }
+    }
+    if ($hasEvidenceRequirement) {
+        $blockedRequirement = Get-RequiredString `
+            -Object $entry `
+            -Name "exit_evidence_requirement" `
+            -Context "planned evidence blocker registry $plannedEvidenceBlocker"
+        if (!$allowedExitEvidenceRequirements.ContainsKey($blockedRequirement)) {
+            throw "planned evidence blocker exit evidence requirement is not registered for ${plannedEvidenceBlocker}: $blockedRequirement"
+        }
+    }
+    $plannedEvidenceBlockerById[$plannedEvidenceBlocker] = $entry
+}
 foreach ($entry in $transitionCategoryEntries) {
     $context = "transition category registry"
     $category = Get-RequiredString -Object $entry -Name "id" -Context $context
@@ -237,6 +271,9 @@ foreach ($entry in $exitTargetEntries) {
         }
         [void] (Get-RequiredString -Object $evidenceStatus -Name "reason" -Context "$context $requirement")
         if ($state -eq "available") {
+            if ($evidenceStatus.PSObject.Properties.Name -contains "blocked_by") {
+                throw "available evidence_status must not declare blocked_by: $exitTarget -> $requirement"
+            }
             $evidenceTarget = Get-RequiredString `
                 -Object $evidenceStatus `
                 -Name "bazel_target" `
@@ -248,6 +285,35 @@ foreach ($entry in $exitTargetEntries) {
                 throw "exit target evidence_status bazel_target must not be a transition: $exitTarget -> $evidenceTarget"
             }
         } else {
+            if (!($evidenceStatus.PSObject.Properties.Name -contains "blocked_by")) {
+                throw "planned evidence_status blocked_by missing for $exitTarget -> $requirement"
+            }
+            $plannedBlockers = @(Get-RequiredStringArray `
+                -Object $evidenceStatus `
+                -Name "blocked_by" `
+                -Context "$context $requirement")
+            if ($plannedBlockers.Count -eq 0) {
+                throw "planned evidence_status blocked_by must not be empty for $exitTarget -> $requirement"
+            }
+            Assert-Unique -Values $plannedBlockers -Message "planned evidence_status blocker for $exitTarget $requirement"
+            foreach ($plannedBlocker in $plannedBlockers) {
+                if (!$plannedEvidenceBlockerById.ContainsKey($plannedBlocker)) {
+                    throw "planned evidence blocker is not registered for ${exitTarget}: $plannedBlocker"
+                }
+                $blockerEntry = $plannedEvidenceBlockerById[$plannedBlocker]
+                if ($blockerEntry.PSObject.Properties.Name -contains "approval_gate") {
+                    $approvalGate = [string] $blockerEntry.approval_gate
+                    if (!(Test-ContainsValue -Values $exitTargetBlockingApprovalGates -Expected $approvalGate)) {
+                        throw "planned evidence approval blocker must be covered by exit target blocking_approval_gates: $exitTarget -> $plannedBlocker"
+                    }
+                }
+                if ($blockerEntry.PSObject.Properties.Name -contains "exit_evidence_requirement") {
+                    $blockedRequirement = [string] $blockerEntry.exit_evidence_requirement
+                    if ($blockedRequirement -ne $requirement) {
+                        throw "planned implementation blocker must match evidence_status requirement: $exitTarget -> $plannedBlocker"
+                    }
+                }
+            }
             $hasPlannedEvidence = $true
         }
         $evidenceStatusRequirements += $requirement

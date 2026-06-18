@@ -86,6 +86,50 @@
       "evidence_kind": "provisioning_decision"
     }
   ],
+  "planned_evidence_blocker_registry": [
+    {
+      "id": "external_advisory_collection_required",
+      "owner": "build-platform",
+      "reason": "Pinned advisory evidence cannot be produced until external advisory collection is explicitly approved.",
+      "approval_gate": "external_advisory_collection"
+    },
+    {
+      "id": "toolchain_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "Tool-dependent retirement cannot proceed until the toolchain provisioning decision is made.",
+      "approval_gate": "toolchain_provisioning"
+    },
+    {
+      "id": "database_service_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "DB-backed retirement cannot proceed until the database service provisioning decision is made.",
+      "approval_gate": "database_service_provisioning"
+    },
+    {
+      "id": "service_orchestration_provisioning_decision_required",
+      "owner": "build-platform",
+      "reason": "Service e2e retirement cannot proceed until the service orchestration provisioning decision is made.",
+      "approval_gate": "service_orchestration_provisioning"
+    },
+    {
+      "id": "native_bazel_coverage_target_missing",
+      "owner": "build-platform",
+      "reason": "Coverage evidence is not yet represented as a native Bazel output target.",
+      "exit_evidence_requirement": "native_bazel_coverage_evidence"
+    },
+    {
+      "id": "native_bazel_database_test_missing",
+      "owner": "build-platform",
+      "reason": "DB migration execution is not yet represented as a native Bazel database test.",
+      "exit_evidence_requirement": "native_bazel_database_test"
+    },
+    {
+      "id": "native_bazel_service_orchestration_missing",
+      "owner": "build-platform",
+      "reason": "Multi-service e2e orchestration is not yet represented as native Bazel execution.",
+      "exit_evidence_requirement": "native_bazel_service_orchestration"
+    }
+  ],
   "approval_gate_registry": [
     {
       "id": "external_advisory_collection",
@@ -306,7 +350,8 @@
         {
           "requirement": "pinned_advisory_evidence",
           "state": "planned",
-          "reason": "External advisory reads still require explicit collection approval before they can become pinned evidence."
+          "reason": "External advisory reads still require explicit collection approval before they can become pinned evidence.",
+          "blocked_by": ["external_advisory_collection_required"]
         }
       ]
     },
@@ -324,12 +369,14 @@
         {
           "requirement": "native_bazel_coverage_evidence",
           "state": "planned",
-          "reason": "Coverage output is still produced by the tarpaulin transition rather than a declared Bazel output."
+          "reason": "Coverage output is still produced by the tarpaulin transition rather than a declared Bazel output.",
+          "blocked_by": ["native_bazel_coverage_target_missing"]
         },
         {
           "requirement": "toolchain_provisioning_decision",
           "state": "planned",
-          "reason": "Coverage retirement still needs an explicit toolchain provisioning decision."
+          "reason": "Coverage retirement still needs an explicit toolchain provisioning decision.",
+          "blocked_by": ["toolchain_provisioning_decision_required"]
         }
       ]
     },
@@ -347,12 +394,14 @@
         {
           "requirement": "database_service_provisioning_decision",
           "state": "planned",
-          "reason": "Migration retirement still needs an explicit native Bazel database service provisioning decision."
+          "reason": "Migration retirement still needs an explicit native Bazel database service provisioning decision.",
+          "blocked_by": ["database_service_provisioning_decision_required"]
         },
         {
           "requirement": "native_bazel_database_test",
           "state": "planned",
-          "reason": "Migration execution is still represented by transition runners, not native Bazel database tests."
+          "reason": "Migration execution is still represented by transition runners, not native Bazel database tests.",
+          "blocked_by": ["native_bazel_database_test_missing"]
         }
       ]
     },
@@ -374,12 +423,14 @@
         {
           "requirement": "native_bazel_service_orchestration",
           "state": "planned",
-          "reason": "Walking skeleton e2e is still represented by a transition runner instead of native Bazel service orchestration."
+          "reason": "Walking skeleton e2e is still represented by a transition runner instead of native Bazel service orchestration.",
+          "blocked_by": ["native_bazel_service_orchestration_missing"]
         },
         {
           "requirement": "service_orchestration_provisioning_decision",
           "state": "planned",
-          "reason": "Service e2e retirement still needs an explicit service orchestration provisioning decision."
+          "reason": "Service e2e retirement still needs an explicit service orchestration provisioning decision.",
+          "blocked_by": ["service_orchestration_provisioning_decision_required"]
         }
       ]
     }

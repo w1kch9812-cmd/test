@@ -57,6 +57,17 @@ Assert-Unique `
     -Values @($exitEvidenceRequirementEntries | ForEach-Object { [string] $_.id }) `
     -Message "transition ratchet exit evidence requirement"
 
+$plannedEvidenceBlockerEntries = @()
+if ($policy.PSObject.Properties.Name -contains "planned_evidence_blocker_registry") {
+    $plannedEvidenceBlockerEntries = @($policy.planned_evidence_blocker_registry)
+}
+if ($plannedEvidenceBlockerEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare planned_evidence_blocker_registry"
+}
+Assert-Unique `
+    -Values @($plannedEvidenceBlockerEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet planned evidence blocker"
+
 $evidenceKindRegistryEntries = @()
 if ($policy.PSObject.Properties.Name -contains "evidence_kind_registry") {
     $evidenceKindRegistryEntries = @($policy.evidence_kind_registry)

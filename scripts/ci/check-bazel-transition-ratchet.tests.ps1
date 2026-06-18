@@ -397,6 +397,30 @@ try {
     Assert-Equals $duplicateEvidenceKindRegistry.ExitCode 1 "duplicate evidence kind registry exit code mismatch"
     Assert-Contains $duplicateEvidenceKindRegistry.Output "transition ratchet evidence kind duplicate"
 
+    $missingPlannedEvidenceBlockerRegistryRoot = Join-Path $TempRoot "missing-planned-evidence-blocker-registry"
+    Write-MinimalRepo -Root $missingPlannedEvidenceBlockerRegistryRoot -MissingPlannedEvidenceBlockerRegistry
+    $missingPlannedEvidenceBlockerRegistry = Invoke-Checker -Root $missingPlannedEvidenceBlockerRegistryRoot
+    Assert-Equals $missingPlannedEvidenceBlockerRegistry.ExitCode 1 "missing planned evidence blocker registry exit code mismatch"
+    Assert-Contains $missingPlannedEvidenceBlockerRegistry.Output "transition ratchet policy must declare planned_evidence_blocker_registry"
+
+    $missingRegisteredPlannedEvidenceBlockerRoot = Join-Path $TempRoot "missing-registered-planned-evidence-blocker"
+    Write-MinimalRepo -Root $missingRegisteredPlannedEvidenceBlockerRoot -MissingRegisteredPlannedEvidenceBlocker
+    $missingRegisteredPlannedEvidenceBlocker = Invoke-Checker -Root $missingRegisteredPlannedEvidenceBlockerRoot
+    Assert-Equals $missingRegisteredPlannedEvidenceBlocker.ExitCode 1 "missing registered planned evidence blocker exit code mismatch"
+    Assert-Contains $missingRegisteredPlannedEvidenceBlocker.Output "planned evidence blocker is not registered"
+
+    $duplicatePlannedEvidenceBlockerRegistryRoot = Join-Path $TempRoot "duplicate-planned-evidence-blocker-registry"
+    Write-MinimalRepo -Root $duplicatePlannedEvidenceBlockerRegistryRoot -DuplicatePlannedEvidenceBlockerRegistry
+    $duplicatePlannedEvidenceBlockerRegistry = Invoke-Checker -Root $duplicatePlannedEvidenceBlockerRegistryRoot
+    Assert-Equals $duplicatePlannedEvidenceBlockerRegistry.ExitCode 1 "duplicate planned evidence blocker registry exit code mismatch"
+    Assert-Contains $duplicatePlannedEvidenceBlockerRegistry.Output "transition ratchet planned evidence blocker duplicate"
+
+    $missingPlannedEvidenceBlockedByRoot = Join-Path $TempRoot "missing-planned-evidence-blocked-by"
+    Write-MinimalRepo -Root $missingPlannedEvidenceBlockedByRoot -MissingPlannedEvidenceBlockedBy
+    $missingPlannedEvidenceBlockedBy = Invoke-Checker -Root $missingPlannedEvidenceBlockedByRoot
+    Assert-Equals $missingPlannedEvidenceBlockedBy.ExitCode 1 "missing planned evidence blocked_by exit code mismatch"
+    Assert-Contains $missingPlannedEvidenceBlockedBy.Output "planned evidence_status blocked_by"
+
     $missingExitEvidenceRequirementRegistryRoot = Join-Path $TempRoot "missing-exit-evidence-requirement-registry"
     Write-MinimalRepo -Root $missingExitEvidenceRequirementRegistryRoot -MissingExitEvidenceRequirementRegistry
     $missingExitEvidenceRequirementRegistry = Invoke-Checker -Root $missingExitEvidenceRequirementRegistryRoot

@@ -14,11 +14,43 @@
     } else {
         ""
     }
+    $pinnedAdvisoryBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["external_advisory_collection_required"]
+'@
+    }
+    $nativeTestBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["native_bazel_test_target_missing"]
+'@
+    }
+    $databaseServiceDecisionBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["database_service_provisioning_decision_required"]
+'@
+    }
+    $nativeBazelDatabaseBlockedBy = if ($MissingPlannedEvidenceBlockedBy) {
+        ""
+    } else {
+        @'
+,
+          "blocked_by": ["native_bazel_database_test_missing"]
+'@
+    }
     $rustVerificationExitTargetState = if ($AvailableMissingExitTarget) { "available" } else { "planned" }
     $dependencyScaEvidenceStatus = if ($MissingExitTargetEvidenceStatus) {
         ""
     } elseif ($AvailableMissingEvidenceTarget) {
-        @'
+        @"
 ,
       "evidence_status": [
         {
@@ -31,11 +63,12 @@
           "requirement": "pinned_advisory_evidence",
           "state": "planned",
           "reason": "fixture"
+$pinnedAdvisoryBlockedBy
         }
       ]
-'@
+"@
     } elseif ($MismatchedExitTargetEvidence) {
-        @'
+        @"
 ,
       "evidence_status": [
         {
@@ -45,9 +78,9 @@
           "reason": "fixture"
         }
       ]
-'@
+"@
     } else {
-        @'
+        @"
 ,
       "evidence_status": [
         {
@@ -60,20 +93,22 @@
           "requirement": "pinned_advisory_evidence",
           "state": "planned",
           "reason": "fixture"
+$pinnedAdvisoryBlockedBy
         }
       ]
-'@
+"@
     }
-    $nativeTestEvidenceStatus = @'
+    $nativeTestEvidenceStatus = @"
 ,
       "evidence_status": [
         {
           "requirement": "native_bazel_test_target",
           "state": "planned",
           "reason": "fixture"
+$nativeTestBlockedBy
         }
       ]
-'@
+"@
     $rustVerificationEvidenceStatus = if ($AvailableMissingExitTarget) {
         @'
 ,
@@ -89,21 +124,23 @@
     } else {
         $nativeTestEvidenceStatus
     }
-    $databaseEvidenceStatus = @'
+    $databaseEvidenceStatus = @"
 ,
       "evidence_status": [
         {
           "requirement": "database_service_provisioning_decision",
           "state": "planned",
           "reason": "fixture"
+$databaseServiceDecisionBlockedBy
         },
         {
           "requirement": "native_bazel_database_test",
           "state": "planned",
           "reason": "fixture"
+$nativeBazelDatabaseBlockedBy
         }
       ]
-'@
+"@
     $registeredExitTargets = if ($MissingExitTargetRegistry) {
         ""
     } elseif ($MissingRegisteredExitTarget) {
