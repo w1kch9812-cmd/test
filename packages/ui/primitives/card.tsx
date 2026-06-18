@@ -2,12 +2,12 @@ import * as React from "react";
 import { cn } from "../lib/utils";
 
 /*
- * Card — Claude.com spec 의 feature-card / pricing-tier-card / product-mockup-card-dark
- * variant 통합. surface 색은 prop 으로 받지 않고 className 으로 override.
+ * Card surfaces for repeated product information blocks.
+ * Surface 색은 prop 으로 받지 않고 className 으로 override.
  *
- * - 기본 (canvas surface, hairline border): pricing-tier-card / connector-tile
- * - "cream-card" surface: feature-card (소프트 cream 배경, no border)
- * - "dark" surface: product-mockup-card-dark
+ * - 기본: canvas surface, hairline border
+ * - "cream-card" surface: soft cream background, no border
+ * - "dark" surface: high-contrast work surface
  */
 type CardSurface = "default" | "cream-card" | "dark";
 

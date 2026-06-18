@@ -13,8 +13,8 @@ import { usePanelStack } from "@/lib/panel/use-panel-stack";
 import { ROUTES } from "@/lib/routes";
 
 /*
- * ListingCard — Claude.com spec 의 feature-card 패턴 (cream-card surface).
- * 핀↔카드 highlight: 선택 시 coral 외곽선 (spec 의 primary 강조 사용).
+ * ListingCard uses the Gongzzang cream-card surface for scannable listing results.
+ * 핀↔카드 highlight: 선택 시 coral 외곽선.
  * 카드 내부 구조: 이미지(4/3) + 타입/거래방식 badge + 제목 + 면적 + 가격 + 메타.
  *
  * SP10: Click → pushPanel({ kind: "listing", view: "summary" }).

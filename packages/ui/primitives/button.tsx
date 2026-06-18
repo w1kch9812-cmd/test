@@ -4,12 +4,11 @@ import * as React from "react";
 import { cn } from "../lib/utils";
 
 /*
- * Button — Claude.com spec 의 button-primary / button-secondary /
- * button-secondary-on-dark / button-text-link / button-icon-circular 매핑.
+ * Button variants for Gongzzang work surfaces.
  *
  * 기본: rounded-md (8px), height 40px, type-button (14px / 500 / tracking 0).
  * coral 은 primary 에만. press 시 primary-active 로 어두워짐.
- * hover state 는 spec 에 별도 정의 없음 → press(active) 만 변형.
+ * Secondary and ghost variants keep the interface quiet for repeated operational use.
  */
 const buttonVariants = cva(
   "inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-canvas)] disabled:pointer-events-none disabled:opacity-50",

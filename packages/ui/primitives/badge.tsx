@@ -3,9 +3,9 @@ import type * as React from "react";
 import { cn } from "../lib/utils";
 
 /*
- * Badge — Claude.com spec 의 badge-pill / badge-coral 매핑.
+ * Badge variants for compact status and category labels.
  * - default: surface-card 배경, ink text, caption (13px / 500), pill 모양
- * - coral: primary 배경, on-primary text, uppercase caption (12px / 500 / tracking 1.5px)
+ * - coral: primary 배경, on-primary text, uppercase caption (12px / 500 / tracking 0)
  * - outline: hairline border, body text
  */
 const badgeVariants = cva(

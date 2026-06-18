@@ -30,7 +30,7 @@ for search_root in "${search_roots[@]}"; do
   fi
 done
 
-marker_pattern='(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP)([^A-Za-z0-9]|$)'
+marker_pattern='(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP|임시|(?i:claude\.com|anthropic\.com))([^A-Za-z0-9]|$)'
 mojibake_pattern='\x{FFFD}|\x{6028}|\x{F9CD}|\x{936E}|\x{BA2F}|\x{AFA9}|\x{C493}|\x{6FE1}|\x{8E30}|\x{907A}|\x{ACD7}|\x{B6AE}|\x{BEA3}|\x{5A9B}|\x{5AC4}|\x{C208}|\x{BA84}|\x{D00E}|\x{BE37}|\x{BD23}|\x{BD38}'
 if [ -n "$rg_bin" ]; then
   matches="$(
@@ -45,6 +45,7 @@ if [ -n "$rg_bin" ]; then
       --glob '*.rs' \
       --glob '*.py' \
       --glob '*.sql' \
+      --glob '*.css' \
       --glob '*.yaml' \
       --glob '*.yml' \
       --regexp "$marker_pattern" \
@@ -63,8 +64,8 @@ import os
 import re
 import sys
 
-extensions = {".ts", ".tsx", ".js", ".jsx", ".rs", ".py", ".sql", ".yaml", ".yml"}
-marker_re = re.compile(r"(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP)([^A-Za-z0-9]|$)")
+extensions = {".ts", ".tsx", ".js", ".jsx", ".rs", ".py", ".sql", ".css", ".yaml", ".yml"}
+marker_re = re.compile(r"(^|[^A-Za-z0-9])(TODO|HACK|XXX|TEMP|ALLOWED_FOR_FRONTEND_TEMP|임시|(?i:claude\.com|anthropic\.com))([^A-Za-z0-9]|$)")
 mojibake_re = re.compile("[\uFFFD\u6028\uF9CD\u936E\uBA2F\uAFA9\uC493\u6FE1\u8E30\u907A\uACD7\uB6AE\uBEA3\u5A9B\u5AC4\uC208\uBA84\uD00E\uBE37\uBD23\uBD38]")
 
 for search_root in sys.argv[1:]:

@@ -31,6 +31,9 @@ Current rescan status:
 - Verification guardrail execution metadata is now governed by
   `docs/architecture/verification-task-registry.v1.json`; the checker rejects unregistered
   Bazel guardrail targets, root guardrail suite labels, and `run_guardrail_task.sh` cases.
+- Korean implementation marker and borrowed-brand enforcement is now covered by the forbidden
+  marker guardrail: runtime `.css` files are scanned, `임시` is rejected, and implementation
+  comments cannot reference borrowed `Claude.com` or `anthropic.com` design specs.
 
 쉽게 말하면, 현재 프로젝트가 망가진 상태는 아닙니다. 이번 전수조사에서 발견된
 검증/생성물 관리 빈틈은 guardrail로 막았고, 남은 일은 planned transition을 실제
@@ -118,6 +121,7 @@ The following checks passed during this audit:
 | `check-coverage-transition-ssot.tests.ps1` | `coverage-transition-ssot-tests-ok` |
 | `check-verification-task-registry.ps1` | `verification-task-registry-ok tasks=32` |
 | `check-verification-task-registry.tests.ps1` | `verification-task-registry-tests-ok` |
+| `check-forbidden-implementation-markers.tests.sh` | rejects English markers, mojibake, workflow markers, Korean `임시` markers in CSS, and borrowed external brand markers |
 | `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 32/32 passed |
 | `bash scripts/ci/run-bazel.sh test //:workspace_typecheck //:workspace_hermetic_typechecks //:frontend_unit_test --config=ci --verbose_failures` | 5/5 passed |
 | `bash scripts/ci/run-bazel.sh test //:rust_format_verification //:rust_check_verification //:rust_lint_verification --config=ci --verbose_failures` | 27/27 passed |
@@ -372,6 +376,24 @@ and changing both market reader ports to `fetch_in_scope`. The new scope contrac
 `PNU`, administrative scopes, and validated tile coordinates without making `bbox` the product
 query language.
 
+### Gap 6: Korean Temporary and Borrowed-Brand Markers Were Not Fully Guarded
+
+The audit found implementation-root comments that used Korean temporary wording, including
+runtime design tokens and frontend boundary code. The existing forbidden marker guardrail blocked
+English markers such as `TEMP`, `HACK`, and `XXX`, but it did not scan CSS files and did not reject
+Korean `임시`. The audit also found UI token and primitive comments that referenced borrowed
+external brand specs, which made Gongzzang's design system look derivative rather than owned.
+
+Follow-up status: resolved in this audit session. The forbidden implementation marker guardrail now
+scans `.css` files, rejects `임시` in implementation roots, and rejects borrowed `Claude.com` or
+`anthropic.com` brand references in implementation comments. The guardrail test suite includes CSS
+and TSX fixtures proving that those markers fail. Existing implementation comments were rewritten
+to describe current intent instead of future cleanup or borrowed design provenance.
+
+Related cleanup: typography token tracking values were set to `0`; unused legacy text-size aliases
+were removed from `packages/ui/tokens/typography.css`; unused legacy shadow aliases were removed
+from `packages/ui/tokens/spacing.css`.
+
 ## 6. Quality Assessment
 
 Current Gongzzang quality is high in the areas that matter most for boundaries:
@@ -391,6 +413,9 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
   shell runner flags.
 - Guardrail execution metadata is centralized in `verification-task-registry.v1.json`, with
   bidirectional checks preventing unregistered Bazel/runner guardrail projections.
+- English/Korean temporary implementation markers and borrowed external brand markers are blocked
+  in runtime code and CSS token files.
+- Typography token tracking is `0`, avoiding negative letter-spacing in Gongzzang UI surfaces.
 
 It is not yet a complete SSS final form because:
 

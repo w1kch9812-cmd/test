@@ -68,7 +68,7 @@ export async function submitForReview(
 ): Promise<{ id: string; version: number; status: string }> {
   const json = await apiProxyClient.listingSubmitForReview.postJson<unknown>({ id: listingId });
 
-  // 임시 인라인 schema — 별도 파일로 분리는 FU 56 (편집 + revise + photo 풀 mutation 묶음).
+  // Keep this narrow response check at the API boundary.
   if (
     typeof json !== "object" ||
     json === null ||

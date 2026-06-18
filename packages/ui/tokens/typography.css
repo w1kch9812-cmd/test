@@ -1,11 +1,10 @@
 /*
  * Typography tokens — Pretendard Variable (한/영 통일)
  *
- * Claude.com spec 의 serif display (Copernicus / Tiempos) 는 한국어 글리프가
- * 없어 적용 불가. 대신 Pretendard Bold 600 + 음수 letter-spacing 으로
- * editorial voice 의 무게감 유지.
+ * Korean-first product typography uses one durable sans stack. Display weight
+ * comes from font weight and scale, not letter-spacing tricks.
  *
- * - display-* : Pretendard 600, 음수 tracking
+ * - display-* : Pretendard 600, tracking 0
  * - title-*   : Pretendard 600, tracking 0
  * - body-*    : Pretendard 400, tracking 0
  * - caption   : Pretendard 500
@@ -45,24 +44,14 @@
   --leading-tight: 1;
 
   /* letter-spacing */
-  --tracking-display-xl: -0.0234em; /* -1.5px / 64px */
-  --tracking-display-lg: -0.0208em; /* -1px / 48px */
-  --tracking-display-md: -0.0139em; /* -0.5px / 36px */
-  --tracking-display-sm: -0.0107em; /* -0.3px / 28px */
-  --tracking-uppercase: 0.125em; /* 1.5px / 12px */
+  --tracking-display-xl: 0;
+  --tracking-display-lg: 0;
+  --tracking-display-md: 0;
+  --tracking-display-sm: 0;
+  --tracking-uppercase: 0;
 
   /* weight */
   --font-weight-regular: 400;
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
-
-  /* legacy alias (점진 제거 예정) */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
 }

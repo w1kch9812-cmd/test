@@ -1,5 +1,5 @@
 /*
- * Spacing / radius / shadow tokens — Claude.com spec
+ * Spacing / radius / shadow tokens.
  * Base unit: 4px. Section rhythm: 96px. Card internal: 32px.
  */
 :root {
@@ -26,12 +26,7 @@
   --radius: var(--radius-md);
 
   /* ── Shadow ────────────────────────────────────────────────────────── */
-  /* Claude spec: "color-block first, shadow rare". 거의 사용 안 함. */
+  /* Gongzzang surfaces prefer color blocks first and subtle shadows only when needed. */
   --shadow-soft: 0 1px 3px rgb(20 20 19 / 0.08);
   --shadow-card: 0 2px 8px rgb(20 20 19 / 0.06);
-
-  /* legacy alias */
-  --shadow-sm: var(--shadow-soft);
-  --shadow-md: var(--shadow-card);
-  --shadow-lg: 0 10px 24px rgb(20 20 19 / 0.1);
 }

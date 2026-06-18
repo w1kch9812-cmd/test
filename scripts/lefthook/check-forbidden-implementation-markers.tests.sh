@@ -85,6 +85,28 @@ RS
 assert_failure_contains "rejects HACK comments" "forbidden implementation marker" bash "$script" "$tmp_root"
 
 reset_tmp_root
+write_file "packages/ui/tokens/colors.css" <<'CSS'
+/*
+ * 임시 차용 palette.
+ */
+:root {
+  --color-primary: #cc785c;
+}
+CSS
+assert_failure_contains "rejects Korean temporary markers in CSS" "forbidden implementation marker" bash "$script" "$tmp_root"
+
+reset_tmp_root
+write_file "packages/ui/primitives/button.tsx" <<'TSX'
+/*
+ * Button — Claude.com spec mapping.
+ */
+export function Button() {
+  return null;
+}
+TSX
+assert_failure_contains "rejects borrowed external brand markers" "forbidden implementation marker" bash "$script" "$tmp_root"
+
+reset_tmp_root
 write_file "apps/web/lib/env.ts" <<'TS'
 // Server ?꾩슜: server-only secrets.
 export const ok = true;

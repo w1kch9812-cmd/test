@@ -2,7 +2,7 @@ import * as React from "react";
 import { cn } from "../lib/utils";
 
 /*
- * Input — Claude.com spec 의 text-input.
+ * Input primitive for dense listing and operations forms.
  * 40px height, hairline border, body-md text. focus 시 coral ring (3px / 15% alpha).
  */
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;

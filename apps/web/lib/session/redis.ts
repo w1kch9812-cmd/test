@@ -10,7 +10,7 @@ export function getRedis(): Redis {
       enableReadyCheck: true,
       lazyConnect: false,
     });
-    // T4 에서 pino logger 로 교체 — 임시 console
+    // Keep Redis bootstrap failures visible before request-scoped logging exists.
     _client.on("error", (err: Error) => {
       console.error(`[redis] connection error: ${err.message}`);
     });

@@ -2,7 +2,7 @@
 import { cn } from "../lib/utils";
 
 /*
- * MultiSelect — Claude.com spec 의 category-tab / category-tab-active 패턴 응용.
+ * MultiSelect chip toggles for compact filter surfaces.
  * 칩 토글 UI: inactive=transparent + muted text, active=cream-card surface + ink text.
  * pill 모양 (radius-pill) 으로 가벼운 분위기, padding 6px×14px.
  */

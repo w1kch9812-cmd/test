@@ -1,9 +1,8 @@
 /*
- * Color tokens — Claude.com design system (warm cream + coral + dark navy)
- * 임시 차용 (anthropic.com / claude.com brand). 향후 공짱 brand 로 교체 예정.
+ * Gongzzang product color tokens.
  *
- * Spec: warm cream canvas (#faf9f5) + coral accent (#cc785c) + dark navy
- * surfaces (#181715) trinity. 모든 surface/text/border 값은 spec 그대로.
+ * The palette balances warm industrial surfaces, coral primary actions,
+ * operational teal/amber accents, and high-contrast dark work surfaces.
  */
 :root {
   /* ── Brand & Accent ───────────────────────────────────────────────── */
