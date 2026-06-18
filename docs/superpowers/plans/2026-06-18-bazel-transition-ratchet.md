@@ -165,3 +165,9 @@
   - Require every evidence requirement referenced by transition categories, exit targets, and transition policies to be registered exactly once with owner, reason, and evidence kind.
   - Derive allowed evidence requirement taxonomy from policy data instead of a checker-owned hardcoded evidence list.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 25: Register Transition Runner Tasks**
+  - Add a top-level `runner_task_registry` to the transition ratchet policy.
+  - Require every transition `runner_task` to be registered exactly once with owner, reason, required commands, and required services.
+  - Derive runner prerequisite expectations from policy data instead of checker-owned hardcoded runner task metadata.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

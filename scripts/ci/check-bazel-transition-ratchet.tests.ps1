@@ -61,6 +61,9 @@ function Write-MinimalRepo {
         [switch] $MissingBrowserRuntimeGate,
         [switch] $MissingRunnerTask,
         [switch] $MismatchedRunnerTask,
+        [switch] $MissingRunnerTaskRegistry,
+        [switch] $MissingRegisteredRunnerTask,
+        [switch] $DuplicateRunnerTaskRegistry,
         [switch] $MissingRequiredCommand,
         [switch] $MissingRequiredService,
         [switch] $MissingRunnerCommandGuard,
@@ -410,6 +413,75 @@ $frontendReleaseCategoryEntry    {
   ],
 "@
     }
+    $frontendE2eRunnerTaskEntry = if ($MissingRegisteredRunnerTask) {
+        ""
+    } else {
+        @'
+    {
+      "id": "frontend-e2e",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": ["pnpm"],
+      "required_services": []
+    },
+'@
+    }
+    $duplicateRunnerTaskEntry = if ($DuplicateRunnerTaskRegistry) {
+        @'
+    {
+      "id": "node-audit",
+      "owner": "build-platform",
+      "reason": "fixture duplicate",
+      "required_commands": ["pnpm"],
+      "required_services": []
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredRunnerTasks = if ($MissingRunnerTaskRegistry) {
+        ""
+    } else {
+        @"
+  "runner_task_registry": [
+    {
+      "id": "deleted",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": [],
+      "required_services": []
+    },
+$duplicateRunnerTaskEntry$frontendE2eRunnerTaskEntry    {
+      "id": "migration-v001-full",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": ["pg_isready", "psql", "sqlx"],
+      "required_services": ["postgres"]
+    },
+    {
+      "id": "node-audit",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": ["pnpm"],
+      "required_services": []
+    },
+    {
+      "id": "rust-check",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": ["cargo"],
+      "required_services": []
+    },
+    {
+      "id": "rustfmt-check",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "required_commands": ["cargo"],
+      "required_services": []
+    }
+  ],
+"@
+    }
     $deletedExitTargetRegistryEntry = if ($AddStalePolicy) {
         @'
 ,
@@ -579,6 +651,7 @@ $retiredTargets
 $registeredApprovalGates
 $registeredExitEvidenceRequirements
 $registeredTransitionCategories
+$registeredRunnerTasks
 $registeredExitTargets
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
@@ -762,6 +835,24 @@ try {
     $mismatchedRunnerTask = Invoke-Checker -Root $mismatchedRunnerTaskRoot
     Assert-Equals $mismatchedRunnerTask.ExitCode 1 "mismatched runner task exit code mismatch"
     Assert-Contains $mismatchedRunnerTask.Output "transition policy runner_task does not match BUILD script_args"
+
+    $missingRunnerTaskRegistryRoot = Join-Path $TempRoot "missing-runner-task-registry"
+    Write-MinimalRepo -Root $missingRunnerTaskRegistryRoot -MissingRunnerTaskRegistry
+    $missingRunnerTaskRegistry = Invoke-Checker -Root $missingRunnerTaskRegistryRoot
+    Assert-Equals $missingRunnerTaskRegistry.ExitCode 1 "missing runner task registry exit code mismatch"
+    Assert-Contains $missingRunnerTaskRegistry.Output "transition ratchet policy must declare runner_task_registry"
+
+    $missingRegisteredRunnerTaskRoot = Join-Path $TempRoot "missing-registered-runner-task"
+    Write-MinimalRepo -Root $missingRegisteredRunnerTaskRoot -MissingRegisteredRunnerTask
+    $missingRegisteredRunnerTask = Invoke-Checker -Root $missingRegisteredRunnerTaskRoot
+    Assert-Equals $missingRegisteredRunnerTask.ExitCode 1 "missing registered runner task exit code mismatch"
+    Assert-Contains $missingRegisteredRunnerTask.Output "runner task is not registered"
+
+    $duplicateRunnerTaskRegistryRoot = Join-Path $TempRoot "duplicate-runner-task-registry"
+    Write-MinimalRepo -Root $duplicateRunnerTaskRegistryRoot -DuplicateRunnerTaskRegistry
+    $duplicateRunnerTaskRegistry = Invoke-Checker -Root $duplicateRunnerTaskRegistryRoot
+    Assert-Equals $duplicateRunnerTaskRegistry.ExitCode 1 "duplicate runner task registry exit code mismatch"
+    Assert-Contains $duplicateRunnerTaskRegistry.Output "transition ratchet runner task duplicate"
 
     $missingRequiredCommandRoot = Join-Path $TempRoot "missing-required-command"
     Write-MinimalRepo -Root $missingRequiredCommandRoot -MissingRequiredCommand

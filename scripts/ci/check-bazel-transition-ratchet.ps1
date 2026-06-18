@@ -497,6 +497,15 @@ if ($transitionCategoryEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($transitionCategoryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet category"
 
+$runnerTaskRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "runner_task_registry") {
+    $runnerTaskRegistryEntries = @($policy.runner_task_registry)
+}
+if ($runnerTaskRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare runner_task_registry"
+}
+Assert-Unique -Values @($runnerTaskRegistryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet runner task"
+
 $policyByTarget = @{}
 $exitTargetByLabel = @{}
 $transitionCategoryById = @{}
@@ -543,6 +552,40 @@ $allowedRequiredCommands = @{
 }
 $allowedRequiredServices = @{
     postgres = $true
+}
+$runnerTaskRequirements = @{}
+foreach ($entry in $runnerTaskRegistryEntries) {
+    $context = "runner task registry"
+    $runnerTask = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($runnerTask -notmatch '^[a-z][a-z0-9-]*$') {
+        throw "runner task registry id must be lowercase kebab-case: $runnerTask"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "runner task registry $runnerTask")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "runner task registry $runnerTask")
+    $registeredRequiredCommands = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_commands" `
+        -Context "runner task registry $runnerTask")
+    Assert-Unique -Values $registeredRequiredCommands -Message "runner task registry $runnerTask required command"
+    foreach ($registeredRequiredCommand in $registeredRequiredCommands) {
+        if (!$allowedRequiredCommands.ContainsKey($registeredRequiredCommand)) {
+            throw "unknown runner task required command for ${runnerTask}: $registeredRequiredCommand"
+        }
+    }
+    $registeredRequiredServices = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "required_services" `
+        -Context "runner task registry $runnerTask")
+    Assert-Unique -Values $registeredRequiredServices -Message "runner task registry $runnerTask required service"
+    foreach ($registeredRequiredService in $registeredRequiredServices) {
+        if (!$allowedRequiredServices.ContainsKey($registeredRequiredService)) {
+            throw "unknown runner task required service for ${runnerTask}: $registeredRequiredService"
+        }
+    }
+    $runnerTaskRequirements[$runnerTask] = [pscustomobject]@{
+        Commands = $registeredRequiredCommands
+        Services = $registeredRequiredServices
+    }
 }
 $allowedExitStates = @{
     blocked         = $true
@@ -614,21 +657,6 @@ foreach ($entry in $transitionCategoryEntries) {
 $allowedExitTargetStates = @{
     planned   = $true
     available = $true
-}
-$runnerTaskRequirements = @{
-    "cargo-deny"                     = [pscustomobject]@{ Commands = @("cargo", "cargo-deny"); Services = @() }
-    "coverage-tarpaulin"             = [pscustomobject]@{ Commands = @("cargo", "cargo-tarpaulin"); Services = @() }
-    "deleted"                        = [pscustomobject]@{ Commands = @(); Services = @() }
-    "frontend-e2e"                   = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
-    "migration-v001-full"            = [pscustomobject]@{ Commands = @("pg_isready", "psql", "sqlx"); Services = @("postgres") }
-    "migration-v002-audit-immutable" = [pscustomobject]@{ Commands = @("pg_isready", "psql", "sqlx"); Services = @("postgres") }
-    "node-audit"                     = [pscustomobject]@{ Commands = @("pnpm"); Services = @() }
-    "rust-check"                     = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
-    "rustfmt-check"                  = [pscustomobject]@{ Commands = @("cargo"); Services = @() }
-    "walking-skeleton-e2e"           = [pscustomobject]@{
-        Commands = @("cargo", "curl", "pg_isready", "psql", "python3", "sqlx")
-        Services = @("postgres")
-    }
 }
 foreach ($entry in $exitTargetEntries) {
     $context = "exit target registry"
@@ -737,7 +765,7 @@ foreach ($entry in $policyEntries) {
     $runnerScript = Get-RequiredString -Object $entry -Name "runner_script" -Context "transition policy $target"
     $runnerTask = Get-RequiredString -Object $entry -Name "runner_task" -Context "transition policy $target"
     if (!$runnerTaskRequirements.ContainsKey($runnerTask)) {
-        throw "unknown transition runner_task for ${target}: $runnerTask"
+        throw "runner task is not registered: ${target} -> $runnerTask"
     }
     $requiredCommands = @(Get-RequiredStringArray `
         -Object $entry `

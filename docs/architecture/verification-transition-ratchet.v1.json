@@ -161,6 +161,50 @@
       "external_collection_approval_required": false
     }
   ],
+  "runner_task_registry": [
+    {
+      "id": "cargo-deny",
+      "owner": "build-platform",
+      "reason": "Cargo advisory scanning remains a transition until Rust SCA evidence is pinned as a Bazel-owned target.",
+      "required_commands": ["cargo", "cargo-deny"],
+      "required_services": []
+    },
+    {
+      "id": "coverage-tarpaulin",
+      "owner": "build-platform",
+      "reason": "Tarpaulin coverage remains a transition until coverage output is represented by native Bazel evidence.",
+      "required_commands": ["cargo", "cargo-tarpaulin"],
+      "required_services": []
+    },
+    {
+      "id": "migration-v001-full",
+      "owner": "build-platform",
+      "reason": "Full migration smoke remains a transition until Postgres-backed migration execution is native Bazel evidence.",
+      "required_commands": ["pg_isready", "psql", "sqlx"],
+      "required_services": ["postgres"]
+    },
+    {
+      "id": "migration-v002-audit-immutable",
+      "owner": "build-platform",
+      "reason": "Audit immutability migration smoke remains a transition until DB-backed verification is native Bazel evidence.",
+      "required_commands": ["pg_isready", "psql", "sqlx"],
+      "required_services": ["postgres"]
+    },
+    {
+      "id": "node-audit",
+      "owner": "build-platform",
+      "reason": "Node advisory scanning remains a transition until advisory evidence is pinned as a Bazel-owned target.",
+      "required_commands": ["pnpm"],
+      "required_services": []
+    },
+    {
+      "id": "walking-skeleton-e2e",
+      "owner": "build-platform",
+      "reason": "Walking skeleton e2e remains a transition until multi-service orchestration is native Bazel execution.",
+      "required_commands": ["cargo", "curl", "pg_isready", "psql", "python3", "sqlx"],
+      "required_services": ["postgres"]
+    }
+  ],
   "exit_targets": [
     {
       "bazel_target": "//:dependency_sca_evidence",
