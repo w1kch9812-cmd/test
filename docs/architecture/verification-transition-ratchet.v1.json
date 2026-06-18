@@ -86,6 +86,85 @@
       "evidence_kind": "provisioning_decision"
     }
   ],
+  "exit_evidence_target_registry": [
+    {
+      "exit_target": "//:dependency_sca_evidence",
+      "requirement": "native_bazel_evidence_target",
+      "planned_bazel_target": "//:verify_supply_chain",
+      "owner": "build-platform",
+      "reason": "Supply-chain verification already owns native Bazel evidence for release SBOM and manifest contracts."
+    },
+    {
+      "exit_target": "//:dependency_sca_evidence",
+      "requirement": "pinned_advisory_evidence",
+      "planned_bazel_target": "//:pinned_advisory_evidence",
+      "owner": "build-platform",
+      "reason": "External advisory reads retire only after advisory evidence is pinned as a Bazel-owned target."
+    },
+    {
+      "exit_target": "//:coverage_evidence",
+      "requirement": "native_bazel_coverage_evidence",
+      "planned_bazel_target": "//:coverage_evidence",
+      "owner": "build-platform",
+      "reason": "Coverage retirement requires a native Bazel evidence target replacing the tarpaulin transition."
+    },
+    {
+      "exit_target": "//:coverage_evidence",
+      "requirement": "toolchain_provisioning_decision",
+      "planned_bazel_target": "//:coverage_toolchain_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Coverage retirement must record the toolchain provisioning decision as Bazel-owned evidence."
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "database_service_provisioning_decision",
+      "planned_bazel_target": "//:migration_database_service_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Migration retirement must record the database service provisioning decision as Bazel-owned evidence."
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "native_bazel_database_test",
+      "planned_bazel_target": "//:migration_verification",
+      "owner": "build-platform",
+      "reason": "Migration execution must move from transition runners to a native Bazel database-backed verification target."
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "toolchain_provisioning_decision",
+      "planned_bazel_target": "//:migration_toolchain_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Migration retirement must record the sqlx/toolchain provisioning decision as Bazel-owned evidence."
+    },
+    {
+      "exit_target": "//:service_e2e_verification",
+      "requirement": "database_service_provisioning_decision",
+      "planned_bazel_target": "//:service_e2e_database_service_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Service e2e retirement must record database service provisioning as Bazel-owned evidence."
+    },
+    {
+      "exit_target": "//:service_e2e_verification",
+      "requirement": "native_bazel_service_orchestration",
+      "planned_bazel_target": "//:service_e2e_verification",
+      "owner": "build-platform",
+      "reason": "Walking-skeleton orchestration must move from transition runners to native Bazel service orchestration."
+    },
+    {
+      "exit_target": "//:service_e2e_verification",
+      "requirement": "service_orchestration_provisioning_decision",
+      "planned_bazel_target": "//:service_e2e_orchestration_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Service e2e retirement must record the service orchestration provisioning decision as Bazel-owned evidence."
+    },
+    {
+      "exit_target": "//:service_e2e_verification",
+      "requirement": "toolchain_provisioning_decision",
+      "planned_bazel_target": "//:service_e2e_toolchain_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "Service e2e retirement must record toolchain provisioning as Bazel-owned evidence."
+    }
+  ],
   "planned_evidence_blocker_registry": [
     {
       "id": "external_advisory_collection_required",

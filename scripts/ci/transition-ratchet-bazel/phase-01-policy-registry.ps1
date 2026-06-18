@@ -57,6 +57,17 @@ Assert-Unique `
     -Values @($exitEvidenceRequirementEntries | ForEach-Object { [string] $_.id }) `
     -Message "transition ratchet exit evidence requirement"
 
+$exitEvidenceTargetEntries = @()
+if ($policy.PSObject.Properties.Name -contains "exit_evidence_target_registry") {
+    $exitEvidenceTargetEntries = @($policy.exit_evidence_target_registry)
+}
+if ($exitEvidenceTargetEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare exit_evidence_target_registry"
+}
+Assert-Unique `
+    -Values @($exitEvidenceTargetEntries | ForEach-Object { "$($_.exit_target)|$($_.requirement)" }) `
+    -Message "transition ratchet exit evidence target"
+
 $plannedEvidenceBlockerEntries = @()
 if ($policy.PSObject.Properties.Name -contains "planned_evidence_blocker_registry") {
     $plannedEvidenceBlockerEntries = @($policy.planned_evidence_blocker_registry)

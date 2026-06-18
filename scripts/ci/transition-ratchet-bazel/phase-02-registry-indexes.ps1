@@ -149,6 +149,31 @@ foreach ($entry in $exitEvidenceRequirementEntries) {
     }
     $allowedExitEvidenceRequirements[$evidenceRequirement] = $true
 }
+$exitEvidenceTargetByKey = @{}
+foreach ($entry in $exitEvidenceTargetEntries) {
+    $context = "exit evidence target registry"
+    $exitTarget = Get-RequiredString -Object $entry -Name "exit_target" -Context $context
+    if ($exitTarget -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+$') {
+        throw "exit evidence target registry exit_target must be a Bazel label: $exitTarget"
+    }
+    if ($exitTarget -match '_transition$') {
+        throw "exit evidence target registry exit_target must not be a transition: $exitTarget"
+    }
+    $requirement = Get-RequiredString -Object $entry -Name "requirement" -Context "$context $exitTarget"
+    if (!$allowedExitEvidenceRequirements.ContainsKey($requirement)) {
+        throw "exit evidence requirement is not registered for exit evidence target ${exitTarget}: $requirement"
+    }
+    $plannedTarget = Get-RequiredString -Object $entry -Name "planned_bazel_target" -Context "$context $exitTarget $requirement"
+    if ($plannedTarget -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+$') {
+        throw "planned exit evidence target must be a Bazel label: $exitTarget -> $requirement -> $plannedTarget"
+    }
+    if ($plannedTarget -match '_transition$') {
+        throw "planned exit evidence target must not be a transition: $exitTarget -> $requirement -> $plannedTarget"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "$context $exitTarget $requirement")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "$context $exitTarget $requirement")
+    $exitEvidenceTargetByKey["$exitTarget|$requirement"] = $entry
+}
 $plannedEvidenceBlockerById = @{}
 foreach ($entry in $plannedEvidenceBlockerEntries) {
     $context = "planned evidence blocker registry"
@@ -228,6 +253,7 @@ foreach ($entry in $exitTargetStateRegistryEntries) {
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "exit target state registry $exitTargetState")
     $allowedExitTargetStates[$exitTargetState] = $true
 }
+$coveredExitEvidenceTargetKeys = @{}
 foreach ($entry in $exitTargetEntries) {
     $context = "exit target registry"
     $exitTarget = Get-RequiredString -Object $entry -Name "bazel_target" -Context $context
@@ -276,6 +302,12 @@ foreach ($entry in $exitTargetEntries) {
         if (!$allowedExitEvidenceRequirements.ContainsKey($requirement)) {
             throw "exit target evidence_status requirement is not registered for ${exitTarget}: $requirement"
         }
+        $exitEvidenceTargetKey = "$exitTarget|$requirement"
+        if (!$exitEvidenceTargetByKey.ContainsKey($exitEvidenceTargetKey)) {
+            throw "exit evidence target registry missing entry: $exitTarget -> $requirement"
+        }
+        $registeredExitEvidenceTarget = $exitEvidenceTargetByKey[$exitEvidenceTargetKey]
+        $coveredExitEvidenceTargetKeys[$exitEvidenceTargetKey] = $true
         $state = Get-RequiredString -Object $evidenceStatus -Name "state" -Context "$context $requirement"
         if (!$allowedExitTargetStates.ContainsKey($state)) {
             throw "exit target evidence_status state is not registered for ${exitTarget}: $state"
@@ -294,6 +326,10 @@ foreach ($entry in $exitTargetEntries) {
             }
             if ($evidenceTarget -match '_transition$') {
                 throw "exit target evidence_status bazel_target must not be a transition: $exitTarget -> $evidenceTarget"
+            }
+            $registeredEvidenceTarget = [string] $registeredExitEvidenceTarget.planned_bazel_target
+            if ($registeredEvidenceTarget -ne $evidenceTarget) {
+                throw "available exit evidence target must match registry planned_bazel_target: $exitTarget -> $requirement"
             }
         } else {
             if (!($evidenceStatus.PSObject.Properties.Name -contains "blocked_by")) {
@@ -348,4 +384,9 @@ foreach ($entry in $exitTargetEntries) {
         }
     }
     $exitTargetByLabel[$exitTarget] = $entry
+}
+foreach ($key in $exitEvidenceTargetByKey.Keys) {
+    if (!$coveredExitEvidenceTargetKeys.ContainsKey($key)) {
+        throw "exit evidence target registry has unreferenced entry: $key"
+    }
 }

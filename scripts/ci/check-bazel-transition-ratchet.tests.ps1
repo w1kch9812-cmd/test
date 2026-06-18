@@ -331,6 +331,30 @@ try {
     Assert-Equals $missingRegisteredExitTarget.ExitCode 1 "missing registered exit target exit code mismatch"
     Assert-Contains $missingRegisteredExitTarget.Output "transition exit_target is not registered"
 
+    $missingExitEvidenceTargetRegistryRoot = Join-Path $TempRoot "missing-exit-evidence-target-registry"
+    Write-MinimalRepo -Root $missingExitEvidenceTargetRegistryRoot -MissingExitEvidenceTargetRegistry
+    $missingExitEvidenceTargetRegistry = Invoke-Checker -Root $missingExitEvidenceTargetRegistryRoot
+    Assert-Equals $missingExitEvidenceTargetRegistry.ExitCode 1 "missing exit evidence target registry exit code mismatch"
+    Assert-Contains $missingExitEvidenceTargetRegistry.Output "transition ratchet policy must declare exit_evidence_target_registry"
+
+    $missingRegisteredExitEvidenceTargetRoot = Join-Path $TempRoot "missing-registered-exit-evidence-target"
+    Write-MinimalRepo -Root $missingRegisteredExitEvidenceTargetRoot -MissingRegisteredExitEvidenceTarget
+    $missingRegisteredExitEvidenceTarget = Invoke-Checker -Root $missingRegisteredExitEvidenceTargetRoot
+    Assert-Equals $missingRegisteredExitEvidenceTarget.ExitCode 1 "missing registered exit evidence target exit code mismatch"
+    Assert-Contains $missingRegisteredExitEvidenceTarget.Output "exit evidence target registry missing entry"
+
+    $invalidPlannedExitEvidenceTargetRoot = Join-Path $TempRoot "invalid-planned-exit-evidence-target"
+    Write-MinimalRepo -Root $invalidPlannedExitEvidenceTargetRoot -InvalidPlannedExitEvidenceTarget
+    $invalidPlannedExitEvidenceTarget = Invoke-Checker -Root $invalidPlannedExitEvidenceTargetRoot
+    Assert-Equals $invalidPlannedExitEvidenceTarget.ExitCode 1 "invalid planned exit evidence target exit code mismatch"
+    Assert-Contains $invalidPlannedExitEvidenceTarget.Output "planned exit evidence target must be a Bazel label"
+
+    $transitionPlannedExitEvidenceTargetRoot = Join-Path $TempRoot "transition-planned-exit-evidence-target"
+    Write-MinimalRepo -Root $transitionPlannedExitEvidenceTargetRoot -TransitionPlannedExitEvidenceTarget
+    $transitionPlannedExitEvidenceTarget = Invoke-Checker -Root $transitionPlannedExitEvidenceTargetRoot
+    Assert-Equals $transitionPlannedExitEvidenceTarget.ExitCode 1 "transition planned exit evidence target exit code mismatch"
+    Assert-Contains $transitionPlannedExitEvidenceTarget.Output "planned exit evidence target must not be a transition"
+
     $mismatchedExitTargetEvidenceRoot = Join-Path $TempRoot "mismatched-exit-target-evidence"
     Write-MinimalRepo -Root $mismatchedExitTargetEvidenceRoot -MismatchedExitTargetEvidence
     $mismatchedExitTargetEvidence = Invoke-Checker -Root $mismatchedExitTargetEvidenceRoot

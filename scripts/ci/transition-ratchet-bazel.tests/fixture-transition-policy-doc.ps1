@@ -8,6 +8,7 @@ $registeredEvidenceKinds
 $registeredApprovalGates
 $registeredExitEvidenceRequirements
 $registeredPlannedEvidenceBlockers
+$registeredExitEvidenceTargets
 $registeredTransitionCategories
 $registeredRequiredCommands
 $registeredRequiredServices

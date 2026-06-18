@@ -200,3 +200,9 @@
   - Require every exit target `blocking_approval_gates` entry to appear in at least one planned `evidence_status.blocked_by` approval blocker.
   - Keep implementation blockers separate from approval blockers.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 31: Register Exit Evidence Target Labels**
+  - Add a top-level `exit_evidence_target_registry` for every exit target and evidence requirement pair.
+  - Require each entry to declare owner, reason, and a non-transition `planned_bazel_target`.
+  - Require every `evidence_status` entry to have a matching registry entry, and require available evidence to match the registry target label.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

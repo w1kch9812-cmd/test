@@ -18,6 +18,23 @@
     } else {
         '["external_advisory_collection"]'
     }
+    $nativeEvidencePlannedTarget = if ($AvailableMissingEvidenceTarget) {
+        "//:missing_supply_chain_evidence"
+    } else {
+        "//:verify_supply_chain"
+    }
+    $rustfmtPlannedTarget = if ($AvailableMissingExitTarget) {
+        "//:rust_verification"
+    } else {
+        "//tools/bazel:rustfmt_check"
+    }
+    $pinnedAdvisoryPlannedTarget = if ($InvalidPlannedExitEvidenceTarget) {
+        "not-a-bazel-label"
+    } elseif ($TransitionPlannedExitEvidenceTarget) {
+        "//tools/bazel:ci_node_audit_transition"
+    } else {
+        "//:pinned_advisory_evidence"
+    }
     $externalAdvisoryCategoryEvidence = if ($MismatchedCategoryEvidence) { '["native_bazel_database_test"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
     $nativeBazelEvidenceKindEntry = if ($MissingRegisteredEvidenceKind) {
         ""
@@ -215,6 +232,93 @@ $nativeTestTargetMissingBlockerEntry    {
       "owner": "build-platform",
       "reason": "fixture",
       "exit_evidence_requirement": "native_bazel_coverage_evidence"
+    }
+  ],
+"@
+    }
+    $dependencyScaNativeEvidenceTargetEntry = if ($MissingRegisteredExitTarget) {
+        ""
+    } else {
+        @"
+    {
+      "exit_target": "//:dependency_sca_evidence",
+      "requirement": "native_bazel_evidence_target",
+      "planned_bazel_target": "$nativeEvidencePlannedTarget",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+"@
+    }
+    $dependencyScaPinnedEvidenceTargetEntry = if (
+        $MissingRegisteredExitTarget -or
+        $MissingRegisteredExitEvidenceTarget -or
+        $MismatchedExitTargetEvidence
+    ) {
+        ""
+    } else {
+        @"
+    {
+      "exit_target": "//:dependency_sca_evidence",
+      "requirement": "pinned_advisory_evidence",
+      "planned_bazel_target": "$pinnedAdvisoryPlannedTarget",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+"@
+    }
+    $registeredExitEvidenceTargets = if ($MissingExitEvidenceTargetRegistry) {
+        ""
+    } else {
+        @"
+  "exit_evidence_target_registry": [
+$dependencyScaNativeEvidenceTargetEntry$dependencyScaPinnedEvidenceTargetEntry    {
+      "exit_target": "//:rust_verification",
+      "requirement": "native_bazel_test_target",
+      "planned_bazel_target": "//:rust_verification",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//tools/bazel:rustfmt_check",
+      "requirement": "native_bazel_test_target",
+      "planned_bazel_target": "$rustfmtPlannedTarget",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//:frontend_e2e",
+      "requirement": "browser_runtime_provisioning_decision",
+      "planned_bazel_target": "//:frontend_e2e_browser_runtime_evidence",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//:frontend_e2e",
+      "requirement": "native_bazel_test_target",
+      "planned_bazel_target": "//:frontend_e2e",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "database_service_provisioning_decision",
+      "planned_bazel_target": "//:migration_database_service_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "native_bazel_database_test",
+      "planned_bazel_target": "//:migration_verification",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+    {
+      "exit_target": "//:migration_verification",
+      "requirement": "toolchain_provisioning_decision",
+      "planned_bazel_target": "//:migration_toolchain_provisioning_evidence",
+      "owner": "build-platform",
+      "reason": "fixture"
     }
   ],
 "@

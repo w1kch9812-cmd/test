@@ -381,6 +381,12 @@ approval blocker. This forced migration and service e2e exit targets to declare 
 toolchain/database provisioning evidence requirements explicitly instead of carrying ungrounded
 blocking gates.
 
+Ninth follow-up status: planned exit evidence targets are now registry-backed. The transition
+ratchet policy has an `exit_evidence_target_registry` entry for every exit target and evidence
+requirement pair. Each entry declares the owner, reason, and non-transition `planned_bazel_target`;
+available evidence must match the registered target label. This turns the remaining transition
+retirement work into explicit target-level evidence rather than implicit future intent.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
