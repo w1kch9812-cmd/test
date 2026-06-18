@@ -22,6 +22,15 @@ foreach ($exitTarget in $exitTargetByLabel.Keys) {
     if ([string] $registeredExitTarget.state -eq "available" -and !$actualBuildTargetSet.ContainsKey($exitTarget)) {
         throw "available exit target does not exist in Bazel BUILD files: $exitTarget"
     }
+    foreach ($evidenceStatus in @($registeredExitTarget.evidence_status)) {
+        if ([string] $evidenceStatus.state -ne "available") {
+            continue
+        }
+        $evidenceTarget = [string] $evidenceStatus.bazel_target
+        if (!$actualBuildTargetSet.ContainsKey($evidenceTarget)) {
+            throw "available exit evidence target does not exist in Bazel BUILD files: $exitTarget -> $evidenceTarget"
+        }
+    }
 }
 foreach ($target in $policyByTarget.Keys) {
     $entry = $policyByTarget[$target]

@@ -313,6 +313,18 @@ try {
     Assert-Equals $mismatchedExitTargetEvidence.ExitCode 1 "mismatched exit target evidence exit code mismatch"
     Assert-Contains $mismatchedExitTargetEvidence.Output "exit target registry exit_evidence_requirements"
 
+    $missingExitTargetEvidenceStatusRoot = Join-Path $TempRoot "missing-exit-target-evidence-status"
+    Write-MinimalRepo -Root $missingExitTargetEvidenceStatusRoot -MissingExitTargetEvidenceStatus
+    $missingExitTargetEvidenceStatus = Invoke-Checker -Root $missingExitTargetEvidenceStatusRoot
+    Assert-Equals $missingExitTargetEvidenceStatus.ExitCode 1 "missing exit target evidence status exit code mismatch"
+    Assert-Contains $missingExitTargetEvidenceStatus.Output "exit target registry evidence_status"
+
+    $availableMissingEvidenceTargetRoot = Join-Path $TempRoot "available-missing-evidence-target"
+    Write-MinimalRepo -Root $availableMissingEvidenceTargetRoot -AvailableMissingEvidenceTarget
+    $availableMissingEvidenceTarget = Invoke-Checker -Root $availableMissingEvidenceTargetRoot
+    Assert-Equals $availableMissingEvidenceTarget.ExitCode 1 "available missing evidence target exit code mismatch"
+    Assert-Contains $availableMissingEvidenceTarget.Output "available exit evidence target does not exist in Bazel BUILD files"
+
     $availableMissingExitTargetRoot = Join-Path $TempRoot "available-missing-exit-target"
     Write-MinimalRepo -Root $availableMissingExitTargetRoot -AvailableMissingExitTarget
     $availableMissingExitTarget = Invoke-Checker -Root $availableMissingExitTargetRoot

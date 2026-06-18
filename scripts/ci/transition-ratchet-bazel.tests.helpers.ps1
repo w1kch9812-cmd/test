@@ -86,6 +86,8 @@ function Write-MinimalRepo {
         [switch] $MissingRegisteredExitTargetState,
         [switch] $DuplicateExitTargetStateRegistry,
         [switch] $AvailableMissingExitTarget,
+        [switch] $MissingExitTargetEvidenceStatus,
+        [switch] $AvailableMissingEvidenceTarget,
         [switch] $MismatchedExitTargetEvidence,
         [switch] $MissingApprovalGateRegistry,
         [switch] $MissingRegisteredApprovalGate,

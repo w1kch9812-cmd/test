@@ -7,13 +7,103 @@
       "owner": "build-platform",
       "reason": "fixture",
       "exit_evidence_requirements": [],
-      "blocking_approval_gates": []
+      "blocking_approval_gates": [],
+      "evidence_status": []
     }
 '@
     } else {
         ""
     }
     $rustVerificationExitTargetState = if ($AvailableMissingExitTarget) { "available" } else { "planned" }
+    $dependencyScaEvidenceStatus = if ($MissingExitTargetEvidenceStatus) {
+        ""
+    } elseif ($AvailableMissingEvidenceTarget) {
+        @'
+,
+      "evidence_status": [
+        {
+          "requirement": "native_bazel_evidence_target",
+          "state": "available",
+          "bazel_target": "//:missing_supply_chain_evidence",
+          "reason": "fixture"
+        },
+        {
+          "requirement": "pinned_advisory_evidence",
+          "state": "planned",
+          "reason": "fixture"
+        }
+      ]
+'@
+    } elseif ($MismatchedExitTargetEvidence) {
+        @'
+,
+      "evidence_status": [
+        {
+          "requirement": "native_bazel_evidence_target",
+          "state": "available",
+          "bazel_target": "//:verify_supply_chain",
+          "reason": "fixture"
+        }
+      ]
+'@
+    } else {
+        @'
+,
+      "evidence_status": [
+        {
+          "requirement": "native_bazel_evidence_target",
+          "state": "available",
+          "bazel_target": "//:verify_supply_chain",
+          "reason": "fixture"
+        },
+        {
+          "requirement": "pinned_advisory_evidence",
+          "state": "planned",
+          "reason": "fixture"
+        }
+      ]
+'@
+    }
+    $nativeTestEvidenceStatus = @'
+,
+      "evidence_status": [
+        {
+          "requirement": "native_bazel_test_target",
+          "state": "planned",
+          "reason": "fixture"
+        }
+      ]
+'@
+    $rustVerificationEvidenceStatus = if ($AvailableMissingExitTarget) {
+        @'
+,
+      "evidence_status": [
+        {
+          "requirement": "native_bazel_test_target",
+          "state": "available",
+          "bazel_target": "//:rust_verification",
+          "reason": "fixture"
+        }
+      ]
+'@
+    } else {
+        $nativeTestEvidenceStatus
+    }
+    $databaseEvidenceStatus = @'
+,
+      "evidence_status": [
+        {
+          "requirement": "database_service_provisioning_decision",
+          "state": "planned",
+          "reason": "fixture"
+        },
+        {
+          "requirement": "native_bazel_database_test",
+          "state": "planned",
+          "reason": "fixture"
+        }
+      ]
+'@
     $registeredExitTargets = if ($MissingExitTargetRegistry) {
         ""
     } elseif ($MissingRegisteredExitTarget) {
@@ -26,6 +116,7 @@
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": []
+$rustVerificationEvidenceStatus
     },
     {
       "bazel_target": "//tools/bazel:rustfmt_check",
@@ -34,6 +125,7 @@
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": []
+$rustVerificationEvidenceStatus
     },
     {
       "bazel_target": "//:frontend_e2e",
@@ -42,6 +134,7 @@
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": ["browser_runtime_provisioning"]
+$nativeTestEvidenceStatus
     },
     {
       "bazel_target": "//:migration_verification",
@@ -50,6 +143,7 @@
       "reason": "fixture",
       "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
+$databaseEvidenceStatus
     }
 $deletedExitTargetRegistryEntry
   ],
@@ -64,6 +158,7 @@ $deletedExitTargetRegistryEntry
       "reason": "fixture",
       "exit_evidence_requirements": $dependencyScaExitEvidenceRequirements,
       "blocking_approval_gates": ["external_advisory_collection"]
+$dependencyScaEvidenceStatus
     },
     {
       "bazel_target": "//:rust_verification",
@@ -72,6 +167,7 @@ $deletedExitTargetRegistryEntry
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": []
+$rustVerificationEvidenceStatus
     },
     {
       "bazel_target": "//tools/bazel:rustfmt_check",
@@ -80,6 +176,7 @@ $deletedExitTargetRegistryEntry
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": []
+$rustVerificationEvidenceStatus
     },
     {
       "bazel_target": "//:frontend_e2e",
@@ -88,6 +185,7 @@ $deletedExitTargetRegistryEntry
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
       "blocking_approval_gates": ["browser_runtime_provisioning"]
+$nativeTestEvidenceStatus
     },
     {
       "bazel_target": "//:migration_verification",
@@ -96,6 +194,7 @@ $deletedExitTargetRegistryEntry
       "reason": "fixture",
       "exit_evidence_requirements": ["database_service_provisioning_decision", "native_bazel_database_test"],
       "blocking_approval_gates": ["toolchain_provisioning", "database_service_provisioning"]
+$databaseEvidenceStatus
     }
 $deletedExitTargetRegistryEntry
   ],

@@ -219,5 +219,50 @@ foreach ($entry in $exitTargetEntries) {
             throw "exit target approval gate is not registered for ${exitTarget}: $exitTargetBlockingApprovalGate"
         }
     }
+    if (!($entry.PSObject.Properties.Name -contains "evidence_status")) {
+        throw "exit target registry evidence_status missing for $exitTarget"
+    }
+    $evidenceStatusEntries = @($entry.evidence_status)
+    $evidenceStatusRequirements = @()
+    $hasPlannedEvidence = $false
+    foreach ($evidenceStatus in $evidenceStatusEntries) {
+        $context = "exit target registry evidence_status for $exitTarget"
+        $requirement = Get-RequiredString -Object $evidenceStatus -Name "requirement" -Context $context
+        if (!$allowedExitEvidenceRequirements.ContainsKey($requirement)) {
+            throw "exit target evidence_status requirement is not registered for ${exitTarget}: $requirement"
+        }
+        $state = Get-RequiredString -Object $evidenceStatus -Name "state" -Context "$context $requirement"
+        if (!$allowedExitTargetStates.ContainsKey($state)) {
+            throw "exit target evidence_status state is not registered for ${exitTarget}: $state"
+        }
+        [void] (Get-RequiredString -Object $evidenceStatus -Name "reason" -Context "$context $requirement")
+        if ($state -eq "available") {
+            $evidenceTarget = Get-RequiredString `
+                -Object $evidenceStatus `
+                -Name "bazel_target" `
+                -Context "$context $requirement"
+            if ($evidenceTarget -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+$') {
+                throw "exit target evidence_status bazel_target must be a Bazel label: $exitTarget -> $evidenceTarget"
+            }
+            if ($evidenceTarget -match '_transition$') {
+                throw "exit target evidence_status bazel_target must not be a transition: $exitTarget -> $evidenceTarget"
+            }
+        } else {
+            $hasPlannedEvidence = $true
+        }
+        $evidenceStatusRequirements += $requirement
+    }
+    Assert-Unique -Values $evidenceStatusRequirements -Message "exit target registry $exitTarget evidence_status requirement"
+    Assert-ContainsAll `
+        -Actual $evidenceStatusRequirements `
+        -Expected $exitTargetEvidenceRequirements `
+        -Message "exit target registry evidence_status for $exitTarget"
+    Assert-ContainsAll `
+        -Actual $exitTargetEvidenceRequirements `
+        -Expected $evidenceStatusRequirements `
+        -Message "exit target registry evidence_status requirements for $exitTarget"
+    if ($exitTargetState -eq "available" -and $hasPlannedEvidence) {
+        throw "available exit target must not have planned evidence_status: $exitTarget"
+    }
     $exitTargetByLabel[$exitTarget] = $entry
 }

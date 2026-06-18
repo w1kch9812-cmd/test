@@ -32,6 +32,25 @@ transition_shell_test(
 )
 '@
 
+    $rustVerificationTarget = if ($AvailableMissingExitTarget) {
+        ""
+    } else {
+        @'
+
+test_suite(
+    name = "rust_verification",
+    tests = [],
+)
+'@
+    }
+    Write-File -Root $Root -RelativePath "BUILD.bazel" -Content @"
+test_suite(
+    name = "verify_supply_chain",
+    tests = [],
+)
+$rustVerificationTarget
+"@
+
     $runnerPsqlGuard = if ($MissingRunnerCommandGuard) { "" } else { "  require_command psql" }
     $runnerPostgresGuard = if ($MissingRunnerServiceGuard) { "" } else { "  wait_for_postgres" }
     $runnerRustCheckCase = if ($MissingRunnerTaskCase) {

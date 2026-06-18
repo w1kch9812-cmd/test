@@ -294,6 +294,12 @@ entry whose `state` is `available` unless that exact Bazel label exists in track
 files. This does not retire the remaining transitions, but it prevents a planned exit target from
 being reclassified as ready without a real Bazel target behind it.
 
+Second follow-up status: further hardened after the audit. Each exit target now declares
+`evidence_status` per required evidence item. This separates partial progress from completion:
+for example, `dependency_sca_evidence` records Bazel-owned SBOM/evidence manifest coverage as
+available through `//:verify_supply_chain`, while keeping pinned external advisory evidence
+planned until explicit advisory collection approval exists.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
@@ -318,6 +324,8 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
 - Traffic/auth route policy is registry-driven.
 - Lakehouse integration is registry-driven.
 - Bazel transition state is explicit rather than hidden.
+- Planned Bazel exit targets now expose requirement-by-requirement evidence state, so partial
+  evidence cannot be mistaken for transition retirement.
 
 It is not yet a complete SSS final form because:
 
