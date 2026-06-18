@@ -55,6 +55,10 @@ function Write-MinimalRepo {
         [switch] $AddStalePolicy,
         [switch] $ExpiredSunset,
         [switch] $MissingExternalCollectionFlag,
+        [switch] $MissingApprovalGates,
+        [switch] $UnknownApprovalGate,
+        [switch] $MissingAdvisoryApprovalGate,
+        [switch] $MissingBrowserRuntimeGate,
         [switch] $RetiredRustfmtTransition,
         [switch] $UntrackedCiTransition
     )
@@ -79,9 +83,18 @@ transition_shell_test(
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["rustfmt-check"],
 )
+
+transition_shell_test(
+    name = "frontend_e2e_transition",
+    srcs = ["run_ci_transition_task.sh"],
+    script_args = ["frontend-e2e"],
+)
 '@
 
     $sunset = if ($ExpiredSunset) { "2020-01-01" } else { "2026-07-31" }
+    $nodeAuditApprovalGates = if ($MissingAdvisoryApprovalGate) { "[]" } elseif ($UnknownApprovalGate) { '["typo_gate"]' } else { '["external_advisory_collection"]' }
+    $approvalGatesLine = if ($MissingApprovalGates) { "" } else { "`"approval_gates`": []," }
+    $frontendE2eApprovalGates = if ($MissingBrowserRuntimeGate) { "[]" } else { '["browser_runtime_provisioning"]' }
     $nodeAuditPolicy = if ($OmitNodeAuditPolicy) {
         ""
     } else {
@@ -94,6 +107,7 @@ transition_shell_test(
       "reason": "pnpm audit still shells out until advisory SCA is represented by a pinned Bazel evidence target.",
       "exit_target": "//:dependency_sca_evidence",
       "sunset": "$sunset",
+      "approval_gates": $nodeAuditApprovalGates,
       "external_collection_approval_required": $externalCollection
     },
 "@
@@ -107,6 +121,7 @@ transition_shell_test(
       "reason": "fixture",
       "exit_target": "//:deleted",
       "sunset": "2026-07-31",
+      "approval_gates": [],
       "external_collection_approval_required": false
     },
 '@
@@ -138,6 +153,7 @@ $nodeAuditPolicy$stalePolicy    {
       "reason": "cargo check transition until Rust check is a native Bazel rule target.",
       "exit_target": "//:rust_verification",
       "sunset": "$sunset",
+$approvalGatesLine
       "external_collection_approval_required": false
     },
     {
@@ -147,6 +163,17 @@ $nodeAuditPolicy$stalePolicy    {
       "reason": "fixture",
       "exit_target": "//tools/bazel:rustfmt_check",
       "sunset": "$sunset",
+      "approval_gates": [],
+      "external_collection_approval_required": false
+    },
+    {
+      "bazel_target": "//tools/bazel:frontend_e2e_transition",
+      "category": "frontend-release-verification",
+      "owner": "build-platform",
+      "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
+      "exit_target": "//:frontend_e2e",
+      "sunset": "$sunset",
+      "approval_gates": $frontendE2eApprovalGates,
       "external_collection_approval_required": false
     }
   ]
@@ -200,6 +227,30 @@ try {
     $missingExternalFlag = Invoke-Checker -Root $missingExternalFlagRoot
     Assert-Equals $missingExternalFlag.ExitCode 1 "missing external collection flag exit code mismatch"
     Assert-Contains $missingExternalFlag.Output "external advisory collection transition must require approval"
+
+    $missingApprovalGatesRoot = Join-Path $TempRoot "missing-approval-gates"
+    Write-MinimalRepo -Root $missingApprovalGatesRoot -MissingApprovalGates
+    $missingApprovalGates = Invoke-Checker -Root $missingApprovalGatesRoot
+    Assert-Equals $missingApprovalGates.ExitCode 1 "missing approval gates exit code mismatch"
+    Assert-Contains $missingApprovalGates.Output "transition policy //tools/bazel:ci_rust_check_transition missing 'approval_gates'"
+
+    $unknownApprovalGateRoot = Join-Path $TempRoot "unknown-approval-gate"
+    Write-MinimalRepo -Root $unknownApprovalGateRoot -UnknownApprovalGate
+    $unknownApprovalGate = Invoke-Checker -Root $unknownApprovalGateRoot
+    Assert-Equals $unknownApprovalGate.ExitCode 1 "unknown approval gate exit code mismatch"
+    Assert-Contains $unknownApprovalGate.Output "unknown transition approval gate for //tools/bazel:ci_node_audit_transition"
+
+    $missingAdvisoryApprovalGateRoot = Join-Path $TempRoot "missing-advisory-approval-gate"
+    Write-MinimalRepo -Root $missingAdvisoryApprovalGateRoot -MissingAdvisoryApprovalGate
+    $missingAdvisoryApprovalGate = Invoke-Checker -Root $missingAdvisoryApprovalGateRoot
+    Assert-Equals $missingAdvisoryApprovalGate.ExitCode 1 "missing advisory approval gate exit code mismatch"
+    Assert-Contains $missingAdvisoryApprovalGate.Output "external advisory transition must declare approval gate"
+
+    $missingBrowserRuntimeGateRoot = Join-Path $TempRoot "missing-browser-runtime-gate"
+    Write-MinimalRepo -Root $missingBrowserRuntimeGateRoot -MissingBrowserRuntimeGate
+    $missingBrowserRuntimeGate = Invoke-Checker -Root $missingBrowserRuntimeGateRoot
+    Assert-Equals $missingBrowserRuntimeGate.ExitCode 1 "missing browser runtime gate exit code mismatch"
+    Assert-Contains $missingBrowserRuntimeGate.Output "frontend e2e transition must declare browser runtime provisioning gate"
 
     $retiredRustfmtRoot = Join-Path $TempRoot "retired-rustfmt"
     Write-MinimalRepo -Root $retiredRustfmtRoot -RetiredRustfmtTransition

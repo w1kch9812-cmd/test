@@ -64,6 +64,31 @@ function Get-RequiredBoolean {
     [bool] $Object.$Name
 }
 
+function Get-RequiredStringArray {
+    param([object] $Object, [string] $Name, [string] $Context)
+
+    if (!($Object.PSObject.Properties.Name -contains $Name)) {
+        throw "$Context missing '$Name'"
+    }
+    $rawValue = $Object.PSObject.Properties[$Name].Value
+    if ($null -eq $rawValue) {
+        throw "$Context '$Name' must be a string array"
+    }
+    if ($rawValue -isnot [System.Array]) {
+        throw "$Context '$Name' must be a string array"
+    }
+
+    $values = @()
+    foreach ($value in @($rawValue)) {
+        $stringValue = [string] $value
+        if ([string]::IsNullOrWhiteSpace($stringValue)) {
+            throw "$Context '$Name' entries must not be empty"
+        }
+        $values += $stringValue
+    }
+    $values
+}
+
 function Assert-Equals {
     param([object] $Actual, [object] $Expected, [string] $Message)
 
@@ -82,6 +107,17 @@ function Assert-Unique {
         }
         $seen[$value] = $true
     }
+}
+
+function Test-ContainsValue {
+    param([string[]] $Values, [string] $Expected)
+
+    foreach ($value in $Values) {
+        if ($value -eq $Expected) {
+            return $true
+        }
+    }
+    $false
 }
 
 function Test-IsIgnoredPath {
@@ -197,16 +233,33 @@ foreach ($target in $retiredTransitionTargets) {
 }
 
 $policyByTarget = @{}
+$allowedApprovalGates = @{
+    external_advisory_collection  = $true
+    browser_runtime_provisioning  = $true
+    toolchain_provisioning        = $true
+    database_service_provisioning = $true
+    service_orchestration_provisioning = $true
+}
 foreach ($entry in $policyEntries) {
     $context = "transition policy"
     $target = Get-RequiredString -Object $entry -Name "bazel_target" -Context $context
     if ($target -notmatch '^//[A-Za-z0-9_./-]*:[A-Za-z0-9_.-]+_transition$') {
         throw "transition policy target must be a Bazel _transition label: $target"
     }
-    [void] (Get-RequiredString -Object $entry -Name "category" -Context "transition policy $target")
+    $category = Get-RequiredString -Object $entry -Name "category" -Context "transition policy $target"
     [void] (Get-RequiredString -Object $entry -Name "owner" -Context "transition policy $target")
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "transition policy $target")
     [void] (Get-RequiredString -Object $entry -Name "exit_target" -Context "transition policy $target")
+    $approvalGates = @(Get-RequiredStringArray `
+        -Object $entry `
+        -Name "approval_gates" `
+        -Context "transition policy $target")
+    Assert-Unique -Values $approvalGates -Message "transition policy $target approval gate"
+    foreach ($approvalGate in $approvalGates) {
+        if (!$allowedApprovalGates.ContainsKey($approvalGate)) {
+            throw "unknown transition approval gate for ${target}: $approvalGate"
+        }
+    }
     $sunset = Get-RequiredString -Object $entry -Name "sunset" -Context "transition policy $target"
     $sunsetDate = [DateTime]::ParseExact(
         $sunset,
@@ -220,8 +273,54 @@ foreach ($entry in $policyEntries) {
         -Object $entry `
         -Name "external_collection_approval_required" `
         -Context "transition policy $target"
-    if ([string] $entry.category -eq "external-advisory-sca" -and !$externalCollection) {
+    if ($category -eq "external-advisory-sca" -and !$externalCollection) {
         throw "external advisory collection transition must require approval: $target"
+    }
+    if (
+        $category -eq "external-advisory-sca" -and
+        !(Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection")
+    ) {
+        throw "external advisory transition must declare approval gate: $target"
+    }
+    if ($externalCollection -and !(Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection")) {
+        throw "external collection transition must declare external advisory approval gate: $target"
+    }
+    if (
+        (Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection") -and
+        !$externalCollection
+    ) {
+        throw "external advisory approval gate must require external collection approval: $target"
+    }
+    if (
+        $target -eq "//tools/bazel:frontend_e2e_transition" -and
+        !(Test-ContainsValue -Values $approvalGates -Expected "browser_runtime_provisioning")
+    ) {
+        throw "frontend e2e transition must declare browser runtime provisioning gate: $target"
+    }
+    if (
+        $category -eq "coverage-verification" -and
+        !(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")
+    ) {
+        throw "coverage transition must declare toolchain provisioning gate: $target"
+    }
+    if ($category -eq "database-verification") {
+        if (!(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")) {
+            throw "database transition must declare toolchain provisioning gate: $target"
+        }
+        if (!(Test-ContainsValue -Values $approvalGates -Expected "database_service_provisioning")) {
+            throw "database transition must declare database service provisioning gate: $target"
+        }
+    }
+    if ($category -eq "service-e2e-verification") {
+        if (!(Test-ContainsValue -Values $approvalGates -Expected "toolchain_provisioning")) {
+            throw "service e2e transition must declare toolchain provisioning gate: $target"
+        }
+        if (!(Test-ContainsValue -Values $approvalGates -Expected "database_service_provisioning")) {
+            throw "service e2e transition must declare database service provisioning gate: $target"
+        }
+        if (!(Test-ContainsValue -Values $approvalGates -Expected "service_orchestration_provisioning")) {
+            throw "service e2e transition must declare service orchestration gate: $target"
+        }
     }
     $policyByTarget[$target] = $entry
 }

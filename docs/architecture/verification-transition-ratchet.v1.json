@@ -20,6 +20,7 @@
       "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
       "exit_target": "//:frontend_e2e",
       "sunset": "2026-07-31",
+      "approval_gates": ["browser_runtime_provisioning"],
       "external_collection_approval_required": false
     },
     {
@@ -29,6 +30,7 @@
       "reason": "pnpm audit reads external advisory data; keep behind an explicit transition target until advisory SCA evidence is a pinned Bazel output.",
       "exit_target": "//:dependency_sca_evidence",
       "sunset": "2026-07-31",
+      "approval_gates": ["external_advisory_collection"],
       "external_collection_approval_required": true
     },
     {
@@ -38,6 +40,7 @@
       "reason": "cargo-deny may read advisory data; keep behind an explicit transition target until Rust SCA evidence is a pinned Bazel output.",
       "exit_target": "//:dependency_sca_evidence",
       "sunset": "2026-07-31",
+      "approval_gates": ["external_advisory_collection"],
       "external_collection_approval_required": true
     },
     {
@@ -47,6 +50,7 @@
       "reason": "cargo tarpaulin transition retained until coverage reports are native Bazel outputs.",
       "exit_target": "//:coverage_evidence",
       "sunset": "2026-07-31",
+      "approval_gates": ["toolchain_provisioning"],
       "external_collection_approval_required": false
     },
     {
@@ -56,6 +60,7 @@
       "reason": "migration smoke transition retained until DB migration execution is a native Bazel test target.",
       "exit_target": "//:migration_verification",
       "sunset": "2026-07-31",
+      "approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "external_collection_approval_required": false
     },
     {
@@ -65,6 +70,7 @@
       "reason": "audit immutability migration transition retained until DB migration execution is a native Bazel test target.",
       "exit_target": "//:migration_verification",
       "sunset": "2026-07-31",
+      "approval_gates": ["toolchain_provisioning", "database_service_provisioning"],
       "external_collection_approval_required": false
     },
     {
@@ -74,6 +80,11 @@
       "reason": "walking-skeleton service e2e transition retained until service orchestration is a native Bazel test target.",
       "exit_target": "//:service_e2e_verification",
       "sunset": "2026-07-31",
+      "approval_gates": [
+        "toolchain_provisioning",
+        "database_service_provisioning",
+        "service_orchestration_provisioning"
+      ],
       "external_collection_approval_required": false
     }
   ]

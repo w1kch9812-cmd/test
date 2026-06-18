@@ -92,3 +92,8 @@
   - Move `//tools/bazel:frontend_bundle_transition` to `retired_transition_targets`.
   - Route app-level `pnpm test:bundle` through Bazel instead of the pnpm transition wrapper.
   - Re-run targeted ratchet tests, bundle verification, guardrails, and full Bazel graph.
+
+- [x] **Task 13: Require Explicit Transition Approval Gates**
+  - Add `approval_gates` to every active transition policy entry.
+  - Enforce category-specific gates for external advisory reads, Playwright browser runtime provisioning, toolchain provisioning, database service provisioning, and service orchestration.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
