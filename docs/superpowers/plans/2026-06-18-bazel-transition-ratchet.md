@@ -103,3 +103,8 @@
   - Remove `//tools/bazel:frontend_e2e_transition`, because CI already uses the Bazel-native `//:frontend_e2e` suite.
   - Move `//tools/bazel:frontend_e2e_transition` to `retired_transition_targets`.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 15: Remove Retired Frontend Transition Runner**
+  - Delete `tools/bazel/run_pnpm_task.sh` after all frontend transition wrappers have moved to retired policy.
+  - Verify no BUILD, CI, hook, or package script still references the runner.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
