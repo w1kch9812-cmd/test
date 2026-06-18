@@ -36,9 +36,6 @@ case "$task" in
   lint)
     exec pnpm lint
     ;;
-  typecheck)
-    exec pnpm typecheck
-    ;;
   test)
     exec pnpm test
     ;;

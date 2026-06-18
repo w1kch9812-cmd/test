@@ -68,3 +68,9 @@
   - Move `//tools/bazel:ci_sqlx_prepare_check_transition` to `retired_transition_targets`.
   - Verify committed `.sqlx/query-*.json` offline metadata as Bazel runfiles without DB or cargo shell execution.
   - Re-run targeted ratchet tests, SQLx metadata Bazel target, guardrails, and full Bazel graph.
+
+- [x] **Task 9: Retire Frontend Typecheck Transition**
+  - Replace `//tools/bazel:frontend_typecheck_transition` with the existing `//:frontend_typecheck` and `//:workspace_typecheck` Bazel suites.
+  - Move `//tools/bazel:frontend_typecheck_transition` to `retired_transition_targets`.
+  - Route local `pnpm typecheck` and lefthook pre-push `typecheck` through Bazel instead of the pnpm transition wrapper.
+  - Re-run targeted ratchet tests, workspace typecheck, guardrails, and full Bazel graph.

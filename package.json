@@ -14,8 +14,8 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "typecheck:coverage": "bash scripts/ci/check-workspace-typecheck-coverage.sh",
-    "typecheck": "pnpm typecheck:coverage && bash scripts/ci/run-bazel-workspace-typecheck.sh",
+    "typecheck:coverage": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage --config=ci --verbose_failures",
+    "typecheck": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage //:workspace_typecheck --config=ci --verbose_failures",
     "test": "turbo run test",
     "clean": "turbo run clean && rimraf node_modules **/node_modules"
   },

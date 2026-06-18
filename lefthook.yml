@@ -164,7 +164,7 @@ pre-push:
         - merge
         - rebase
     typecheck:
-      run: bash scripts/ci/check-workspace-typecheck-coverage.sh && bash scripts/ci/run-bazel-workspace-typecheck.sh
+      run: bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage //:workspace_typecheck --config=ci --verbose_failures
       skip:
         - merge
         - rebase

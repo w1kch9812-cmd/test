@@ -3,21 +3,13 @@
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
   "retired_transition_targets": [
+    "//tools/bazel:frontend_typecheck_transition",
     "//tools/bazel:ci_rust_clippy_transition",
     "//tools/bazel:ci_rust_check_transition",
     "//tools/bazel:ci_rustfmt_transition",
     "//tools/bazel:ci_sqlx_prepare_check_transition"
   ],
   "transition_targets": [
-    {
-      "bazel_target": "//tools/bazel:frontend_typecheck_transition",
-      "category": "frontend-verification",
-      "owner": "build-platform",
-      "reason": "pnpm typecheck transition retained until all frontend typecheck entrypoints are native Bazel targets.",
-      "exit_target": "//:frontend_typecheck",
-      "sunset": "2026-07-31",
-      "external_collection_approval_required": false
-    },
     {
       "bazel_target": "//tools/bazel:frontend_unit_test_transition",
       "category": "frontend-verification",
