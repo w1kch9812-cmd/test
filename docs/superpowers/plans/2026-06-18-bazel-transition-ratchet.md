@@ -126,3 +126,10 @@
   - Require every policy `required_commands` and `required_services` entry to have a matching runner guard.
   - Make DB migration transition runners wait for Postgres directly and declare `pg_isready`.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 19: Verify Workflow Prerequisite Contracts**
+  - Parse GitHub Actions workflow job blocks that reference active transition targets.
+  - Derive required workflow provisioning from each transition policy's `required_commands` and `required_services`.
+  - Fail CI when a job runs a transition without provisioning its required commands or services in that same job.
+  - Make DB and walking-skeleton workflows explicitly install the required client tools instead of relying on runner image defaults.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

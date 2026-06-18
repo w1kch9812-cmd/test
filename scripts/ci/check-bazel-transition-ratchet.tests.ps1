@@ -70,7 +70,9 @@ function Write-MinimalRepo {
         [switch] $TransitionExitTarget,
         [switch] $RetiredRustfmtTransition,
         [switch] $UntrackedCiTransition,
-        [switch] $UnreferencedTransitionPolicy
+        [switch] $UnreferencedTransitionPolicy,
+        [switch] $MissingWorkflowCommandProvisioning,
+        [switch] $MissingWorkflowServiceProvisioning
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -311,10 +313,28 @@ $approvalGatesLine
     } else {
         "      - run: bazelisk test //tools/bazel:frontend_e2e_transition --config=ci"
     }
+    $workflowPnpmInstall = if ($MissingWorkflowCommandProvisioning) { "" } else { "      - run: pnpm install --frozen-lockfile" }
+    $workflowPostgresService = if ($MissingWorkflowServiceProvisioning) {
+        ""
+    } else {
+        @'
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+'@
+    }
     Write-File -Root $Root -RelativePath ".github\workflows\ci.yml" -Content @"
 jobs:
   verify:
+$workflowPostgresService
     steps:
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+$workflowPnpmInstall
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+          cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
       - run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci
       - run: bazelisk test //tools/bazel:ci_rust_check_transition --config=ci
       - run: bazelisk test //tools/bazel:ci_rustfmt_transition --config=ci
@@ -452,6 +472,18 @@ try {
     $unreferencedTransition = Invoke-Checker -Root $unreferencedTransitionRoot
     Assert-Equals $unreferencedTransition.ExitCode 1 "unreferenced transition exit code mismatch"
     Assert-Contains $unreferencedTransition.Output "active transition target is not referenced by CI or hooks"
+
+    $missingWorkflowCommandProvisioningRoot = Join-Path $TempRoot "missing-workflow-command-provisioning"
+    Write-MinimalRepo -Root $missingWorkflowCommandProvisioningRoot -MissingWorkflowCommandProvisioning
+    $missingWorkflowCommandProvisioning = Invoke-Checker -Root $missingWorkflowCommandProvisioningRoot
+    Assert-Equals $missingWorkflowCommandProvisioning.ExitCode 1 "missing workflow command provisioning exit code mismatch"
+    Assert-Contains $missingWorkflowCommandProvisioning.Output "workflow job missing required command provisioning"
+
+    $missingWorkflowServiceProvisioningRoot = Join-Path $TempRoot "missing-workflow-service-provisioning"
+    Write-MinimalRepo -Root $missingWorkflowServiceProvisioningRoot -MissingWorkflowServiceProvisioning
+    $missingWorkflowServiceProvisioning = Invoke-Checker -Root $missingWorkflowServiceProvisioningRoot
+    Assert-Equals $missingWorkflowServiceProvisioning.ExitCode 1 "missing workflow service provisioning exit code mismatch"
+    Assert-Contains $missingWorkflowServiceProvisioning.Output "workflow job missing required service provisioning"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

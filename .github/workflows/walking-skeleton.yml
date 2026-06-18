@@ -62,7 +62,7 @@ jobs:
       - name: Install sqlx-cli + postgres client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y curl postgresql-client python3
           cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
 
       - name: Run walking-skeleton E2E

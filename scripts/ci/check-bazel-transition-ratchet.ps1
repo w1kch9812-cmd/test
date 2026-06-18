@@ -281,28 +281,152 @@ function Test-RunnerScriptHasServiceGuard {
     $false
 }
 
-function Get-CiTransitionReferences {
-    $references = New-Object System.Collections.Generic.List[string]
-    $paths = New-Object System.Collections.Generic.List[string]
+function Get-WorkflowJobBlocks {
+    param([string] $Content)
+
+    $blocks = New-Object System.Collections.Generic.List[object]
+    $lines = $Content -split "`r?`n"
+    $insideJobs = $false
+    $currentName = $null
+    $currentLines = New-Object System.Collections.Generic.List[string]
+
+    foreach ($line in $lines) {
+        if (!$insideJobs) {
+            if ($line -match '^jobs:\s*$') {
+                $insideJobs = $true
+            }
+            continue
+        }
+
+        if ($line -match '^\S') {
+            break
+        }
+
+        if ($line -match '^  ([A-Za-z0-9_-]+):\s*$') {
+            if (![string]::IsNullOrWhiteSpace($currentName)) {
+                $blocks.Add([pscustomobject]@{
+                    Name    = $currentName
+                    Content = ($currentLines.ToArray() -join [Environment]::NewLine)
+                })
+            }
+            $currentName = [string] $Matches[1]
+            $currentLines.Clear()
+            $currentLines.Add($line)
+            continue
+        }
+
+        if (![string]::IsNullOrWhiteSpace($currentName)) {
+            $currentLines.Add($line)
+        }
+    }
+
+    if (![string]::IsNullOrWhiteSpace($currentName)) {
+        $blocks.Add([pscustomobject]@{
+            Name    = $currentName
+            Content = ($currentLines.ToArray() -join [Environment]::NewLine)
+        })
+    }
+
+    $blocks.ToArray()
+}
+
+function Get-CiTransitionReferenceRecords {
+    $records = New-Object System.Collections.Generic.List[object]
     $workflowRoot = Resolve-RepoPath -RelativePath ".github/workflows"
     if (Test-Path -LiteralPath $workflowRoot -PathType Container) {
         Get-ChildItem -LiteralPath $workflowRoot -File |
             Where-Object { $_.Extension -in @(".yml", ".yaml") } |
-            ForEach-Object { $paths.Add((Get-RelativePath -Path $_.FullName)) }
+            ForEach-Object {
+                $relativePath = Get-RelativePath -Path $_.FullName
+                $content = Read-TextFile -RelativePath $relativePath
+                foreach ($jobBlock in @(Get-WorkflowJobBlocks -Content $content)) {
+                    foreach ($match in [regex]::Matches([string] $jobBlock.Content, '//[A-Za-z0-9_./-]+:[A-Za-z0-9_.-]*_transition\b')) {
+                        $records.Add([pscustomobject]@{
+                            Target       = [string] $match.Value
+                            RelativePath = $relativePath
+                            JobName      = [string] $jobBlock.Name
+                            JobContent   = [string] $jobBlock.Content
+                            SourceKind   = "workflow"
+                        })
+                    }
+                }
+            }
     }
     $lefthookPath = Resolve-RepoPath -RelativePath "lefthook.yml"
     if (Test-Path -LiteralPath $lefthookPath -PathType Leaf) {
-        $paths.Add("lefthook.yml")
-    }
-
-    $transitionLabelPattern = '//[A-Za-z0-9_./-]+:[A-Za-z0-9_.-]*_transition\b'
-    foreach ($relativePath in $paths) {
-        $content = Read-TextFile -RelativePath $relativePath
-        foreach ($match in [regex]::Matches($content, $transitionLabelPattern)) {
-            $references.Add($match.Value)
+        $content = Read-TextFile -RelativePath "lefthook.yml"
+        foreach ($match in [regex]::Matches($content, '//[A-Za-z0-9_./-]+:[A-Za-z0-9_.-]*_transition\b')) {
+            $records.Add([pscustomobject]@{
+                Target       = [string] $match.Value
+                RelativePath = "lefthook.yml"
+                JobName      = ""
+                JobContent   = $content
+                SourceKind   = "lefthook"
+            })
         }
     }
+    $records.ToArray()
+}
+
+function Get-CiTransitionReferences {
+    $references = New-Object System.Collections.Generic.List[string]
+    foreach ($record in @(Get-CiTransitionReferenceRecords)) {
+        $references.Add([string] $record.Target)
+    }
     $references.ToArray() | Sort-Object -Unique
+}
+
+function Test-WorkflowJobHasCommandProvisioning {
+    param([string] $Content, [string] $Command)
+
+    switch ($Command) {
+        "cargo" {
+            return $Content -match 'dtolnay/rust-toolchain@'
+        }
+        "cargo-deny" {
+            return $Content -match '(?m)^\s*run:\s*cargo\s+install\s+cargo-deny\b'
+        }
+        "cargo-tarpaulin" {
+            return $Content -match '(?m)^\s*run:\s*cargo\s+install\s+cargo-tarpaulin\b'
+        }
+        "curl" {
+            return $Content -match '(?m)^\s*(sudo\s+)?apt-get\s+install\b[^\r\n]*\bcurl\b'
+        }
+        "pg_isready" {
+            return $Content -match '(?m)^\s*(sudo\s+)?apt-get\s+install\b[^\r\n]*\bpostgresql-client\b'
+        }
+        "pnpm" {
+            return (
+                $Content -match 'pnpm/action-setup@' -and
+                $Content -match '(?m)^\s*-\s*run:\s*pnpm\s+install\s+--frozen-lockfile\b'
+            )
+        }
+        "psql" {
+            return $Content -match '(?m)^\s*(sudo\s+)?apt-get\s+install\b[^\r\n]*\bpostgresql-client\b'
+        }
+        "python3" {
+            return $Content -match '(?m)^\s*(sudo\s+)?apt-get\s+install\b[^\r\n]*\bpython3\b'
+        }
+        "sqlx" {
+            return $Content -match '(?m)^\s*cargo\s+install\s+sqlx-cli\b'
+        }
+        default {
+            return $false
+        }
+    }
+}
+
+function Test-WorkflowJobHasServiceProvisioning {
+    param([string] $Content, [string] $Service)
+
+    if ($Service -eq "postgres") {
+        return (
+            $Content -match '(?m)^\s+services:\s*$' -and
+            $Content -match '(?m)^\s+postgres:\s*$' -and
+            $Content -match 'image:\s*postgis/postgis:'
+        )
+    }
+    $false
 }
 
 $policy = Read-JsonFile -RelativePath "docs/architecture/verification-transition-ratchet.v1.json"
@@ -553,7 +677,8 @@ foreach ($target in $policyByTarget.Keys) {
     }
 }
 
-$ciReferences = @(Get-CiTransitionReferences)
+$ciReferenceRecords = @(Get-CiTransitionReferenceRecords)
+$ciReferences = @($ciReferenceRecords | ForEach-Object { [string] $_.Target } | Sort-Object -Unique)
 $ciReferenceSet = @{}
 foreach ($target in $ciReferences) {
     $ciReferenceSet[$target] = $true
@@ -567,6 +692,28 @@ foreach ($target in $ciReferences) {
 foreach ($target in $policyByTarget.Keys) {
     if (!$ciReferenceSet.ContainsKey($target)) {
         throw "active transition target is not referenced by CI or hooks: $target"
+    }
+}
+
+foreach ($record in $ciReferenceRecords) {
+    if ([string] $record.SourceKind -ne "workflow") {
+        continue
+    }
+    $target = [string] $record.Target
+    if (!$policyByTarget.ContainsKey($target)) {
+        continue
+    }
+    $entry = $policyByTarget[$target]
+    $jobContent = [string] $record.JobContent
+    foreach ($requiredCommand in @($entry.required_commands | ForEach-Object { [string] $_ })) {
+        if (!(Test-WorkflowJobHasCommandProvisioning -Content $jobContent -Command $requiredCommand)) {
+            throw "workflow job missing required command provisioning: $target -> $($record.RelativePath) job=$($record.JobName) command=$requiredCommand"
+        }
+    }
+    foreach ($requiredService in @($entry.required_services | ForEach-Object { [string] $_ })) {
+        if (!(Test-WorkflowJobHasServiceProvisioning -Content $jobContent -Service $requiredService)) {
+            throw "workflow job missing required service provisioning: $target -> $($record.RelativePath) job=$($record.JobName) service=$requiredService"
+        }
     }
 }
 
