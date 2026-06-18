@@ -56,3 +56,12 @@
 - [ ] **Task 5: Verify, commit, push**
   - Run targeted policy tests, Bazel evidence tests, guardrails, and full `bazel test //...`.
   - Commit and push only after hooks pass and the worktree is clean.
+
+## Local Verification Evidence
+
+- 2026-06-18: `bash scripts/ci/run-bazel.sh build //:supply_chain_evidence_artifacts --config=ci --verbose_failures`
+  passed and produced the API release binary, web release archive, two CycloneDX SBOM files, and
+  `bazel-bin/supply-chain/evidence-manifest.json`.
+- 2026-06-18: `bash scripts/ci/run-bazel.sh test //:verify_supply_chain --config=ci --verbose_failures`
+  passed via `//:supply_chain_evidence_contract_test`.
+- Commit and push are intentionally not claimed here.
