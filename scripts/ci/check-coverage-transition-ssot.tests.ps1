@@ -36,25 +36,35 @@ function Write-MinimalRepo {
         [string] $Root,
         [switch] $HardcodedFailUnder,
         [switch] $HardcodedOut,
-        [switch] $MissingFailUnderConfig
+        [switch] $HardcodedSkipClean,
+        [switch] $HardcodedExcludeFiles,
+        [switch] $MissingFailUnderConfig,
+        [switch] $MissingSkipCleanConfig,
+        [switch] $MissingExcludeFilesConfig
     )
 
     $failUnderFlag = if ($HardcodedFailUnder) { " --fail-under 90" } else { "" }
     $outFlag = if ($HardcodedOut) { " --out Lcov" } else { "" }
+    $skipCleanFlag = if ($HardcodedSkipClean) { " --skip-clean" } else { "" }
+    $excludeFilesFlag = if ($HardcodedExcludeFiles) { " --exclude-files '*/tests.rs'" } else { "" }
     $failUnderConfig = if ($MissingFailUnderConfig) { "" } else { "fail-under = 90" }
+    $skipCleanConfig = if ($MissingSkipCleanConfig) { "" } else { "skip-clean = true" }
+    $excludeFilesConfig = if ($MissingExcludeFilesConfig) { "" } else {
+        'exclude-files = ["target/**", "**/tests/**"]'
+    }
     Write-File -Root $Root -RelativePath "tools\bazel\run_ci_transition_task.sh" -Content @"
 run_coverage_tarpaulin() {
   require_command cargo
   require_command cargo-tarpaulin
-  cargo tarpaulin --workspace$failUnderFlag$outFlag
+  cargo tarpaulin --workspace$failUnderFlag$outFlag$skipCleanFlag$excludeFilesFlag
 }
 "@
     Write-File -Root $Root -RelativePath "tarpaulin.toml" -Content @"
 [default]
-skip-clean = true
+$skipCleanConfig
 out = ["Html", "Lcov"]
 $failUnderConfig
-exclude-files = ["target/**", "**/tests/**"]
+$excludeFilesConfig
 "@
 }
 
@@ -112,11 +122,35 @@ try {
     Assert-Equals $hardcodedOut.ExitCode 1 "hardcoded out exit code mismatch"
     Assert-Contains $hardcodedOut.Output "coverage transition must not hard-code --out"
 
+    $hardcodedSkipCleanRoot = Join-Path $TempRoot "hardcoded-skip-clean"
+    Write-MinimalRepo -Root $hardcodedSkipCleanRoot -HardcodedSkipClean
+    $hardcodedSkipClean = Invoke-Checker -Root $hardcodedSkipCleanRoot
+    Assert-Equals $hardcodedSkipClean.ExitCode 1 "hardcoded skip-clean exit code mismatch"
+    Assert-Contains $hardcodedSkipClean.Output "coverage transition must not hard-code --skip-clean"
+
+    $hardcodedExcludeFilesRoot = Join-Path $TempRoot "hardcoded-exclude-files"
+    Write-MinimalRepo -Root $hardcodedExcludeFilesRoot -HardcodedExcludeFiles
+    $hardcodedExcludeFiles = Invoke-Checker -Root $hardcodedExcludeFilesRoot
+    Assert-Equals $hardcodedExcludeFiles.ExitCode 1 "hardcoded exclude-files exit code mismatch"
+    Assert-Contains $hardcodedExcludeFiles.Output "coverage transition must not hard-code --exclude-files"
+
     $missingFailUnderRoot = Join-Path $TempRoot "missing-fail-under-config"
     Write-MinimalRepo -Root $missingFailUnderRoot -MissingFailUnderConfig
     $missingFailUnder = Invoke-Checker -Root $missingFailUnderRoot
     Assert-Equals $missingFailUnder.ExitCode 1 "missing fail-under config exit code mismatch"
     Assert-Contains $missingFailUnder.Output "tarpaulin.toml must declare fail-under"
+
+    $missingSkipCleanRoot = Join-Path $TempRoot "missing-skip-clean-config"
+    Write-MinimalRepo -Root $missingSkipCleanRoot -MissingSkipCleanConfig
+    $missingSkipClean = Invoke-Checker -Root $missingSkipCleanRoot
+    Assert-Equals $missingSkipClean.ExitCode 1 "missing skip-clean config exit code mismatch"
+    Assert-Contains $missingSkipClean.Output "tarpaulin.toml must declare skip-clean"
+
+    $missingExcludeFilesRoot = Join-Path $TempRoot "missing-exclude-files-config"
+    Write-MinimalRepo -Root $missingExcludeFilesRoot -MissingExcludeFilesConfig
+    $missingExcludeFiles = Invoke-Checker -Root $missingExcludeFilesRoot
+    Assert-Equals $missingExcludeFiles.ExitCode 1 "missing exclude-files config exit code mismatch"
+    Assert-Contains $missingExcludeFiles.Output "tarpaulin.toml must declare exclude-files"
 
     Write-Host "coverage-transition-ssot-tests-ok"
 } finally {

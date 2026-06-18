@@ -41,11 +41,23 @@ if ($runnerContent -match '(?m)^\s*cargo\s+tarpaulin\b[^\r\n]*(^|\s)--fail-under
 if ($runnerContent -match '(?m)^\s*cargo\s+tarpaulin\b[^\r\n]*(^|\s)--out(?:\s|=|$)') {
     throw "coverage transition must not hard-code --out"
 }
+if ($runnerContent -match '(?m)^\s*cargo\s+tarpaulin\b[^\r\n]*(^|\s)--skip-clean(?:\s|=|$)') {
+    throw "coverage transition must not hard-code --skip-clean"
+}
+if ($runnerContent -match '(?m)^\s*cargo\s+tarpaulin\b[^\r\n]*(^|\s)--exclude-files(?:\s|=|$)') {
+    throw "coverage transition must not hard-code --exclude-files"
+}
 if ($tarpaulinConfig -notmatch '(?m)^\s*fail-under\s*=') {
     throw "tarpaulin.toml must declare fail-under"
 }
 if ($tarpaulinConfig -notmatch '(?m)^\s*out\s*=') {
     throw "tarpaulin.toml must declare out"
+}
+if ($tarpaulinConfig -notmatch '(?m)^\s*skip-clean\s*=') {
+    throw "tarpaulin.toml must declare skip-clean"
+}
+if ($tarpaulinConfig -notmatch '(?m)^\s*exclude-files\s*=') {
+    throw "tarpaulin.toml must declare exclude-files"
 }
 
 Write-Host "coverage-transition-ssot-ok"
