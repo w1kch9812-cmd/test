@@ -6,7 +6,7 @@
     $rustCheckRunnerTaskLine = if ($MissingRunnerTask) { "" } elseif ($MismatchedRunnerTask) { '"runner_task": "rustfmt-check",' } else { '"runner_task": "rust-check",' }
     $nodeAuditRequiredCommands = if ($MissingRequiredCommand) { "[]" } else { '["pnpm"]' }
     $migrationRequiredServices = if ($MissingRequiredService) { "[]" } else { '["postgres"]' }
-    $exitStateLine = if ($MissingExitState) { "" } elseif ($UnknownExitState) { '"exit_state": "done",' } else { '"exit_state": "blocked",' }
+    $exitStateLine = if ($MissingExitState) { "" } elseif ($UnknownExitState) { '"exit_state": "done",' } elseif ($AvailableMissingExitTarget) { '"exit_state": "ready_to_retire",' } else { '"exit_state": "blocked",' }
     $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }

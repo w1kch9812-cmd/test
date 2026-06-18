@@ -313,6 +313,12 @@ try {
     Assert-Equals $mismatchedExitTargetEvidence.ExitCode 1 "mismatched exit target evidence exit code mismatch"
     Assert-Contains $mismatchedExitTargetEvidence.Output "exit target registry exit_evidence_requirements"
 
+    $availableMissingExitTargetRoot = Join-Path $TempRoot "available-missing-exit-target"
+    Write-MinimalRepo -Root $availableMissingExitTargetRoot -AvailableMissingExitTarget
+    $availableMissingExitTarget = Invoke-Checker -Root $availableMissingExitTargetRoot
+    Assert-Equals $availableMissingExitTarget.ExitCode 1 "available missing exit target exit code mismatch"
+    Assert-Contains $availableMissingExitTarget.Output "available exit target does not exist in Bazel BUILD files"
+
     $missingApprovalGateRegistryRoot = Join-Path $TempRoot "missing-approval-gate-registry"
     Write-MinimalRepo -Root $missingApprovalGateRegistryRoot -MissingApprovalGateRegistry
     $missingApprovalGateRegistry = Invoke-Checker -Root $missingApprovalGateRegistryRoot

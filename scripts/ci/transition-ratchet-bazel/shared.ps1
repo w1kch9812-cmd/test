@@ -217,6 +217,39 @@ function Get-BuildTransitionTargets {
     @(Get-BuildTransitionTargetMetadata).Keys | Sort-Object
 }
 
+function Get-BuildTargetSet {
+    $targets = @{}
+    $buildFiles = @(
+        Get-ChildItem -LiteralPath (Resolve-RepoPath -RelativePath ".") -Recurse -File -Filter "BUILD.bazel" |
+            Sort-Object FullName
+    )
+    foreach ($file in $buildFiles) {
+        $relativePath = Get-RelativePath -Path $file.FullName
+        if (Test-IsIgnoredPath -RelativePath $relativePath) {
+            continue
+        }
+        $packagePath = Split-Path -Parent $relativePath
+        if ($packagePath -eq "." -or [string]::IsNullOrWhiteSpace($packagePath)) {
+            $packagePath = ""
+        } else {
+            $packagePath = $packagePath -replace "\\", "/"
+        }
+
+        foreach ($line in Get-Content -LiteralPath $file.FullName -Encoding UTF8) {
+            if ($line -match '^\s*name\s*=\s*"([^"]+)"') {
+                $name = [string] $Matches[1]
+                $label = if ([string]::IsNullOrWhiteSpace($packagePath)) {
+                    "//:$name"
+                } else {
+                    "//${packagePath}:$name"
+                }
+                $targets[$label] = $true
+            }
+        }
+    }
+    $targets
+}
+
 function Get-BazelPackagePath {
     param([string] $Label)
 

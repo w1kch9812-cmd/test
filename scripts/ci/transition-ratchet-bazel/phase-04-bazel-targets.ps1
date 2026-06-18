@@ -1,4 +1,5 @@
 $actualTargetMetadata = Get-BuildTransitionTargetMetadata
+$actualBuildTargetSet = Get-BuildTargetSet
 $actualTargets = @($actualTargetMetadata.Keys | Sort-Object)
 Assert-Unique -Values $actualTargets -Message "Bazel transition target"
 $actualTargetSet = @{}
@@ -14,6 +15,12 @@ foreach ($target in $actualTargets) {
 foreach ($target in $policyByTarget.Keys) {
     if (!$actualTargetSet.ContainsKey($target)) {
         throw "stale transition policy for $target"
+    }
+}
+foreach ($exitTarget in $exitTargetByLabel.Keys) {
+    $registeredExitTarget = $exitTargetByLabel[$exitTarget]
+    if ([string] $registeredExitTarget.state -eq "available" -and !$actualBuildTargetSet.ContainsKey($exitTarget)) {
+        throw "available exit target does not exist in Bazel BUILD files: $exitTarget"
     }
 }
 foreach ($target in $policyByTarget.Keys) {

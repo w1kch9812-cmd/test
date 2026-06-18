@@ -13,6 +13,7 @@
     } else {
         ""
     }
+    $rustVerificationExitTargetState = if ($AvailableMissingExitTarget) { "available" } else { "planned" }
     $registeredExitTargets = if ($MissingExitTargetRegistry) {
         ""
     } elseif ($MissingRegisteredExitTarget) {
@@ -20,7 +21,7 @@
   "exit_targets": [
     {
       "bazel_target": "//:rust_verification",
-      "state": "planned",
+      "state": "$rustVerificationExitTargetState",
       "owner": "build-platform",
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
@@ -66,7 +67,7 @@ $deletedExitTargetRegistryEntry
     },
     {
       "bazel_target": "//:rust_verification",
-      "state": "planned",
+      "state": "$rustVerificationExitTargetState",
       "owner": "build-platform",
       "reason": "fixture",
       "exit_evidence_requirements": ["native_bazel_test_target"],
@@ -111,7 +112,7 @@ $deletedExitTargetRegistryEntry
       "owner": "build-platform",
       "reason": "pnpm audit still shells out until advisory SCA is represented by a pinned Bazel evidence target.",
       "exit_target": "//:dependency_sca_evidence",
-$exitStateLine
+      "exit_state": "blocked",
       "exit_evidence_requirements": ["native_bazel_evidence_target", "pinned_advisory_evidence"],
       "blocking_approval_gates": $nodeAuditBlockingApprovalGates,
       "runner_script": "run_ci_transition_task.sh",

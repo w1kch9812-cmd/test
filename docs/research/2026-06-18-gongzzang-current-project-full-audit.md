@@ -275,6 +275,11 @@ The ratchet passes, but several transitions are intentionally still blocked beca
 
 This is structurally better than ad-hoc scripts, because the temporary state is explicit and guarded. It is not yet the final enterprise form.
 
+Follow-up status: partially hardened after the audit. The ratchet now rejects an `exit_targets`
+entry whose `state` is `available` unless that exact Bazel label exists in tracked `BUILD.bazel`
+files. This does not retire the remaining transitions, but it prevents a planned exit target from
+being reclassified as ready without a real Bazel target behind it.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
