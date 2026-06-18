@@ -13,6 +13,48 @@
     "//tools/bazel:ci_sqlx_prepare_check_transition",
     "//tools/bazel:frontend_e2e_transition"
   ],
+  "approval_gate_registry": [
+    {
+      "id": "external_advisory_collection",
+      "owner": "build-platform",
+      "reason": "External advisory reads must remain explicit until advisory evidence is pinned as Bazel-owned data.",
+      "decision_reference": "User approval is required before external advisory collection.",
+      "requires_human_approval": true,
+      "external_collection_approval_required": true
+    },
+    {
+      "id": "browser_runtime_provisioning",
+      "owner": "build-platform",
+      "reason": "Browser runtime provisioning must remain explicit until browser execution is native Bazel evidence.",
+      "decision_reference": "Browser runtime provisioning decision is required before retirement.",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "toolchain_provisioning",
+      "owner": "build-platform",
+      "reason": "Toolchain provisioning must remain explicit until tools are native Bazel toolchains or pinned evidence.",
+      "decision_reference": "Toolchain provisioning decision is required before retirement.",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "database_service_provisioning",
+      "owner": "build-platform",
+      "reason": "Database service provisioning must remain explicit until DB tests are native Bazel service-backed tests.",
+      "decision_reference": "Database service provisioning decision is required before retirement.",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "service_orchestration_provisioning",
+      "owner": "build-platform",
+      "reason": "Service orchestration must remain explicit until multi-service e2e is represented as native Bazel execution.",
+      "decision_reference": "Service orchestration provisioning decision is required before retirement.",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    }
+  ],
   "exit_targets": [
     {
       "bazel_target": "//:dependency_sca_evidence",

@@ -468,14 +468,46 @@ if ($exitTargetEntries.Count -eq 0) {
 }
 Assert-Unique -Values @($exitTargetEntries | ForEach-Object { [string] $_.bazel_target }) -Message "transition ratchet exit target"
 
+$approvalGateRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "approval_gate_registry") {
+    $approvalGateRegistryEntries = @($policy.approval_gate_registry)
+}
+if ($approvalGateRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare approval_gate_registry"
+}
+Assert-Unique -Values @($approvalGateRegistryEntries | ForEach-Object { [string] $_.id }) -Message "transition ratchet approval gate"
+
 $policyByTarget = @{}
 $exitTargetByLabel = @{}
-$allowedApprovalGates = @{
-    external_advisory_collection  = $true
-    browser_runtime_provisioning  = $true
-    toolchain_provisioning        = $true
-    database_service_provisioning = $true
-    service_orchestration_provisioning = $true
+$allowedApprovalGates = @{}
+$externalCollectionApprovalGateSet = @{}
+foreach ($entry in $approvalGateRegistryEntries) {
+    $context = "approval gate registry"
+    $approvalGate = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($approvalGate -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "approval gate registry id must be lowercase snake_case: $approvalGate"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "approval gate registry $approvalGate")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "approval gate registry $approvalGate")
+    [void] (Get-RequiredString -Object $entry -Name "decision_reference" -Context "approval gate registry $approvalGate")
+    $requiresHumanApproval = Get-RequiredBoolean `
+        -Object $entry `
+        -Name "requires_human_approval" `
+        -Context "approval gate registry $approvalGate"
+    if (!$requiresHumanApproval) {
+        throw "approval gate registry $approvalGate requires_human_approval must be true"
+    }
+    $externalCollectionApprovalRequired = Get-RequiredBoolean `
+        -Object $entry `
+        -Name "external_collection_approval_required" `
+        -Context "approval gate registry $approvalGate"
+    $allowedApprovalGates[$approvalGate] = $true
+    if ($externalCollectionApprovalRequired) {
+        $externalCollectionApprovalGateSet[$approvalGate] = $true
+    }
+}
+if ($externalCollectionApprovalGateSet.Count -eq 0) {
+    throw "approval_gate_registry must declare an external collection approval gate"
 }
 $allowedRequiredCommands = @{
     cargo           = $true
@@ -566,7 +598,7 @@ foreach ($entry in $exitTargetEntries) {
     Assert-Unique -Values $exitTargetBlockingApprovalGates -Message "exit target registry $exitTarget blocking approval gate"
     foreach ($exitTargetBlockingApprovalGate in $exitTargetBlockingApprovalGates) {
         if (!$allowedApprovalGates.ContainsKey($exitTargetBlockingApprovalGate)) {
-            throw "unknown exit target registry blocking approval gate for ${exitTarget}: $exitTargetBlockingApprovalGate"
+            throw "exit target approval gate is not registered for ${exitTarget}: $exitTargetBlockingApprovalGate"
         }
     }
     $exitTargetByLabel[$exitTarget] = $entry
@@ -623,7 +655,7 @@ foreach ($entry in $policyEntries) {
     Assert-Unique -Values $blockingApprovalGates -Message "transition policy $target blocking approval gate"
     foreach ($blockingApprovalGate in $blockingApprovalGates) {
         if (!$allowedApprovalGates.ContainsKey($blockingApprovalGate)) {
-            throw "unknown transition blocking approval gate for ${target}: $blockingApprovalGate"
+            throw "transition blocking approval gate is not registered for ${target}: $blockingApprovalGate"
         }
     }
     Assert-ContainsAll `
@@ -678,7 +710,7 @@ foreach ($entry in $policyEntries) {
     Assert-Unique -Values $approvalGates -Message "transition policy $target approval gate"
     foreach ($approvalGate in $approvalGates) {
         if (!$allowedApprovalGates.ContainsKey($approvalGate)) {
-            throw "unknown transition approval gate for ${target}: $approvalGate"
+            throw "transition approval gate is not registered for ${target}: $approvalGate"
         }
     }
     $sunset = Get-RequiredString -Object $entry -Name "sunset" -Context "transition policy $target"
@@ -697,20 +729,25 @@ foreach ($entry in $policyEntries) {
     if ($category -eq "external-advisory-sca" -and !$externalCollection) {
         throw "external advisory collection transition must require approval: $target"
     }
+    $hasExternalCollectionApprovalGate = $false
+    foreach ($approvalGate in $approvalGates) {
+        if ($externalCollectionApprovalGateSet.ContainsKey($approvalGate)) {
+            $hasExternalCollectionApprovalGate = $true
+        }
+    }
     if (
         $category -eq "external-advisory-sca" -and
-        !(Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection")
+        !$hasExternalCollectionApprovalGate
     ) {
         throw "external advisory transition must declare approval gate: $target"
     }
-    if ($externalCollection -and !(Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection")) {
+    if ($externalCollection -and !$hasExternalCollectionApprovalGate) {
         throw "external collection transition must declare external advisory approval gate: $target"
     }
-    if (
-        (Test-ContainsValue -Values $approvalGates -Expected "external_advisory_collection") -and
-        !$externalCollection
-    ) {
-        throw "external advisory approval gate must require external collection approval: $target"
+    foreach ($approvalGate in $approvalGates) {
+        if ($externalCollectionApprovalGateSet.ContainsKey($approvalGate) -and !$externalCollection) {
+            throw "external advisory approval gate must require external collection approval: $target"
+        }
     }
     if (
         $target -eq "//tools/bazel:frontend_e2e_transition" -and

@@ -147,3 +147,9 @@
   - Require transition-level evidence and blocking gates to be covered by the registered exit target.
   - Keep blocked transitions pointed at planned exit targets instead of pretending the final Bazel target exists.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 22: Register Transition Approval Gates**
+  - Add a top-level `approval_gate_registry` to the transition ratchet policy.
+  - Require every approval gate referenced by transitions or exit targets to be registered exactly once with owner, reason, decision reference, and approval semantics.
+  - Derive external collection approval gates from policy data instead of a checker-owned hardcoded gate list.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

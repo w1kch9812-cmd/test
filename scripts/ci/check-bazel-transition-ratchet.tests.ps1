@@ -79,7 +79,10 @@ function Write-MinimalRepo {
         [switch] $MissingBlockingApprovalGate,
         [switch] $MissingExitTargetRegistry,
         [switch] $MissingRegisteredExitTarget,
-        [switch] $MismatchedExitTargetEvidence
+        [switch] $MismatchedExitTargetEvidence,
+        [switch] $MissingApprovalGateRegistry,
+        [switch] $MissingRegisteredApprovalGate,
+        [switch] $DuplicateApprovalGateRegistry
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -195,6 +198,77 @@ esac
     $rustCheckEvidenceRequirements = if ($MissingExitEvidenceRequirements) { "[]" } else { '["native_bazel_test_target"]' }
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $externalAdvisoryGateEntry = @'
+    {
+      "id": "external_advisory_collection",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "decision_reference": "fixture",
+      "requires_human_approval": true,
+      "external_collection_approval_required": true
+    },
+'@
+    $browserRuntimeGateEntry = if ($MissingRegisteredApprovalGate) {
+        ""
+    } else {
+        @'
+    {
+      "id": "browser_runtime_provisioning",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "decision_reference": "fixture",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+'@
+    }
+    $duplicateApprovalGateEntry = if ($DuplicateApprovalGateRegistry) {
+        @'
+    {
+      "id": "toolchain_provisioning",
+      "owner": "build-platform",
+      "reason": "fixture duplicate",
+      "decision_reference": "fixture duplicate",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredApprovalGates = if ($MissingApprovalGateRegistry) {
+        ""
+    } else {
+        @"
+  "approval_gate_registry": [
+$externalAdvisoryGateEntry$browserRuntimeGateEntry$duplicateApprovalGateEntry
+    {
+      "id": "toolchain_provisioning",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "decision_reference": "fixture",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "database_service_provisioning",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "decision_reference": "fixture",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    },
+    {
+      "id": "service_orchestration_provisioning",
+      "owner": "build-platform",
+      "reason": "fixture",
+      "decision_reference": "fixture",
+      "requires_human_approval": true,
+      "external_collection_approval_required": false
+    }
+  ],
+"@
+    }
     $deletedExitTargetRegistryEntry = if ($AddStalePolicy) {
         @'
 ,
@@ -361,6 +435,7 @@ $exitStateLine
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
 $retiredTargets
+$registeredApprovalGates
 $registeredExitTargets
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
@@ -482,7 +557,7 @@ try {
     $successRoot = Join-Path $TempRoot "success"
     Write-MinimalRepo -Root $successRoot
     $success = Invoke-Checker -Root $successRoot
-    Assert-Equals $success.ExitCode 0 "success exit code mismatch"
+    Assert-Equals $success.ExitCode 0 "success exit code mismatch output=$($success.Output)"
     Assert-Contains $success.Output "bazel-transition-ratchet-ok"
 
     $missingPolicyRoot = Join-Path $TempRoot "missing-policy"
@@ -519,7 +594,7 @@ try {
     Write-MinimalRepo -Root $unknownApprovalGateRoot -UnknownApprovalGate
     $unknownApprovalGate = Invoke-Checker -Root $unknownApprovalGateRoot
     Assert-Equals $unknownApprovalGate.ExitCode 1 "unknown approval gate exit code mismatch"
-    Assert-Contains $unknownApprovalGate.Output "unknown transition approval gate for //tools/bazel:ci_node_audit_transition"
+    Assert-Contains $unknownApprovalGate.Output "transition approval gate is not registered"
 
     $missingAdvisoryApprovalGateRoot = Join-Path $TempRoot "missing-advisory-approval-gate"
     Write-MinimalRepo -Root $missingAdvisoryApprovalGateRoot -MissingAdvisoryApprovalGate
@@ -658,6 +733,24 @@ try {
     $mismatchedExitTargetEvidence = Invoke-Checker -Root $mismatchedExitTargetEvidenceRoot
     Assert-Equals $mismatchedExitTargetEvidence.ExitCode 1 "mismatched exit target evidence exit code mismatch"
     Assert-Contains $mismatchedExitTargetEvidence.Output "exit target registry exit_evidence_requirements"
+
+    $missingApprovalGateRegistryRoot = Join-Path $TempRoot "missing-approval-gate-registry"
+    Write-MinimalRepo -Root $missingApprovalGateRegistryRoot -MissingApprovalGateRegistry
+    $missingApprovalGateRegistry = Invoke-Checker -Root $missingApprovalGateRegistryRoot
+    Assert-Equals $missingApprovalGateRegistry.ExitCode 1 "missing approval gate registry exit code mismatch"
+    Assert-Contains $missingApprovalGateRegistry.Output "transition ratchet policy must declare approval_gate_registry"
+
+    $missingRegisteredApprovalGateRoot = Join-Path $TempRoot "missing-registered-approval-gate"
+    Write-MinimalRepo -Root $missingRegisteredApprovalGateRoot -MissingRegisteredApprovalGate
+    $missingRegisteredApprovalGate = Invoke-Checker -Root $missingRegisteredApprovalGateRoot
+    Assert-Equals $missingRegisteredApprovalGate.ExitCode 1 "missing registered approval gate exit code mismatch"
+    Assert-Contains $missingRegisteredApprovalGate.Output "approval gate is not registered"
+
+    $duplicateApprovalGateRegistryRoot = Join-Path $TempRoot "duplicate-approval-gate-registry"
+    Write-MinimalRepo -Root $duplicateApprovalGateRegistryRoot -DuplicateApprovalGateRegistry
+    $duplicateApprovalGateRegistry = Invoke-Checker -Root $duplicateApprovalGateRegistryRoot
+    Assert-Equals $duplicateApprovalGateRegistry.ExitCode 1 "duplicate approval gate registry exit code mismatch"
+    Assert-Contains $duplicateApprovalGateRegistry.Output "transition ratchet approval gate duplicate"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {
