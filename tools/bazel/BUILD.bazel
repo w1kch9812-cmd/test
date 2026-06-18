@@ -1,5 +1,5 @@
 load("@aspect_rules_js//js:defs.bzl", "js_test")
-load("@rules_rust//rust:defs.bzl", "rustfmt_test")
+load("@rules_rust//rust:defs.bzl", "rust_clippy", "rustfmt_test")
 load("//tools/bazel:rust_targets.bzl", "RUST_CRATE_TARGETS", "RUST_UNIT_TEST_TARGETS")
 load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
@@ -165,16 +165,15 @@ rustfmt_test(
     ],
 )
 
+rust_clippy(
+    name = "rust_clippy",
+    deps = RUST_CRATE_TARGETS,
+    testonly = True,
+)
+
 test_suite(
     name = "rust_check",
     tests = RUST_UNIT_TEST_TARGETS,
-)
-
-transition_shell_test(
-    name = "ci_rust_clippy_transition",
-    srcs = ["run_ci_transition_task.sh"],
-    script_args = ["rust-clippy"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
 )
 
 transition_shell_test(

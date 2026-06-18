@@ -173,6 +173,11 @@ pre-push:
       skip:
         - merge
         - rebase
+    rust-lint-verification:
+      run: bash scripts/ci/run-bazel.sh build //:rust_lint_verification --config=ci --verbose_failures
+      skip:
+        - merge
+        - rebase
     markdown-links:
       run: bash scripts/ci/check-markdown-links.sh
       skip:

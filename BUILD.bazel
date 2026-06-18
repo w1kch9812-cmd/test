@@ -4,7 +4,10 @@ load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
 
-exports_files(["rustfmt.toml"])
+exports_files([
+    "clippy.toml",
+    "rustfmt.toml",
+])
 
 npm_link_all_packages(name = "node_modules")
 
@@ -460,6 +463,13 @@ test_suite(
 test_suite(
     name = "rust_check_verification",
     tests = ["//tools/bazel:rust_check"],
+)
+
+filegroup(
+    name = "rust_lint_verification",
+    srcs = ["//tools/bazel:rust_clippy"],
+    tags = ["manual"],
+    testonly = True,
 )
 
 test_suite(

@@ -56,3 +56,9 @@
   - Move `//tools/bazel:ci_rust_check_transition` to `retired_transition_targets`.
   - Use `//tools/bazel:rust_targets.bzl` as the Rust verification target set for format and check suites.
   - Re-run targeted ratchet tests, Rust check Bazel target, guardrails, and full Bazel graph.
+
+- [x] **Task 7: Retire Rust Clippy Transition**
+  - Replace `//tools/bazel:ci_rust_clippy_transition` with `//:rust_lint_verification`.
+  - Move `//tools/bazel:ci_rust_clippy_transition` to `retired_transition_targets`.
+  - Use `rules_rust` `rust_clippy` over `RUST_CRATE_TARGETS`, with `clippy.toml` exported as Bazel config.
+  - Re-run targeted ratchet tests, Rust lint Bazel build, guardrails, and full Bazel graph.

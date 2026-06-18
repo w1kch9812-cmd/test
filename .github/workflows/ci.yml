@@ -148,7 +148,7 @@ jobs:
       - name: cargo fmt
         run: bazelisk test //:rust_format_verification --config=ci --verbose_failures
       - name: cargo clippy
-        run: bazelisk test //tools/bazel:ci_rust_clippy_transition --config=ci --verbose_failures
+        run: bazelisk build //:rust_lint_verification --config=ci --verbose_failures
 
   typecheck:
     name: Workspace typecheck (Bazel)
