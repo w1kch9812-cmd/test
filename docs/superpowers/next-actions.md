@@ -1,6 +1,6 @@
 # Next Actions
 
-Last updated: 2026-05-29
+Last updated: 2026-06-19
 
 This file is the active short-term queue. Historical SP9, Bronze, and public
 data collection notes were removed from this active queue because Platform Core
@@ -29,6 +29,8 @@ Gongzzang-owned listing PBF tiles.
   [traffic-auth-policy-registry.v1.json](../architecture/traffic-auth-policy-registry.v1.json)
 - Platform Core integration operations:
   [operations runbook](../runbooks/platform-core-integration-operations.md)
+- Concurrent session role split:
+  [2026-06-19 concurrent session role split](./handoff/2026-06-19-concurrent-session-role-split.md)
 
 ## Platform Core UI Decision
 
@@ -42,6 +44,21 @@ and deploy candidate verification.
 The console must use Platform Core public/admin APIs only. It must not bypass
 the API boundary with direct database access, and any future write action must
 require RBAC, audit log, approval trail, and runbook coverage.
+
+## Concurrent Session Rule
+
+When more than one agent session is active, split work by ownership before editing files.
+The current split is recorded in
+[2026-06-19 concurrent session role split](./handoff/2026-06-19-concurrent-session-role-split.md).
+
+The short version:
+
+- Bazel transition ratchet, guardrail checker, and provisioning ADR evidence stay with the
+  Bazel worker.
+- Product architecture, ownership-boundary audit, and next-action clarity may proceed in a
+  separate session.
+- Public-data collection, DB migrations, R2 deletion, production infrastructure, Kafka, and
+  Kubernetes remain approval-gated.
 
 ## Do Next
 
