@@ -10,19 +10,10 @@
     "//tools/bazel:ci_rust_clippy_transition",
     "//tools/bazel:ci_rust_check_transition",
     "//tools/bazel:ci_rustfmt_transition",
-    "//tools/bazel:ci_sqlx_prepare_check_transition"
+    "//tools/bazel:ci_sqlx_prepare_check_transition",
+    "//tools/bazel:frontend_e2e_transition"
   ],
   "transition_targets": [
-    {
-      "bazel_target": "//tools/bazel:frontend_e2e_transition",
-      "category": "frontend-release-verification",
-      "owner": "build-platform",
-      "reason": "Playwright transition retained until browser provisioning and e2e execution are native Bazel targets.",
-      "exit_target": "//:frontend_e2e",
-      "sunset": "2026-07-31",
-      "approval_gates": ["browser_runtime_provisioning"],
-      "external_collection_approval_required": false
-    },
     {
       "bazel_target": "//tools/bazel:ci_node_audit_transition",
       "category": "external-advisory-sca",

@@ -116,13 +116,6 @@ test_suite(
 )
 
 transition_shell_test(
-    name = "frontend_e2e_transition",
-    srcs = ["run_pnpm_task.sh"],
-    script_args = ["e2e"],
-    tags = FRONTEND_TRANSITION_TAGS,
-)
-
-transition_shell_test(
     name = "ci_node_audit_transition",
     srcs = ["run_ci_transition_task.sh"],
     script_args = ["node-audit"],

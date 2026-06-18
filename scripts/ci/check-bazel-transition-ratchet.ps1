@@ -344,12 +344,19 @@ foreach ($target in $policyByTarget.Keys) {
 }
 
 $ciReferences = @(Get-CiTransitionReferences)
+$ciReferenceSet = @{}
 foreach ($target in $ciReferences) {
+    $ciReferenceSet[$target] = $true
     if ($retiredTransitionTargetSet.ContainsKey($target)) {
         throw "CI references retired transition target: $target"
     }
     if (!$policyByTarget.ContainsKey($target)) {
         throw "CI references transition target without policy: $target"
+    }
+}
+foreach ($target in $policyByTarget.Keys) {
+    if (!$ciReferenceSet.ContainsKey($target)) {
+        throw "active transition target is not referenced by CI or hooks: $target"
     }
 }
 

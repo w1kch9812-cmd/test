@@ -60,7 +60,8 @@ function Write-MinimalRepo {
         [switch] $MissingAdvisoryApprovalGate,
         [switch] $MissingBrowserRuntimeGate,
         [switch] $RetiredRustfmtTransition,
-        [switch] $UntrackedCiTransition
+        [switch] $UntrackedCiTransition,
+        [switch] $UnreferencedTransitionPolicy
     )
 
     Write-File -Root $Root -RelativePath "tools\bazel\BUILD.bazel" -Content @'
@@ -185,12 +186,19 @@ $approvalGatesLine
     } else {
         ""
     }
+    $frontendE2eCi = if ($UnreferencedTransitionPolicy) {
+        ""
+    } else {
+        "      - run: bazelisk test //tools/bazel:frontend_e2e_transition --config=ci"
+    }
     Write-File -Root $Root -RelativePath ".github\workflows\ci.yml" -Content @"
 jobs:
   verify:
     steps:
       - run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci
       - run: bazelisk test //tools/bazel:ci_rust_check_transition --config=ci
+      - run: bazelisk test //tools/bazel:ci_rustfmt_transition --config=ci
+$frontendE2eCi
 $extraCi
 "@
 }
@@ -263,6 +271,12 @@ try {
     $untrackedCi = Invoke-Checker -Root $untrackedCiRoot
     Assert-Equals $untrackedCi.ExitCode 1 "untracked CI transition exit code mismatch"
     Assert-Contains $untrackedCi.Output "CI references transition target without policy"
+
+    $unreferencedTransitionRoot = Join-Path $TempRoot "unreferenced-transition"
+    Write-MinimalRepo -Root $unreferencedTransitionRoot -UnreferencedTransitionPolicy
+    $unreferencedTransition = Invoke-Checker -Root $unreferencedTransitionRoot
+    Assert-Equals $unreferencedTransition.ExitCode 1 "unreferenced transition exit code mismatch"
+    Assert-Contains $unreferencedTransition.Output "active transition target is not referenced by CI or hooks"
 
     Write-Host "bazel-transition-ratchet-tests-ok"
 } finally {

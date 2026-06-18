@@ -97,3 +97,9 @@
   - Add `approval_gates` to every active transition policy entry.
   - Enforce category-specific gates for external advisory reads, Playwright browser runtime provisioning, toolchain provisioning, database service provisioning, and service orchestration.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 14: Retire Unreferenced Frontend E2E Transition**
+  - Require every active transition policy target to be referenced by CI or lefthook.
+  - Remove `//tools/bazel:frontend_e2e_transition`, because CI already uses the Bazel-native `//:frontend_e2e` suite.
+  - Move `//tools/bazel:frontend_e2e_transition` to `retired_transition_targets`.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
