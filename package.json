@@ -16,7 +16,7 @@
     "format": "biome format --write .",
     "typecheck:coverage": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage --config=ci --verbose_failures",
     "typecheck": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage //:workspace_typecheck --config=ci --verbose_failures",
-    "test": "turbo run test",
+    "test": "bash scripts/ci/run-bazel.sh test //:frontend_unit_test --config=ci --verbose_failures",
     "clean": "turbo run clean && rimraf node_modules **/node_modules"
   },
   "devDependencies": {

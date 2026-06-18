@@ -74,3 +74,9 @@
   - Move `//tools/bazel:frontend_typecheck_transition` to `retired_transition_targets`.
   - Route local `pnpm typecheck` and lefthook pre-push `typecheck` through Bazel instead of the pnpm transition wrapper.
   - Re-run targeted ratchet tests, workspace typecheck, guardrails, and full Bazel graph.
+
+- [x] **Task 10: Retire Frontend Unit Test Transition**
+  - Replace `//tools/bazel:frontend_unit_test_transition` with the existing `//:frontend_unit_test` and `//apps/web:vitest_unit_test` Bazel suites.
+  - Move `//tools/bazel:frontend_unit_test_transition` to `retired_transition_targets`.
+  - Route root and app-level `pnpm test` through Bazel instead of the pnpm transition wrapper.
+  - Re-run targeted ratchet tests, frontend unit tests, guardrails, and full Bazel graph.

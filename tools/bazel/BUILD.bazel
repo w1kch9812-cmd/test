@@ -67,13 +67,6 @@ test_suite(
     tests = [":frontend_unit_test_vitest"],
 )
 
-transition_shell_test(
-    name = "frontend_unit_test_transition",
-    srcs = ["run_pnpm_task.sh"],
-    script_args = ["test"],
-    tags = FRONTEND_TRANSITION_TAGS,
-)
-
 test_suite(
     name = "frontend_build_bazel",
     tags = [
