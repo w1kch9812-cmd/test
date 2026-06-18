@@ -84,10 +84,16 @@ function Write-MinimalRepo {
         [switch] $MissingWorkflowServiceProvisioning,
         [switch] $MissingExitState,
         [switch] $UnknownExitState,
+        [switch] $MissingTransitionExitStateRegistry,
+        [switch] $MissingRegisteredTransitionExitState,
+        [switch] $DuplicateTransitionExitStateRegistry,
         [switch] $MissingExitEvidenceRequirements,
         [switch] $MissingBlockingApprovalGate,
         [switch] $MissingExitTargetRegistry,
         [switch] $MissingRegisteredExitTarget,
+        [switch] $MissingExitTargetStateRegistry,
+        [switch] $MissingRegisteredExitTargetState,
+        [switch] $DuplicateExitTargetStateRegistry,
         [switch] $MismatchedExitTargetEvidence,
         [switch] $MissingApprovalGateRegistry,
         [switch] $MissingRegisteredApprovalGate,
@@ -95,6 +101,9 @@ function Write-MinimalRepo {
         [switch] $MissingTransitionCategoryRegistry,
         [switch] $MissingRegisteredTransitionCategory,
         [switch] $MismatchedCategoryEvidence,
+        [switch] $MissingEvidenceKindRegistry,
+        [switch] $MissingRegisteredEvidenceKind,
+        [switch] $DuplicateEvidenceKindRegistry,
         [switch] $MissingExitEvidenceRequirementRegistry,
         [switch] $MissingRegisteredExitEvidenceRequirement,
         [switch] $DuplicateExitEvidenceRequirementRegistry
@@ -214,6 +223,46 @@ esac
     $nodeAuditBlockingApprovalGates = if ($MissingBlockingApprovalGate) { "[]" } else { '["external_advisory_collection"]' }
     $dependencyScaExitEvidenceRequirements = if ($MismatchedExitTargetEvidence) { '["native_bazel_evidence_target"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
     $externalAdvisoryCategoryEvidence = if ($MismatchedCategoryEvidence) { '["native_bazel_database_test"]' } else { '["native_bazel_evidence_target", "pinned_advisory_evidence"]' }
+    $nativeBazelEvidenceKindEntry = if ($MissingRegisteredEvidenceKind) {
+        ""
+    } else {
+        @'
+    {
+      "id": "native_bazel_evidence",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+'@
+    }
+    $duplicateEvidenceKindEntry = if ($DuplicateEvidenceKindRegistry) {
+        @'
+    {
+      "id": "provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture duplicate"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredEvidenceKinds = if ($MissingEvidenceKindRegistry) {
+        ""
+    } else {
+        @"
+  "evidence_kind_registry": [
+$nativeBazelEvidenceKindEntry    {
+      "id": "pinned_external_evidence",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+$duplicateEvidenceKindEntry    {
+      "id": "provisioning_decision",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+  ],
+"@
+    }
     $nativeBazelTestEvidenceEntry = if ($MissingRegisteredExitEvidenceRequirement) {
         ""
     } else {
@@ -532,6 +581,82 @@ $duplicateRequiredServiceEntry$postgresRequiredServiceEntry
   ],
 "@
     }
+    $plannedExitTargetStateEntry = if ($MissingRegisteredExitTargetState) {
+        @'
+    {
+      "id": "archived",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+'@
+    } else {
+        @'
+    {
+      "id": "planned",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+'@
+    }
+    $duplicateExitTargetStateEntry = if ($DuplicateExitTargetStateRegistry) {
+        @'
+    {
+      "id": "planned",
+      "owner": "build-platform",
+      "reason": "fixture duplicate"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredExitTargetStates = if ($MissingExitTargetStateRegistry) {
+        ""
+    } else {
+        @"
+  "exit_target_state_registry": [
+    {
+      "id": "available",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+$duplicateExitTargetStateEntry$plannedExitTargetStateEntry  ],
+"@
+    }
+    $blockedTransitionExitStateEntry = if ($MissingRegisteredTransitionExitState) {
+        ""
+    } else {
+        @'
+    {
+      "id": "blocked",
+      "owner": "build-platform",
+      "reason": "fixture"
+    },
+'@
+    }
+    $duplicateTransitionExitStateEntry = if ($DuplicateTransitionExitStateRegistry) {
+        @'
+    {
+      "id": "blocked",
+      "owner": "build-platform",
+      "reason": "fixture duplicate"
+    },
+'@
+    } else {
+        ""
+    }
+    $registeredTransitionExitStates = if ($MissingTransitionExitStateRegistry) {
+        ""
+    } else {
+        @"
+  "transition_exit_state_registry": [
+$duplicateTransitionExitStateEntry$blockedTransitionExitStateEntry    {
+      "id": "ready_to_retire",
+      "owner": "build-platform",
+      "reason": "fixture"
+    }
+  ],
+"@
+    }
     $registeredRunnerTasks = if ($MissingRunnerTaskRegistry) {
         ""
     } else {
@@ -741,13 +866,16 @@ $exitStateLine
   "repo_slug": "gongzzang",
   "default_decision": "deny_new_transition_without_policy",
 $retiredTargets
+$registeredEvidenceKinds
 $registeredApprovalGates
 $registeredExitEvidenceRequirements
 $registeredTransitionCategories
 $registeredRequiredCommands
 $registeredRequiredServices
 $registeredRunnerTasks
+$registeredExitTargetStates
 $registeredExitTargets
+$registeredTransitionExitStates
   "transition_targets": [
 $nodeAuditPolicy$stalePolicy    {
       "bazel_target": "//tools/bazel:ci_rust_check_transition",
@@ -1057,6 +1185,24 @@ try {
     Assert-Equals $missingWorkflowServiceProvisioning.ExitCode 1 "missing workflow service provisioning exit code mismatch"
     Assert-Contains $missingWorkflowServiceProvisioning.Output "workflow job missing required service provisioning"
 
+    $missingTransitionExitStateRegistryRoot = Join-Path $TempRoot "missing-transition-exit-state-registry"
+    Write-MinimalRepo -Root $missingTransitionExitStateRegistryRoot -MissingTransitionExitStateRegistry
+    $missingTransitionExitStateRegistry = Invoke-Checker -Root $missingTransitionExitStateRegistryRoot
+    Assert-Equals $missingTransitionExitStateRegistry.ExitCode 1 "missing transition exit state registry exit code mismatch"
+    Assert-Contains $missingTransitionExitStateRegistry.Output "transition ratchet policy must declare transition_exit_state_registry"
+
+    $missingRegisteredTransitionExitStateRoot = Join-Path $TempRoot "missing-registered-transition-exit-state"
+    Write-MinimalRepo -Root $missingRegisteredTransitionExitStateRoot -MissingRegisteredTransitionExitState
+    $missingRegisteredTransitionExitState = Invoke-Checker -Root $missingRegisteredTransitionExitStateRoot
+    Assert-Equals $missingRegisteredTransitionExitState.ExitCode 1 "missing registered transition exit state exit code mismatch"
+    Assert-Contains $missingRegisteredTransitionExitState.Output "transition exit_state is not registered"
+
+    $duplicateTransitionExitStateRegistryRoot = Join-Path $TempRoot "duplicate-transition-exit-state-registry"
+    Write-MinimalRepo -Root $duplicateTransitionExitStateRegistryRoot -DuplicateTransitionExitStateRegistry
+    $duplicateTransitionExitStateRegistry = Invoke-Checker -Root $duplicateTransitionExitStateRegistryRoot
+    Assert-Equals $duplicateTransitionExitStateRegistry.ExitCode 1 "duplicate transition exit state registry exit code mismatch"
+    Assert-Contains $duplicateTransitionExitStateRegistry.Output "transition ratchet transition exit state duplicate"
+
     $missingExitStateRoot = Join-Path $TempRoot "missing-exit-state"
     Write-MinimalRepo -Root $missingExitStateRoot -MissingExitState
     $missingExitState = Invoke-Checker -Root $missingExitStateRoot
@@ -1067,7 +1213,7 @@ try {
     Write-MinimalRepo -Root $unknownExitStateRoot -UnknownExitState
     $unknownExitState = Invoke-Checker -Root $unknownExitStateRoot
     Assert-Equals $unknownExitState.ExitCode 1 "unknown exit state exit code mismatch"
-    Assert-Contains $unknownExitState.Output "unknown transition exit_state"
+    Assert-Contains $unknownExitState.Output "transition exit_state is not registered"
 
     $missingExitEvidenceRoot = Join-Path $TempRoot "missing-exit-evidence"
     Write-MinimalRepo -Root $missingExitEvidenceRoot -MissingExitEvidenceRequirements
@@ -1086,6 +1232,24 @@ try {
     $missingExitTargetRegistry = Invoke-Checker -Root $missingExitTargetRegistryRoot
     Assert-Equals $missingExitTargetRegistry.ExitCode 1 "missing exit target registry exit code mismatch"
     Assert-Contains $missingExitTargetRegistry.Output "transition ratchet policy must declare exit_targets"
+
+    $missingExitTargetStateRegistryRoot = Join-Path $TempRoot "missing-exit-target-state-registry"
+    Write-MinimalRepo -Root $missingExitTargetStateRegistryRoot -MissingExitTargetStateRegistry
+    $missingExitTargetStateRegistry = Invoke-Checker -Root $missingExitTargetStateRegistryRoot
+    Assert-Equals $missingExitTargetStateRegistry.ExitCode 1 "missing exit target state registry exit code mismatch"
+    Assert-Contains $missingExitTargetStateRegistry.Output "transition ratchet policy must declare exit_target_state_registry"
+
+    $missingRegisteredExitTargetStateRoot = Join-Path $TempRoot "missing-registered-exit-target-state"
+    Write-MinimalRepo -Root $missingRegisteredExitTargetStateRoot -MissingRegisteredExitTargetState
+    $missingRegisteredExitTargetState = Invoke-Checker -Root $missingRegisteredExitTargetStateRoot
+    Assert-Equals $missingRegisteredExitTargetState.ExitCode 1 "missing registered exit target state exit code mismatch"
+    Assert-Contains $missingRegisteredExitTargetState.Output "exit target state is not registered"
+
+    $duplicateExitTargetStateRegistryRoot = Join-Path $TempRoot "duplicate-exit-target-state-registry"
+    Write-MinimalRepo -Root $duplicateExitTargetStateRegistryRoot -DuplicateExitTargetStateRegistry
+    $duplicateExitTargetStateRegistry = Invoke-Checker -Root $duplicateExitTargetStateRegistryRoot
+    Assert-Equals $duplicateExitTargetStateRegistry.ExitCode 1 "duplicate exit target state registry exit code mismatch"
+    Assert-Contains $duplicateExitTargetStateRegistry.Output "transition ratchet exit target state duplicate"
 
     $missingRegisteredExitTargetRoot = Join-Path $TempRoot "missing-registered-exit-target"
     Write-MinimalRepo -Root $missingRegisteredExitTargetRoot -MissingRegisteredExitTarget
@@ -1134,6 +1298,24 @@ try {
     $mismatchedCategoryEvidence = Invoke-Checker -Root $mismatchedCategoryEvidenceRoot
     Assert-Equals $mismatchedCategoryEvidence.ExitCode 1 "mismatched category evidence exit code mismatch"
     Assert-Contains $mismatchedCategoryEvidence.Output "transition category required_exit_evidence_requirements"
+
+    $missingEvidenceKindRegistryRoot = Join-Path $TempRoot "missing-evidence-kind-registry"
+    Write-MinimalRepo -Root $missingEvidenceKindRegistryRoot -MissingEvidenceKindRegistry
+    $missingEvidenceKindRegistry = Invoke-Checker -Root $missingEvidenceKindRegistryRoot
+    Assert-Equals $missingEvidenceKindRegistry.ExitCode 1 "missing evidence kind registry exit code mismatch"
+    Assert-Contains $missingEvidenceKindRegistry.Output "transition ratchet policy must declare evidence_kind_registry"
+
+    $missingRegisteredEvidenceKindRoot = Join-Path $TempRoot "missing-registered-evidence-kind"
+    Write-MinimalRepo -Root $missingRegisteredEvidenceKindRoot -MissingRegisteredEvidenceKind
+    $missingRegisteredEvidenceKind = Invoke-Checker -Root $missingRegisteredEvidenceKindRoot
+    Assert-Equals $missingRegisteredEvidenceKind.ExitCode 1 "missing registered evidence kind exit code mismatch"
+    Assert-Contains $missingRegisteredEvidenceKind.Output "evidence kind is not registered"
+
+    $duplicateEvidenceKindRegistryRoot = Join-Path $TempRoot "duplicate-evidence-kind-registry"
+    Write-MinimalRepo -Root $duplicateEvidenceKindRegistryRoot -DuplicateEvidenceKindRegistry
+    $duplicateEvidenceKindRegistry = Invoke-Checker -Root $duplicateEvidenceKindRegistryRoot
+    Assert-Equals $duplicateEvidenceKindRegistry.ExitCode 1 "duplicate evidence kind registry exit code mismatch"
+    Assert-Contains $duplicateEvidenceKindRegistry.Output "transition ratchet evidence kind duplicate"
 
     $missingExitEvidenceRequirementRegistryRoot = Join-Path $TempRoot "missing-exit-evidence-requirement-registry"
     Write-MinimalRepo -Root $missingExitEvidenceRequirementRegistryRoot -MissingExitEvidenceRequirementRegistry

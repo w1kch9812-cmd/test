@@ -177,3 +177,9 @@
   - Require every command and service referenced by runner tasks or transition policies to be registered exactly once with owner and reason.
   - Derive command and service taxonomy from policy data instead of checker-owned hardcoded allowlists.
   - Re-run targeted ratchet tests, guardrails, and full Bazel graph.
+
+- [x] **Task 27: Register Exit States And Evidence Kinds**
+  - Add top-level `evidence_kind_registry`, `exit_target_state_registry`, and `transition_exit_state_registry` entries to the transition ratchet policy.
+  - Require every evidence kind, exit target state, and transition exit state to be registered exactly once with owner and reason.
+  - Derive exit/evidence taxonomy from policy data instead of checker-owned hardcoded enum maps.
+  - Re-run targeted ratchet tests, guardrails, and full Bazel graph.

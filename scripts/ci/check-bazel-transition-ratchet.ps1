@@ -488,6 +488,17 @@ Assert-Unique `
     -Values @($exitEvidenceRequirementEntries | ForEach-Object { [string] $_.id }) `
     -Message "transition ratchet exit evidence requirement"
 
+$evidenceKindRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "evidence_kind_registry") {
+    $evidenceKindRegistryEntries = @($policy.evidence_kind_registry)
+}
+if ($evidenceKindRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare evidence_kind_registry"
+}
+Assert-Unique `
+    -Values @($evidenceKindRegistryEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet evidence kind"
+
 $transitionCategoryEntries = @()
 if ($policy.PSObject.Properties.Name -contains "transition_category_registry") {
     $transitionCategoryEntries = @($policy.transition_category_registry)
@@ -527,6 +538,28 @@ if ($requiredServiceRegistryEntries.Count -eq 0) {
 Assert-Unique `
     -Values @($requiredServiceRegistryEntries | ForEach-Object { [string] $_.id }) `
     -Message "transition ratchet required service"
+
+$exitTargetStateRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "exit_target_state_registry") {
+    $exitTargetStateRegistryEntries = @($policy.exit_target_state_registry)
+}
+if ($exitTargetStateRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare exit_target_state_registry"
+}
+Assert-Unique `
+    -Values @($exitTargetStateRegistryEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet exit target state"
+
+$transitionExitStateRegistryEntries = @()
+if ($policy.PSObject.Properties.Name -contains "transition_exit_state_registry") {
+    $transitionExitStateRegistryEntries = @($policy.transition_exit_state_registry)
+}
+if ($transitionExitStateRegistryEntries.Count -eq 0) {
+    throw "transition ratchet policy must declare transition_exit_state_registry"
+}
+Assert-Unique `
+    -Values @($transitionExitStateRegistryEntries | ForEach-Object { [string] $_.id }) `
+    -Message "transition ratchet transition exit state"
 
 $policyByTarget = @{}
 $exitTargetByLabel = @{}
@@ -617,15 +650,34 @@ foreach ($entry in $runnerTaskRegistryEntries) {
         Services = $registeredRequiredServices
     }
 }
-$allowedExitStates = @{
-    blocked         = $true
-    ready_to_retire = $true
+$allowedExitStates = @{}
+foreach ($entry in $transitionExitStateRegistryEntries) {
+    $context = "transition exit state registry"
+    $transitionExitState = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($transitionExitState -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "transition exit state registry id must be lowercase snake_case: $transitionExitState"
+    }
+    [void] (Get-RequiredString `
+        -Object $entry `
+        -Name "owner" `
+        -Context "transition exit state registry $transitionExitState")
+    [void] (Get-RequiredString `
+        -Object $entry `
+        -Name "reason" `
+        -Context "transition exit state registry $transitionExitState")
+    $allowedExitStates[$transitionExitState] = $true
 }
 $allowedExitEvidenceRequirements = @{}
-$allowedExitEvidenceKinds = @{
-    native_bazel_evidence   = $true
-    pinned_external_evidence = $true
-    provisioning_decision   = $true
+$allowedExitEvidenceKinds = @{}
+foreach ($entry in $evidenceKindRegistryEntries) {
+    $context = "evidence kind registry"
+    $evidenceKind = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($evidenceKind -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "evidence kind registry id must be lowercase snake_case: $evidenceKind"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "evidence kind registry $evidenceKind")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "evidence kind registry $evidenceKind")
+    $allowedExitEvidenceKinds[$evidenceKind] = $true
 }
 foreach ($entry in $exitEvidenceRequirementEntries) {
     $context = "exit evidence requirement registry"
@@ -646,7 +698,7 @@ foreach ($entry in $exitEvidenceRequirementEntries) {
         -Name "evidence_kind" `
         -Context "exit evidence requirement registry $evidenceRequirement"
     if (!$allowedExitEvidenceKinds.ContainsKey($evidenceKind)) {
-        throw "unknown exit evidence requirement kind for ${evidenceRequirement}: $evidenceKind"
+        throw "evidence kind is not registered for ${evidenceRequirement}: $evidenceKind"
     }
     $allowedExitEvidenceRequirements[$evidenceRequirement] = $true
 }
@@ -684,9 +736,16 @@ foreach ($entry in $transitionCategoryEntries) {
         -Context "transition category registry $category")
     $transitionCategoryById[$category] = $entry
 }
-$allowedExitTargetStates = @{
-    planned   = $true
-    available = $true
+$allowedExitTargetStates = @{}
+foreach ($entry in $exitTargetStateRegistryEntries) {
+    $context = "exit target state registry"
+    $exitTargetState = Get-RequiredString -Object $entry -Name "id" -Context $context
+    if ($exitTargetState -notmatch '^[a-z][a-z0-9_]*$') {
+        throw "exit target state registry id must be lowercase snake_case: $exitTargetState"
+    }
+    [void] (Get-RequiredString -Object $entry -Name "owner" -Context "exit target state registry $exitTargetState")
+    [void] (Get-RequiredString -Object $entry -Name "reason" -Context "exit target state registry $exitTargetState")
+    $allowedExitTargetStates[$exitTargetState] = $true
 }
 foreach ($entry in $exitTargetEntries) {
     $context = "exit target registry"
@@ -699,7 +758,7 @@ foreach ($entry in $exitTargetEntries) {
     }
     $exitTargetState = Get-RequiredString -Object $entry -Name "state" -Context "exit target registry $exitTarget"
     if (!$allowedExitTargetStates.ContainsKey($exitTargetState)) {
-        throw "unknown exit target registry state for ${exitTarget}: $exitTargetState"
+        throw "exit target state is not registered for ${exitTarget}: $exitTargetState"
     }
     [void] (Get-RequiredString -Object $entry -Name "owner" -Context "exit target registry $exitTarget")
     [void] (Get-RequiredString -Object $entry -Name "reason" -Context "exit target registry $exitTarget")
@@ -751,7 +810,7 @@ foreach ($entry in $policyEntries) {
     $registeredExitTarget = $exitTargetByLabel[$exitTarget]
     $exitState = Get-RequiredString -Object $entry -Name "exit_state" -Context "transition policy $target"
     if (!$allowedExitStates.ContainsKey($exitState)) {
-        throw "unknown transition exit_state for ${target}: $exitState"
+        throw "transition exit_state is not registered for ${target}: $exitState"
     }
     $exitEvidenceRequirements = @(Get-RequiredStringArray `
         -Object $entry `

@@ -13,6 +13,23 @@
     "//tools/bazel:ci_sqlx_prepare_check_transition",
     "//tools/bazel:frontend_e2e_transition"
   ],
+  "evidence_kind_registry": [
+    {
+      "id": "native_bazel_evidence",
+      "owner": "build-platform",
+      "reason": "Evidence is produced by Bazel-owned targets or tests."
+    },
+    {
+      "id": "pinned_external_evidence",
+      "owner": "build-platform",
+      "reason": "External inputs are pinned as reproducible evidence before transition retirement."
+    },
+    {
+      "id": "provisioning_decision",
+      "owner": "build-platform",
+      "reason": "Transition retirement depends on an explicit provisioning decision before native Bazel coverage exists."
+    }
+  ],
   "exit_evidence_requirement_registry": [
     {
       "id": "database_service_provisioning_decision",
@@ -259,6 +276,18 @@
       "required_services": ["postgres"]
     }
   ],
+  "exit_target_state_registry": [
+    {
+      "id": "available",
+      "owner": "build-platform",
+      "reason": "The exit target exists and can replace the transition."
+    },
+    {
+      "id": "planned",
+      "owner": "build-platform",
+      "reason": "The exit target is declared but not yet implemented as the transition replacement."
+    }
+  ],
   "exit_targets": [
     {
       "bazel_target": "//:dependency_sca_evidence",
@@ -304,6 +333,18 @@
         "database_service_provisioning",
         "service_orchestration_provisioning"
       ]
+    }
+  ],
+  "transition_exit_state_registry": [
+    {
+      "id": "blocked",
+      "owner": "build-platform",
+      "reason": "The transition remains active because required exit evidence or approval is absent."
+    },
+    {
+      "id": "ready_to_retire",
+      "owner": "build-platform",
+      "reason": "The transition is eligible for deletion because its exit target is available."
     }
   ],
   "transition_targets": [
