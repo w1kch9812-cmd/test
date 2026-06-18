@@ -7,20 +7,21 @@ Repo: `C:\Users\admin\Desktop\gongzzang`
 
 Current rescan status:
 
-- The repo is not clean: the current session has staged architecture and guardrail refactor work.
-- There is no unstaged diff after the latest rescan.
+- The repo is not clean: the current session has uncommitted generated-artifact guardrail work.
 - No public-data collection was started.
 - The main product/Catalog ownership guardrails pass.
 - The 1500-line hard gate passes.
+- Frontend typecheck/unit, Rust format/check/lint, Biome, markdown links, and the full guardrail suite pass.
 - The prior red item was intentional maintainability ratcheting:
   `scripts/ci/check-platform-core-boundary.tests.ps1` now self-checks that the boundary
   checker and its modules stay <=600 lines.
 - That red item is now resolved: the test runner is 315 lines, the checker
   orchestrator is 12 lines, and every boundary checker module is <=201 lines.
+- The generated/compatibility aggregate large-file gap is now governed by an explicit registry
+  and wired into Bazel, lefthook, and CI.
 
-쉽게 말하면, 현재 프로젝트가 “망가진 상태”는 아닙니다. 실제 boundary checker들은 통과합니다.
-방금까지 걸려 있던 빨간불은 기능 장애가 아니라 큰 guardrail 파일을 더 작게 쪼개라는 품질 기준이었고,
-현재는 그 기준까지 통과합니다.
+쉽게 말하면, 현재 프로젝트가 망가진 상태는 아닙니다. 지금 dirty 상태인 이유는
+전수조사 중 발견한 생성 파일 관리 빈틈을 guardrail로 막는 변경이 아직 커밋되지 않았기 때문입니다.
 
 ## 1. Scope
 
@@ -84,7 +85,7 @@ The following checks passed during this audit:
 
 | Check | Result |
 |---|---|
-| `git status --short --branch` | staged architecture and guardrail refactor changes present |
+| `git status --short --branch` | uncommitted generated-artifact guardrail changes present |
 | `check-platform-core-boundary.ps1` | `platform-core-boundary-ok entries=46 contracts=5 gates=6 legacy_schema_allowances=11` |
 | `check-platform-core-dependency-boundary.ps1` | `platform-core-dependency-boundary-ok manifests=26 allowances=0 source_allowances=0` |
 | `check-pnu-anchor-pbf-marker-contract.ps1` | `pnu-anchor-pbf-marker-contract-ok files=60` |
@@ -98,6 +99,13 @@ The following checks passed during this audit:
 | `check-forbidden-implementation-markers.sh` | passed |
 | `file-line-limit.sh` | passed |
 | `check-markdown-links.sh` | passed |
+| `check-generated-artifact-registry.ps1` | `generated-artifact-registry-ok artifacts=2 sources=11` |
+| `check-generated-artifact-registry.tests.ps1` | `generated-artifact-registry-tests-ok` |
+| `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 26/26 passed |
+| `bash scripts/ci/run-bazel.sh test //:workspace_typecheck //:workspace_hermetic_typechecks //:frontend_unit_test --config=ci --verbose_failures` | 5/5 passed |
+| `bash scripts/ci/run-bazel.sh test //:rust_format_verification //:rust_check_verification //:rust_lint_verification --config=ci --verbose_failures` | 27/27 passed |
+| `pnpm exec biome check .` | `Checked 260 files. No fixes applied.` |
+| `git diff --check` | passed |
 
 Focused test runners also pass after the prior guardrail decomposition work:
 
@@ -176,6 +184,12 @@ against the fragments to block drift.
 
 The generated edge policy is produced by `generate-traffic-auth-policy.ps1`, so it
 is a generated artifact rather than a source-maintainability priority.
+
+Follow-up status: partially hardened after the audit. Generated and compatibility
+aggregate artifacts are now registered in `docs/architecture/generated-artifacts.v1.json`.
+The new `check-generated-artifact-registry.ps1` guardrail verifies generator, verifier,
+source paths, artifact line budgets, source-fragment line budgets, and registration of
+large generated JSON artifacts. The guardrail is wired into Bazel, lefthook, and CI.
 
 The previous largest test runner, `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`, has been split into:
 
@@ -307,18 +321,20 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
 
 It is not yet a complete SSS final form because:
 
-- several generated or compatibility aggregate files are still large, though their source
-  inputs are split and drift-checked;
 - some Bazel transitions still rely on explicit transitional runners;
-- full runtime/build verification was not rerun in this audit.
+- database-backed migration verification, coverage evidence, dependency SCA evidence, and
+  service e2e verification still need native Bazel evidence targets;
+- production deployment, AWS provisioning, and public-data collection were intentionally not run.
 
 ## 7. Recommended Next Work
 
 Recommended order:
 
 1. Turn planned Bazel exit targets into native evidence targets one by one.
-2. Decide whether the remaining generated JSON artifacts need separate generated-file handling in line-count reporting.
-3. Run a broader verification pass after docs and guardrail refactors.
+2. Keep generated and compatibility aggregate artifacts registered through
+   `docs/architecture/generated-artifacts.v1.json` whenever a large generated JSON artifact is added.
+3. Only after the verification-control plane is tightened, resume collection planning in the owning repo:
+   Platform Core for Catalog/raw public data, Gongzzang for Gongzzang-owned market/listing assets.
 
 ## 8. Bottom Line
 
@@ -326,5 +342,5 @@ Gongzzang is not in a broken state.
 
 The main product/Catalog boundary is structurally enforced and currently passes.
 The next SSS-grade work should not be more public-data collection from this repo.
-It should be Bazel exit-target retirement and broader runtime/build verification, while keeping
-Catalog ingestion in Platform Core.
+It should be Bazel exit-target retirement and explicit collection planning by ownership boundary,
+while keeping Catalog ingestion in Platform Core.

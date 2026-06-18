@@ -99,6 +99,12 @@ case "$task" in
   bazel-transition-ratchet-tests)
     run_pwsh scripts/ci/check-bazel-transition-ratchet.tests.ps1
     ;;
+  generated-artifact-registry)
+    run_pwsh scripts/ci/check-generated-artifact-registry.ps1 -Root "$repo_root"
+    ;;
+  generated-artifact-registry-tests)
+    run_pwsh scripts/ci/check-generated-artifact-registry.tests.ps1
+    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;

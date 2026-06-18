@@ -64,6 +64,8 @@ pre-commit:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1
     bazel-transition-ratchet:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-bazel-transition-ratchet.ps1
+    generated-artifact-registry:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-generated-artifact-registry.ps1
 
 pre-push:
   parallel: false
@@ -160,6 +162,16 @@ pre-push:
         - rebase
     bazel-transition-ratchet:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-bazel-transition-ratchet.ps1
+      skip:
+        - merge
+        - rebase
+    generated-artifact-registry:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-generated-artifact-registry.ps1
+      skip:
+        - merge
+        - rebase
+    generated-artifact-registry-tests:
+      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-generated-artifact-registry.tests.ps1
       skip:
         - merge
         - rebase

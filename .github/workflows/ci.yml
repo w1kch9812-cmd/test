@@ -114,6 +114,12 @@ jobs:
       - name: GitHub Actions Node runtime guardrail tests
         shell: pwsh
         run: ./scripts/ci/check-github-actions-node-runtime.tests.ps1
+      - name: Generated artifact registry guardrail
+        shell: pwsh
+        run: ./scripts/ci/check-generated-artifact-registry.ps1
+      - name: Generated artifact registry guardrail tests
+        shell: pwsh
+        run: ./scripts/ci/check-generated-artifact-registry.tests.ps1
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1
