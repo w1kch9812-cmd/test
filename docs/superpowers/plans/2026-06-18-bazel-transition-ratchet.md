@@ -62,3 +62,9 @@
   - Move `//tools/bazel:ci_rust_clippy_transition` to `retired_transition_targets`.
   - Use `rules_rust` `rust_clippy` over `RUST_CRATE_TARGETS`, with `clippy.toml` exported as Bazel config.
   - Re-run targeted ratchet tests, Rust lint Bazel build, guardrails, and full Bazel graph.
+
+- [x] **Task 8: Retire SQLx Prepare Transition**
+  - Replace `//tools/bazel:ci_sqlx_prepare_check_transition` with `//:sqlx_prepare_verification`.
+  - Move `//tools/bazel:ci_sqlx_prepare_check_transition` to `retired_transition_targets`.
+  - Verify committed `.sqlx/query-*.json` offline metadata as Bazel runfiles without DB or cargo shell execution.
+  - Re-run targeted ratchet tests, SQLx metadata Bazel target, guardrails, and full Bazel graph.

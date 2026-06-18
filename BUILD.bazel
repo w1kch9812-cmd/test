@@ -473,6 +473,12 @@ filegroup(
 )
 
 test_suite(
+    name = "sqlx_prepare_verification",
+    tests = ["//tools/bazel:sqlx_offline_metadata_check"],
+    tags = ["manual"],
+)
+
+test_suite(
     name = "guardrails_fast",
     tests = [
         "//tools/bazel:guardrail_catalog_m1_boundary",

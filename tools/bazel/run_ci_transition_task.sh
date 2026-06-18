@@ -60,12 +60,6 @@ run_sqlx_migrate() {
   sqlx migrate run --source migrations
 }
 
-run_sqlx_prepare_check() {
-  require_command cargo
-  run_sqlx_migrate
-  cargo sqlx prepare --workspace --check
-}
-
 run_migration_v001_full() {
   require_database_url
   exec bash tests/migrations/test_v001_full.sh
@@ -198,9 +192,6 @@ case "$task" in
     ;;
   coverage-tarpaulin)
     run_coverage_tarpaulin
-    ;;
-  sqlx-prepare-check)
-    run_sqlx_prepare_check
     ;;
   migration-v001-full)
     run_migration_v001_full

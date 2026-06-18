@@ -3,7 +3,7 @@ def _shell_quote(value):
 
 def _transition_shell_test_impl(ctx):
     if len(ctx.files.srcs) != 1:
-        fail("transition_shell_test requires exactly one script in srcs")
+        fail("shell script test requires exactly one script in srcs")
 
     script = ctx.files.srcs[0]
     executable = ctx.actions.declare_file(ctx.label.name + ".test.sh")
@@ -32,7 +32,7 @@ exec bash "$script_path" {args}
         runfiles = ctx.runfiles(files = [script] + data_files),
     )]
 
-transition_shell_test = rule(
+shell_script_test = rule(
     implementation = _transition_shell_test_impl,
     attrs = {
         "script_args": attr.string_list(),
@@ -41,3 +41,5 @@ transition_shell_test = rule(
     },
     test = True,
 )
+
+transition_shell_test = shell_script_test

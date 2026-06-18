@@ -5,7 +5,8 @@
   "retired_transition_targets": [
     "//tools/bazel:ci_rust_clippy_transition",
     "//tools/bazel:ci_rust_check_transition",
-    "//tools/bazel:ci_rustfmt_transition"
+    "//tools/bazel:ci_rustfmt_transition",
+    "//tools/bazel:ci_sqlx_prepare_check_transition"
   ],
   "transition_targets": [
     {
@@ -77,15 +78,6 @@
       "owner": "build-platform",
       "reason": "cargo tarpaulin transition retained until coverage reports are native Bazel outputs.",
       "exit_target": "//:coverage_evidence",
-      "sunset": "2026-07-31",
-      "external_collection_approval_required": false
-    },
-    {
-      "bazel_target": "//tools/bazel:ci_sqlx_prepare_check_transition",
-      "category": "database-verification",
-      "owner": "build-platform",
-      "reason": "sqlx prepare transition retained until query metadata drift checking is a native Bazel target.",
-      "exit_target": "//:sqlx_prepare_verification",
       "sunset": "2026-07-31",
       "external_collection_approval_required": false
     },

@@ -178,6 +178,11 @@ pre-push:
       skip:
         - merge
         - rebase
+    sqlx-prepare-verification:
+      run: bash scripts/ci/run-bazel.sh test //:sqlx_prepare_verification --config=ci --verbose_failures
+      skip:
+        - merge
+        - rebase
     markdown-links:
       run: bash scripts/ci/check-markdown-links.sh
       skip:

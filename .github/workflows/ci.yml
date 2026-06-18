@@ -181,6 +181,8 @@ jobs:
         run: cargo install cargo-deny --version 0.19.8 --locked
       - name: Rust check
         run: bazelisk test //:rust_check_verification --config=ci --verbose_failures
+      - name: SQLx offline metadata
+        run: bazelisk test //:sqlx_prepare_verification --config=ci --verbose_failures
       - name: Cargo deny
         run: bazelisk test //tools/bazel:ci_cargo_deny_transition --config=ci --verbose_failures
 

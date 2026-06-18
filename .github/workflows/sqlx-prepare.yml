@@ -14,34 +14,12 @@ permissions:
   contents: read
 
 env:
-  CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-  RUST_BACKTRACE: 1
-  POSTGRES_USER: gongzzang
-  POSTGRES_PASSWORD: ci_only_changeme
-  POSTGRES_DB: gongzzang
 
 jobs:
   drift-check:
-    name: SQLx query/schema drift check
+    name: SQLx offline metadata check
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgis/postgis:17-3.5
-        env:
-          POSTGRES_USER: gongzzang
-          POSTGRES_PASSWORD: ci_only_changeme
-          POSTGRES_DB: gongzzang
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U gongzzang"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
-
-    env:
-      DATABASE_URL: postgres://gongzzang:ci_only_changeme@localhost:5432/gongzzang
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
@@ -52,22 +30,5 @@ jobs:
           bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
           echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
 
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
-        with: { toolchain: "1.91.1" }
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
-        with:
-          shared-key: sqlx-prepare
-
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --version 0.8.6 --locked --no-default-features --features postgres,rustls
-
-      - name: Wait for Postgres
-        run: |
-          for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U gongzzang && break
-            sleep 1
-          done
-
       - name: Check committed SQLx metadata
-        run: bazelisk test //tools/bazel:ci_sqlx_prepare_check_transition --config=ci --verbose_failures
+        run: bazelisk test //:sqlx_prepare_verification --config=ci --verbose_failures

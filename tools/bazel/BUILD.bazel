@@ -1,11 +1,12 @@
 load("@aspect_rules_js//js:defs.bzl", "js_test")
 load("@rules_rust//rust:defs.bzl", "rust_clippy", "rustfmt_test")
 load("//tools/bazel:rust_targets.bzl", "RUST_CRATE_TARGETS", "RUST_UNIT_TEST_TARGETS")
-load("//tools/bazel:shell_test_compat.bzl", "transition_shell_test")
+load("//tools/bazel:shell_test_compat.bzl", "shell_script_test", "transition_shell_test")
 
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
+    "check_sqlx_offline_data.sh",
     "check_release_artifacts.sh",
     "check_supply_chain_evidence.sh",
     "generate_release_file_sbom.sh",
@@ -190,11 +191,14 @@ transition_shell_test(
     tags = GUARDRAIL_TRANSITION_TAGS,
 )
 
-transition_shell_test(
-    name = "ci_sqlx_prepare_check_transition",
-    srcs = ["run_ci_transition_task.sh"],
-    script_args = ["sqlx-prepare-check"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
+shell_script_test(
+    name = "sqlx_offline_metadata_check",
+    srcs = ["check_sqlx_offline_data.sh"],
+    data = ["//:sqlx_offline_data"],
+    tags = [
+        "manual",
+        "local",
+    ],
 )
 
 transition_shell_test(
