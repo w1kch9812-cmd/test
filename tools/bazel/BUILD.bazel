@@ -29,6 +29,8 @@ GUARDRAIL_TRANSITION_TAGS = [
     "manual",
     "local",
     "no-sandbox",
+    "no-cache",
+    "external",
 ]
 
 js_test(

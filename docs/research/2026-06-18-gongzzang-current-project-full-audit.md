@@ -300,6 +300,10 @@ for example, `dependency_sca_evidence` records Bazel-owned SBOM/evidence manifes
 available through `//:verify_supply_chain`, while keeping pinned external advisory evidence
 planned until explicit advisory collection approval exists.
 
+Third follow-up status: guardrail transition targets are now tagged `no-cache` and `external`.
+This prevents repo-scanning guardrails from reporting cached success after checker or policy
+files change.
+
 ### Gap 5: Internal Market Spatial Scope Naming Was Still BBox-Centric
 
 Public listing marker routes are protected from `bbox`/`bounds` launch shapes by guardrails.
@@ -326,6 +330,8 @@ Current Gongzzang quality is high in the areas that matter most for boundaries:
 - Bazel transition state is explicit rather than hidden.
 - Planned Bazel exit targets now expose requirement-by-requirement evidence state, so partial
   evidence cannot be mistaken for transition retirement.
+- Guardrail transition targets are uncached/external, so policy/checker edits rerun the
+  guardrails instead of relying on stale Bazel test results.
 
 It is not yet a complete SSS final form because:
 
