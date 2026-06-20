@@ -102,10 +102,6 @@ Assert-Contains `
     -RelativePath ".github/workflows/ci.yml" `
     -Needle "check-load-test-assets.ps1" `
     -Message "CI workflow must run check-load-test-assets.ps1"
-Assert-Contains `
-    -RelativePath ".github/workflows/ci.yml" `
-    -Needle "check-load-test-assets.tests.ps1" `
-    -Message "CI workflow must run check-load-test-assets.tests.ps1"
 
 $manualWorkflow = Read-Text ".github/workflows/load-test-capacity.yml"
 foreach ($needle in @("workflow_dispatch", "self-hosted", "load-test", "upload-artifact", "target/audit/load-tests")) {

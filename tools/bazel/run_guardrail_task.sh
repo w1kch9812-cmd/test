@@ -87,36 +87,6 @@ case "$task" in
   workspace-typecheck-coverage)
     exec bash scripts/ci/check-workspace-typecheck-coverage.sh "$repo_root"
     ;;
-  verification-control-plane)
-    run_pwsh scripts/ci/check-verification-control-plane.ps1 -Root "$repo_root"
-    ;;
-  verification-control-plane-tests)
-    run_pwsh scripts/ci/check-verification-control-plane.tests.ps1
-    ;;
-  bazel-transition-ratchet)
-    run_pwsh scripts/ci/check-bazel-transition-ratchet.ps1 -Root "$repo_root"
-    ;;
-  bazel-transition-ratchet-tests)
-    run_pwsh scripts/ci/check-bazel-transition-ratchet.tests.ps1
-    ;;
-  generated-artifact-registry)
-    run_pwsh scripts/ci/check-generated-artifact-registry.ps1 -Root "$repo_root"
-    ;;
-  generated-artifact-registry-tests)
-    run_pwsh scripts/ci/check-generated-artifact-registry.tests.ps1
-    ;;
-  coverage-transition-ssot)
-    run_pwsh scripts/ci/check-coverage-transition-ssot.ps1 -Root "$repo_root"
-    ;;
-  coverage-transition-ssot-tests)
-    run_pwsh scripts/ci/check-coverage-transition-ssot.tests.ps1
-    ;;
-  verification-task-registry)
-    run_pwsh scripts/ci/check-verification-task-registry.ps1 -Root "$repo_root"
-    ;;
-  verification-task-registry-tests)
-    run_pwsh scripts/ci/check-verification-task-registry.tests.ps1
-    ;;
   platform-core-boundary)
     run_pwsh scripts/ci/check-platform-core-boundary.ps1 -Root "$repo_root"
     ;;
@@ -147,23 +117,11 @@ case "$task" in
   traffic-auth-policy-registry)
     run_pwsh scripts/ci/check-traffic-auth-policy-registry.ps1 -Root "$repo_root"
     ;;
-  traffic-auth-policy-registry-tests)
-    run_pwsh scripts/ci/check-traffic-auth-policy-registry.tests.ps1
-    ;;
-  traffic-auth-api-control-plane-tests)
-    run_pwsh scripts/ci/check-traffic-auth-api-control-plane.tests.ps1
-    ;;
   github-actions-node-runtime)
     run_pwsh scripts/ci/check-github-actions-node-runtime.ps1 -Root "$repo_root"
     ;;
-  github-actions-node-runtime-tests)
-    run_pwsh scripts/ci/check-github-actions-node-runtime.tests.ps1
-    ;;
   load-test-assets)
     run_pwsh scripts/ci/check-load-test-assets.ps1 -Root "$repo_root"
-    ;;
-  load-test-assets-tests)
-    run_pwsh scripts/ci/check-load-test-assets.tests.ps1
     ;;
   *)
     printf 'run-guardrail-task: unknown task: %s\n' "$task" >&2

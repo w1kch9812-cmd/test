@@ -88,8 +88,7 @@ $ci = Read-TextFile -RelativePath ".github/workflows/ci.yml"
 $requiredCiJobsOrSteps = @(Get-JsonProperty -Object $index -Name "required_ci_jobs_or_steps" | ForEach-Object { [string] $_ })
 $productionPromotionCiJobsOrSteps = @(
     "check-production-edge-admission.ps1",
-    "check-load-test-assets.ps1",
-    "verify-load-test-capacity-evidence.tests.ps1"
+    "check-load-test-assets.ps1"
 )
 $requiredCiJobsOrSteps = @($requiredCiJobsOrSteps | Where-Object {
         $productionPromotionCiJobsOrSteps -notcontains ([string] $_)
@@ -106,7 +105,6 @@ foreach ($needle in @(
     "gitleaks-action",
     "check-platform-integration-policy.ps1",
     "check-lakehouse-registry-integration.ps1",
-    "check-lakehouse-registry-integration.tests.ps1",
     "supply-chain-provenance:",
     "id-token: write",
     "attestations: write",

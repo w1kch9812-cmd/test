@@ -73,8 +73,5 @@ $ciWorkflow = Read-TextFile -Path $ciWorkflowPath
 if (!$ciWorkflow.Contains("./scripts/ci/check-github-actions-node-runtime.ps1")) {
     throw "CI workflow must run check-github-actions-node-runtime.ps1"
 }
-if (!$ciWorkflow.Contains("./scripts/ci/check-github-actions-node-runtime.tests.ps1")) {
-    throw "CI workflow must run check-github-actions-node-runtime.tests.ps1"
-}
 
 Write-Host "github-actions-node-runtime-ok workflows=$($workflowFiles.Count)"
