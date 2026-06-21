@@ -58,11 +58,9 @@ The guardrail must reject:
 
 - [ ] **Step 3: Run guardrail**
 
-Run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
-```
+Run the PNU-anchor PBF contract guard. (This was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract` check, removed per ADR-0044;
+its intent now lives in the Rust contract tests run via `cargo test`.)
 
 Expected: PASS.
 
@@ -112,7 +110,7 @@ stable source id and layer id generated from the route policy or marker layer re
 
 Run:
 
-```powershell
+```bash
 pnpm --filter web test
 pnpm --filter web exec playwright test
 ```
@@ -132,7 +130,7 @@ Expected: PASS. If no Playwright marker smoke exists, add a minimal smoke before
 
 Run:
 
-```powershell
+```bash
 cargo test -p listing-domain
 cargo test -p db --features integration --test listing_marker_tile_integration
 cargo test -p api listing_marker
@@ -142,12 +140,15 @@ Expected: PASS.
 
 - [ ] **Step 2: Run guardrails**
 
-Run:
+Run the surviving guards. (The PowerShell `check-pnu-anchor-pbf-marker-contract`,
+`check-platform-core-boundary`, and `check-platform-core-dependency-boundary`
+scripts were removed per ADR-0044; the boundary is now
+`scripts/lefthook/catalog-m1-boundary.sh` and the PNU-anchor PBF contract is
+covered by Rust contract tests.)
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary
+```bash
+bash scripts/lefthook/catalog-m1-boundary.sh
+cargo test -p api listing_marker
 ```
 
 Expected: PASS.

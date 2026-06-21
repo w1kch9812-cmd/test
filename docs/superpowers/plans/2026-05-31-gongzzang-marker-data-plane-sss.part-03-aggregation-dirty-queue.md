@@ -76,7 +76,7 @@ Aggregate query must:
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_tile_aggregates_low_zoom_without_dropping_records
 cargo test -p api listing_marker_tile
 ```
@@ -149,7 +149,7 @@ gongzzang_listing_marker_deltas_active
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_projection_enqueues_dirty_tiles
 cargo test -p api metrics
 ```

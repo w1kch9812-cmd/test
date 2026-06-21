@@ -88,7 +88,7 @@ async fn listing_marker_projection_writes_delta_when_listing_becomes_public() {
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_projection_writes_
 ```
 
@@ -110,7 +110,7 @@ Use `ON CONFLICT DO NOTHING` for overlay log idempotency.
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_projection_writes_
 ```
 
@@ -266,7 +266,7 @@ GET /map/v1/marker-tombstones/listing/{z}/{x}/{y}?base_version={version}
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_tombstones
 cargo test -p api listing_marker_tombstone
 ```
@@ -392,7 +392,7 @@ Cache-Control: public, max-age=5, stale-while-revalidate=10
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_delta
 cargo test -p api listing_marker_delta
 ```

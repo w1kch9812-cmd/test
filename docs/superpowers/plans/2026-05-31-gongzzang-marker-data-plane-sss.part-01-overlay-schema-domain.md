@@ -64,7 +64,7 @@ async fn listing_marker_overlay_tables_exist_with_expected_columns() {
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_overlay_tables_exist_with_expected_columns
 ```
 
@@ -187,7 +187,7 @@ create index listing_marker_dirty_tile_due_idx
 
 Run:
 
-```powershell
+```bash
 sqlx migrate run
 cargo test -p db --features integration --test listing_marker_tile_integration listing_marker_overlay_tables_exist_with_expected_columns
 ```
@@ -310,7 +310,7 @@ Add these methods to `ListingRepository`:
 
 Run:
 
-```powershell
+```bash
 cargo test -p listing-domain listing_marker_overlay_query
 ```
 
