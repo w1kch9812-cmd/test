@@ -18,18 +18,14 @@ The directory contains a small local flat `.pbf` sample generated before this AD
 
 ## Command
 
-```powershell
-$root = Resolve-Path 'var/gold/v1/parcels'
-$files = Get-ChildItem -Path $root -Recurse -Filter '*.pbf' -File
-$byZoom = $files |
-  ForEach-Object {
-    $rel = $_.FullName.Substring($root.Path.Length + 1)
-    $zoom = $rel.Split([IO.Path]::DirectorySeparatorChar)[0]
-    [pscustomobject]@{ Zoom=$zoom; Length=$_.Length }
-  } |
-  Group-Object Zoom |
-  Sort-Object {[int]$_.Name}
-$total = ($files | Measure-Object -Property Length -Sum).Sum
+```bash
+root='var/gold/v1/parcels'
+# Per-zoom tile count + total bytes (zoom is the first path segment under the layer root).
+find "$root" -type f -name '*.pbf' -printf '%P %s\n' \
+  | awk '{ z=$1; sub(/\/.*/, "", z); count[z]++; bytes[z]+=$2; total+=$2 } \
+         END { for (z in count) printf "zoom %s: %d tiles, %d bytes\n", z, count[z], bytes[z]; \
+               printf "total: %d bytes\n", total }' \
+  | sort
 ```
 
 ## Result

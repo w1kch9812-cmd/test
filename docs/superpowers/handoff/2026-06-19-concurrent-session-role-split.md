@@ -101,7 +101,7 @@ It is not the final enterprise form yet because:
 
 Before starting a new edit batch:
 
-```powershell
+```bash
 git status -sb --ahead-behind
 git log --oneline --decorate -5
 ```
@@ -111,7 +111,7 @@ dirty, stop and identify whether the dirty files belong to the other session.
 
 Before claiming a slice complete:
 
-```powershell
+```bash
 git diff --check
 bash scripts/lefthook/file-line-limit.sh .
 bash scripts/lefthook/check-forbidden-implementation-markers.sh .

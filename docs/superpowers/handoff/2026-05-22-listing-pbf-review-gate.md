@@ -59,20 +59,17 @@ If this slice is touched again, re-run the implementation verification checklist
 
 ## Verification Evidence
 
-Fresh verification commands that have passed for this gate:
+Verification commands that passed for this gate (historical evidence). The
+PNU-anchor PBF contract guard was a PowerShell `scripts/ci/check-pnu-anchor-pbf-marker-contract`
+check that has since been removed (ADR-0044, PowerShell elimination); its
+intent now lives in the Rust contract/repository tests run via `cargo test`:
 
-```powershell
+```bash
 pnpm markdownlint-cli2 docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-git diff --check -- docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md crates/domain/core/shared-kernel/src/geometry.rs crates/db/tests/listing_integration.rs scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
-pnpm markdownlint-cli2 C:/Users/admin/Desktop/platform-core/AGENTS.md C:/Users/admin/Desktop/platform-core/docs/superpowers/README.md C:/Users/admin/Desktop/platform-core/docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md
-git -C C:\Users\admin\Desktop\platform-core diff --check -- AGENTS.md docs/superpowers/README.md docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract -Root C:\Users\admin\Desktop\platform-core
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
-C:\Users\admin\.cargo\bin\cargo.exe fmt --check
-C:\Users\admin\.cargo\bin\cargo.exe check -p platform-core-api
+git diff --check -- docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md crates/domain/core/shared-kernel/src/geometry.rs crates/db/tests/listing_integration.rs
+cargo test -p platform-core-api
+cargo fmt --check
+cargo check -p platform-core-api
 ```
 
 Live HTTP CORS smoke also passed on a temporary `platform-core-api` at `127.0.0.1:18082`: GET and

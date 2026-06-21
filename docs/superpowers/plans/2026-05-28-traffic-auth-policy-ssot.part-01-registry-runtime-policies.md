@@ -50,14 +50,10 @@ The registry must include:
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
-```
-
-Expected:
-
-```text
-traffic-auth-policy-registry-ok routes=6 service_policies=2
+```bash
+# Registry parity is now verified by regenerating and confirming no diff (ADR-0044 PowerShell -> Rust).
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs
 ```
 
 - [x] **Step 3: Confirm current registry matches code**
@@ -122,8 +118,8 @@ export const GENERATED_PUBLIC_MAP_ROUTE_POLICIES: readonly GeneratedPublicMapRou
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy -Root .
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
 ```
 
 Expected:
@@ -166,7 +162,7 @@ const PUBLIC_MAP_ROUTE_POLICIES: readonly PublicMapRoutePolicy[] =
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-proxy.test.ts
 ```
 
@@ -231,8 +227,8 @@ Then replace local constants with imported generated constants.
 
 Run:
 
-```powershell
-C:\Users\admin\.cargo\bin\cargo.exe check --workspace --bins --all-features
+```bash
+cargo check --workspace --bins --all-features
 ```
 
 Expected:

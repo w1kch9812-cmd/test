@@ -149,7 +149,7 @@ boundary contract `docs/architecture/platform-core-boundary.v1.json`.
 
 Run Rust checks for the circuit breaker crate and affected service:
 
-```powershell
+```bash
 cargo test -p circuit-breaker
 cargo check -p api
 ```

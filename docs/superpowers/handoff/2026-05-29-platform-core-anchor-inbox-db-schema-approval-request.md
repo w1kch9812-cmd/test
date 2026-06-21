@@ -111,12 +111,16 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 
 After approval and implementation, run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-migration-version-prefixes -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
+The migration-version-prefixes and Platform Core boundary guards used to be
+PowerShell `scripts/ci/check-*` scripts; per ADR-0044 (PowerShell elimination)
+the migration guard is now the `repo-guard` Rust binary and the Platform Core
+boundary is enforced by `scripts/lefthook/catalog-m1-boundary.sh`. The
+PNU-anchor PBF contract check was removed; its intent lives in the Rust contract
+tests run by `cargo test`.
+
+```bash
+cargo run -q -p repo-guard -- migration-version-prefixes
+bash scripts/lefthook/catalog-m1-boundary.sh
 cargo test -p db --features integration --test platform_core_anchor_import_integration
 cargo test -p api platform_core_events
 cargo test -p api platform_core_anchor_import
