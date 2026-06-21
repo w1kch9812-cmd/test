@@ -77,8 +77,8 @@ historical reference 로만 사용한다.
 소비합니다. 해당 crate 또는 직접 의존성을 재도입하면 boundary CI가 차단해야 합니다.
 Gongzzang's pinned Catalog API consumer contract is
 `docs/architecture/platform-core-catalog-api-contract.v1.pin.json`; changes to parcel/building
-Platform Core consumption must update that pin and pass
-`scripts/ci/check-platform-core-catalog-api-contract.ps1`.
+Platform Core consumption must update that pin and keep it consistent with
+`../platform-core/docs/openapi/catalog.v1.yaml`.
 Platform Core-owned ETL service scaffolds such as `services/data-pipeline` and
 `services/scraper-py` must also stay out of this repo.
 Platform Core-owned public/reference vector tile ETL assets must also stay out:
