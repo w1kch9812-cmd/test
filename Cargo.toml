@@ -23,6 +23,7 @@ members = [
     "crates/parcel-lookup",
     "crates/db",
     "crates/outbox-publisher",
+    "crates/repo-guard",
     "services/api",
     "services/outbox-publisher",
     "services/etl-base-layer",
