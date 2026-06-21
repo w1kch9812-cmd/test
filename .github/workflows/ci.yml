@@ -1,5 +1,5 @@
-# CI — cargo + pnpm 직접 실행 (Bazel 폐기, ADR-0044 역전).
-# 이전: 모든 잡이 bazelisk 경유. 현재: cargo / pnpm 표준 명령.
+# CI — cargo + pnpm 직접 실행 (graph build 폐기, ADR-0044 역전).
+# 이전: 모든 잡이 graph build wrapper 경유. 현재: cargo / pnpm 표준 명령.
 # 일부러 뺀 것(런칭 후 필요시 재도입): release-provenance(SBOM/SLSA 첨부), tarpaulin 90% 커버리지 게이트.
 name: CI
 
