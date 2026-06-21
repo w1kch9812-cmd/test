@@ -66,9 +66,8 @@ gh workflow run "Production Deploy Admission" \
 The admission workflow downloads the release candidate artifact from the
 approved CI run, verifies provenance for both production subjects, verifies SBOM
 attestations, downloads load-test capacity evidence from the approved load-test
-workflow run, runs `scripts/ci/verify-load-test-capacity-evidence.ps1`, runs
-production edge admission, and binds the gate to the `production` GitHub
-Environment.
+workflow run, verifies that evidence, runs production edge admission, and binds
+the gate to the `production` GitHub Environment.
 
 The load-test capacity evidence gate requires healthy evidence for
 `api-read-mix`, `map-marker-mix`, and `platform-core-events`. Each accepted run
@@ -92,22 +91,8 @@ CloudFront production ingress is intentionally blocked by the same admission
 script until the generated WebACL ARN is wired into the CloudFront distribution
 module. Do not attach WAF manually in the AWS console.
 
-Manual verification uses the same script:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass `
-  -File scripts/ci/verify-production-deploy-candidate.ps1 `
-  -ArtifactPath bazel-bin/gongzzang-web-next-build.tgz `
-  -Repository <owner>/gongzzang
-
-powershell -NoProfile -ExecutionPolicy Bypass `
-  -File scripts/ci/verify-production-deploy-candidate.ps1 `
-  -ArtifactPath bazel-bin/gongzzang-api-release/api `
-  -Repository <owner>/gongzzang
-```
-
-The script rejects artifacts not built by the approved workflow or approved
-source ref. Manual verification commands are:
+Manual verification rejects artifacts not built by the approved workflow or
+approved source ref. The verification commands are:
 
 ```bash
 gh attestation verify bazel-bin/gongzzang-web-next-build.tgz \

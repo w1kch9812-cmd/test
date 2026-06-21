@@ -149,5 +149,6 @@ Required tests:
 - `catalog_circuit_breaker_timeout_fault` proves timeouts record failures.
 - `catalog_circuit_breaker_open_fault` proves an open circuit blocks calls.
 
-Production readiness requires these tests plus
-`scripts/ci/check-platform-integration-policy.ps1` to pass.
+Production readiness requires these tests plus the platform-integration policy
+contract in `docs/architecture/platform-integration/index.v1.json` to stay
+intact.
