@@ -6,7 +6,7 @@
 
 **Architecture:** Define traffic/auth policy once in `docs/architecture/traffic-auth-policy-registry.v1.json`. Enforcement remains layered at edge, Next proxy, Rust API, service-to-service auth, and data/cache layers, but every layer must either consume the registry or pass a CI drift check against it. This keeps rate limit and mTLS from becoming scattered constants while preserving defense in depth.
 
-**Tech Stack:** JSON registry, PowerShell CI checks, Next.js proxy, TypeScript, Rust/Axum, Redis/Valkey-compatible cache, platform-core published HTTP/event contracts.
+**Tech Stack:** JSON registry, Rust codegen (`cargo run -p api --bin generate-traffic-auth-policy`) with regenerate-and-diff parity checks, Next.js proxy, TypeScript, Rust/Axum, Redis/Valkey-compatible cache, platform-core published HTTP/event contracts.
 
 ---
 
@@ -17,11 +17,13 @@ The registry is now consumed by runtime code and checked by CI/pre-push:
 - `docs/architecture/traffic-auth-policy-registry.v1.json`
 - `scripts/ci/check-traffic-auth-policy-registry`
 
-Fresh local evidence:
+Fresh local evidence (registry parity is verified by regenerating with the Rust
+generator and confirming no diff, per ADR-0044):
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
-# traffic-auth-policy-registry-ok routes=6 service_policies=2
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs
+# no diff: generated policy artifacts match the registry (routes=6 service_policies=2)
 ```
 
 This proves current Gongzzang public map route rate values, BFF route exposure,

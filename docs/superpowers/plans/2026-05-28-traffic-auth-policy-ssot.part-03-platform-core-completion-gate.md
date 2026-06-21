@@ -34,15 +34,13 @@ The drift check must compare registry values to:
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root C:\Users\admin\Desktop\platform-core
+```bash
+# In the platform-core repo, regenerate its traffic-auth policy and confirm no diff (ADR-0044).
+cargo run -p platform-core-api --bin generate-traffic-auth-policy
+git -C /c/Users/admin/Desktop/platform-core diff --exit-code
 ```
 
-Expected:
-
-```text
-traffic-auth-policy-registry-ok
-```
+Expected: no diff (platform-core generated policy artifacts match its registry).
 
 ## Task 6: Completion Gate
 
@@ -57,21 +55,18 @@ traffic-auth-policy-registry-ok
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs
 ```
 
-Expected:
-
-```text
-traffic-auth-policy-registry-ok routes=6 service_policies=2
-```
+Expected: no diff (generated policy artifacts match the registry; routes=6 service_policies=2).
 
 - [x] **Step 2: Verify focused web policy tests**
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-proxy.test.ts
 ```
 
@@ -86,8 +81,8 @@ Tests  7 passed
 
 Run:
 
-```powershell
-C:\Users\admin\.cargo\bin\cargo.exe check --workspace --bins --all-features
+```bash
+cargo check --workspace --bins --all-features
 ```
 
 Expected:
@@ -100,8 +95,8 @@ Finished `dev` profile
 
 Run:
 
-```powershell
-C:\Users\admin\.cargo\bin\cargo.exe check --workspace --all-targets --all-features
+```bash
+cargo check --workspace --all-targets --all-features
 ```
 
 Expected:

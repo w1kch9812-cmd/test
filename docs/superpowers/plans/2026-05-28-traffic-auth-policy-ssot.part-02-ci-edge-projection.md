@@ -13,10 +13,12 @@ Parent index: [Traffic/Auth Policy SSOT Implementation Plan](./2026-05-28-traffi
 
 - [x] **Step 1: Add CI workflow command**
 
-Add this command to the CI guardrail section:
+Add this command to the CI guardrail section (registry parity is now verified by
+regenerating with the Rust generator and confirming no diff, per ADR-0044):
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs infrastructure/security/traffic-auth-edge-policy.generated.json
 ```
 
 - [x] **Step 2: Add pre-push command**
@@ -27,15 +29,12 @@ Add the same command to `lefthook.yml` pre-push checks.
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs
 ```
 
-Expected:
-
-```text
-traffic-auth-policy-registry-ok routes=6 service_policies=2
-```
+Expected: no diff (generated policy artifacts already match the registry).
 
 ## Task 4.5: Generate Edge/Ingress Projection
 
@@ -64,19 +63,18 @@ suite includes a negative case for a missing generated edge policy file.
 
 Run:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
+```bash
+cargo run -p api --bin generate-traffic-auth-policy
+git diff --exit-code apps/web/lib/policies services/api/src/traffic_auth_policy.rs services/api/src/listing_marker_policy.rs infrastructure/security/traffic-auth-edge-policy.generated.json
 ```
 
 Expected:
 
 ```text
-traffic-auth-policy-registry-tests-ok
 traffic-auth-policy-generated ts=apps/web/lib/policies/traffic-auth-policy.generated.ts rust=services/api/src/listing_marker_policy.rs,services/api/src/traffic_auth_policy.rs edge=infrastructure/security/traffic-auth-edge-policy.generated.json
-traffic-auth-policy-registry-ok routes=6 service_policies=2
 ```
+
+(`git diff --exit-code` reports no diff, proving the generated artifacts match the registry.)
 
 ## Task 4.6: Generate AWS WAFv2/Pulumi Manifest
 
