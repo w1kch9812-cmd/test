@@ -41,7 +41,7 @@ it("returns retryable failure when Rust API inbox write fails for anchor events"
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts
 ```
 
@@ -93,7 +93,7 @@ Change `EventHandler` and `POST` to await async handlers and return status 503 f
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts
 ```
 
@@ -119,13 +119,12 @@ In `scripts/ci/check-platform-core-boundary.tests`, add required ownership entri
 
 - [ ] **Step 2: Run boundary tests and verify RED**
 
-Run:
+Run the boundary guard test suite. (Historical note: this was the PowerShell
+`scripts/ci/check-platform-core-boundary` guard; per ADR-0044 it was replaced by
+`scripts/lefthook/catalog-m1-boundary.sh` plus the boundary contract in
+`docs/architecture/platform-core-boundary.v1.json`.)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
-```
-
-Expected: fail because checker does not require the new entries.
+Expected: fail because the boundary does not require the new entries.
 
 - [ ] **Step 3: Update boundary SSOT and checker**
 
@@ -133,19 +132,13 @@ Add the same entries to `docs/architecture/platform-core-boundary.v1.json` and `
 
 - [ ] **Step 4: Run boundary tests and verify GREEN**
 
-Run:
+Run the boundary guard (now `scripts/lefthook/catalog-m1-boundary.sh`, per ADR-0044):
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
+```bash
+bash scripts/lefthook/catalog-m1-boundary.sh
 ```
 
-Expected:
-
-```text
-check-platform-core-boundary-tests-ok
-platform-core-boundary-ok
-```
+Expected: the boundary guard passes.
 
 ## Task 7: Focused Verification
 
@@ -156,7 +149,7 @@ platform-core-boundary-ok
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts tests/unit/platform-core-proxy.test.ts tests/unit/map/vector-tile-manifest.test.ts tests/unit/map/marker-tile-style.test.ts
 ```
 
@@ -166,7 +159,7 @@ Expected: all non-live tests pass; live manifest test remains skipped unless `PL
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web typecheck
 ```
 
@@ -176,7 +169,7 @@ Expected: `tsc --noEmit` exits 0.
 
 Run:
 
-```powershell
+```bash
 cargo test -p api platform_core_events
 cargo test -p api platform_core_anchor_import
 cargo test -p db --features integration --test platform_core_anchor_import_integration
@@ -186,23 +179,25 @@ Expected: all tests pass when `DATABASE_URL` points at a migrated PostGIS databa
 
 - [ ] **Step 4: Run guardrails**
 
-Run:
+Run the surviving guards. (The PowerShell `check-platform-core-boundary` and
+`check-pnu-anchor-pbf-marker-contract` scripts were removed per ADR-0044; the
+boundary is now `scripts/lefthook/catalog-m1-boundary.sh` and the PNU-anchor PBF
+contract is covered by Rust contract tests.)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
+```bash
+bash scripts/lefthook/catalog-m1-boundary.sh
+cargo test -p api platform_core_events
+cargo test -p db --features integration --test platform_core_anchor_import_integration
 ```
 
-Expected: all four commands exit 0.
+Expected: all commands exit 0.
 
 - [ ] **Step 5: Run diff whitespace checks**
 
 Run:
 
-```powershell
-git diff --check -- migrations/30016_platform_core_event_inbox_anchor_import.sql crates/db/src/platform_core_anchor.rs crates/db/src/lib.rs crates/db/tests/platform_core_anchor_import_integration.rs services/api/src/routes/platform_core_events.rs services/api/src/main.rs services/api/src/bin/platform_core_anchor_import.rs services/api/src/platform_core_anchor_import.rs services/api/Cargo.toml apps/web/app/platform-core/events/route.ts apps/web/tests/unit/platform-core-events.test.ts docs/architecture/platform-core-boundary.v1.json scripts/ci/check-platform-core-boundary scripts/ci/check-platform-core-boundary.tests scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
+```bash
+git diff --check -- migrations/30016_platform_core_event_inbox_anchor_import.sql crates/db/src/platform_core_anchor.rs crates/db/src/lib.rs crates/db/tests/platform_core_anchor_import_integration.rs services/api/src/routes/platform_core_events.rs services/api/src/main.rs services/api/src/bin/platform_core_anchor_import.rs services/api/src/platform_core_anchor_import.rs services/api/Cargo.toml apps/web/app/platform-core/events/route.ts apps/web/tests/unit/platform-core-events.test.ts docs/architecture/platform-core-boundary.v1.json
 ```
 
 Expected: no output and exit 0.

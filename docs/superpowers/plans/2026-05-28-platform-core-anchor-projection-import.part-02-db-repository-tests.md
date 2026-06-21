@@ -168,7 +168,7 @@ async fn anchor_import_upserts_long_algorithm_version_and_refreshes_listing_proj
 
 Run with a migrated test database:
 
-```powershell
+```bash
 cargo test -p db --features integration --test platform_core_anchor_import_integration
 ```
 

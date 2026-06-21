@@ -56,13 +56,12 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 
 - [ ] **Step 2: Run the guardrail test and verify RED**
 
-Run:
+Run the contract guard test suite. (Historical note: this was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract.tests` guard, since removed per
+ADR-0044 PowerShell elimination; the PNU-anchor PBF contract is now covered by
+Rust contract tests run via `cargo test`.)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-```
-
-Expected: fail because `check-pnu-anchor-pbf-marker-contract` does not yet require migration `30015` or `algorithm_version varchar(128)`.
+Expected: fail because the contract does not yet require migration `30015` or `algorithm_version varchar(128)`.
 
 - [ ] **Step 3: Implement the guardrail requirement**
 
@@ -151,10 +150,8 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 
 - [ ] **Step 5: Run the guardrail test and verify GREEN**
 
-Run:
+Run the contract guard test suite (now the Rust contract tests via `cargo test`;
+the PowerShell `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests` guard was
+removed per ADR-0044).
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-```
-
-Expected: `check-pnu-anchor-pbf-marker-contract-tests-ok`.
+Expected: the contract tests pass.

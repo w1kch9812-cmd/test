@@ -44,7 +44,7 @@ fn anchor_snapshot_event_maps_to_pending_import_inbox_row() {
 
 Run:
 
-```powershell
+```bash
 cargo test -p api platform_core_events
 ```
 
@@ -219,7 +219,7 @@ Merge it before `internal`:
 
 Run:
 
-```powershell
+```bash
 cargo test -p api platform_core_events
 ```
 
@@ -268,7 +268,7 @@ mod tests {
 
 Run:
 
-```powershell
+```bash
 cargo test -p api platform_core_anchor_import
 ```
 
@@ -361,7 +361,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
 
 Run:
 
-```powershell
+```bash
 cargo test -p api platform_core_anchor_import
 ```
 

@@ -356,7 +356,7 @@ pub mod platform_core_anchor;
 
 Run:
 
-```powershell
+```bash
 cargo test -p db --features integration --test platform_core_anchor_import_integration
 ```
 

@@ -6,7 +6,7 @@
 
 **Architecture:** Platform Core still owns parcel geometry and anchor coordinates. Gongzzang stores only a read-model copy in `parcel_marker_anchor`, records inbound Platform Core events in a durable inbox, and refreshes Gongzzang-owned `listing_marker_projection` rows from listing semantics joined to the copied anchors. The public Next.js receiver validates Platform Core headers, then forwards accepted events to the Rust API internal route for durable storage; the artifact importer runs from the Rust API package against the same database.
 
-**Tech Stack:** Next.js route handler, Rust Axum, SQLx/PostGIS, existing `reqwest`, existing workspace `sha2`, Vitest, Rust integration tests, PowerShell guardrails.
+**Tech Stack:** Next.js route handler, Rust Axum, SQLx/PostGIS, existing `reqwest`, existing workspace `sha2`, Vitest, Rust integration tests, repo guardrails (the `repo-guard` Rust binary and `scripts/lefthook/*.sh`; the former PowerShell guards were removed per ADR-0044).
 
 ---
 
