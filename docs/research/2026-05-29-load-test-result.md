@@ -5,8 +5,8 @@
 - Plan: `docs/superpowers/plans/2026-05-29-load-test-capacity-sizing.md`
 - Scenario registry: `tests/load/scenarios.v1.json`
 - Scenario script: `tests/load/scenarios/api-read-mix.js`
-- Launcher: `scripts/load/run-k6.ps1`
-- Normalizer: `scripts/load/normalize-k6-summary.ps1`
+- Launcher and normalizer: the original k6 launcher/normalizer PowerShell scripts
+  (since removed) drove this run via `k6 run --summary-export`.
 
 This run verifies the evidence pipeline for the Gongzzang load-test harness. It
 does not establish a production launch capacity spec.

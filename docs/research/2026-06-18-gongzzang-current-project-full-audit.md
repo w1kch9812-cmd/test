@@ -3,6 +3,13 @@
 Date: 2026-06-18
 Repo: `C:\Users\admin\Desktop\gongzzang`
 
+> Historical snapshot. This audit predates the PowerShell elimination (ADR-0044,
+> 2026-06-21). The PowerShell guard/registry machinery named below has since been
+> removed; the surviving guards are `scripts/lefthook/*.sh` and the `repo-guard`
+> Rust binary, and the traffic-auth policy is regenerated with
+> `cargo run -p api --bin generate-traffic-auth-policy`. Guard names below are kept
+> for the historical record.
+
 ## 0. Current Rescan Summary
 
 Current rescan status:
@@ -20,7 +27,7 @@ Current rescan status:
 - Runtime code search did not find direct V-World/data.go.kr Catalog endpoint usage in `apps/`,
   `services/`, `crates/`, or `packages/`.
 - The prior red item was intentional maintainability ratcheting:
-  `scripts/ci/check-platform-core-boundary.tests.ps1` now self-checks that the boundary
+  `scripts/ci/check-platform-core-boundary tests` now self-checks that the boundary
   checker and its modules stay <=600 lines.
 - That red item is now resolved: the test runner is 315 lines, the checker
   orchestrator is 12 lines, and every boundary checker module is <=201 lines.
@@ -102,25 +109,25 @@ The following checks passed during this audit:
 | Check | Result |
 |---|---|
 | `git status --short --branch --ahead-behind` | tracked code clean before this audit note update |
-| `check-platform-core-boundary.ps1` | `platform-core-boundary-ok entries=46 contracts=5 gates=6 legacy_schema_allowances=11` |
-| `check-platform-core-dependency-boundary.ps1` | `platform-core-dependency-boundary-ok manifests=26 allowances=0 source_allowances=0` |
-| `check-pnu-anchor-pbf-marker-contract.ps1` | `pnu-anchor-pbf-marker-contract-ok files=60` |
-| `check-traffic-auth-policy-registry.ps1` | `traffic-auth-policy-registry-ok routes=6 service_policies=2` |
-| `check-platform-integration-policy.ps1` | `platform-integration-policy-ok components=10 route_surfaces=8` |
-| `check-lakehouse-registry-integration.ps1` | `lakehouse-registry-integration-ok namespaces=1 assets=5 media_sets=1` |
-| `check-bazel-transition-ratchet.ps1` | `bazel-transition-ratchet-ok targets=6 ci_refs=6` |
-| `check-verification-control-plane.ps1` | `verification-control-plane-ok files=8 allowlisted=9` |
-| `check-migration-version-prefixes.ps1` | `migration-version-prefixes-ok files=25` |
-| `check-platform-core-event-receiver-contract.ps1` | `platform-core-event-receiver-contract-ok events=2 source_checked=True` |
+| `check-platform-core-boundary` | `platform-core-boundary-ok entries=46 contracts=5 gates=6 legacy_schema_allowances=11` |
+| `check-platform-core-dependency-boundary` | `platform-core-dependency-boundary-ok manifests=26 allowances=0 source_allowances=0` |
+| `check-pnu-anchor-pbf-marker-contract` | `pnu-anchor-pbf-marker-contract-ok files=60` |
+| `check-traffic-auth-policy-registry` | `traffic-auth-policy-registry-ok routes=6 service_policies=2` |
+| `check-platform-integration-policy` | `platform-integration-policy-ok components=10 route_surfaces=8` |
+| `check-lakehouse-registry-integration` | `lakehouse-registry-integration-ok namespaces=1 assets=5 media_sets=1` |
+| `check-bazel-transition-ratchet` | `bazel-transition-ratchet-ok targets=6 ci_refs=6` |
+| `check-verification-control-plane` | `verification-control-plane-ok files=8 allowlisted=9` |
+| `check-migration-version-prefixes` | `migration-version-prefixes-ok files=25` |
+| `check-platform-core-event-receiver-contract` | `platform-core-event-receiver-contract-ok events=2 source_checked=True` |
 | `check-forbidden-implementation-markers.sh` | passed |
 | `file-line-limit.sh` | passed |
 | `check-markdown-links.sh` | passed |
-| `check-generated-artifact-registry.ps1` | `generated-artifact-registry-ok artifacts=2 sources=11` |
-| `check-generated-artifact-registry.tests.ps1` | `generated-artifact-registry-tests-ok` |
-| `check-coverage-transition-ssot.ps1` | `coverage-transition-ssot-ok` |
-| `check-coverage-transition-ssot.tests.ps1` | `coverage-transition-ssot-tests-ok` |
-| `check-verification-task-registry.ps1` | `verification-task-registry-ok tasks=32` |
-| `check-verification-task-registry.tests.ps1` | `verification-task-registry-tests-ok` |
+| `check-generated-artifact-registry` | `generated-artifact-registry-ok artifacts=2 sources=11` |
+| `check-generated-artifact-registry tests` | `generated-artifact-registry-tests-ok` |
+| `check-coverage-transition-ssot` | `coverage-transition-ssot-ok` |
+| `check-coverage-transition-ssot tests` | `coverage-transition-ssot-tests-ok` |
+| `check-verification-task-registry` | `verification-task-registry-ok tasks=32` |
+| `check-verification-task-registry tests` | `verification-task-registry-tests-ok` |
 | `check-forbidden-implementation-markers.tests.sh` | rejects English markers, mojibake, workflow markers, Korean `임시` markers in CSS, and borrowed external brand markers |
 | `bash scripts/ci/run-bazel.sh test //:guardrails_all --config=ci --verbose_failures` | 32/32 passed |
 | `bash scripts/ci/run-bazel.sh test //:workspace_typecheck //:workspace_hermetic_typechecks //:frontend_unit_test --config=ci --verbose_failures` | 5/5 passed |
@@ -130,15 +137,15 @@ The following checks passed during this audit:
 
 Focused test runners also pass after the prior guardrail decomposition work:
 
-- `check-traffic-auth-policy-registry.tests.ps1`
-- `check-bazel-transition-ratchet.tests.ps1`
-- `check-platform-integration-policy.tests.ps1`
-- `check-pnu-anchor-pbf-marker-contract.tests.ps1`
-- `check-platform-core-boundary.tests.ps1`
+- `check-traffic-auth-policy-registry tests`
+- `check-bazel-transition-ratchet tests`
+- `check-platform-integration-policy tests`
+- `check-pnu-anchor-pbf-marker-contract tests`
+- `check-platform-core-boundary tests`
 
 Previously expected failure, now resolved:
 
-- `check-platform-core-boundary.tests.ps1` previously failed with:
+- `check-platform-core-boundary tests` previously failed with:
   `line count 812 exceeds 600`
 - After the split it passes:
   `check-platform-core-boundary-tests-ok`
@@ -227,16 +234,17 @@ from smaller source fragments in `docs/architecture/traffic-auth-policy-registry
 Every source fragment is below 400 lines. The checker compares the aggregate
 against the fragments to block drift.
 
-The generated edge policy is produced by `generate-traffic-auth-policy.ps1`, so it
-is a generated artifact rather than a source-maintainability priority.
+The generated edge policy is produced by the traffic-auth policy generator (now
+`cargo run -p api --bin generate-traffic-auth-policy`), so it is a generated
+artifact rather than a source-maintainability priority.
 
 Follow-up status: partially hardened after the audit. Generated and compatibility
 aggregate artifacts are now registered in `docs/architecture/generated-artifacts.v1.json`.
-The new `check-generated-artifact-registry.ps1` guardrail verifies generator, verifier,
+The new `check-generated-artifact-registry` guardrail verifies generator, verifier,
 source paths, artifact line budgets, source-fragment line budgets, and registration of
 large generated JSON artifacts. The guardrail is wired into Bazel, lefthook, and CI.
 
-The previous largest test runner, `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`, has been split into:
+The previous largest test runner, `scripts/ci/check-traffic-auth-policy-registry tests`, has been split into:
 
 - a 189-line scenario runner;
 - a 359-line shared helper;
