@@ -89,4 +89,6 @@
 | [0040](./0040-bazel-first-build-verification-control-plane.md) | Bazel-first build and verification control plane | Accepted |
 | [0041](./0041-hermetic-javascript-package-bazel-rules.md) | Hermetic JavaScript package Bazel rules | Accepted |
 | [0042](./0042-cross-repo-bazel-native-build-graph.md) | Cross-Repo Bazel-Native Build Graph | Accepted |
-| [0043](./0043-bazel-transition-provisioning-decisions.md) | Bazel Transition Provisioning Decisions | Accepted |
+| [0043](./0043-bazel-transition-provisioning-decisions.md) | Bazel Transition Provisioning Decisions | Accepted (Supersede pending 0044) |
+| [0044](./0044-bazel-transition-reconciliation.md) | Bazel 전환 정합화 — PowerShell 제거 / 두 바구니(삭제·유지) / enabler 우선·release 마지막 | Accepted |
+| [0045](./0045-adr-placement-cross-repo-governance.md) | ADR 배치 규칙 — repo별 결정은 각 repo, cross-repo 결정은 gongzzang | Accepted |
