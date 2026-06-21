@@ -77,7 +77,7 @@ One direction for `gongzzang`, `platform-core`, and `dawneer` build strategy:
 ## Enabler Decisions (resolved 2026-06-21)
 
 Priority: do **#4 and #3 now** (they deliver "PowerShell out, all Rust" at zero infra cost); **defer
-#1 and #2** (not urgent; #2 is the last step by definition).
+enablers #1 and #2** (not urgent; #2 is the last step by definition).
 
 1. **Remote cache backend — DEFERRED.** Local disk cache (`--disk_cache`, already configured) is
    sufficient for now. Pick a remote backend only when CI build time or cross-repo result sharing
@@ -93,9 +93,9 @@ Priority: do **#4 and #3 now** (they deliver "PowerShell out, all Rust" at zero 
    platform-core 1.95.0); keep the generated crate cargo-buildable while `dawneer` is not yet
    Bazel-ified.
 4. **PowerShell → Rust port triage — ADOPTED (start here).** Value-triage with a DELETE default:
-   delete the meta-machine (registry/projection/ratchet/control-plane) and all `*.tests.ps1`; keep
-   off-the-shelf tools (gitleaks, lefthook, cargo-deny); port only the few real repo-specific guards
-   into one `repo-guard` Rust binary exposed as Bazel `rust_test` targets. End state: `.ps1` → 0.
+   delete the meta-machine (registry/projection/ratchet/control-plane) and all PowerShell test
+   scripts; keep off-the-shelf tools (gitleaks, lefthook, cargo-deny); port only the few real
+   repo-specific guards into one `repo-guard` Rust binary. End state: PowerShell scripts → 0.
    **Carve-out (verified 2026-06-21):** the `traffic-auth-policy-registry` / `traffic-auth-policy-generator`
    cluster (~16 PowerShell files + `docs/architecture/traffic-auth-policy-registry.v1.json`, 1000 lines)
    is NOT ceremony — it is the auth / authz / rate-limit + web↔API-proxy policy SSOT. Its 6-phase
@@ -103,10 +103,10 @@ Priority: do **#4 and #3 now** (they deliver "PowerShell out, all Rust" at zero 
    (used by `app.rs` for `BackendAuthorizationState` + rate policies) and `listing_marker_policy.rs`,
    plus `apps/web/lib/policies/traffic-auth-policy.generated.ts` and `.../api/api-proxy-client.generated.ts`
    (imported across the web data layer: buildings/parcels/listings/notifications + the `/api/proxy` route).
-   Therefore KEEP it; it is the LARGEST, most careful PORT — the PowerShell generator → a Rust/Bazel
-   codegen step, with regenerated-output parity verification. Until that port lands, the PowerShell
-   generator MUST remain (it produces the committed `.generated.*` files), so `.ps1 → 0` completes only
-   when this generator is ported last. Do NOT delete it.
+   Therefore KEEP it; it is the LARGEST, most careful PORT — the PowerShell generator → a Rust
+   codegen step, with regenerated-output parity verification. This generator was the last to be
+   ported; it is now the Rust binary `cargo run -p api --bin generate-traffic-auth-policy`, which
+   produces the committed `.generated.*` files, completing PowerShell scripts → 0.
 
 ## Alternatives
 
@@ -135,10 +135,11 @@ Priority: do **#4 and #3 now** (they deliver "PowerShell out, all Rust" at zero 
   `local-bazel-execution-policy.v1.json`, `guardrail-transition-suite-contract.v1.json`;
   `tools/bazel/platform_core_guardrails.bzl`, `shell_test_compat.bzl`,
   `run_platform_core_powershell.sh`; `services/outbox-publisher/src/bin/bazel_verification_selector.rs`;
-  the `//:guardrails_*` / `//:national_collection_*` suites; ceremony `scripts/**/*.ps1`.
-- `gongzzang`: `verification-control-plane.v1.json` + `check-verification-control-plane.ps1`;
-  `verification-transition-ratchet.v1.json` + `check-bazel-transition-ratchet.ps1`;
-  `verification-task-registry.v1.json` + `check-verification-task-registry.ps1`;
+  the `//:guardrails_*` / `//:national_collection_*` suites; the ceremony PowerShell scripts under
+  `scripts/**`.
+- `gongzzang`: `verification-control-plane.v1.json` + its `check-verification-control-plane` guard;
+  `verification-transition-ratchet.v1.json` + its `check-bazel-transition-ratchet` guard;
+  `verification-task-registry.v1.json` + its `check-verification-task-registry` guard;
   `shell_test_compat.bzl`, `run_guardrail_task.sh`, the `guardrails_*` wrapper targets.
 
 **Documents superseded (banner pointing here, on acceptance):**
@@ -175,8 +176,8 @@ handoff, `architecture/observability.md`, `architecture/layers.md`,
 - 2026-06-20: this ADR proposed; ~39-document adversarial reconciliation audit complete.
 - Checkbox reality of the `platform-core` transition plan: Tasks 1–2 done, Tasks 3–4 partial,
   Tasks 5–7 not started.
-- Pending: owner fills the four Open Decisions → then supersession banners + Rust-native replacements
-  + DELETE-bucket removal (delegated to a code agent), enablers before release cutover.
+- Pending: owner fills the four Open Decisions → then supersession banners, Rust-native replacements,
+  and DELETE-bucket removal (delegated to a code agent), enablers before release cutover.
 
 ## References
 
