@@ -46,37 +46,23 @@ describe("playwright runtime SSOT", () => {
     expect(runtime.zitadelRedirectUri).toBe("http://localhost:4100/api/auth/callback");
   });
 
-  it("uses the declared Next launcher and Bazel output directories in Bazel mode", () => {
+  it("uses pnpm dev as the managed launch command", () => {
     const runtime = resolvePlaywrightRuntime({
-      env: {
-        GONGZZANG_BAZEL_PLAYWRIGHT: "1",
-        PLAYWRIGHT_NEXT_CLI_PATH: "/workspace/apps/web/bazel/next-cli.mjs",
-        PLAYWRIGHT_NODE_EXECUTABLE: "/bazel/node/bin/node",
-        TEST_UNDECLARED_OUTPUTS_DIR: "/tmp/bazel-test-outputs",
-      },
+      env: {},
       defaultPort: DEFAULT_E2E_PLAYWRIGHT_PORT,
     });
 
-    expect(runtime.command).toBe(
-      "/bazel/node/bin/node /workspace/apps/web/bazel/next-cli.mjs dev -H 127.0.0.1 -p 3100",
-    );
-    expect(runtime.outputDir).toBe("/tmp/bazel-test-outputs/test-results");
-    expect(runtime.reportDir).toBe("/tmp/bazel-test-outputs/playwright-report");
+    expect(runtime.command).toBe("pnpm dev -H 127.0.0.1 -p 3100");
   });
 
-  it("shell-quotes declared Bazel launcher paths before Playwright starts the server", () => {
+  it("derives output/report directories from TEST_UNDECLARED_OUTPUTS_DIR", () => {
     const runtime = resolvePlaywrightRuntime({
-      env: {
-        GONGZZANG_BAZEL_PLAYWRIGHT: "1",
-        PLAYWRIGHT_NEXT_CLI_PATH: "/workspace/apps/web/bazel/next cli.mjs",
-        PLAYWRIGHT_NODE_EXECUTABLE: "/bazel/node's/bin/node",
-      },
+      env: { TEST_UNDECLARED_OUTPUTS_DIR: "/tmp/test-outputs" },
       defaultPort: DEFAULT_E2E_PLAYWRIGHT_PORT,
     });
 
-    expect(runtime.command).toBe(
-      "'/bazel/node'\"'\"'s/bin/node' '/workspace/apps/web/bazel/next cli.mjs' dev -H 127.0.0.1 -p 3100",
-    );
+    expect(runtime.outputDir).toBe("/tmp/test-outputs/test-results");
+    expect(runtime.reportDir).toBe("/tmp/test-outputs/playwright-report");
   });
 
   it("rejects invalid ports before Playwright can attach to a wrong server", () => {

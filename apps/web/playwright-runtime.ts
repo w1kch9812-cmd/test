@@ -3,8 +3,6 @@ export const DEFAULT_PROBE_PLAYWRIGHT_PORT = 3101;
 
 const DEFAULT_PLAYWRIGHT_HOST = "127.0.0.1";
 const PORT_ERROR = "PLAYWRIGHT_PORT must be an integer between 1 and 65535";
-const BAZEL_NEXT_CLI_PATH = "bazel/next-cli.mjs";
-const BAZEL_NODE_EXECUTABLE = "node";
 
 type PlaywrightRuntimeEnv = Record<string, string | undefined>;
 
@@ -47,28 +45,13 @@ function parseHost(rawHost: string | undefined): string {
   return host;
 }
 
-function shellQuote(value: string): string {
-  if (/^[a-zA-Z0-9_/:=+,.@%-]+$/.test(value)) {
-    return value;
-  }
-  return `'${value.replace(/'/g, "'\"'\"'")}'`;
-}
-
 function joinEnvPath(basePath: string | undefined, leaf: string): string | undefined {
   const base = basePath?.trim();
   if (!base) return undefined;
   return `${base.replace(/[\\/]+$/, "")}/${leaf}`;
 }
 
-function resolveCommand(env: PlaywrightRuntimeEnv, host: string, port: number): string {
-  if (env.GONGZZANG_BAZEL_PLAYWRIGHT === "1") {
-    const nodeExecutable = env.PLAYWRIGHT_NODE_EXECUTABLE?.trim() || BAZEL_NODE_EXECUTABLE;
-    const nextCliPath = env.PLAYWRIGHT_NEXT_CLI_PATH?.trim() || BAZEL_NEXT_CLI_PATH;
-    return `${shellQuote(nodeExecutable)} ${shellQuote(nextCliPath)} dev -H ${shellQuote(
-      host,
-    )} -p ${port}`;
-  }
-
+function resolveCommand(host: string, port: number): string {
   return `pnpm dev -H ${host} -p ${port}`;
 }
 
@@ -85,7 +68,7 @@ export function resolvePlaywrightRuntime({
     port,
     baseURL,
     webServerUrl: baseURL,
-    command: resolveCommand(env, host, port),
+    command: resolveCommand(host, port),
     reuseExistingServer: env.CI ? false : env.PLAYWRIGHT_REUSE_EXISTING_SERVER === "1",
     zitadelRedirectUri: `${baseURL}/api/auth/callback`,
     outputDir: joinEnvPath(env.TEST_UNDECLARED_OUTPUTS_DIR, "test-results"),

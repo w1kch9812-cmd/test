@@ -1,3 +1,6 @@
+# === Agent scratch (worktrees, sessions) ===
+.claude/
+
 # === Env ===
 .env
 .env.local
@@ -22,12 +25,6 @@ target/
 target-*/
 *.rs.bk
 Cargo.lock.bak
-
-# === Bazel ===
-bazel-*
-.bazel-*
-.bazelrc.remote
-MODULE.bazel.lock
 
 # === Logs ===
 *.log
