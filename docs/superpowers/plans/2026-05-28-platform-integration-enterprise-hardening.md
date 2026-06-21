@@ -6,7 +6,7 @@
 
 **Architecture:** Keep `docs/architecture/platform-integration/` as the folder-shaped SSOT. Add small policy files for each control-plane concern and make `check-platform-integration-policy` reject drift, missing ownership, and expired exceptions before runtime work is treated as production-ready.
 
-**Tech Stack:** JSON policy SSOT, PowerShell guardrails, Next.js webhook receiver, Rust Platform Core clients, GitHub Actions, lefthook, gitleaks, cargo-deny, pnpm audit, future SBOM/attestation/deploy admission.
+**Tech Stack:** JSON policy SSOT, repo guardrails (`repo-guard` Rust binary / `scripts/lefthook/*.sh`; the original PowerShell guardrails were removed per ADR-0044), Next.js webhook receiver, Rust Platform Core clients, GitHub Actions, lefthook, gitleaks, cargo-deny, pnpm audit, future SBOM/attestation/deploy admission.
 
 ---
 

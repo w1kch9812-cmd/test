@@ -4,9 +4,9 @@
 
 **Goal:** Add a folder-shaped Platform Integration policy SSOT that ties route exposure, traffic budgets, service auth, webhook auth, and supply-chain gates into one drift-checkable control plane.
 
-**Architecture:** Keep the existing narrow registries as authoritative and add a higher-level index under `docs/architecture/platform-integration/`. A PowerShell guardrail validates cross-file consistency and CI/pre-push wiring.
+**Architecture:** Keep the existing narrow registries as authoritative and add a higher-level index under `docs/architecture/platform-integration/`. A guardrail validates cross-file consistency and CI/pre-push wiring. (The original `scripts/ci/check-platform-integration-policy` guardrail was a PowerShell check; it was removed per ADR-0044, which eliminated the verification meta-machine and ports surviving repo-specific guards into the `repo-guard` Rust binary and `scripts/lefthook/*.sh`.)
 
-**Tech Stack:** JSON policy files, PowerShell guardrails, GitHub Actions, lefthook, Next.js webhook receiver, Rust reqwest Platform Core adapters, pnpm audit, cargo-deny, gitleaks.
+**Tech Stack:** JSON policy files, repo guardrails (`repo-guard` Rust binary / `scripts/lefthook/*.sh`), GitHub Actions, lefthook, Next.js webhook receiver, Rust reqwest Platform Core adapters, pnpm audit, cargo-deny, gitleaks.
 
 ---
 
@@ -53,8 +53,7 @@
 
 ## Task 4: Verify
 
-- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.tests`.
-- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy -Root .`.
+- [x] Run the platform-integration policy guardrail (originally the PowerShell `scripts/ci/check-platform-integration-policy` check; removed per ADR-0044). The surviving boundary guard is `bash scripts/lefthook/catalog-m1-boundary.sh`.
 - [x] Run the existing traffic-auth, Platform Core boundary, webhook, catalog API, and dependency guardrails.
 - [x] Run `pnpm exec biome check` on touched JSON/TS files.
 - [x] Run `git diff --check` on touched files.

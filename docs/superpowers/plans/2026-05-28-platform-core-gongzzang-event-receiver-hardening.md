@@ -102,7 +102,7 @@ it("rejects unsupported platform-core event types", async () => {
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts
 ```
 
@@ -183,7 +183,7 @@ The handler must not call `revalidatePath` or `revalidateTag`.
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts
 ```
 
@@ -198,7 +198,7 @@ Expected: all tests in `platform-core-events.test.ts` pass.
 
 Run:
 
-```powershell
+```bash
 pnpm --filter @gongzzang/web test -- tests/unit/platform-core-events.test.ts tests/unit/platform-core-proxy.test.ts tests/unit/map/vector-tile-manifest.test.ts tests/unit/map/marker-tile-style.test.ts
 ```
 
@@ -206,17 +206,11 @@ Expected: all tests pass, except live manifest tests remain skipped unless `PLAT
 
 - [ ] **Step 2: Run PNU marker guardrail**
 
-Run:
+Run the PNU-anchor PBF contract guard. (This was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract` check, removed per ADR-0044;
+its intent now lives in the Rust contract tests run via `cargo test`.)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-```
-
-Expected:
-
-```text
-pnu-anchor-pbf-marker-contract-ok
-```
+Expected: the PNU-anchor PBF contract tests pass.
 
 ## Self-Review
 

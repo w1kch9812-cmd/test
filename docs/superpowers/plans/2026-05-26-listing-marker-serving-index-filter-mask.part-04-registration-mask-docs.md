@@ -251,14 +251,11 @@ find_markers_in_bbox
 
 - [x] **Step 2: Run guardrail tests**
 
-Run:
+Run the PNU-anchor PBF contract guard tests. (This was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract` check, removed per ADR-0044;
+its intent now lives in the Rust contract tests run via `cargo test`.)
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
-```
-
-Expected: guardrail test suite and contract check pass.
+Expected: the contract test suite passes.
 
 - [x] **Step 3: Update runtime guide**
 
@@ -291,13 +288,15 @@ Expected: markdown lint and whitespace checks pass.
 
 Run the focused verification set before claiming this implementation slice is complete:
 
+The PNU-anchor PBF contract guard was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract` check, removed per ADR-0044;
+its intent now lives in the Rust contract tests run by `cargo test` below.
+
 ```bash
 cargo test -p listing-domain marker_filter
 cargo test -p db --features integration --test listing_marker_tile_integration
 cargo check -p api
 pnpm --filter @gongzzang/web test -- lib/map/listing-marker-filter.test.ts lib/map/listing-marker-server-state.test.ts tests/unit/map/marker-tile-contract.test.ts tests/unit/map/marker-tile-style.test.ts tests/unit/listings/filters.test.ts
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
 pnpm markdownlint-cli2 docs/adr/0038-listing-marker-serving-index-filter-mask.md docs/superpowers/specs/2026-05-26-listing-marker-serving-index-filter-mask-design.md docs/superpowers/plans/2026-05-26-listing-marker-serving-index-filter-mask.md docs/frontend/listings-search.md
 git diff --check
 ```

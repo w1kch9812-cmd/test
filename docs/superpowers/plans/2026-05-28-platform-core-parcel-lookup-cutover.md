@@ -6,7 +6,7 @@
 
 **Architecture:** Platform Core owns canonical Catalog parcel reads and exposes a PNU lookup endpoint. Gongzzang keeps only the B2C `ParcelInfoLookup` port and maps Platform Core parcel classification into listing denormalization inputs, with unavailable official price/zoning fields explicitly absent until Platform Core publishes those fields.
 
-**Tech Stack:** Rust, axum, sqlx, reqwest, PowerShell CI boundary checks.
+**Tech Stack:** Rust, axum, sqlx, reqwest, Platform Core boundary guard (`scripts/lefthook/catalog-m1-boundary.sh`; the original PowerShell boundary checks were removed per ADR-0044).
 
 **Execution note, 2026-05-29:** Gongzzang-side cutover is implemented with the
 runtime HTTP adapter in `services/api/src/platform_core_parcel_lookup.rs` and
@@ -100,8 +100,11 @@ Add cases where `crates/parcel-lookup/Cargo.toml` depends on `parcel-domain` or 
 
 - [ ] **Step 2: Run boundary tests**
 
-Run: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.tests`
-Expected: FAIL until the checker forbids those dependencies.
+Run the dependency-boundary guard. (This was the PowerShell
+`scripts/ci/check-platform-core-dependency-boundary` check; per ADR-0044 the
+boundary is now enforced by `scripts/lefthook/catalog-m1-boundary.sh` and the
+contract in `docs/architecture/platform-core-boundary.v1.json`.)
+Expected: FAIL until the boundary forbids those dependencies.
 
 - [ ] **Step 3: Remove transitional allowances**
 

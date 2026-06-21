@@ -6,7 +6,7 @@
 
 **Architecture:** Keep Platform Core as the Catalog SSOT and Gongzzang as a consumer. Fix dependency advisories through pinned workspace overrides, then make the Gongzzang boundary manifest, env examples, and CI guardrails require service authentication for Platform Core HTTP and webhook paths.
 
-**Tech Stack:** pnpm workspaces, GitHub Actions, PowerShell CI guardrails, Next.js route handler, Rust reqwest adapters, gitleaks, cargo-deny.
+**Tech Stack:** pnpm workspaces, GitHub Actions, repo guardrails (`repo-guard` Rust binary / `scripts/lefthook/*.sh`; the original PowerShell CI guardrails were removed per ADR-0044), Next.js route handler, Rust reqwest adapters, gitleaks, cargo-deny.
 
 **Execution note, 2026-05-29:** The Gongzzang caller side is now policy-driven
 and Platform Core has a matching inbound default-deny receiver policy. Platform
