@@ -497,7 +497,6 @@ test_suite(
         "//tools/bazel:guardrail_github_actions_node_runtime",
         "//tools/bazel:guardrail_lakehouse_registry_integration",
         "//tools/bazel:guardrail_load_test_assets",
-        "//tools/bazel:guardrail_migration_version_prefixes",
         "//tools/bazel:guardrail_platform_core_anchor_inbox_db_approval",
         "//tools/bazel:guardrail_platform_core_boundary",
         "//tools/bazel:guardrail_platform_core_catalog_api_contract",

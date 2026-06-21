@@ -102,9 +102,6 @@ case "$task" in
   pnu-anchor-pbf-marker-contract)
     run_pwsh scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1 -Root "$repo_root"
     ;;
-  migration-version-prefixes)
-    run_pwsh scripts/ci/check-migration-version-prefixes.ps1 -Root "$repo_root"
-    ;;
   platform-core-anchor-inbox-db-approval)
     run_pwsh scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1 -Root "$repo_root"
     ;;

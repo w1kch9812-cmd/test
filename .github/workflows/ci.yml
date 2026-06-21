@@ -100,8 +100,7 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/check-github-actions-node-runtime.ps1
       - name: Migration version prefix guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-migration-version-prefixes.ps1
+        run: cargo run -p repo-guard -- migration-version-prefixes
       - name: Platform Core anchor inbox DB approval guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1

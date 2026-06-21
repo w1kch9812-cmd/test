@@ -267,13 +267,6 @@ transition_shell_test(
 )
 
 transition_shell_test(
-    name = "guardrail_migration_version_prefixes",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["migration-version-prefixes"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
     name = "guardrail_platform_core_anchor_inbox_db_approval",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-anchor-inbox-db-approval"],

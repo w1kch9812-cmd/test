@@ -57,7 +57,7 @@ pre-commit:
     platform-core-dependency-boundary:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
     migration-version-prefixes:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+      run: bash scripts/lefthook/migration-version-prefixes.sh
     platform-core-anchor-inbox-db-approval:
       run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
 
@@ -125,7 +125,7 @@ pre-push:
         - merge
         - rebase
     migration-version-prefixes:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-migration-version-prefixes.ps1
+      run: bash scripts/lefthook/migration-version-prefixes.sh
       skip:
         - merge
         - rebase
