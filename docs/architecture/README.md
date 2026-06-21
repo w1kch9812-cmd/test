@@ -12,7 +12,8 @@
 | geo-pipeline.md | PostGIS 인덱싱·타일·공간쿼리 파이프라인 | Active |
 | caching.md | Redis 레이어, Platform Core contract cache, 법령 캐시 | Active |
 | observability.md | Sentry + OTel + 로깅 | Active |
-| traffic-auth-policy-registry/ | Traffic/Auth 정책 fragment SSOT. `traffic-auth-policy-registry.v1.json`은 생성 aggregate | Active |
+| traffic-auth-policy-registry.v1.json | Traffic/Auth 정책 단일 SSOT (손 편집). 생성기가 읽어 6개 산출물 재생성 | Active |
+| traffic-auth-policy-registry/ | 위 aggregate 를 가리키는 README 만 남음 (split fragment 는 삭제) | Active |
 
 ## 현재 확정된 원칙
 

@@ -229,10 +229,12 @@ Largest tracked text files after the audit follow-up split:
 - `infrastructure/security/traffic-auth-edge-policy.generated.json`: 510 lines
 - `docs/architecture/platform-core-boundary.v1.json`: 527 lines
 
-`traffic-auth-policy-registry.v1.json` is now a compatibility aggregate generated
-from smaller source fragments in `docs/architecture/traffic-auth-policy-registry/`.
-Every source fragment is below 400 lines. The checker compares the aggregate
-against the fragments to block drift.
+`traffic-auth-policy-registry.v1.json` is the single hand-edited SSOT for the
+traffic/auth policy. (Update 2026-06-22: the former `00-*.json`..`80-*.json` split
+fragments under `docs/architecture/traffic-auth-policy-registry/` were dead
+duplicate copies that no code read; they were removed and the aggregate is now the
+sole source. The earlier "aggregate generated from fragments" model and its
+fragment-vs-aggregate checker no longer exist.)
 
 The generated edge policy is produced by the traffic-auth policy generator (now
 `cargo run -p api --bin generate-traffic-auth-policy`), so it is a generated
