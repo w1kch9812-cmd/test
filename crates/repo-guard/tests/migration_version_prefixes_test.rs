@@ -42,8 +42,7 @@ fn valid_set_passes() -> Result<(), Box<dyn Error>> {
     root.write_migration("00001_create_user.sql")?;
     root.write_migration("00002_add_listing.sql")?;
 
-    let report = check_migration_version_prefixes(root.path())
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+    let report = check_migration_version_prefixes(root.path()).map_err(std::io::Error::other)?;
 
     assert_eq!(2, report.files);
     Ok(())

@@ -259,6 +259,8 @@ pub fn resolve_auth_path_source(path_source: &str) -> Result<&'static str, Strin
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, clippy::unwrap_used)]
+
     use super::*;
 
     // ------------------------------------------------------------------

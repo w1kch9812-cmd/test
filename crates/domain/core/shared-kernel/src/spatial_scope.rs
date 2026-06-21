@@ -31,7 +31,7 @@ impl MapTile {
     ///
     /// Returns [`MapTileError`] when `z` is above [`MAX_MAP_TILE_Z`] or when `x`/`y` are outside
     /// the axis range for the zoom.
-    pub fn try_new(z: u8, x: u32, y: u32) -> Result<Self, MapTileError> {
+    pub const fn try_new(z: u8, x: u32, y: u32) -> Result<Self, MapTileError> {
         if z > MAX_MAP_TILE_Z {
             return Err(MapTileError::ZoomOutOfRange {
                 z,
