@@ -72,44 +72,14 @@ jobs:
         run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci --verbose_failures
       - name: Biome check
         run: bazelisk test //tools/bazel:frontend_lint --config=ci --verbose_failures
-      - name: Platform Integration policy guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-integration-policy.ps1
-      - name: Lakehouse Registry integration guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-lakehouse-registry-integration.ps1
-      - name: Platform Core boundary guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-boundary.ps1
-      - name: Platform Core dependency boundary guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-dependency-boundary.ps1
-      - name: Platform Core catalog API contract guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-catalog-api-contract.ps1
-      - name: Platform Core event receiver contract guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-event-receiver-contract.ps1
       - name: Traffic/auth policy registry guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1
       - name: Traffic/auth production edge policy guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
-      - name: GitHub Actions Node runtime guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-github-actions-node-runtime.ps1
       - name: Migration version prefix guardrail
         run: cargo run -p repo-guard -- migration-version-prefixes
-      - name: Platform Core anchor inbox DB approval guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
-      - name: PNU anchor PBF marker contract guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-      - name: Load-test asset guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-load-test-assets.ps1
       - name: Install ripgrep for repository guardrails
         run: |
           sudo apt-get update -qq

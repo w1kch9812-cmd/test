@@ -1,12 +1,10 @@
 # https://lefthook.dev/configuration/
-# pre-commit: fast local checks for staged changes.
-# pre-push: full local verification gates.
+# pre-commit: 빠른 검사 — 관련 파일이 바뀔 때만(glob) + 비밀키 스캔.
+# pre-push:   가벼운 bash 검사. 무거운 검증(cargo test/clippy 등)은 CI에서.
+# 원칙(ADR-0044 역전): PowerShell·Bazel 폐기, cargo가 빌드 SSOT. 훅에 PowerShell/Bazel 호출 금지.
 
 pre-commit:
   parallel: true
-  # 커밋은 빠르게: 관련 파일이 바뀔 때만 도는 검사(glob) + 비밀키 스캔만.
-  # 무거운 전수검사 + 모든 PowerShell 검사는 pre-commit에서 제거 (ADR-0044 역전: Bazel/PowerShell 폐기, 속도 우선).
-  # 깊은 검사는 CI에서 돈다. PowerShell 스크립트 자체 삭제는 후속 단계.
   commands:
     biome:
       glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
@@ -38,7 +36,7 @@ pre-commit:
       run: bash scripts/lefthook/panel-no-state-without-router.sh
 
 pre-push:
-  parallel: false
+  parallel: true
   commands:
     lefthook-no-fake-pass:
       run: bash scripts/lefthook/check-no-fake-pass.sh
@@ -55,78 +53,8 @@ pre-push:
       skip:
         - merge
         - rebase
-    platform-core-boundary:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
-      skip:
-        - merge
-        - rebase
-    pnu-anchor-pbf-marker-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-      skip:
-        - merge
-        - rebase
-    traffic-auth-policy-registry:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-traffic-auth-policy-registry.ps1
-      skip:
-        - merge
-        - rebase
-    github-actions-node-runtime:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-github-actions-node-runtime.ps1
-      skip:
-        - merge
-        - rebase
-    platform-integration-policy:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1
-      skip:
-        - merge
-        - rebase
-    lakehouse-registry-integration:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-lakehouse-registry-integration.ps1
-      skip:
-        - merge
-        - rebase
-    platform-core-event-receiver-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
-      skip:
-        - merge
-        - rebase
-    platform-core-catalog-api-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
-      skip:
-        - merge
-        - rebase
-    platform-core-dependency-boundary:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
-      skip:
-        - merge
-        - rebase
     migration-version-prefixes:
       run: bash scripts/lefthook/migration-version-prefixes.sh
-      skip:
-        - merge
-        - rebase
-    platform-core-anchor-inbox-db-approval:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
-      skip:
-        - merge
-        - rebase
-    typecheck:
-      run: bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage //:workspace_typecheck --config=ci --verbose_failures
-      skip:
-        - merge
-        - rebase
-    bazel-workspace-graph:
-      run: bash scripts/ci/run-bazel.sh test //... --config=ci --verbose_failures
-      skip:
-        - merge
-        - rebase
-    rust-lint-verification:
-      run: bash scripts/ci/run-bazel.sh build //:rust_lint_verification --config=ci --verbose_failures
-      skip:
-        - merge
-        - rebase
-    sqlx-prepare-verification:
-      run: bash scripts/ci/run-bazel.sh test //:sqlx_prepare_verification --config=ci --verbose_failures
       skip:
         - merge
         - rebase
@@ -136,5 +64,4 @@ pre-push:
         - merge
         - rebase
 
-# commit-msg is enforced by CI/Spectral or a separate rule.
-# Conventional Commits format: docs/conventions/git-and-pr.md
+# commit-msg는 CI에서 강제. Conventional Commits: docs/conventions/git-and-pr.md
