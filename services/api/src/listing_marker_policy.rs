@@ -1,5 +1,5 @@
 //! Generated listing marker serving policy from docs/architecture/traffic-auth-policy-registry.v1.json.
-//! Run scripts/ci/generate-traffic-auth-policy.ps1 after editing the registry.
+//! Run `cargo run -p api --bin generate-traffic-auth-policy` after editing the registry.
 
 pub const MAX_LISTING_MARKER_TILE_BYTES: usize = 262_144;
 pub const MAX_LISTING_MARKER_TILE_FEATURES: i64 = 10_000;

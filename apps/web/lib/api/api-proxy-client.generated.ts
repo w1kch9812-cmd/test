@@ -1,5 +1,5 @@
 // Generated from docs/architecture/traffic-auth-policy-registry.v1.json.
-// Run scripts/ci/generate-traffic-auth-policy.ps1 after editing the registry.
+// Run `cargo run -p api --bin generate-traffic-auth-policy` after editing the registry.
 
 import type { Options as KyOptions } from "ky";
 import { api } from "@/lib/api";

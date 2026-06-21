@@ -45,5 +45,11 @@ aws-smithy-types = "=1.4.8"
 tempfile = "3"
 tower = "0.5"
 
+# Regenerates the traffic/auth policy artifacts from the registry SSOT.
+# Run: cargo run -p api --bin generate-traffic-auth-policy
+[[bin]]
+name = "generate-traffic-auth-policy"
+path = "src/bin/generate_traffic_auth_policy.rs"
+
 [lints]
 workspace = true

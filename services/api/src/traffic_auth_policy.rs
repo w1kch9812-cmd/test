@@ -1,5 +1,5 @@
 //! Generated traffic/auth serving policy from docs/architecture/traffic-auth-policy-registry.v1.json.
-//! Run scripts/ci/generate-traffic-auth-policy.ps1 after editing the registry.
+//! Run `cargo run -p api --bin generate-traffic-auth-policy` after editing the registry.
 
 use crate::backend_authorization::BackendRolePolicy;
 use crate::backend_rate_limit::{BackendRateKeyStrategy, BackendRatePolicy};
