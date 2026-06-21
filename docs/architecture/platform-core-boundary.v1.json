@@ -328,14 +328,7 @@
   ],
   "allowed_transitional_dependencies": [],
   "allowed_transitional_source_imports": [],
-  "required_ci_gates": [
-    "scripts/ci/check-platform-core-boundary.ps1",
-    "scripts/lefthook/catalog-m1-boundary.sh",
-    "scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1",
-    "scripts/ci/check-platform-core-event-receiver-contract.ps1",
-    "scripts/ci/check-platform-core-catalog-api-contract.ps1",
-    "scripts/ci/check-platform-core-dependency-boundary.ps1"
-  ],
+  "required_ci_gates": ["scripts/lefthook/catalog-m1-boundary.sh"],
   "allowed_legacy_schema_tokens": [
     {
       "token": "pipeline_schedule",

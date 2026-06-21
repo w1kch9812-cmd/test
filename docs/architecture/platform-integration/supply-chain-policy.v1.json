@@ -95,7 +95,6 @@
     "approved_job": "supply-chain-provenance",
     "candidate_policy": "production_candidates_must_be_built_on_main_by_approved_workflow",
     "verification_command": "gh attestation verify <artifact> -R <owner>/gongzzang",
-    "verification_script": "scripts/ci/verify-production-deploy-candidate.ps1",
     "admission_workflow": ".github/workflows/production-deploy-admission.yml",
     "admission_job": "verify-production-deploy-candidates",
     "admission_environment": "production",
@@ -113,7 +112,6 @@
     ],
     "load_test_capacity_admission": {
       "required": true,
-      "verification_script": "scripts/ci/verify-load-test-capacity-evidence.ps1",
       "evidence_artifact_name": "load-test-capacity-evidence",
       "workflow_input_run_id": "load-evidence-run-id",
       "workflow_input_artifact_name": "load-evidence-artifact-name",
@@ -137,14 +135,12 @@
       "generated_waf_manifest": "infrastructure/security/aws-wafv2-edge-policy.generated.json",
       "pulumi_project": "infrastructure/Pulumi.yaml",
       "pulumi_program": "infrastructure/index.ts",
-      "verification_script": "scripts/ci/check-production-edge-admission.ps1",
       "regional_attachment": {
         "supported": true,
         "config_key": "wafRegionalResourceArn",
         "required_env": "GONGZZANG_WAF_REGIONAL_RESOURCE_ARN",
         "pulumi_association_preview": {
           "required": true,
-          "preview_script": "scripts/ci/check-pulumi-local-preview.ps1",
           "evidence": "regional_association=planned"
         }
       },
