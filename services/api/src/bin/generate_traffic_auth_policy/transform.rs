@@ -236,7 +236,12 @@ pub fn rate_to_five_minute_limit(
     let numerator = limit
         .checked_mul(300)
         .ok_or_else(|| "rate limit overflow".to_string())?;
-    Ok((numerator + window_seconds - 1) / window_seconds)
+    // Integer ceiling: (numerator + window - 1) / window. Guard the addition too
+    // so an extreme limit cannot overflow i64 between the multiply and divide.
+    let rounded = numerator
+        .checked_add(window_seconds - 1)
+        .ok_or_else(|| "rate limit overflow".to_string())?;
+    Ok(rounded / window_seconds)
 }
 
 /// Resolves an auth `path_source` token to its concrete request path.
@@ -249,5 +254,240 @@ pub fn resolve_auth_path_source(path_source: &str) -> Result<&'static str, Strin
         "API.auth.refresh" => Ok("/api/auth/refresh"),
         "API.auth.logout" => Ok("/api/auth/logout"),
         other => Err(format!("Unsupported auth path source '{other}'")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ------------------------------------------------------------------
+    // rate_to_five_minute_limit — security WAF rate translation.
+    // result = ceil(limit * 300 / window), with overflow + window guards.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn rate_to_five_minute_limit_exact_division_has_no_ceiling() {
+        // 60 req / 60s == 1 req/s == 300 req / 5min, divides exactly.
+        assert_eq!(rate_to_five_minute_limit(60, 60, "k").unwrap(), 300);
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_rounds_up_on_remainder() {
+        // 10 * 300 = 3000; 3000 / 7 = 428.57..., ceiling -> 429.
+        assert_eq!(rate_to_five_minute_limit(10, 7, "k").unwrap(), 429);
+        // 1 * 300 = 300; 300 / 299 = 1.003..., ceiling -> 2.
+        assert_eq!(rate_to_five_minute_limit(1, 299, "k").unwrap(), 2);
+        // 1 * 300 = 300; 300 / 300 = 1 exactly, no rounding.
+        assert_eq!(rate_to_five_minute_limit(1, 300, "k").unwrap(), 1);
+        // 1 * 300 = 300; 300 / 301 = 0.99..., ceiling -> 1.
+        assert_eq!(rate_to_five_minute_limit(1, 301, "k").unwrap(), 1);
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_zero_limit_is_zero() {
+        // A zero base rate must not round up to one.
+        assert_eq!(rate_to_five_minute_limit(0, 60, "k").unwrap(), 0);
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_window_window_one_second() {
+        // 5 req / 1s -> 5 * 300 = 1500 over 5 minutes.
+        assert_eq!(rate_to_five_minute_limit(5, 1, "k").unwrap(), 1500);
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_rejects_zero_window() {
+        let error = rate_to_five_minute_limit(10, 0, "auth-login").unwrap_err();
+        assert!(error.contains("window_seconds must be positive"));
+        assert!(error.contains("auth-login"));
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_rejects_negative_window() {
+        let error = rate_to_five_minute_limit(10, -5, "kp").unwrap_err();
+        assert!(error.contains("window_seconds must be positive"));
+        assert!(error.contains("kp"));
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_detects_checked_mul_overflow() {
+        // limit * 300 overflows i64 -> checked_mul returns None -> Err.
+        let error = rate_to_five_minute_limit(i64::MAX, 60, "kp").unwrap_err();
+        assert_eq!(error, "rate limit overflow");
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_realistic_large_limit() {
+        // A large-but-realistic per-minute rate translates without overflow.
+        // 10_000 / 60s -> ceil(10_000 * 300 / 60) = ceil(3_000_000 / 60) = 50_000.
+        assert_eq!(rate_to_five_minute_limit(10_000, 60, "kp").unwrap(), 50_000);
+    }
+
+    #[test]
+    fn rate_to_five_minute_limit_detects_ceiling_add_overflow() {
+        // limit * 300 just fits i64, but the ceiling (+ window - 1) addition would
+        // overflow; the checked_add guard turns it into an error, not a panic.
+        let max_limit = i64::MAX / 300;
+        let error = rate_to_five_minute_limit(max_limit, 300, "kp").unwrap_err();
+        assert_eq!(error, "rate limit overflow");
+    }
+
+    // ------------------------------------------------------------------
+    // format_number_literal — thousands grouping for emitted code.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn format_number_literal_short_values_unchanged() {
+        assert_eq!(format_number_literal(0), "0");
+        assert_eq!(format_number_literal(7), "7");
+        assert_eq!(format_number_literal(42), "42");
+        assert_eq!(format_number_literal(999), "999");
+    }
+
+    #[test]
+    fn format_number_literal_groups_thousands() {
+        assert_eq!(format_number_literal(1000), "1_000");
+        assert_eq!(format_number_literal(262_144), "262_144");
+        assert_eq!(format_number_literal(1_000_000), "1_000_000");
+        assert_eq!(format_number_literal(12_345_678), "12_345_678");
+    }
+
+    #[test]
+    fn format_number_literal_boundary_four_digits() {
+        assert_eq!(format_number_literal(1234), "1_234");
+        assert_eq!(format_number_literal(9999), "9_999");
+    }
+
+    // ------------------------------------------------------------------
+    // policy_id_to_operation_name — camelCase op name from dotted id.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn policy_id_to_operation_name_takes_leaf_after_last_dot() {
+        assert_eq!(
+            policy_id_to_operation_name("api_proxy.listings.create_listing").unwrap(),
+            "createListing"
+        );
+    }
+
+    #[test]
+    fn policy_id_to_operation_name_single_word_leaf() {
+        assert_eq!(
+            policy_id_to_operation_name("group.search").unwrap(),
+            "search"
+        );
+    }
+
+    #[test]
+    fn policy_id_to_operation_name_no_dot_uses_whole_id() {
+        assert_eq!(
+            policy_id_to_operation_name("get_user_profile").unwrap(),
+            "getUserProfile"
+        );
+    }
+
+    #[test]
+    fn policy_id_to_operation_name_collapses_repeated_underscores() {
+        // Empty underscore-split parts are filtered out.
+        assert_eq!(policy_id_to_operation_name("a__b___c").unwrap(), "aBC");
+    }
+
+    #[test]
+    fn policy_id_to_operation_name_errors_on_empty_leaf() {
+        // Trailing dot -> empty leaf -> no parts.
+        let error = policy_id_to_operation_name("group.").unwrap_err();
+        assert!(error.contains("Cannot derive operation name"));
+    }
+
+    #[test]
+    fn policy_id_to_operation_name_errors_on_only_underscores() {
+        let error = policy_id_to_operation_name("___").unwrap_err();
+        assert!(error.contains("Cannot derive operation name"));
+    }
+
+    // ------------------------------------------------------------------
+    // api_proxy_target_path_to_ts_expression — quoted literal vs template.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn api_proxy_target_path_static_returns_quoted_literal() {
+        assert_eq!(
+            api_proxy_target_path_to_ts_expression("/listings/search").unwrap(),
+            "\"listings/search\""
+        );
+    }
+
+    #[test]
+    fn api_proxy_target_path_with_param_returns_backtick_template() {
+        assert_eq!(
+            api_proxy_target_path_to_ts_expression("/listings/:id").unwrap(),
+            "`listings/${encodePathParam(params.id)}`"
+        );
+    }
+
+    #[test]
+    fn api_proxy_target_path_with_multiple_params() {
+        assert_eq!(
+            api_proxy_target_path_to_ts_expression("/users/:userId/listings/:listingId").unwrap(),
+            "`users/${encodePathParam(params.userId)}/listings/${encodePathParam(params.listingId)}`"
+        );
+    }
+
+    #[test]
+    fn api_proxy_target_path_strips_empty_segments() {
+        // Leading slash and doubled slashes collapse via the empty-segment skip.
+        assert_eq!(
+            api_proxy_target_path_to_ts_expression("//a//b/").unwrap(),
+            "\"a/b\""
+        );
+    }
+
+    #[test]
+    fn api_proxy_target_path_empty_is_error() {
+        let error = api_proxy_target_path_to_ts_expression("/").unwrap_err();
+        assert!(error.contains("cannot be empty"));
+    }
+
+    // ------------------------------------------------------------------
+    // backend_policy_path_to_rust_pattern — {param} -> :param routers.
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn backend_policy_path_static_unchanged() {
+        assert_eq!(
+            backend_policy_path_to_rust_pattern("/listings/search"),
+            "/listings/search"
+        );
+    }
+
+    #[test]
+    fn backend_policy_path_single_param() {
+        assert_eq!(
+            backend_policy_path_to_rust_pattern("/listings/{id}"),
+            "/listings/:id"
+        );
+    }
+
+    #[test]
+    fn backend_policy_path_multiple_params() {
+        assert_eq!(
+            backend_policy_path_to_rust_pattern("/users/{userId}/listings/{listingId}"),
+            "/users/:userId/listings/:listingId"
+        );
+    }
+
+    #[test]
+    fn backend_policy_path_param_with_underscore() {
+        assert_eq!(
+            backend_policy_path_to_rust_pattern("/a/{snake_case_name}/b"),
+            "/a/:snake_case_name/b"
+        );
+    }
+
+    #[test]
+    fn backend_policy_path_unterminated_brace_consumes_rest() {
+        // No closing brace: the loop drains the iterator into the param name.
+        assert_eq!(backend_policy_path_to_rust_pattern("/a/{id"), "/a/:id");
     }
 }
