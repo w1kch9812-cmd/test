@@ -3,7 +3,15 @@
 | | |
 |---|---|
 | Date | 2026-06-20 |
-| Status | Accepted |
+| Status | **REVERSED 2026-06-21 — Bazel 전환 폐기. Cargo가 영구 빌드 SSOT.** (아래 배너 참조) |
+
+> **⛔ 역전 (2026-06-21):** 실제 대기업 사례 조사 + 소유자 Windows 머신 실측 결과, 풀 Bazel은 이
+> 프로젝트(소규모 팀 · 3개 polyrepo · Rust 위주 · Windows)에 **부적합**으로 결론. 근거: (1) Bazel
+> 빌드가 이 Windows 머신에서 `aws-lc-sys` 컴파일 실패로 **안 됨**; (2) 모든 풀-Bazel 성공 사례는
+> 거대 monorepo + 전담 빌드팀 + 원격 실행 클러스터(소규모 Rust polyrepo 사례 0건); (3) Rust 커뮤니티
+> 정설 = "작은 Rust 팀은 cargo, Bazel은 정말 필요할 때만". **결정: Bazel 전환 폐기, cargo가 빌드/테스트
+> SSOT.** "부분만 실행"은 `cargo test -p <crate>`로 충족. 본 문서의 "go Bazel" 결정은 무효이며,
+> 아래 내용은 역사적 기록으로만 남긴다. 신규 Bazel target/파일 추가 금지.
 | Decision owner | perfectoryinc (platform owner) |
 | Builds on | ADR-0040, ADR-0041, ADR-0042 |
 | Supersedes on acceptance | ADR-0002 (in part — turbo/pnpm as *terminal* SSOT), ADR-0043 |
