@@ -75,7 +75,8 @@ services/outbox-publisher/ Outbox publisher binary (SP4-i)
 - **MSVC Build Tools 2022 설치 완료** — winget silent install (사용자 승인).
   `cl.exe` / `link.exe` 위치: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\14.44.35207\bin\Hostx86\x86\`
 - **로컬 `cargo clippy --workspace --all-features -- -D warnings`** 가능 (CI 동일 명령)
-  · 단, dev shell 활성화 필요: `& "${vsPath}\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation`
+  · 단, Visual Studio Developer Shell 활성화 필요 (`Launch-VsDevShell` 런처를
+  `-Arch amd64 -HostArch amd64 -SkipAutomaticLocation` 로 실행)
 - 다음 SP 시작 시 로컬 진단 → 1번 push 로 CI 그린 가능
 
 ## 알려진 deferred items (production 배포 전 처리)

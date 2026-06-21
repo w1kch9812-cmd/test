@@ -39,10 +39,8 @@ cargo clippy -p etl-base-layer --all-targets -- -D warnings
 ```
 
 Repository-level boundary checks also require Platform Core-owned SP9 tooling
-and workflows to stay absent from Gongzzang:
-
-```bash
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1 -Root .
-```
+and workflows to stay absent from Gongzzang. This is enforced by
+`scripts/lefthook/catalog-m1-boundary.sh` and the boundary contract
+`docs/architecture/platform-core-boundary.v1.json`.
 
 See [ADR 0036](../../docs/adr/0036-static-vector-tile-runtime-contract.md).

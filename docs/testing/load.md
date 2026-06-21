@@ -17,9 +17,10 @@ not application runtime dependencies.
 
 ## Enterprise Gates
 
-Every run must use `scripts/load/run-k6.ps1` so evidence is written under
-`target/audit/load-tests`. Static CI checks verify that load scenarios,
-profiles, scripts, and evidence schema files stay in the approved locations.
+Every run must write its evidence under `target/audit/load-tests`, using
+`k6 run --summary-export` and the scenario registry in `tests/load/`. CI verifies
+that load scenarios, profiles, scripts, and evidence schema files stay in the
+approved locations.
 
 Launch readiness requires the scenario registry, generated evidence, result
 classification, and SLO comparison to agree. Missing evidence is a failed gate.
