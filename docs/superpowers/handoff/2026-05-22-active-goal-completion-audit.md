@@ -87,7 +87,11 @@ For this implementation slice, the concrete deliverables are:
 
 Fresh verification for the implementation slice:
 
-```powershell
+The PNU-anchor PBF contract guard below was the PowerShell
+`scripts/ci/check-pnu-anchor-pbf-marker-contract` check, since removed per
+ADR-0044; its intent now lives in the Rust contract tests run by `cargo test`.
+
+```bash
 cargo fmt --check
 cargo check -p api
 cargo check -p db
@@ -97,14 +101,12 @@ pnpm --filter @gongzzang/web test -- tests/unit/api-proxy-route.test.ts tests/un
 pnpm --filter @gongzzang/web typecheck
 pnpm --filter @gongzzang/web build
 pnpm markdownlint-cli2 AGENTS.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/superpowers/plans/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles.md docs/superpowers/handoff/2026-05-22-listing-pbf-review-gate.md docs/superpowers/handoff/2026-05-22-active-goal-completion-audit.md docs/superpowers/next-actions.md
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 git diff --check
 ```
 
 Fresh local hardening evidence after the Rust TLS supply-chain cleanup and repository split:
 
-```powershell
+```bash
 cargo deny check
 # advisories ok, bans ok, licenses ok, sources ok
 
@@ -120,11 +122,9 @@ pnpm test
 pnpm lefthook run pre-push
 git diff --check
 
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-# pnu-anchor-pbf-marker-contract-ok files=29
-
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-# check-pnu-anchor-pbf-marker-contract-tests-ok
+# PNU-anchor PBF contract guard: was the PowerShell
+# scripts/ci/check-pnu-anchor-pbf-marker-contract check (removed per ADR-0044);
+# now covered by Rust contract tests via `cargo test`.
 
 bash scripts/lefthook/check-no-fake-pass.tests.sh
 # ok - allows strict commands
@@ -137,7 +137,7 @@ bash scripts/lefthook/check-no-fake-pass.tests.sh
 bash scripts/lefthook/check-no-fake-pass.sh
 # lefthook-no-fake-pass-ok
 
-Get-ChildItem scripts -File -Filter *.sh | ForEach-Object { rg -n "\|\|\s*(true|echo)|CI enforces|not installed.*run:" $_.FullName }
+rg -n "\|\|\s*(true|echo)|CI enforces|not installed.*run:" scripts/**/*.sh
 # no matches in top-level local scripts
 
 cargo test -p api public_router_omits_db_debug_route_when_disabled
@@ -382,12 +382,10 @@ review-gate wording such as `implementation-approved` or `waiting for user revie
 platform-core guardrail now also requires the Gongzzang preview CORS origin and the CORS regression
 tests in `services/api/src/routes/mod.rs` (`required_tokens=136`). Fresh guardrail evidence:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract -Root C:\Users\admin\Desktop\platform-core
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
-```
+The PNU-anchor PBF contract guard (Gongzzang and platform-core) was the
+PowerShell `scripts/ci/check-pnu-anchor-pbf-marker-contract` check, since removed
+per ADR-0044; its intent now lives in each repo's Rust contract tests run via
+`cargo test`.
 
 Fresh migration smoke:
 
@@ -427,24 +425,24 @@ GET http://127.0.0.1:18080/map/v1/marker-tiles/contract -> blocked by browser CO
 
 Follow-up evidence from `../platform-core` fixed that specific CORS root cause at the router layer:
 
-```powershell
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api cors_default_local_origins_include_gongzzang_preview
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api cors_invalid_local_origins_fall_back_to_default_local_origins
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api router_allows_gongzzang_preview_preflights
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
-C:\Users\admin\.cargo\bin\cargo.exe fmt --check
-C:\Users\admin\.cargo\bin\cargo.exe check -p platform-core-api
+```bash
+cargo test -p platform-core-api cors_default_local_origins_include_gongzzang_preview
+cargo test -p platform-core-api cors_invalid_local_origins_fall_back_to_default_local_origins
+cargo test -p platform-core-api router_allows_gongzzang_preview_preflights
+cargo test -p platform-core-api
+cargo fmt --check
+cargo check -p platform-core-api
 git diff --check -- services/api/src/routes/mod.rs
 ```
 
 Live HTTP smoke then started the new `platform-core-api` binary on `127.0.0.1:18082` with
 `PLATFORM_CORE_RUNTIME_ENV=development` and confirmed the same origin/endpoint pair:
 
-```powershell
-curl.exe -s -D - -o NUL -H "Origin: http://localhost:3900" http://127.0.0.1:18082/map/v1/marker-tiles/contract
-curl.exe -s -D - -o NUL -H "Origin: http://localhost:3900" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
-curl.exe -s -D - -o NUL -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/map/v1/marker-tiles/contract
-curl.exe -s -D - -o NUL -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
+```bash
+curl -s -D - -o /dev/null -H "Origin: http://localhost:3900" http://127.0.0.1:18082/map/v1/marker-tiles/contract
+curl -s -D - -o /dev/null -H "Origin: http://localhost:3900" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
+curl -s -D - -o /dev/null -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/map/v1/marker-tiles/contract
+curl -s -D - -o /dev/null -X OPTIONS -H "Origin: http://localhost:3900" -H "Access-Control-Request-Method: GET" http://127.0.0.1:18082/catalog/v1/vector-tiles/manifest
 ```
 
 All four responses returned `HTTP/1.1 200 OK` and
@@ -460,29 +458,30 @@ now place EPSG evidence next to those calls.
 
 Fresh focused evidence:
 
-```powershell
-C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
-C:\Users\admin\.cargo\bin\cargo.exe check -p catalog-infra
-C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test marker_tile_reads
-C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test parcel_marker_anchor_rebuild
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.tests
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness -Root .
+The file-line-limit and spatial-SRID guards were PowerShell `scripts/ci/check-*`
+checks; per ADR-0044 they were ported to `scripts/lefthook/file-line-limit.sh`
+and the `repo-guard` Rust binary (the prelaunch-readiness meta-machine guard was
+deleted, not replaced).
+
+```bash
+cargo test -p platform-core-api
+cargo check -p catalog-infra
+cargo test -p catalog-infra --test marker_tile_reads
+cargo test -p catalog-infra --test parcel_marker_anchor_rebuild
+bash scripts/lefthook/file-line-limit.sh .
 ```
 
 After committing the Gongzzang implementation and map-runtime research evidence, both local
 repositories are source-control clean and the strict local prelaunch gate reports:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails -Root .
-# sss-guardrails-ok checks=60 supplemental_checks=2
+The `run-sss-guardrails` aggregate and `check-platform-core-prelaunch-readiness`
+were PowerShell guardrail meta-machines; per ADR-0044 they were deleted (the
+surviving guards run via `repo-guard` and `scripts/lefthook/*.sh`, and progress
+is measured by user-visible capability, not a readiness gate).
 
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness -Root .
-# platform-core-prelaunch-readiness-ok status=ready checks=18 failed=0 blockers=0
-
-git -C C:\Users\admin\Desktop\platform-core status --short
-git -C C:\Users\admin\Desktop\gongzzang status --short
+```bash
+git -C /c/Users/admin/Desktop/platform-core status --short
+git -C /c/Users/admin/Desktop/gongzzang status --short
 # both commands returned no entries
 ```
 
