@@ -96,8 +96,8 @@ Rejected after Platform Core handover. A fallback ETL path inside Gongzzang woul
 
 Gongzzang must keep these gates green:
 
-- `scripts/ci/check-platform-core-boundary.ps1`
-- `scripts/ci/check-platform-core-dependency-boundary.ps1`
+- `scripts/lefthook/catalog-m1-boundary.sh` (Platform Core boundary)
+- `docs/architecture/platform-core-boundary.v1.json` boundary contract
 - `cargo test -p etl-base-layer`
 - `cargo clippy -p etl-base-layer --all-targets -- -D warnings`
 

@@ -112,12 +112,9 @@ The final build architecture for `gongzzang`, `platform-core`, and `dawneer` is 
 - Verified on WSL2/Linux:
   - `~/.local/bin/bazelisk test //:rust_fast --config=ci --verbose_failures`
   - `~/.local/bin/bazelisk test //:guardrails_fast --config=ci --verbose_failures`
-- Verified with Windows PowerShell:
-  - `scripts\ci\run-sss-guardrails.tests.ps1`
-  - `scripts\ci\check-ci-workflow-coverage.tests.ps1`
-  - `scripts\ci\check-ci-workflow-coverage.ps1`
-  - `scripts\ci\check-file-line-limits.tests.ps1`
-  - `scripts\ci\check-file-line-limits.ps1`
+- Verified with the (since-removed) Windows PowerShell guardrail suites: the SSS guardrail
+  self-tests, the CI workflow-coverage check and its tests, and the file line-limit check and
+  its tests. (These PowerShell guards were later eliminated per ADR-0044.)
 
 ## References
 

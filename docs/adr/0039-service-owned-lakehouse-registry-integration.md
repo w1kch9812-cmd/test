@@ -131,8 +131,9 @@ Cost:
 
 ## Enforcement
 
-Gongzzang's local guardrail is
-`scripts/ci/check-lakehouse-registry-integration.ps1`. It verifies the policy SSOT, platform
-integration index wiring, Platform Core boundary contract, required R2 env bucket names, listing
-photo media namespace, and absence of unmanaged root `gongzzang/bronze`, `gongzzang/silver`, or
-`gongzzang/gold` writes in active implementation paths.
+The lakehouse registry integration policy SSOT is
+`docs/architecture/platform-integration/lakehouse-registry-policy.v1.json`, wired into the
+platform integration index. The contract requires consistency with the Platform Core boundary
+contract, the required R2 env bucket names, the listing photo media namespace, and the absence of
+unmanaged root `gongzzang/bronze`, `gongzzang/silver`, or `gongzzang/gold` writes in active
+implementation paths.

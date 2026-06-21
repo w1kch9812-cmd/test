@@ -12,11 +12,10 @@ M3.2 physical extraction 이 gongzzang workspace 에 강제되었다.
 `industrial-complex`, `parcel`, `building`, `manufacturer`, `vworld`, `data-go-kr`,
 `raw-capture`, `data-pipeline-control` crate 는 gongzzang workspace 에 존재하면 안 된다.
 `docs/architecture/platform-core-boundary.v1.json` 이 현재 phase 와 path ownership 의 SSOT 이며,
-`scripts/ci/check-platform-core-boundary.ps1` 와
-`scripts/ci/check-platform-core-dependency-boundary.ps1` 가 재도입을 차단한다.
+`scripts/lefthook/catalog-m1-boundary.sh` 와 그 boundary contract 가 재도입을 차단한다.
 `docs/architecture/platform-core-catalog-api-contract.v1.pin.json` pins the Gongzzang
-Catalog API consumer surface, and `scripts/ci/check-platform-core-catalog-api-contract.ps1`
- checks it against local clients and Platform Core OpenAPI when the sibling repo is present.
+Catalog API consumer surface, kept consistent with Platform Core OpenAPI
+(`../platform-core/docs/openapi/catalog.v1.yaml`) when the sibling repo is present.
 The `parcel-lookup` crate is only the Gongzzang port/projection crate; Platform Core
 HTTP adapters live in `services/api` and must use `Policy::platform_core_default()`
 through `circuit_breaker::execute`.
