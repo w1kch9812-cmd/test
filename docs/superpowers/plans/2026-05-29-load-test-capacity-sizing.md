@@ -4,9 +4,9 @@
 
 **Goal:** Build an enterprise-grade load-test harness that uses the sizing research spec as the baseline test specimen, discovers breakpoints, captures evidence, and produces launch-spec recommendations.
 
-**Architecture:** Keep load generation outside the runtime products. Add k6 scripts under `tests/load`, PowerShell evidence wrappers under `scripts/load`, CI guardrails under `scripts/ci`, and an operator manual under `docs/testing/load.md`. Use self-hosted or operator-provided k6; do not add npm/cargo dependencies or runtime SDKs.
+**Architecture:** Keep load generation outside the runtime products. Add k6 scripts under `tests/load`, evidence wrappers under `scripts/load`, CI guardrails under `scripts/ci`, and an operator manual under `docs/testing/load.md`. Use self-hosted or operator-provided k6; do not add npm/cargo dependencies or runtime SDKs. (The evidence wrappers and asset guardrail were originally PowerShell; per ADR-0044 PowerShell is eliminated and surviving guards run as the `repo-guard` Rust binary or native tooling. The live operator usage is in `docs/testing/load.md`.)
 
-**Tech Stack:** k6 JavaScript, PowerShell 7, GitHub Actions manual workflow on self-hosted load-test runners, CloudWatch/OTel evidence files, markdown docs.
+**Tech Stack:** k6 JavaScript, native launcher/normalizer tooling (originally PowerShell, removed per ADR-0044), GitHub Actions manual workflow on self-hosted load-test runners, CloudWatch/OTel evidence files, markdown docs.
 
 **Execution note, 2026-05-29:** The static asset guardrail, scenario registry,
 k6 shared libraries, four k6 scenarios, evidence wrapper, normalizer, manual
@@ -51,148 +51,25 @@ wrong-host, and production-target evidence are rejected.
 - Create: `scripts/ci/check-load-test-assets.tests`
 - Create: `scripts/ci/check-load-test-assets`
 
-- [ ] **Step 1: Write the failing guardrail tests**
+- [ ] **Step 1: Add the load-test asset guardrail**
 
-Create `scripts/ci/check-load-test-assets.tests`:
+The asset guardrail validates that the required k6 assets exist and that
+`tests/load/scenarios.v1.json` declares a non-production `defaultTargetBaseUrl`
+and positive `maxSafeRps` per scenario.
 
-```powershell
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
-$ScriptPath = Join-Path $PSScriptRoot "check-load-test-assets"
-$RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
-$TempRoot = Join-Path (Join-Path $RepoRoot "target\check-load-test-assets-tests") ([Guid]::NewGuid().ToString("N"))
-$PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh" } else { "powershell.exe" }
-
-function Write-File([string] $Root, [string] $RelativePath, [string] $Content) {
-    $path = Join-Path $Root $RelativePath
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $path) | Out-Null
-    Set-Content -LiteralPath $path -Encoding UTF8 -Value $Content
-}
-
-function Invoke-Checker([string] $Root) {
-    $output = & $PowerShellExe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath -Root $Root 2>&1
-    [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output -join [Environment]::NewLine) }
-}
-
-function Write-MinimalLoadAssets([string] $Root, [switch] $UnsafeProductionTarget) {
-    $target = if ($UnsafeProductionTarget) { "https://gongzzang.com" } else { "https://perf.gongzzang.internal" }
-    Write-File $Root "docs\testing\load.md" "# Load Testing`n"
-    Write-File $Root "tests\load\README.md" "# Load Scenarios`n"
-    Write-File $Root "tests\load\scenarios.v1.json" @"
-{
-  "schemaVersion": "gongzzang.load.scenarios.v1",
-  "defaultTargetBaseUrl": "$target",
-  "scenarios": [
-    {"id":"api-read-mix","file":"tests/load/scenarios/api-read-mix.js","maxSafeRps":50},
-    {"id":"map-marker-mix","file":"tests/load/scenarios/map-marker-mix.js","maxSafeRps":50},
-    {"id":"capacity-stress","file":"tests/load/scenarios/capacity-stress.js","maxSafeRps":800},
-    {"id":"platform-core-events","file":"tests/load/scenarios/platform-core-events.js","maxSafeRps":50}
-  ]
-}
-"@
-    foreach ($file in @(
-        "tests\load\lib\env.js",
-        "tests\load\lib\http.js",
-        "tests\load\scenarios\api-read-mix.js",
-        "tests\load\scenarios\map-marker-mix.js",
-        "tests\load\scenarios\capacity-stress.js",
-        "tests\load\scenarios\platform-core-events.js",
-        "scripts\load\run-k6",
-        "scripts\load\normalize-k6-summary",
-        ".github\workflows\load-test-capacity.yml"
-    )) {
-        Write-File $Root $file "asset"
-    }
-}
-
-New-Item -ItemType Directory -Force -Path $TempRoot | Out-Null
-try {
-    $okRoot = Join-Path $TempRoot "ok"
-    Write-MinimalLoadAssets $okRoot
-    $ok = Invoke-Checker $okRoot
-    if ($ok.ExitCode -ne 0) { throw "expected ok fixture to pass: $($ok.Output)" }
-
-    $unsafeRoot = Join-Path $TempRoot "unsafe"
-    Write-MinimalLoadAssets $unsafeRoot -UnsafeProductionTarget
-    $unsafe = Invoke-Checker $unsafeRoot
-    if ($unsafe.ExitCode -eq 0) { throw "expected production target fixture to fail" }
-    if (!$unsafe.Output.Contains("defaultTargetBaseUrl must not be production")) {
-        throw "expected production target error, got: $($unsafe.Output)"
-    }
-
-    Write-Output "check-load-test-assets-tests-ok"
-} finally {
-    Remove-Item -LiteralPath $TempRoot -Recurse -Force -ErrorAction SilentlyContinue
-}
-```
-
-- [ ] **Step 2: Run the tests and confirm they fail because the checker is missing**
-
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests`
-
-Expected: non-zero exit mentioning `check-load-test-assets` cannot be found.
-
-- [ ] **Step 3: Implement the checker**
-
-Create `scripts/ci/check-load-test-assets`:
-
-```powershell
-param([string] $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path)
-
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
-function Assert-File([string] $RelativePath) {
-    $path = Join-Path $Root $RelativePath
-    if (!(Test-Path -LiteralPath $path -PathType Leaf)) { throw "missing required load-test asset: $RelativePath" }
-}
-
-function Read-Json([string] $RelativePath) {
-    Get-Content -LiteralPath (Join-Path $Root $RelativePath) -Raw | ConvertFrom-Json
-}
-
-$requiredFiles = @(
-    "docs/testing/load.md",
-    "tests/load/README.md",
-    "tests/load/scenarios.v1.json",
-    "tests/load/lib/env.js",
-    "tests/load/lib/http.js",
-    "tests/load/scenarios/api-read-mix.js",
-    "tests/load/scenarios/map-marker-mix.js",
-    "tests/load/scenarios/capacity-stress.js",
-    "tests/load/scenarios/platform-core-events.js",
-    "scripts/load/run-k6",
-    "scripts/load/normalize-k6-summary",
-    ".github/workflows/load-test-capacity.yml"
-)
-$requiredFiles | ForEach-Object { Assert-File $_ }
-
-$registry = Read-Json "tests/load/scenarios.v1.json"
-if ($registry.schemaVersion -ne "gongzzang.load.scenarios.v1") { throw "scenario registry schemaVersion mismatch" }
-if ([string] $registry.defaultTargetBaseUrl -match "gongzzang\.com|api\.gongzzang\.com") {
-    throw "defaultTargetBaseUrl must not be production"
-}
-foreach ($scenario in @($registry.scenarios)) {
-    Assert-File ([string] $scenario.file)
-    if ([int] $scenario.maxSafeRps -lt 1) { throw "scenario maxSafeRps must be positive: $($scenario.id)" }
-}
-
-Write-Output "check-load-test-assets-ok scenarios=$(@($registry.scenarios).Count)"
-```
-
-- [ ] **Step 4: Run the guardrail tests and confirm they pass**
-
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests`
-
-Expected: `check-load-test-assets-tests-ok`.
+Historical note (ADR-0044): the guardrail was originally the PowerShell
+`scripts/ci/check-load-test-assets` (+ `.tests`) script, which has been removed
+with the rest of the PowerShell verification surface. The same intent is
+expressed as required-asset/registry checks; re-add it as a `repo-guard`
+subcommand or native check only if it earns its keep per the product-first
+guardrail rule.
 
 - [ ] **Step 5: Commit**
 
 Run:
 
-```powershell
-git add scripts/ci/check-load-test-assets scripts/ci/check-load-test-assets.tests
+```bash
+git add tests/load
 git commit -m "test: add load-test asset guardrail"
 ```
 
@@ -225,12 +102,14 @@ Create `tests/load/README.md`:
 These k6 scenarios are operator tooling for perf/staging capacity discovery.
 They are not imported by `apps/`, `services/`, `crates/`, or `packages/`.
 
-Run through `scripts/load/run-k6` so every run writes evidence.
+Run each scenario with `k6 run --summary-export` and write evidence under
+`target/audit/load-tests` (see `docs/testing/load.md`).
 
 Example:
 
-```powershell
-./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke
+```bash
+k6 run --summary-export target/audit/load-tests/.../k6-summary.json \
+  tests/load/scenarios/api-read-mix.js
 ```
 ```
 
@@ -261,9 +140,9 @@ Create `tests/load/scenarios.v1.json` with:
 
 - [ ] **Step 4: Run the asset checker**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets`
+Run the load-test asset guardrail (the PowerShell `scripts/ci/check-load-test-assets` was removed per ADR-0044).
 
-Expected: fails until Task 3 and Task 4 create the referenced script files.
+Expected: fails until Task 3 and Task 4 create the referenced asset files.
 
 - [ ] **Step 5: Commit after Task 4 completes**
 
@@ -339,7 +218,7 @@ export function safePostJson(url, body, tags, headers = {}) {
 
 - [ ] **Step 3: Run static checker**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets`
+Run the load-test asset guardrail (the PowerShell `scripts/ci/check-load-test-assets` was removed per ADR-0044).
 
 Expected: still fails until scenario files exist.
 
@@ -371,7 +250,7 @@ Create `tests/load/scenarios/platform-core-events.js` to POST signed synthetic w
 
 Run:
 
-```powershell
+```bash
 k6 inspect tests/load/scenarios/api-read-mix.js
 k6 inspect tests/load/scenarios/map-marker-mix.js
 k6 inspect tests/load/scenarios/capacity-stress.js
@@ -406,8 +285,10 @@ The first version should classify results as `healthy`, `latency breakpoint`, or
 
 Run:
 
-```powershell
-./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl http://127.0.0.1:3000 -Profile smoke
+```bash
+TARGET_BASE_URL=http://127.0.0.1:3000 LOAD_PROFILE=smoke \
+  k6 run --summary-export target/audit/load-tests/local/api-read-mix/k6-summary.json \
+  tests/load/scenarios/api-read-mix.js
 ```
 
 Expected: if the target is unavailable, k6 records connection failures and evidence files are still written. If the target is available, thresholds decide pass/fail.
@@ -424,32 +305,31 @@ Create `.github/workflows/load-test-capacity.yml` using `workflow_dispatch`, `ru
 
 - [ ] **Step 2: Wire the static guardrail into CI**
 
-Modify `.github/workflows/ci.yml` lint-format job after Platform Integration policy guardrail:
-
-```yaml
-      - name: Load-test asset guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-load-test-assets
-```
+Modify `.github/workflows/ci.yml` lint-format job after the other architecture
+guardrails. (Historical note: this step originally ran the PowerShell
+`scripts/ci/check-load-test-assets` under `shell: pwsh`; per ADR-0044 PowerShell
+is eliminated, so wire any surviving asset check as a `repo-guard` subcommand or
+native command under `shell: bash`.)
 
 - [ ] **Step 3: Run local guardrail verification**
 
 Run:
 
-```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets
+The PowerShell `scripts/ci/check-load-test-assets` (+ `.tests`) guards were
+removed per ADR-0044; run the surviving markdown lint and any native asset check:
+
+```bash
 pnpm exec markdownlint-cli2 "docs/testing/load.md" "tests/load/README.md"
 ```
 
-Expected: tests print `check-load-test-assets-tests-ok`, checker prints `check-load-test-assets-ok scenarios=4`, markdownlint reports `0 error(s)`.
+Expected: markdownlint reports `0 error(s)` and any surviving asset check passes.
 
 - [ ] **Step 4: Commit**
 
 Run:
 
-```powershell
-git add docs/testing/load.md tests/load scripts/load scripts/ci/check-load-test-assets scripts/ci/check-load-test-assets.tests .github/workflows/load-test-capacity.yml .github/workflows/ci.yml
+```bash
+git add docs/testing/load.md tests/load scripts/load .github/workflows/load-test-capacity.yml .github/workflows/ci.yml
 git commit -m "feat: add enterprise load-test capacity harness"
 ```
 
@@ -463,8 +343,10 @@ git commit -m "feat: add enterprise load-test capacity harness"
 
 Run:
 
-```powershell
-./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke -Environment perf
+```bash
+TARGET_BASE_URL=https://perf.gongzzang.internal LOAD_PROFILE=smoke LOAD_ENVIRONMENT=perf \
+  k6 run --summary-export target/audit/load-tests/perf/api-read-mix/k6-summary.json \
+  tests/load/scenarios/api-read-mix.js
 ```
 
 Expected: evidence directory contains `run.json`, `spec.json`, `thresholds.json`, `k6-summary.json`, `bottleneck.md`, `recommendation.md`, and `baseline-comparison.md`.
@@ -477,7 +359,7 @@ Create `docs/research/YYYY-MM-DD-load-test-result.md` with sections: Tested Spec
 
 Run:
 
-```powershell
+```bash
 git add docs/research/YYYY-MM-DD-load-test-result.md
 git commit -m "docs: record load-test smoke result"
 ```
