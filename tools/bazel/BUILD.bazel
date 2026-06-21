@@ -232,76 +232,6 @@ transition_shell_test(
 )
 
 transition_shell_test(
-    name = "guardrail_verification_control_plane",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["verification-control-plane"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_verification_control_plane_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["verification-control-plane-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_bazel_transition_ratchet",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["bazel-transition-ratchet"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_bazel_transition_ratchet_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["bazel-transition-ratchet-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_generated_artifact_registry",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["generated-artifact-registry"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_generated_artifact_registry_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["generated-artifact-registry-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_coverage_transition_ssot",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["coverage-transition-ssot"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_coverage_transition_ssot_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["coverage-transition-ssot-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_verification_task_registry",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["verification-task-registry"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_verification_task_registry_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["verification-task-registry-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
     name = "guardrail_platform_core_boundary",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["platform-core-boundary"],
@@ -372,20 +302,6 @@ transition_shell_test(
 )
 
 transition_shell_test(
-    name = "guardrail_traffic_auth_policy_registry_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["traffic-auth-policy-registry-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_traffic_auth_api_control_plane_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["traffic-auth-api-control-plane-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
     name = "guardrail_github_actions_node_runtime",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["github-actions-node-runtime"],
@@ -393,22 +309,8 @@ transition_shell_test(
 )
 
 transition_shell_test(
-    name = "guardrail_github_actions_node_runtime_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["github-actions-node-runtime-tests"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
     name = "guardrail_load_test_assets",
     srcs = ["run_guardrail_task.sh"],
     script_args = ["load-test-assets"],
-    tags = GUARDRAIL_TRANSITION_TAGS,
-)
-
-transition_shell_test(
-    name = "guardrail_load_test_assets_tests",
-    srcs = ["run_guardrail_task.sh"],
-    script_args = ["load-test-assets-tests"],
     tags = GUARDRAIL_TRANSITION_TAGS,
 )

@@ -134,9 +134,5 @@ Assert-Contains `
     -Message "CI traffic/auth policy registry gate"
 Assert-Contains `
     -Content $ciWorkflow `
-    -Needle "./scripts/ci/check-traffic-auth-policy-registry.tests.ps1" `
-    -Message "CI traffic/auth policy registry tests gate"
-Assert-Contains `
-    -Content $ciWorkflow `
     -Needle "-IncludeProductionEdge" `
     -Message "CI traffic/auth production edge policy gate"

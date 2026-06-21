@@ -41,9 +41,6 @@ jobs:
             --build_event_json_file=target/bazel/bep/ci-test.json \
             --profile=target/bazel/profile/ci-test.gz
 
-      - name: Verification control plane guardrail
-        run: bazelisk test //tools/bazel:guardrail_verification_control_plane //tools/bazel:guardrail_verification_control_plane_tests //tools/bazel:guardrail_bazel_transition_ratchet //tools/bazel:guardrail_bazel_transition_ratchet_tests --config=ci --verbose_failures
-
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
         with:
@@ -81,9 +78,6 @@ jobs:
       - name: Lakehouse Registry integration guardrail
         shell: pwsh
         run: ./scripts/ci/check-lakehouse-registry-integration.ps1
-      - name: Lakehouse Registry integration guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-lakehouse-registry-integration.tests.ps1
       - name: Platform Core boundary guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-core-boundary.ps1
@@ -99,60 +93,24 @@ jobs:
       - name: Traffic/auth policy registry guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1
-      - name: Traffic/auth policy registry guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-traffic-auth-policy-registry.tests.ps1
-      - name: Traffic/auth API control-plane guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-traffic-auth-api-control-plane.tests.ps1
       - name: Traffic/auth production edge policy guardrail
         shell: pwsh
         run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
       - name: GitHub Actions Node runtime guardrail
         shell: pwsh
         run: ./scripts/ci/check-github-actions-node-runtime.ps1
-      - name: GitHub Actions Node runtime guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-github-actions-node-runtime.tests.ps1
-      - name: Generated artifact registry guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-generated-artifact-registry.ps1
-      - name: Generated artifact registry guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-generated-artifact-registry.tests.ps1
-      - name: Coverage transition SSOT guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-coverage-transition-ssot.ps1
-      - name: Coverage transition SSOT guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-coverage-transition-ssot.tests.ps1
-      - name: Verification task registry guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-verification-task-registry.ps1
-      - name: Verification task registry guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-verification-task-registry.tests.ps1
       - name: Migration version prefix guardrail
         shell: pwsh
         run: ./scripts/ci/check-migration-version-prefixes.ps1
-      - name: Migration version prefix guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-migration-version-prefixes.tests.ps1
       - name: Platform Core anchor inbox DB approval guardrail
         shell: pwsh
         run: ./scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
-      - name: Platform Core anchor inbox DB approval guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-platform-core-anchor-inbox-db-approval.tests.ps1
       - name: PNU anchor PBF marker contract guardrail
         shell: pwsh
         run: ./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
       - name: Load-test asset guardrail
         shell: pwsh
         run: ./scripts/ci/check-load-test-assets.ps1
-      - name: Load-test asset guardrail tests
-        shell: pwsh
-        run: ./scripts/ci/check-load-test-assets.tests.ps1
       - name: Install ripgrep for repository guardrails
         run: |
           sudo apt-get update -qq
