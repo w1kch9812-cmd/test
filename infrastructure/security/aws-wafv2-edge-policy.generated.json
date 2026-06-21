@@ -1,4 +1,5 @@
 {
+  "_generated": "DO NOT EDIT - run cargo run -p api --bin generate-traffic-auth-policy",
   "schema_version": "gongzzang.aws_wafv2_edge_policy_manifest.v1",
   "source_projection": "infrastructure/security/traffic-auth-edge-policy.generated.json",
   "source_registry": "docs/architecture/traffic-auth-policy-registry.v1.json",

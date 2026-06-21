@@ -7,9 +7,16 @@
 
 use serde::Serialize;
 
+/// Machine marker emitted as the first key of every generated JSON output so a
+/// hand edit is obviously wrong and the CI drift guard explains how to reproduce.
+pub const GENERATED_MARKER: &str =
+    "DO NOT EDIT - run cargo run -p api --bin generate-traffic-auth-policy";
+
 /// Provider-neutral edge ingress projection root.
 #[derive(Debug, Serialize)]
 pub struct EdgeProjection {
+    #[serde(rename = "_generated")]
+    pub generated: &'static str,
     pub schema_version: &'static str,
     pub source_registry: &'static str,
     pub projection_kind: &'static str,
@@ -79,6 +86,8 @@ pub struct ServiceEdgeRule {
 /// AWS `WAFv2` manifest root.
 #[derive(Debug, Serialize)]
 pub struct AwsWafManifest {
+    #[serde(rename = "_generated")]
+    pub generated: &'static str,
     pub schema_version: &'static str,
     pub source_projection: &'static str,
     pub source_registry: &'static str,

@@ -30,7 +30,7 @@ mod transform;
 use edge_model::{
     ApiProxyEdgeRule, AuthEdgeRule, AwsWafManifest, AwsWafRateMatch, AwsWafRateRule,
     BlockedQueryShapeMatch, BlockedQueryShapeRule, EdgeProjection, IdentityAwareApplicationRule,
-    PublicEdgeRule, RateProjection, ServiceEdgeRule, ServiceIdentityRule,
+    PublicEdgeRule, RateProjection, ServiceEdgeRule, ServiceIdentityRule, GENERATED_MARKER,
 };
 use registry::{PublicRoutePolicy, Registry, RouteRateProfile, EXPECTED_SCHEMA_VERSION};
 
@@ -668,6 +668,7 @@ fn render_edge_projection_json(registry: &Registry) -> Result<String, String> {
         .collect();
 
     let projection = EdgeProjection {
+        generated: GENERATED_MARKER,
         schema_version: "gongzzang.traffic_auth_edge_policy_projection.v1",
         source_registry: "docs/architecture/traffic-auth-policy-registry.v1.json",
         projection_kind: "provider_neutral_edge_ingress",
@@ -785,6 +786,7 @@ fn render_aws_waf_manifest_json(registry: &Registry) -> Result<String, String> {
         .collect();
 
     let manifest = AwsWafManifest {
+        generated: GENERATED_MARKER,
         schema_version: "gongzzang.aws_wafv2_edge_policy_manifest.v1",
         source_projection: "infrastructure/security/traffic-auth-edge-policy.generated.json",
         source_registry: "docs/architecture/traffic-auth-policy-registry.v1.json",
