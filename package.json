@@ -9,14 +9,13 @@
     "pnpm": ">=9.12.0"
   },
   "scripts": {
-    "build": "bash scripts/ci/run-bazel.sh test //:frontend_build --config=ci --verbose_failures",
+    "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "typecheck:coverage": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage --config=ci --verbose_failures",
-    "typecheck": "bash scripts/ci/run-bazel.sh test //tools/bazel:guardrail_workspace_typecheck_coverage //:workspace_typecheck --config=ci --verbose_failures",
-    "test": "bash scripts/ci/run-bazel.sh test //:frontend_unit_test --config=ci --verbose_failures",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "clean": "turbo run clean && rimraf node_modules **/node_modules"
   },
   "devDependencies": {

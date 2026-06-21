@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "bash ../../scripts/ci/run-bazel.sh test //apps/web:next_production_build_smoke_test --config=ci --verbose_failures",
+    "build": "next build",
     "start": "next start",
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
-    "test": "bash ../../scripts/ci/run-bazel.sh test //apps/web:vitest_unit_test --config=ci --verbose_failures",
+    "test": "vitest run",
     "test:e2e": "playwright test",
     "probe:naver": "playwright test --config playwright.probes.config.ts",
-    "test:bundle": "bash ../../scripts/ci/run-bazel.sh test //apps/web:bundle_size_test --config=ci --verbose_failures"
+    "test:bundle": "size-limit"
   },
   "dependencies": {
     "@gongzzang/api-types": "workspace:*",

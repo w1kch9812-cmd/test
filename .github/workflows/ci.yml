@@ -62,7 +62,7 @@ jobs:
       - name: Biome check
         run: pnpm biome check .
       - name: Typecheck
-        run: pnpm turbo check-types
+        run: pnpm turbo typecheck
       - name: Unit tests
         run: pnpm turbo test
       - name: Build
