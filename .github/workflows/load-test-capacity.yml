@@ -58,8 +58,8 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
 
-      - name: Run load test
-        shell: pwsh
+      - name: Run k6 load test
+        shell: bash
         env:
           LOAD_INPUT_ALLOW_STRESS: ${{ inputs.allow_stress }}
           LOAD_INPUT_ENVIRONMENT: ${{ inputs.environment }}
@@ -67,17 +67,62 @@ jobs:
           LOAD_INPUT_SCENARIO: ${{ inputs.scenario }}
           LOAD_INPUT_TARGET: ${{ inputs.target }}
         run: |
-          $runArgs = @(
-            "-Scenario", $env:LOAD_INPUT_SCENARIO,
-            "-Profile", $env:LOAD_INPUT_PROFILE,
-            "-TargetBaseUrl", $env:LOAD_INPUT_TARGET,
-            "-Environment", $env:LOAD_INPUT_ENVIRONMENT
-          )
-          if ([System.Convert]::ToBoolean($env:LOAD_INPUT_ALLOW_STRESS)) {
-            $runArgs += "-AllowStress"
-          }
+          set -euo pipefail
 
-          ./scripts/load/run-k6.ps1 @runArgs
+          # Resolve the scenario script + safe RPS cap from the registry SSOT.
+          registry="tests/load/scenarios.v1.json"
+          scenario_file="$(jq -r --arg id "$LOAD_INPUT_SCENARIO" \
+            '.scenarios[] | select(.id == $id) | .file' "$registry")"
+          max_safe_rps="$(jq -r --arg id "$LOAD_INPUT_SCENARIO" \
+            '.scenarios[] | select(.id == $id) | .maxSafeRps' "$registry")"
+          if [ -z "$scenario_file" ] || [ "$scenario_file" = "null" ]; then
+            echo "unknown load scenario: $LOAD_INPUT_SCENARIO" >&2
+            exit 1
+          fi
+
+          # Profile -> load shape. Mirrors the retired launcher's table.
+          case "$LOAD_INPUT_PROFILE" in
+            smoke)    rps=2;   duration=15s; pre_vus=2;   max_vus=10;   stress_stage=10s ;;
+            baseline) rps=20;  duration=10m; pre_vus=40;  max_vus=200;  stress_stage=1m ;;
+            stress)   rps=50;  duration=15m; pre_vus=100; max_vus=2000; stress_stage=2m ;;
+            spike)    rps=100; duration=3m;  pre_vus=100; max_vus=1000; stress_stage=30s ;;
+            soak)     rps=20;  duration=6h;  pre_vus=40;  max_vus=200;  stress_stage=5m ;;
+            *) echo "unknown load profile: $LOAD_INPUT_PROFILE" >&2; exit 1 ;;
+          esac
+
+          # Stress-class runs are gated behind an explicit opt-in.
+          case "$LOAD_INPUT_PROFILE" in stress|spike|soak) is_stress=1 ;; *) is_stress=0 ;; esac
+          if [ "$LOAD_INPUT_SCENARIO" = "capacity-stress" ]; then is_stress=1; fi
+          if [ "$is_stress" = "1" ] && [ "$LOAD_INPUT_ALLOW_STRESS" != "true" ]; then
+            echo "allow_stress is required for stress, spike, soak, or capacity-stress runs" >&2
+            exit 1
+          fi
+
+          # maxSafeRps from the registry is an executable cap.
+          if [ "$rps" -gt "$max_safe_rps" ]; then
+            echo "profile LOAD_RPS ($rps) exceeds scenario maxSafeRps ($max_safe_rps)" >&2
+            exit 1
+          fi
+
+          out_dir="target/audit/load-tests/${LOAD_INPUT_ENVIRONMENT}/${LOAD_INPUT_SCENARIO}"
+          mkdir -p "$out_dir"
+
+          # Production targets are additionally forbidden by tests/load/lib/env.js.
+          export TARGET_BASE_URL="$LOAD_INPUT_TARGET"
+          export LOAD_PROFILE="$LOAD_INPUT_PROFILE"
+          export LOAD_ENVIRONMENT="$LOAD_INPUT_ENVIRONMENT"
+          export GIT_SHA="${GITHUB_SHA:-unknown}"
+          export LOAD_RPS="$rps"
+          export LOAD_DURATION="$duration"
+          export LOAD_PRE_ALLOCATED_VUS="$pre_vus"
+          export LOAD_MAX_VUS="$max_vus"
+          export LOAD_STRESS_STAGE_DURATION="$stress_stage"
+          if [ "$LOAD_INPUT_ALLOW_STRESS" = "true" ]; then export ALLOW_STRESS=true; fi
+
+          k6 run \
+            --summary-export "$out_dir/k6-summary.json" \
+            --summary-trend-stats "min,avg,med,p(90),p(95),p(99),max" \
+            "$scenario_file"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
         if: always()
