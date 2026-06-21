@@ -4,11 +4,10 @@
 
 pre-commit:
   parallel: true
+  # 커밋은 빠르게: 관련 파일이 바뀔 때만 도는 검사(glob) + 비밀키 스캔만.
+  # 무거운 전수검사 + 모든 PowerShell 검사는 pre-commit에서 제거 (ADR-0044 역전: Bazel/PowerShell 폐기, 속도 우선).
+  # 깊은 검사는 CI에서 돈다. PowerShell 스크립트 자체 삭제는 후속 단계.
   commands:
-    lefthook-no-fake-pass:
-      run: bash scripts/lefthook/check-no-fake-pass.sh
-    forbidden-implementation-markers:
-      run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
     biome:
       glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
       run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
@@ -28,11 +27,6 @@ pre-commit:
       skip:
         - merge
         - rebase
-    file-line-limit:
-      run: bash scripts/lefthook/file-line-limit.sh
-      skip:
-        - merge
-        - rebase
     panel-no-framework-import-kind:
       glob: "apps/web/lib/panel/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-framework-import-kind.sh
@@ -42,24 +36,6 @@ pre-commit:
     panel-no-state-without-router:
       glob: "apps/web/stores/**/*.{ts,tsx}"
       run: bash scripts/lefthook/panel-no-state-without-router.sh
-    catalog-m1-boundary:
-      run: bash scripts/lefthook/catalog-m1-boundary.sh
-    pnu-anchor-pbf-marker-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-    platform-core-boundary:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
-    lakehouse-registry-integration:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-lakehouse-registry-integration.ps1
-    platform-core-event-receiver-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-event-receiver-contract.ps1
-    platform-core-catalog-api-contract:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-catalog-api-contract.ps1
-    platform-core-dependency-boundary:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
-    migration-version-prefixes:
-      run: bash scripts/lefthook/migration-version-prefixes.sh
-    platform-core-anchor-inbox-db-approval:
-      run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-anchor-inbox-db-approval.ps1
 
 pre-push:
   parallel: false
