@@ -1,3 +1,6 @@
+# CI — cargo + pnpm 직접 실행 (Bazel 폐기, ADR-0044 역전).
+# 이전: 모든 잡이 bazelisk 경유. 현재: cargo / pnpm 표준 명령.
+# 일부러 뺀 것(런칭 후 필요시 재도입): release-provenance(SBOM/SLSA 첨부), tarpaulin 90% 커버리지 게이트.
 name: CI
 
 on:
@@ -16,265 +19,85 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   RUST_BACKTRACE: 1
   SQLX_OFFLINE: "true"
 
 jobs:
-  bazel-fast-graph:
-    name: Bazel fast graph
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-
-      - name: Bazel test graph
-        run: |
-          mkdir -p target/bazel/bep target/bazel/profile
-          bazelisk test //... --config=ci --verbose_failures \
-            --build_event_json_file=target/bazel/bep/ci-test.json \
-            --profile=target/bazel/profile/ci-test.gz
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
-        if: always()
-        with:
-          name: bazel-fast-graph-evidence
-          path: |
-            target/bazel/bep/ci-test.json
-            target/bazel/profile/ci-test.gz
-          if-no-files-found: ignore
-          retention-days: 14
-
-  lint-format:
-    name: Lint & Format (Bazel)
+  rust:
+    name: Rust (fmt, clippy, test, build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
-        with: { version: 9.12.0 }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
-        with:
-          node-version: "20.19.0"
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Node dependency audit
-        run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci --verbose_failures
-      - name: Biome check
-        run: bazelisk test //tools/bazel:frontend_lint --config=ci --verbose_failures
-      - name: Migration version prefix guardrail
-        run: cargo run -p repo-guard -- migration-version-prefixes
-      - name: Install ripgrep for repository guardrails
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ripgrep
-      - name: Forbidden implementation marker guardrail
-        run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
-      - name: markdownlint
-        run: bazelisk test //tools/bazel:guardrail_markdown_links --config=ci --verbose_failures
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (SHA pin, ADR 0028)
         with: { toolchain: "1.91.1", components: "rustfmt, clippy" }
-      - name: cargo fmt
-        run: bazelisk test //:rust_format_verification --config=ci --verbose_failures
-      - name: cargo clippy
-        run: bazelisk build //:rust_lint_verification --config=ci --verbose_failures
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (SHA pin, ADR 0028)
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - run: cargo test --workspace --all-features
+      - run: cargo build --release
 
-  typecheck:
-    name: Workspace typecheck (Bazel)
+  cargo-deny:
+    name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-
-      - run: bazelisk test //:workspace_typecheck --config=ci --verbose_failures
-
-  cargo-check:
-    name: Rust check + cargo-deny (Bazel)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
       - name: Install cargo-deny
         run: cargo install cargo-deny --version 0.19.8 --locked
-      - name: Rust check
-        run: bazelisk test //:rust_check_verification --config=ci --verbose_failures
-      - name: SQLx offline metadata
-        run: bazelisk test //:sqlx_prepare_verification --config=ci --verbose_failures
-      - name: Cargo deny
-        run: bazelisk test //tools/bazel:ci_cargo_deny_transition --config=ci --verbose_failures
+      - run: cargo deny check
 
-  supply-chain-provenance:
-    name: Supply chain provenance
+  frontend:
+    name: Frontend (biome, typecheck, test, build)
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
-    env:
-      NEXT_PUBLIC_API_BASE_URL: https://api.perf.gongzzang.internal
-      NEXT_PUBLIC_NAVER_MAPS_CLIENT_ID: ci-build-client
-      NEXT_PUBLIC_PLATFORM_CORE_BASE_URL: https://platform-core.perf.gongzzang.internal
-      ZITADEL_ISSUER: https://auth.perf.gongzzang.internal
-      ZITADEL_CLIENT_ID: ci-build-client
-      ZITADEL_AUDIENCE: ci-build-audience
-      ZITADEL_REDIRECT_URI: https://web.perf.gongzzang.internal/auth/callback
-      REDIS_URL: rediss://redis.perf.gongzzang.internal:6379
-      SESSION_SECRET: ci-build-session-secret-32-bytes-ok-not-prod
-      INTERNAL_AUTH_SECRET: ci-build-internal-auth-secret-32-bytes
-      PLATFORM_CORE_WEBHOOK_SECRET: ci-build-platform-core-webhook-secret-32
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (SHA pin, ADR 0028)
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (SHA pin, ADR 0028)
         with: { version: 9.12.0 }
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (SHA pin, ADR 0028)
         with:
           node-version: "20.19.0"
           cache: pnpm
-
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
-        with: { toolchain: "1.91.1" }
-
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
-
       - run: pnpm install --frozen-lockfile
+      - name: Biome check
+        run: pnpm biome check .
+      - name: Typecheck
+        run: pnpm turbo check-types
+      - name: Unit tests
+        run: pnpm turbo test
+      - name: Build
+        run: pnpm turbo build
 
-      - name: Build supply chain evidence artifacts
-        run: bazelisk build //:supply_chain_evidence_artifacts --config=ci --verbose_failures
-
-      - name: Validate supply chain evidence artifacts
-        run: bazelisk test //:verify_supply_chain --config=ci --verbose_failures
-
-      - name: Attest web provenance
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
-        with:
-          subject-path: bazel-bin/gongzzang-web-next-build.tgz
-
-      - name: Attest API provenance
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
-        with:
-          subject-path: bazel-bin/gongzzang-api-release/api
-
-      - name: Attest web SBOM
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
-        with:
-          subject-path: bazel-bin/gongzzang-web-next-build.tgz
-          sbom-path: bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json
-
-      - name: Attest API SBOM
-        uses: actions/attest@281a49d4cbb0a72c9575a50d18f6deb515a11deb  # v4 (Round 5 SHA pin, ADR 0028)
-        with:
-          subject-path: bazel-bin/gongzzang-api-release/api
-          sbom-path: bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
-        with:
-          name: supply-chain-release-candidates
-          path: |
-            bazel-bin/gongzzang-web-next-build.tgz
-            bazel-bin/gongzzang-api-release/api
-            bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json
-            bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json
-            bazel-bin/supply-chain/evidence-manifest.json
-          if-no-files-found: error
-          retention-days: 30
-
-  catalog-m1-boundary:
-    name: Catalog M1 boundary
+  guardrails:
+    name: Repo guardrails
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - name: Enforce gongzzang3 catalog M1 boundary
-        run: bash scripts/lefthook/catalog-m1-boundary.sh
-
-  coverage:
-    name: Coverage (tarpaulin ≥ 90%)
-    runs-on: ubuntu-latest
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - name: Install Bazelisk
-        run: |
-          mkdir -p "${RUNNER_TEMP}/bazelisk"
-          bash tools/bazel/install_bazelisk_ci.sh "${RUNNER_TEMP}/bazelisk"
-          echo "${RUNNER_TEMP}/bazelisk" >> "${GITHUB_PATH}"
-      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (Round 5 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (SHA pin, ADR 0028)
+      - uses: dtolnay/rust-toolchain@21dc36fb71dd22e3317045c0c31a3f4249868b17  # @stable (SHA pin, ADR 0028)
         with: { toolchain: "1.91.1" }
-      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (Node 24 SHA pin, ADR 0028)
-        with:
-          shared-key: tarpaulin
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin --version "^0.31" --locked
-      - name: Run tarpaulin
-        run: bazelisk test //tools/bazel:ci_coverage_tarpaulin_transition --config=ci --verbose_failures
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1 (Node 24 SHA pin, ADR 0028)
-        if: always()
-        with:
-          name: coverage-lcov
-          path: lcov.info
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1 (SHA pin, ADR 0028)
+      - name: Install ripgrep
+        run: sudo apt-get update -qq && sudo apt-get install -y ripgrep
+      - name: No fake pass
+        run: bash scripts/lefthook/check-no-fake-pass.sh
+      - name: Forbidden implementation markers
+        run: bash scripts/lefthook/check-forbidden-implementation-markers.sh
+      - name: Catalog M1 boundary
+        run: bash scripts/lefthook/catalog-m1-boundary.sh
+      - name: File size limit
+        run: bash scripts/lefthook/file-line-limit.sh
+      - name: Migration version prefixes (repo-guard)
+        run: cargo run -p repo-guard -- migration-version-prefixes
+      - name: Markdown links
+        run: bash scripts/ci/check-markdown-links.sh
 
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (SHA pin, ADR 0028)
         with: { fetch-depth: 0 }
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0 (Node 24 SHA pin, ADR 0028)
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0 (SHA pin, ADR 0028)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_CONFIG: .gitleaks.toml
-
-  link-check:
-    name: Markdown link check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093  # v6.0.8 (Node 24 SHA pin, ADR 0028)
-        with: { version: 9.12.0 }
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0 (Node 24 SHA pin, ADR 0028)
-        with:
-          node-version: "20.19.0"
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Check internal Markdown links
-        run: bash scripts/ci/check-markdown-links.sh
-
-  file-size:
-    name: File size limit (≤500 권장 / 1500 강제)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2 (Node 24 SHA pin, ADR 0028)
-      - name: Check file sizes
-        run: bash scripts/lefthook/file-line-limit.sh
