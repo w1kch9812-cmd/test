@@ -134,12 +134,8 @@ Important files:
 
 ## 7. Guardrails
 
-Run these when data-flow ownership changes:
-
-```powershell
-./scripts/ci/check-platform-core-boundary.ps1
-./scripts/ci/check-platform-core-dependency-boundary.ps1
-./scripts/ci/check-platform-integration-policy.ps1
-./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-./scripts/ci/check-traffic-auth-policy-registry.ps1
-```
+When data-flow ownership changes, the Platform Core boundary, dependency
+boundary, platform-integration policy, PNU-anchor PBF marker contract, and
+traffic/auth policy registry must stay intact. The Platform Core catalog
+boundary is enforced by `scripts/lefthook/catalog-m1-boundary.sh` and the
+boundary contract `docs/architecture/platform-core-boundary.v1.json`.

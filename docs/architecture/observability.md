@@ -93,7 +93,8 @@ Gongzzang must not reintroduce:
 - `crates/db/src/api_health.rs`
 - `docs/observability/api-drift-smoke-test.md`
 
-The boundary is enforced by `check-platform-core-boundary.ps1`.
+The boundary is enforced by `scripts/lefthook/catalog-m1-boundary.sh` and the
+boundary contract `docs/architecture/platform-core-boundary.v1.json`.
 
 ## 7. Current Gaps
 
@@ -107,10 +108,7 @@ Remaining hardening areas:
 
 ## 8. Guardrails
 
-Relevant checks:
-
-```powershell
-./scripts/ci/check-traffic-auth-policy-registry.ps1
-./scripts/ci/check-platform-core-boundary.ps1
-./scripts/ci/check-verification-control-plane.ps1
-```
+The traffic/auth policy registry and the Platform Core boundary are enforced in
+CI and pre-commit. The Platform Core catalog boundary is guarded by
+`scripts/lefthook/catalog-m1-boundary.sh`; the traffic/auth policy artifacts are
+regenerated with `cargo run -p api --bin generate-traffic-auth-policy`.

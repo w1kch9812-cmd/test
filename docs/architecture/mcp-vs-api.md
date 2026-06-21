@@ -77,9 +77,7 @@ When introducing AI or agent-facing code:
 - keep generated summaries or embeddings as derived artifacts;
 - add boundary checks before runtime dependency is introduced.
 
-Relevant checks today:
-
-```powershell
-./scripts/ci/check-platform-core-boundary.ps1
-./scripts/ci/check-platform-integration-policy.ps1
-```
+The Platform Core boundary and platform-integration policy are enforced in CI
+and pre-commit. The Platform Core catalog boundary is guarded by
+`scripts/lefthook/catalog-m1-boundary.sh` and the boundary contract
+`docs/architecture/platform-core-boundary.v1.json`.

@@ -99,10 +99,7 @@ Gongzzang does not own static vector tile ETL after Platform Core extraction.
 
 ## 7. Guardrails
 
-Relevant checks:
-
-```powershell
-./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-./scripts/ci/check-platform-core-boundary.ps1
-./scripts/ci/check-platform-core-dependency-boundary.ps1
-```
+The PNU-anchor PBF marker contract and the Platform Core (dependency) boundary
+must stay intact. The Platform Core catalog boundary is enforced by
+`scripts/lefthook/catalog-m1-boundary.sh` and the boundary contract
+`docs/architecture/platform-core-boundary.v1.json`.

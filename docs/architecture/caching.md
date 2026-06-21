@@ -74,10 +74,8 @@ Gongzzang's map client may consume manifests and immutable tile URLs, but Gongzz
 
 ## 7. Guardrails
 
-Relevant checks:
-
-```powershell
-./scripts/ci/check-traffic-auth-policy-registry.ps1
-./scripts/ci/check-platform-core-event-receiver-contract.ps1
-./scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-```
+The traffic/auth, Platform Core event-receiver, and PNU-anchor PBF marker
+contracts are enforced in CI and pre-commit hooks. The Platform Core boundary is
+guarded by `scripts/lefthook/catalog-m1-boundary.sh`; the traffic/auth policy
+artifacts are regenerated from the registry with
+`cargo run -p api --bin generate-traffic-auth-policy`.

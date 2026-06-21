@@ -45,9 +45,9 @@ Gongzzang owns:
 
 ## Guardrails
 
-- `scripts/ci/check-platform-core-boundary.ps1`
-- `scripts/ci/check-platform-core-dependency-boundary.ps1`
-- `scripts/ci/check-platform-core-catalog-api-contract.ps1`
+- Platform Core catalog boundary — `scripts/lefthook/catalog-m1-boundary.sh`
+- Platform Core boundary / dependency-boundary contract — `docs/architecture/platform-core-boundary.v1.json`
+- Platform Core Catalog API consumer contract — `docs/architecture/platform-core-catalog-api-contract.v1.pin.json`
 
 If data.go.kr source behavior changes, update Platform Core first. Gongzzang
 should only update pinned Platform Core contracts after the Platform Core

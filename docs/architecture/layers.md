@@ -111,10 +111,7 @@ The goal is not to hide shell scripts. The goal is to retire transitional runner
 
 ## 8. Guardrails
 
-Layer changes should pass:
-
-```powershell
-./scripts/ci/check-platform-core-dependency-boundary.ps1
-./scripts/ci/check-platform-integration-policy.ps1
-./scripts/ci/check-bazel-transition-ratchet.ps1
-```
+Layer changes must preserve the Platform Core dependency boundary and the
+platform-integration policy. The Platform Core catalog boundary is enforced by
+`scripts/lefthook/catalog-m1-boundary.sh` and the boundary contract
+`docs/architecture/platform-core-boundary.v1.json`.

@@ -142,13 +142,10 @@ These adapters keep Platform Core calls behind service-owned boundaries and reus
 
 ## 10. Verification
 
-Run focused checks after changing external-call behavior:
-
-```powershell
-./scripts/ci/check-platform-core-boundary.ps1
-./scripts/ci/check-platform-core-dependency-boundary.ps1
-./scripts/ci/check-platform-integration-policy.ps1
-```
+After changing external-call behavior, keep the Platform Core (dependency)
+boundary and platform-integration policy intact. The Platform Core catalog
+boundary is enforced by `scripts/lefthook/catalog-m1-boundary.sh` and the
+boundary contract `docs/architecture/platform-core-boundary.v1.json`.
 
 Run Rust checks for the circuit breaker crate and affected service:
 
