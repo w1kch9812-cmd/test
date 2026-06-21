@@ -895,8 +895,8 @@ fn resolve_biome_executable(root: &Path) -> Result<PathBuf, String> {
     let candidates = [
         "node_modules/.bin/biome.CMD",
         "node_modules/.bin/biome.cmd",
+        "node_modules/.bin/biome.exe",
         "node_modules/.bin/biome",
-        "node_modules/.bin/biome.ps1",
     ];
     for candidate in candidates {
         let path = root.join(candidate);

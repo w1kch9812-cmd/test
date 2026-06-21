@@ -1,9 +1,9 @@
 //! Serializable projection models for the edge policy JSON outputs.
 //!
 //! serde serializes struct fields in declaration order, so field order here
-//! reproduces the `[ordered]@{}` blocks from the retired
-//! `phase-05-edge-projection.ps1` and `phase-06-aws-waf-manifest.ps1`. Biome
-//! reformats whitespace afterwards but never reorders keys.
+//! reproduces the ordered projection/manifest blocks from the retired edge
+//! projection and AWS WAF manifest generator phases. Biome reformats whitespace
+//! afterwards but never reorders keys.
 
 use serde::Serialize;
 

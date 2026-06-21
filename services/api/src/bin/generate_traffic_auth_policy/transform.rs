@@ -1,8 +1,7 @@
 //! Pure string/number transforms shared across generator phases.
 //!
-//! These mirror the helper functions in the retired
-//! `scripts/ci/traffic-auth-policy-generator/shared.ps1` and
-//! `rust-edge-shared.ps1` so the generated output is byte-for-byte identical.
+//! These mirror the helper functions in the retired generator's shared and
+//! rust/edge helper modules so the generated output is byte-for-byte identical.
 
 /// Groups a non-negative integer into underscore-separated thousands.
 ///
