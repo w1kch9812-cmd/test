@@ -124,9 +124,9 @@ Observed on 2026-06-16:
   existing subtests, while their runner self-tests pass.
 - Verified:
   - `~/.local/bin/bazelisk test //:guardrails_fast --config=ci --verbose_failures`
-  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails.tests.ps1`
-  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.tests.ps1`
-  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.ps1`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails.tests`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.tests`
+  - `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits`
 
 - [x] **Step 3: Make CI call Bazel**
 
@@ -257,15 +257,15 @@ Observed on 2026-06-17:
 
 - Added `docs/architecture/verification-control-plane.v1.json` as the SSOT for forbidden direct
   verification commands and structured transition allowlist entries.
-- Added `scripts/ci/check-verification-control-plane.ps1` and tests to reject direct
+- Added `scripts/ci/check-verification-control-plane` and tests to reject direct
   verification commands such as `pnpm test` and `cargo clippy` unless explicitly allowlisted.
 - Added Bazel targets:
   `//tools/bazel:guardrail_verification_control_plane` and
   `//tools/bazel:guardrail_verification_control_plane_tests`.
 - Wired the guardrail into root guardrail suites, lefthook, and the Bazel fast graph CI job.
 - Verified:
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.tests.ps1`
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.ps1`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane.tests`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-verification-control-plane`
   - `bazelisk test //tools/bazel:guardrail_verification_control_plane //tools/bazel:guardrail_verification_control_plane_tests --config=ci --verbose_failures`
 
 ## Task 5: Dawneer Protected Bootstrap

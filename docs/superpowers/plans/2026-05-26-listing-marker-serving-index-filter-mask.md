@@ -17,7 +17,7 @@
 
 ## Contract Keywords
 
-This index intentionally keeps the architectural guardrail tokens that are checked by `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`:
+This index intentionally keeps the architectural guardrail tokens that are checked by `scripts/ci/check-pnu-anchor-pbf-marker-contract`:
 
 - `listing_marker_projection`
 - `listing_marker_filter_registry`

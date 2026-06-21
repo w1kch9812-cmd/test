@@ -9,14 +9,14 @@ Parent index: [Traffic/Auth Policy SSOT Implementation Plan](./2026-05-28-traffi
 
 - Modify: `.github/workflows/ci.yml`
 - Modify: `lefthook.yml`
-- Test: `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- Test: `scripts/ci/check-traffic-auth-policy-registry`
 
 - [x] **Step 1: Add CI workflow command**
 
 Add this command to the CI guardrail section:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 ```
 
 - [x] **Step 2: Add pre-push command**
@@ -28,7 +28,7 @@ Add the same command to `lefthook.yml` pre-push checks.
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 ```
 
 Expected:
@@ -41,10 +41,10 @@ traffic-auth-policy-registry-ok routes=6 service_policies=2
 
 **Files:**
 
-- Modify: `scripts/ci/generate-traffic-auth-policy.ps1`
-- Modify: `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- Modify: `scripts/ci/generate-traffic-auth-policy`
+- Modify: `scripts/ci/check-traffic-auth-policy-registry`
 - Create: `infrastructure/security/traffic-auth-edge-policy.generated.json`
-- Test: `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`
+- Test: `scripts/ci/check-traffic-auth-policy-registry.tests`
 
 - [x] **Step 1: Emit provider-neutral edge policy**
 
@@ -65,9 +65,9 @@ suite includes a negative case for a missing generated edge policy file.
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 ```
 
 Expected:
@@ -82,10 +82,10 @@ traffic-auth-policy-registry-ok routes=6 service_policies=2
 
 **Files:**
 
-- Modify: `scripts/ci/generate-traffic-auth-policy.ps1`
-- Modify: `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- Modify: `scripts/ci/generate-traffic-auth-policy`
+- Modify: `scripts/ci/check-traffic-auth-policy-registry`
 - Create: `infrastructure/security/aws-wafv2-edge-policy.generated.json`
-- Test: `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`
+- Test: `scripts/ci/check-traffic-auth-policy-registry.tests`
 
 > Deferred until production promotion. Do not execute as part of the current
 > Platform Core consumer integration gate.
@@ -116,8 +116,8 @@ identity-aware fallback markers against the registry and edge projection.
 
 - Create: `infrastructure/Pulumi.yaml`
 - Create: `infrastructure/index.ts`
-- Modify: `scripts/ci/check-traffic-auth-policy-registry.ps1`
-- Test: `scripts/ci/check-traffic-auth-policy-registry.tests.ps1`
+- Modify: `scripts/ci/check-traffic-auth-policy-registry`
+- Test: `scripts/ci/check-traffic-auth-policy-registry.tests`
 
 > Deferred until production promotion. Do not execute as part of the current
 > Platform Core consumer integration gate.
@@ -144,7 +144,7 @@ and required manifest members.
 
 - [ ] **Step 4: Run Pulumi preview**
 
-When this deferred workstream opens, `scripts/ci/check-pulumi-local-preview.ps1`
+When this deferred workstream opens, `scripts/ci/check-pulumi-local-preview`
 should log into a local file backend under `target/`, initialize a local preview
 stack, and run `pulumi preview` without real AWS credentials. The guardrail
 should fail on preview warnings as well as non-zero exits. Production admission
@@ -159,7 +159,7 @@ must pass `GONGZZANG_WAF_REGIONAL_RESOURCE_ARN` only for the preview process, so
 - Create: `infrastructure/package.json`
 - Create: `infrastructure/tsconfig.json`
 - Create: `infrastructure/Pulumi.local-preview.yaml`
-- Create: `scripts/ci/check-pulumi-local-preview.ps1`
+- Create: `scripts/ci/check-pulumi-local-preview`
 - Modify: `.github/workflows/ci.yml`
 
 > Deferred until production promotion. Do not execute as part of the current
@@ -184,5 +184,5 @@ workspace coverage guard.
 
 - [ ] **Step 4: Add CI local preview**
 
-Future CI should run `scripts/ci/check-pulumi-local-preview.ps1`, which performs
+Future CI should run `scripts/ci/check-pulumi-local-preview`, which performs
 a warning-free local file-backend preview for the generated WAFv2 WebACL.

@@ -92,7 +92,7 @@ the media object.
 - No raw Bronze body in Postgres JSONB as primary archive.
 - No direct guessing of Platform Core R2 keys.
 - No writes to shared root `bronze/` or `gold/` without owner namespace.
-- `scripts/ci/check-lakehouse-registry-integration.ps1` must pass before Gongzzang-owned lakehouse
+- `scripts/ci/check-lakehouse-registry-integration` must pass before Gongzzang-owned lakehouse
   artifact writers or media namespace changes are accepted.
 
 ## Implementation Order

@@ -8,7 +8,7 @@ Parent index: [Traffic/Auth Policy SSOT Implementation Plan](./2026-05-28-traffi
 **Files:**
 
 - Create in sibling repo: `../platform-core/docs/architecture/traffic-auth-policy-registry.v1.json`
-- Create in sibling repo: `../platform-core/scripts/ci/check-traffic-auth-policy-registry.ps1`
+- Create in sibling repo: `../platform-core/scripts/ci/check-traffic-auth-policy-registry`
 - Modify in sibling repo: `../platform-core/services/api/src/traffic.rs`
 - Modify in sibling repo: `../platform-core/services/api/src/routes/mod.rs`
 
@@ -35,7 +35,7 @@ The drift check must compare registry values to:
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root C:\Users\admin\Desktop\platform-core
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root C:\Users\admin\Desktop\platform-core
 ```
 
 Expected:
@@ -58,7 +58,7 @@ traffic-auth-policy-registry-ok
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 ```
 
 Expected:

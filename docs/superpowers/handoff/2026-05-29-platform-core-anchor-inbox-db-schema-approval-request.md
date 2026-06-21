@@ -112,11 +112,11 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 After approval and implementation, run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-migration-version-prefixes.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-migration-version-prefixes -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
 cargo test -p db --features integration --test platform_core_anchor_import_integration
 cargo test -p api platform_core_events
 cargo test -p api platform_core_anchor_import

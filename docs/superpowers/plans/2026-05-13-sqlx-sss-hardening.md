@@ -171,7 +171,7 @@ Expected: compile fails because SQLx detects the query/schema mismatch.
 **Files:**
 
 - Create: `.sqlx/query-*.json`
-- Create: `scripts/sqlx-prepare.ps1`
+- Create: `scripts/sqlx-prepare`
 - Optionally create: `scripts/sqlx-prepare.sh`
 
 - [ ] Install the CLI if missing:

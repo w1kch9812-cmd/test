@@ -34,9 +34,9 @@ This worker may own:
 Reserved files and areas for that worker:
 
 - `docs/architecture/verification-transition-ratchet.v1.json`
-- `scripts/ci/check-bazel-transition-ratchet.ps1`
+- `scripts/ci/check-bazel-transition-ratchet`
 - `scripts/ci/transition-ratchet-bazel/**`
-- `scripts/ci/check-bazel-transition-ratchet.tests.ps1`
+- `scripts/ci/check-bazel-transition-ratchet.tests`
 - `scripts/ci/check-bazel-transition-ratchet-tests/**`
 - Bazel guardrail target wiring in `BUILD.bazel` and `tools/bazel/**`
 - `docs/superpowers/plans/2026-06-18-bazel-transition-ratchet.md`

@@ -6,12 +6,12 @@ Parent index: [Platform Core Anchor Projection Import Implementation Plan](./202
 
 **Files:**
 - Create after approval: `migrations/30016_platform_core_event_inbox_anchor_import.sql`
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests`
 
 - [ ] **Step 1: Write the failing guardrail test**
 
-In `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1`, update the clean migration fixture for `migrations\30012_parcel_marker_anchor_projection.sql` so it contains:
+In `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests`, update the clean migration fixture for `migrations\30012_parcel_marker_anchor_projection.sql` so it contains:
 
 ```sql
 algorithm_version varchar(128) not null
@@ -59,14 +59,14 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 ```
 
-Expected: fail because `check-pnu-anchor-pbf-marker-contract.ps1` does not yet require migration `30015` or `algorithm_version varchar(128)`.
+Expected: fail because `check-pnu-anchor-pbf-marker-contract` does not yet require migration `30015` or `algorithm_version varchar(128)`.
 
 - [ ] **Step 3: Implement the guardrail requirement**
 
-In `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`, update the `migrations/30012_parcel_marker_anchor_projection.sql` tokens from:
+In `scripts/ci/check-pnu-anchor-pbf-marker-contract`, update the `migrations/30012_parcel_marker_anchor_projection.sql` tokens from:
 
 ```powershell
 "anchor_snapshot_id",
@@ -154,7 +154,7 @@ create index platform_core_event_inbox_anchor_snapshot_idx
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 ```
 
 Expected: `check-pnu-anchor-pbf-marker-contract-tests-ok`.

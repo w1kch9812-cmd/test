@@ -9,7 +9,7 @@ boundary gates now enforce Platform Core physical extraction for Catalog/ETL/raw
 
 Gongzzang's Platform Core Catalog API consumer surface is pinned in
 `docs/architecture/platform-core-catalog-api-contract.v1.pin.json`.
-`scripts/ci/check-platform-core-catalog-api-contract.ps1` verifies the local
+`scripts/ci/check-platform-core-catalog-api-contract` verifies the local
 parcel/building clients and, when present, the sibling Platform Core OpenAPI.
 `services/data-pipeline` and `services/scraper-py` are treated as Platform Core-owned
 Catalog ETL paths and must remain absent from Gongzzang.
@@ -66,7 +66,7 @@ under `allowed_legacy_schema_tokens`.
 | `pipeline_run` | `migrations/30015_drop_platform_core_legacy_schema.sql` | approved Gongzzang DB cleanup migration |
 | `pipeline_schedule` | `migrations/30015_drop_platform_core_legacy_schema.sql` | approved Gongzzang DB cleanup migration |
 
-Any occurrence outside this ledger fails `scripts/ci/check-platform-core-boundary.ps1`.
+Any occurrence outside this ledger fails `scripts/ci/check-platform-core-boundary`.
 The same boundary gate also verifies `tests/migrations/test_v001_full.sh`: dropped
 Platform Core legacy tables must not remain in `EXPECTED_TABLES`, and must be
 listed in `FORBIDDEN_TABLES` so the DB migration smoke proves they are absent.
@@ -77,7 +77,7 @@ keeps running `bash tests/migrations/test_v001_full.sh` against
 ## Canonical Catalog Table Guard
 
 `docs/architecture/platform-core-boundary.v1.json` records
-`forbidden_canonical_catalog_tables`. `scripts/ci/check-platform-core-boundary.ps1`
+`forbidden_canonical_catalog_tables`. `scripts/ci/check-platform-core-boundary`
 scans `apps/`, `services/`, `crates/`, `packages/`, and `migrations/` for direct SQL
 usage patterns including `create table`, `alter table`, `references`, `from`, `join`,
 `insert into`, `update`, and `delete from`.
@@ -123,12 +123,12 @@ excluded port range. The local `.env` was updated to
 
 ## Verification Already Run
 
-- `scripts/ci/check-platform-core-boundary.tests.ps1`
-- `scripts/ci/check-platform-core-boundary.ps1 -Root .`
-- `scripts/ci/check-platform-core-catalog-api-contract.tests.ps1`
-- `scripts/ci/check-platform-core-catalog-api-contract.ps1 -Root .`
-- `scripts/ci/check-platform-core-dependency-boundary.tests.ps1`
-- `scripts/ci/check-platform-core-dependency-boundary.ps1 -Root .`
+- `scripts/ci/check-platform-core-boundary.tests`
+- `scripts/ci/check-platform-core-boundary -Root .`
+- `scripts/ci/check-platform-core-catalog-api-contract.tests`
+- `scripts/ci/check-platform-core-catalog-api-contract -Root .`
+- `scripts/ci/check-platform-core-dependency-boundary.tests`
+- `scripts/ci/check-platform-core-dependency-boundary -Root .`
 - Disposable PostGIS migration smoke via `cargo sqlx migrate run --source migrations`
   against `postgis/postgis:17-3.5`: `tables=20`, `legacy_tables=0`,
   `postgis_extensions=1`

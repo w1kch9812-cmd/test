@@ -19,7 +19,7 @@ The 2026-05-28 DB approval handoff only approved
 durable inbox/read-model import migration in this plan. Because `30015` is
 already used, this plan reserves the next forward migration number,
 `30016_platform_core_event_inbox_anchor_import.sql`, after explicit approval.
-`scripts/ci/check-migration-version-prefixes.ps1` now guards the actual
+`scripts/ci/check-migration-version-prefixes` now guards the actual
 `migrations/` directory against duplicate numeric prefixes before this plan can
 land a new migration file.
 
@@ -55,13 +55,13 @@ No new external package version is required. If implementation uses `sha2` from 
   - Keeps public validation and cache invalidation, forwards supported events to Rust internal API.
 - Test: `apps/web/tests/unit/platform-core-events.test.ts`
   - Proves forwarding success, upstream failure retry behavior, and duplicate ack pass-through.
-- Modify: `scripts/ci/check-platform-core-boundary.ps1`
+- Modify: `scripts/ci/check-platform-core-boundary`
   - Requires the durable inbox migration and Rust internal route.
-- Modify: `scripts/ci/check-platform-core-boundary.tests.ps1`
+- Modify: `scripts/ci/check-platform-core-boundary.tests`
   - Adds fixtures for the required inbox/importer paths.
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract`
   - Requires `algorithm_version varchar(128)` and the anchor import integration test.
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests`
   - Updates fixture expectations.
 
 ## Plan Parts

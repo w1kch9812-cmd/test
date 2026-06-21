@@ -45,7 +45,7 @@ For this implementation slice, the concrete deliverables are:
 | Public same-origin listing PBF proxy path | `apps/web/proxy.ts`, `platform-core-proxy.test.ts` | Covered |
 | Listing panel ID pattern correctness | `LISTING_ID_PATTERN`, panel codec tests rejecting UUID listing IDs | Covered |
 | Full migration chain includes anchor projection | `tests/migrations/test_v001_full.sh` | Covered |
-| Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` checks 29 concrete files and forbidden regressions; `906b7bd` realigned the DB evidence path to `crates/db/src/listing/marker_tile.rs` after the repository split | Covered |
+| Guardrail covers actual objective | `scripts/ci/check-pnu-anchor-pbf-marker-contract` checks 29 concrete files and forbidden regressions; `906b7bd` realigned the DB evidence path to `crates/db/src/listing/marker_tile.rs` after the repository split | Covered |
 | Rust TLS supply-chain advisories | `f953380` moves the workspace to Rust `1.91.1`, pins the matched AWS SDK line, uses `default-https-client`, and removes `rustls-webpki 0.101.x` from the dependency graph | Covered locally |
 | Rust/SQLx/web local verification gates | Fresh `cargo deny`, `cargo check`, `cargo clippy -D warnings`, `cargo test`, `cargo sqlx prepare --workspace --check`, `pnpm lint`, `pnpm test`, and `pnpm lefthook run pre-push` evidence | Covered locally |
 | Workspace TypeScript typecheck coverage | `a4c07ed` adds `scripts/ci/check-workspace-typecheck-coverage.{py,sh,tests.sh}`, adds `typecheck` scripts to `@gongzzang/api-types` and `@gongzzang/ui`, and changes root/CI/pre-push typecheck to verify all 3 workspace packages | Covered locally |
@@ -97,8 +97,8 @@ pnpm --filter @gongzzang/web test -- tests/unit/api-proxy-route.test.ts tests/un
 pnpm --filter @gongzzang/web typecheck
 pnpm --filter @gongzzang/web build
 pnpm markdownlint-cli2 AGENTS.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/superpowers/plans/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles.md docs/superpowers/handoff/2026-05-22-listing-pbf-review-gate.md docs/superpowers/handoff/2026-05-22-active-goal-completion-audit.md docs/superpowers/next-actions.md
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 git diff --check
 ```
 
@@ -120,10 +120,10 @@ pnpm test
 pnpm lefthook run pre-push
 git diff --check
 
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
 # pnu-anchor-pbf-marker-contract-ok files=29
 
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 # check-pnu-anchor-pbf-marker-contract-tests-ok
 
 bash scripts/lefthook/check-no-fake-pass.tests.sh
@@ -383,10 +383,10 @@ platform-core guardrail now also requires the Gongzzang preview CORS origin and 
 tests in `services/api/src/routes/mod.rs` (`required_tokens=136`). Fresh guardrail evidence:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root C:\Users\admin\Desktop\platform-core
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract -Root C:\Users\admin\Desktop\platform-core
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 ```
 
 Fresh migration smoke:
@@ -465,20 +465,20 @@ C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
 C:\Users\admin\.cargo\bin\cargo.exe check -p catalog-infra
 C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test marker_tile_reads
 C:\Users\admin\.cargo\bin\cargo.exe test -p catalog-infra --test parcel_marker_anchor_rebuild
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-file-line-limits -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-spatial-srid.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness -Root .
 ```
 
 After committing the Gongzzang implementation and map-runtime research evidence, both local
 repositories are source-control clean and the strict local prelaunch gate reports:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\run-sss-guardrails -Root .
 # sss-guardrails-ok checks=60 supplemental_checks=2
 
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-prelaunch-readiness -Root .
 # platform-core-prelaunch-readiness-ok status=ready checks=18 failed=0 blockers=0
 
 git -C C:\Users\admin\Desktop\platform-core status --short

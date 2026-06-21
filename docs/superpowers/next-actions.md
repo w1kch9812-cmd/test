@@ -68,11 +68,10 @@ admission, or perf/staging launch-capacity evidence from this section. Those
 belong to the deferred production-promotion queue below.
 
 1. Keep Platform Core boundary gates green after every Platform Core integration
-   change:
-   - `scripts/ci/check-platform-core-boundary.ps1`
-   - `scripts/ci/check-platform-core-dependency-boundary.ps1`
-   - `scripts/ci/check-platform-core-catalog-api-contract.ps1`
-   - `scripts/ci/check-platform-core-event-receiver-contract.ps1`
+   change. The boundary, dependency boundary, catalog API consumer contract, and
+   event-receiver contract are enforced by `scripts/lefthook/catalog-m1-boundary.sh`
+   together with the contracts in `docs/architecture/platform-core-boundary.v1.json`
+   and `docs/architecture/platform-core-catalog-api-contract.v1.pin.json`.
 
 2. Keep browser-visible API work classified in the traffic/auth registry before
    implementation. Anonymous public routes may expose only minimized derived

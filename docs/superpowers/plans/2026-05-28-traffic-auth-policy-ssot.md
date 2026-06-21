@@ -15,12 +15,12 @@
 The registry is now consumed by runtime code and checked by CI/pre-push:
 
 - `docs/architecture/traffic-auth-policy-registry.v1.json`
-- `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- `scripts/ci/check-traffic-auth-policy-registry`
 
 Fresh local evidence:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 # traffic-auth-policy-registry-ok routes=6 service_policies=2
 ```
 
@@ -78,7 +78,7 @@ build from the approved city map.
 
 - `docs/architecture/traffic-auth-policy-registry.v1.json`
   - Source registry for public map route policies and service-call policies.
-- `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- `scripts/ci/check-traffic-auth-policy-registry`
   - Drift check proving current proxy/API constants match the registry.
 - `apps/web/proxy.ts`
   - Current Next proxy enforcement for anonymous public map route rate limits.
@@ -97,7 +97,7 @@ build from the approved city map.
 - `infrastructure/security/traffic-auth-edge-policy.generated.json`
   - Generated provider-neutral edge/ingress projection for CloudFront, AWS
     WAFv2, ALB, or service mesh IaC consumers.
-- `scripts/ci/generate-traffic-auth-policy.ps1`
+- `scripts/ci/generate-traffic-auth-policy`
   - Generator for TypeScript, Rust, and provider-neutral edge policy artifacts.
 - `.github/workflows/ci.yml`
   - CI hook for registry drift checks.

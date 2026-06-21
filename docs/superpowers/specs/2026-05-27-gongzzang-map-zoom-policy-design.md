@@ -42,4 +42,4 @@ The implementation is covered by:
 - `apps/web/tests/unit/map/marker-tile-contract.test.ts`
 - `apps/web/tests/unit/map/marker-tile-style.test.ts`
 - `services/api/src/routes/listing_marker_tiles.rs`
-- `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`
+- `scripts/ci/check-pnu-anchor-pbf-marker-contract`

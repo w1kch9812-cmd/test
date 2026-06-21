@@ -7,7 +7,7 @@ Parent index: [Traffic/Auth Policy SSOT Implementation Plan](./2026-05-28-traffi
 **Files:**
 
 - Create: `docs/architecture/traffic-auth-policy-registry.v1.json`
-- Create: `scripts/ci/check-traffic-auth-policy-registry.ps1`
+- Create: `scripts/ci/check-traffic-auth-policy-registry`
 - Verify: `apps/web/proxy.ts`
 - Verify: `services/api/src/listing_marker_serving.rs`
 
@@ -51,7 +51,7 @@ The registry must include:
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-traffic-auth-policy-registry -Root .
 ```
 
 Expected:
@@ -72,14 +72,14 @@ The script must compare:
 
 **Files:**
 
-- Create: `scripts/ci/generate-traffic-auth-policy.ps1`
+- Create: `scripts/ci/generate-traffic-auth-policy`
 - Create: `apps/web/lib/policies/traffic-auth-policy.generated.ts`
 - Modify: `apps/web/proxy.ts`
 - Test: `apps/web/tests/unit/platform-core-proxy.test.ts`
 
 - [x] **Step 1: Add a generator that emits TypeScript policy**
 
-Create `scripts/ci/generate-traffic-auth-policy.ps1` with a generator that reads `docs/architecture/traffic-auth-policy-registry.v1.json` and writes `apps/web/lib/policies/traffic-auth-policy.generated.ts`.
+Create `scripts/ci/generate-traffic-auth-policy` with a generator that reads `docs/architecture/traffic-auth-policy-registry.v1.json` and writes `apps/web/lib/policies/traffic-auth-policy.generated.ts`.
 
 The generated TypeScript shape must be:
 
@@ -123,7 +123,7 @@ export const GENERATED_PUBLIC_MAP_ROUTE_POLICIES: readonly GeneratedPublicMapRou
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\generate-traffic-auth-policy -Root .
 ```
 
 Expected:
@@ -181,7 +181,7 @@ Tests  7 passed
 
 **Files:**
 
-- Modify: `scripts/ci/generate-traffic-auth-policy.ps1`
+- Modify: `scripts/ci/generate-traffic-auth-policy`
 - Create: `services/api/src/listing_marker_policy.rs`
 - Modify: `services/api/src/main.rs`
 - Modify: `services/api/src/listing_marker_serving.rs`

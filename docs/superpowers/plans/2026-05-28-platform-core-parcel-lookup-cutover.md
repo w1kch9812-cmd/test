@@ -14,8 +14,8 @@ the `parcel-lookup` crate now keeps only the Gongzzang-facing port. Local
 verification passed for `cargo test -p parcel-lookup`,
 `cargo test -p api platform_core_parcel_lookup`,
 `SQLX_OFFLINE=true cargo check -p api`,
-`scripts/ci/check-platform-core-catalog-api-contract.ps1`,
-and `scripts/ci/check-platform-core-dependency-boundary.ps1`. The catalog
+`scripts/ci/check-platform-core-catalog-api-contract`,
+and `scripts/ci/check-platform-core-dependency-boundary`. The catalog
 contract checker reported `source_checked=True` with the sibling
 `platform-core` repo present.
 
@@ -91,8 +91,8 @@ Run: `cargo test -p parcel-lookup` and `SQLX_OFFLINE=true cargo check -p api`.
 
 **Files:**
 - Modify: `docs/architecture/platform-core-boundary.v1.json`
-- Modify: `scripts/ci/check-platform-core-dependency-boundary.ps1`
-- Modify: `scripts/ci/check-platform-core-dependency-boundary.tests.ps1`
+- Modify: `scripts/ci/check-platform-core-dependency-boundary`
+- Modify: `scripts/ci/check-platform-core-dependency-boundary.tests`
 
 - [ ] **Step 1: Write failing boundary tests**
 
@@ -100,7 +100,7 @@ Add cases where `crates/parcel-lookup/Cargo.toml` depends on `parcel-domain` or 
 
 - [ ] **Step 2: Run boundary tests**
 
-Run: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.tests.ps1`
+Run: `powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.tests`
 Expected: FAIL until the checker forbids those dependencies.
 
 - [ ] **Step 3: Remove transitional allowances**

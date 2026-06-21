@@ -24,10 +24,10 @@ Authoritative evidence gathered in this workspace:
 | Domain contracts | `cargo test -p listing-domain` passed. |
 | API routes and metrics | `cargo test -p api listing_marker` and `cargo test -p api` passed. |
 | Frontend composition | `pnpm --filter @gongzzang/web test`, `pnpm --filter @gongzzang/web typecheck`, and Playwright E2E passed. |
-| SSOT route policy | `check-traffic-auth-policy-registry.ps1`, `check-traffic-auth-policy-registry.tests.ps1`, and `check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge` passed. |
-| PNU marker guardrail | `check-pnu-anchor-pbf-marker-contract.ps1` and `.tests.ps1` passed. |
-| Platform boundary | `check-platform-core-boundary.ps1`, `check-platform-core-dependency-boundary.ps1`, `check-platform-integration-policy.ps1`, and `.tests.ps1` passed. |
-| Load-test asset gate | `check-load-test-assets.ps1` and `.tests.ps1` passed, and CI now runs both checks. |
+| SSOT route policy | `check-traffic-auth-policy-registry`, `check-traffic-auth-policy-registry.tests`, and `check-traffic-auth-policy-registry -IncludeProductionEdge` passed. |
+| PNU marker guardrail | `check-pnu-anchor-pbf-marker-contract` and `.tests` passed. |
+| Platform boundary | `check-platform-core-boundary`, `check-platform-core-dependency-boundary`, `check-platform-integration-policy`, and `.tests` passed. |
+| Load-test asset gate | `check-load-test-assets` and `.tests` passed, and CI now runs both checks. |
 | Repository hygiene | `cargo fmt -- --check`, `pnpm lint`, and `git diff --check` passed. |
 
 Important remaining distinction:
@@ -66,7 +66,7 @@ Modify:
 - `apps/web/components/listings/listing-map.tsx` - pass overlay state into the map runtime.
 - `crates/db/tests/listing_marker_tile_integration.rs` and `crates/db/tests/listing_marker_tile_integration/filter_index.rs` - add integration coverage.
 - `services/api/src/routes/listing_marker_tiles.rs` - mirror route parsing tests for overlay routes.
-- `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1` - block regressions.
+- `scripts/ci/check-pnu-anchor-pbf-marker-contract` - block regressions.
 
 Do not modify:
 

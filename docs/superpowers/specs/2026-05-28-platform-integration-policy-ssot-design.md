@@ -34,7 +34,7 @@ supply-chain gates are implemented in different places with no single inventory.
 
 ## Enforcement
 
-`scripts/ci/check-platform-integration-policy.ps1` validates:
+`scripts/ci/check-platform-integration-policy` validates:
 
 - policy component presence and schema versions;
 - traffic-auth registry and Platform Core boundary registry are referenced;

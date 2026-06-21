@@ -20,7 +20,7 @@ evidence pipeline, not production launch capacity. A real perf/staging
 operator run remains required before any launch sizing claim.
 
 **Admission hardening note, 2026-05-29:** Production deploy admission now
-requires `scripts/ci/verify-load-test-capacity-evidence.ps1` against a
+requires `scripts/ci/verify-load-test-capacity-evidence` against a
 downloaded `load-test-capacity-evidence` artifact. The verifier accepts only
 healthy `api-read-mix`, `map-marker-mix`, and `platform-core-events` evidence
 from `perf.gongzzang.internal` or `staging.gongzzang.internal`; local/ci smoke,
@@ -39,27 +39,27 @@ wrong-host, and production-target evidence are rejected.
 - Create `tests/load/scenarios/map-marker-mix.js`: marker tile/count/filter/mask mix.
 - Create `tests/load/scenarios/capacity-stress.js`: staged breakpoint discovery.
 - Create `tests/load/scenarios/platform-core-events.js`: signed webhook burst and duplicate replay mix.
-- Create `scripts/load/run-k6.ps1`: controlled k6 launcher that writes evidence paths.
-- Create `scripts/load/normalize-k6-summary.ps1`: converts k6 JSON output into required evidence files.
-- Create `scripts/ci/check-load-test-assets.ps1`: static guardrail for required assets and unsafe targets.
-- Create `scripts/ci/check-load-test-assets.tests.ps1`: guardrail tests.
+- Create `scripts/load/run-k6`: controlled k6 launcher that writes evidence paths.
+- Create `scripts/load/normalize-k6-summary`: converts k6 JSON output into required evidence files.
+- Create `scripts/ci/check-load-test-assets`: static guardrail for required assets and unsafe targets.
+- Create `scripts/ci/check-load-test-assets.tests`: guardrail tests.
 - Create `.github/workflows/load-test-capacity.yml`: manual self-hosted workflow for controlled runs.
 
 ## Task 1: Guardrail First
 
 **Files:**
-- Create: `scripts/ci/check-load-test-assets.tests.ps1`
-- Create: `scripts/ci/check-load-test-assets.ps1`
+- Create: `scripts/ci/check-load-test-assets.tests`
+- Create: `scripts/ci/check-load-test-assets`
 
 - [ ] **Step 1: Write the failing guardrail tests**
 
-Create `scripts/ci/check-load-test-assets.tests.ps1`:
+Create `scripts/ci/check-load-test-assets.tests`:
 
 ```powershell
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$ScriptPath = Join-Path $PSScriptRoot "check-load-test-assets.ps1"
+$ScriptPath = Join-Path $PSScriptRoot "check-load-test-assets"
 $RepoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $TempRoot = Join-Path (Join-Path $RepoRoot "target\check-load-test-assets-tests") ([Guid]::NewGuid().ToString("N"))
 $PowerShellExe = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh" } else { "powershell.exe" }
@@ -98,8 +98,8 @@ function Write-MinimalLoadAssets([string] $Root, [switch] $UnsafeProductionTarge
         "tests\load\scenarios\map-marker-mix.js",
         "tests\load\scenarios\capacity-stress.js",
         "tests\load\scenarios\platform-core-events.js",
-        "scripts\load\run-k6.ps1",
-        "scripts\load\normalize-k6-summary.ps1",
+        "scripts\load\run-k6",
+        "scripts\load\normalize-k6-summary",
         ".github\workflows\load-test-capacity.yml"
     )) {
         Write-File $Root $file "asset"
@@ -129,13 +129,13 @@ try {
 
 - [ ] **Step 2: Run the tests and confirm they fail because the checker is missing**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests.ps1`
+Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests`
 
-Expected: non-zero exit mentioning `check-load-test-assets.ps1` cannot be found.
+Expected: non-zero exit mentioning `check-load-test-assets` cannot be found.
 
 - [ ] **Step 3: Implement the checker**
 
-Create `scripts/ci/check-load-test-assets.ps1`:
+Create `scripts/ci/check-load-test-assets`:
 
 ```powershell
 param([string] $Root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path)
@@ -162,8 +162,8 @@ $requiredFiles = @(
     "tests/load/scenarios/map-marker-mix.js",
     "tests/load/scenarios/capacity-stress.js",
     "tests/load/scenarios/platform-core-events.js",
-    "scripts/load/run-k6.ps1",
-    "scripts/load/normalize-k6-summary.ps1",
+    "scripts/load/run-k6",
+    "scripts/load/normalize-k6-summary",
     ".github/workflows/load-test-capacity.yml"
 )
 $requiredFiles | ForEach-Object { Assert-File $_ }
@@ -183,7 +183,7 @@ Write-Output "check-load-test-assets-ok scenarios=$(@($registry.scenarios).Count
 
 - [ ] **Step 4: Run the guardrail tests and confirm they pass**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests.ps1`
+Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests`
 
 Expected: `check-load-test-assets-tests-ok`.
 
@@ -192,7 +192,7 @@ Expected: `check-load-test-assets-tests-ok`.
 Run:
 
 ```powershell
-git add scripts/ci/check-load-test-assets.ps1 scripts/ci/check-load-test-assets.tests.ps1
+git add scripts/ci/check-load-test-assets scripts/ci/check-load-test-assets.tests
 git commit -m "test: add load-test asset guardrail"
 ```
 
@@ -225,12 +225,12 @@ Create `tests/load/README.md`:
 These k6 scenarios are operator tooling for perf/staging capacity discovery.
 They are not imported by `apps/`, `services/`, `crates/`, or `packages/`.
 
-Run through `scripts/load/run-k6.ps1` so every run writes evidence.
+Run through `scripts/load/run-k6` so every run writes evidence.
 
 Example:
 
 ```powershell
-./scripts/load/run-k6.ps1 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke
+./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke
 ```
 ```
 
@@ -261,7 +261,7 @@ Create `tests/load/scenarios.v1.json` with:
 
 - [ ] **Step 4: Run the asset checker**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.ps1`
+Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets`
 
 Expected: fails until Task 3 and Task 4 create the referenced script files.
 
@@ -339,7 +339,7 @@ export function safePostJson(url, body, tags, headers = {}) {
 
 - [ ] **Step 3: Run static checker**
 
-Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.ps1`
+Run: `pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets`
 
 Expected: still fails until scenario files exist.
 
@@ -383,16 +383,16 @@ Expected: each command exits 0 and prints scenario options.
 ## Task 5: Evidence Wrappers
 
 **Files:**
-- Create: `scripts/load/run-k6.ps1`
-- Create: `scripts/load/normalize-k6-summary.ps1`
+- Create: `scripts/load/run-k6`
+- Create: `scripts/load/normalize-k6-summary`
 
 - [ ] **Step 1: Create k6 launcher**
 
-Create `scripts/load/run-k6.ps1` with parameters `Scenario`, `TargetBaseUrl`, `Profile`, `Environment`, `OutRoot`, and `AllowStress`. Resolve the scenario from `tests/load/scenarios.v1.json`, reject production targets, create `target/audit/load-tests/YYYY-MM-DD/<environment>/<scenario>/<timestamp>`, run `k6 run --summary-export k6-summary.json`, and write `run.json`, `spec.json`, and `thresholds.json`.
+Create `scripts/load/run-k6` with parameters `Scenario`, `TargetBaseUrl`, `Profile`, `Environment`, `OutRoot`, and `AllowStress`. Resolve the scenario from `tests/load/scenarios.v1.json`, reject production targets, create `target/audit/load-tests/YYYY-MM-DD/<environment>/<scenario>/<timestamp>`, run `k6 run --summary-export k6-summary.json`, and write `run.json`, `spec.json`, and `thresholds.json`.
 
 - [ ] **Step 2: Create summary normalizer**
 
-Create `scripts/load/normalize-k6-summary.ps1` to read `k6-summary.json` and write:
+Create `scripts/load/normalize-k6-summary` to read `k6-summary.json` and write:
 
 ```text
 bottleneck.md
@@ -407,7 +407,7 @@ The first version should classify results as `healthy`, `latency breakpoint`, or
 Run:
 
 ```powershell
-./scripts/load/run-k6.ps1 -Scenario api-read-mix -TargetBaseUrl http://127.0.0.1:3000 -Profile smoke
+./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl http://127.0.0.1:3000 -Profile smoke
 ```
 
 Expected: if the target is unavailable, k6 records connection failures and evidence files are still written. If the target is available, thresholds decide pass/fail.
@@ -429,7 +429,7 @@ Modify `.github/workflows/ci.yml` lint-format job after Platform Integration pol
 ```yaml
       - name: Load-test asset guardrail
         shell: pwsh
-        run: ./scripts/ci/check-load-test-assets.ps1
+        run: ./scripts/ci/check-load-test-assets
 ```
 
 - [ ] **Step 3: Run local guardrail verification**
@@ -437,8 +437,8 @@ Modify `.github/workflows/ci.yml` lint-format job after Platform Integration pol
 Run:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets.tests
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-load-test-assets
 pnpm exec markdownlint-cli2 "docs/testing/load.md" "tests/load/README.md"
 ```
 
@@ -449,7 +449,7 @@ Expected: tests print `check-load-test-assets-tests-ok`, checker prints `check-l
 Run:
 
 ```powershell
-git add docs/testing/load.md tests/load scripts/load scripts/ci/check-load-test-assets.ps1 scripts/ci/check-load-test-assets.tests.ps1 .github/workflows/load-test-capacity.yml .github/workflows/ci.yml
+git add docs/testing/load.md tests/load scripts/load scripts/ci/check-load-test-assets scripts/ci/check-load-test-assets.tests .github/workflows/load-test-capacity.yml .github/workflows/ci.yml
 git commit -m "feat: add enterprise load-test capacity harness"
 ```
 
@@ -464,7 +464,7 @@ git commit -m "feat: add enterprise load-test capacity harness"
 Run:
 
 ```powershell
-./scripts/load/run-k6.ps1 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke -Environment perf
+./scripts/load/run-k6 -Scenario api-read-mix -TargetBaseUrl https://perf.gongzzang.internal -Profile smoke -Environment perf
 ```
 
 Expected: evidence directory contains `run.json`, `spec.json`, `thresholds.json`, `k6-summary.json`, `bottleneck.md`, `recommendation.md`, and `baseline-comparison.md`.

@@ -9,8 +9,8 @@ Parent index: [Gongzzang Marker Data Plane SSS Implementation Plan](./2026-05-31
 
 - Modify: `docs/architecture/traffic-auth-policy-registry.v1.json`
 - Modify: `docs/architecture/platform-integration/route-exposure-policy.v1.json`
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`
-- Test: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract`
+- Test: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests`
 
 - [ ] **Step 1: Add route policies**
 
@@ -61,7 +61,7 @@ The guardrail must reject:
 Run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
+powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
 ```
 
 Expected: PASS.
@@ -126,7 +126,7 @@ Expected: PASS. If no Playwright marker smoke exists, add a minimal smoke before
 **Files:**
 
 - Modify: `docs/testing/load.md`
-- Modify: `scripts/load/run-k6.ps1`
+- Modify: `scripts/load/run-k6`
 
 - [ ] **Step 1: Run backend tests**
 
@@ -145,9 +145,9 @@ Expected: PASS.
 Run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary.ps1
-powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary.ps1
+powershell -ExecutionPolicy Bypass -File scripts/ci/check-pnu-anchor-pbf-marker-contract
+powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-boundary
+powershell -ExecutionPolicy Bypass -File scripts/ci/check-platform-core-dependency-boundary
 ```
 
 Expected: PASS.

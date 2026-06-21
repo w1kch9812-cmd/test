@@ -22,9 +22,9 @@
   - Declares inbound Platform Core webhook signature requirements.
 - Create: `docs/architecture/platform-integration/supply-chain-policy.v1.json`
   - Declares npm/Rust/secret scanning policy gates.
-- Create: `scripts/ci/check-platform-integration-policy.ps1`
+- Create: `scripts/ci/check-platform-integration-policy`
   - Validates policy inventory and runtime/CI drift.
-- Create: `scripts/ci/check-platform-integration-policy.tests.ps1`
+- Create: `scripts/ci/check-platform-integration-policy.tests`
   - Proves the guardrail fails for missing supply-chain or wiring requirements.
 - Modify: `.github/workflows/ci.yml`
   - Runs the platform integration guardrail.
@@ -41,9 +41,9 @@
 
 ## Task 2: Add Drift Checker
 
-- [x] Add `scripts/ci/check-platform-integration-policy.ps1`.
+- [x] Add `scripts/ci/check-platform-integration-policy`.
 - [x] Check policy schema versions, component inventory, service auth, webhook signature enforcement, supply-chain gates, and CI/pre-push wiring.
-- [x] Add `scripts/ci/check-platform-integration-policy.tests.ps1` with success and failure fixtures.
+- [x] Add `scripts/ci/check-platform-integration-policy.tests` with success and failure fixtures.
 
 ## Task 3: Wire Enforcement
 
@@ -53,8 +53,8 @@
 
 ## Task 4: Verify
 
-- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.tests.ps1`.
-- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.ps1 -Root .`.
+- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy.tests`.
+- [x] Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/ci/check-platform-integration-policy -Root .`.
 - [x] Run the existing traffic-auth, Platform Core boundary, webhook, catalog API, and dependency guardrails.
 - [x] Run `pnpm exec biome check` on touched JSON/TS files.
 - [x] Run `git diff --check` on touched files.

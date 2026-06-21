@@ -209,7 +209,7 @@ Expected: all tests pass, except live manifest tests remain skipped unless `PLAT
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
 ```
 
 Expected:

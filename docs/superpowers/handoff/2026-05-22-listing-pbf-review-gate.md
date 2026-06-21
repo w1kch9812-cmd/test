@@ -63,13 +63,13 @@ Fresh verification commands that have passed for this gate:
 
 ```powershell
 pnpm markdownlint-cli2 docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
-git diff --check -- docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md crates/domain/core/shared-kernel/src/geometry.rs crates/db/tests/listing_integration.rs scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1 scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
+git diff --check -- docs/superpowers/roadmap.md docs/superpowers/next-actions.md docs/superpowers/README.md docs/superpowers/specs/2026-05-22-gongzzang-owned-listing-pbf-marker-tiles-design.md docs/adr/0037-pnu-anchor-pbf-marker-tiles.md crates/domain/core/shared-kernel/src/geometry.rs crates/db/tests/listing_integration.rs scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
 pnpm markdownlint-cli2 C:/Users/admin/Desktop/platform-core/AGENTS.md C:/Users/admin/Desktop/platform-core/docs/superpowers/README.md C:/Users/admin/Desktop/platform-core/docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md
-git -C C:\Users\admin\Desktop\platform-core diff --check -- AGENTS.md docs/superpowers/README.md docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1 scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root C:\Users\admin\Desktop\platform-core
-powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
+git -C C:\Users\admin\Desktop\platform-core diff --check -- AGENTS.md docs/superpowers/README.md docs/adr/0008-pnu-anchor-pbf-marker-tile-contract.md scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract -Root C:\Users\admin\Desktop\platform-core
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\admin\Desktop\platform-core\scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
 C:\Users\admin\.cargo\bin\cargo.exe test -p platform-core-api
 C:\Users\admin\.cargo\bin\cargo.exe fmt --check
 C:\Users\admin\.cargo\bin\cargo.exe check -p platform-core-api

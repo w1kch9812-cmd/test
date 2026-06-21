@@ -4,7 +4,7 @@
 
 **Goal:** Move Platform Core integration from registry-level guardrails toward an enterprise control plane with explicit service-call authorization, exception governance, replay-safe events, provenance, and deploy gates.
 
-**Architecture:** Keep `docs/architecture/platform-integration/` as the folder-shaped SSOT. Add small policy files for each control-plane concern and make `check-platform-integration-policy.ps1` reject drift, missing ownership, and expired exceptions before runtime work is treated as production-ready.
+**Architecture:** Keep `docs/architecture/platform-integration/` as the folder-shaped SSOT. Add small policy files for each control-plane concern and make `check-platform-integration-policy` reject drift, missing ownership, and expired exceptions before runtime work is treated as production-ready.
 
 **Tech Stack:** JSON policy SSOT, PowerShell guardrails, Next.js webhook receiver, Rust Platform Core clients, GitHub Actions, lefthook, gitleaks, cargo-deny, pnpm audit, future SBOM/attestation/deploy admission.
 
@@ -18,9 +18,9 @@
   - Explicit allow-list for service-to-service and cross-repo calls.
 - Create: `docs/architecture/platform-integration/exception-policy.v1.json`
   - Defines owner/reason/expiry/approval requirements for exceptions.
-- Modify: `scripts/ci/check-platform-integration-policy.ps1`
+- Modify: `scripts/ci/check-platform-integration-policy`
   - Enforces call matrix and exception governance.
-- Modify: `scripts/ci/check-platform-integration-policy.tests.ps1`
+- Modify: `scripts/ci/check-platform-integration-policy.tests`
   - Proves expired exceptions and missing gates fail.
 
 ## Phase 1: Policy Control Plane

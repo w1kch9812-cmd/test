@@ -103,12 +103,12 @@ Expected: all receiver tests pass.
 
 **Files:**
 - Modify: `docs/architecture/platform-core-boundary.v1.json`
-- Modify: `scripts/ci/check-platform-core-boundary.ps1`
-- Modify: `scripts/ci/check-platform-core-boundary.tests.ps1`
+- Modify: `scripts/ci/check-platform-core-boundary`
+- Modify: `scripts/ci/check-platform-core-boundary.tests`
 
 - [ ] **Step 1: Add failing boundary test fixtures**
 
-In `scripts/ci/check-platform-core-boundary.tests.ps1`, add required ownership entries for:
+In `scripts/ci/check-platform-core-boundary.tests`, add required ownership entries for:
 
 ```json
 {"path":"migrations/30016_platform_core_event_inbox_anchor_import.sql","owner":"gongzzang","classification":"platform_core_event_inbox"},
@@ -122,22 +122,22 @@ In `scripts/ci/check-platform-core-boundary.tests.ps1`, add required ownership e
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
 ```
 
 Expected: fail because checker does not require the new entries.
 
 - [ ] **Step 3: Update boundary SSOT and checker**
 
-Add the same entries to `docs/architecture/platform-core-boundary.v1.json` and `$RequiredPathOwnership` in `scripts/ci/check-platform-core-boundary.ps1`.
+Add the same entries to `docs/architecture/platform-core-boundary.v1.json` and `$RequiredPathOwnership` in `scripts/ci/check-platform-core-boundary`.
 
 - [ ] **Step 4: Run boundary tests and verify GREEN**
 
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
 ```
 
 Expected:
@@ -189,10 +189,10 @@ Expected: all tests pass when `DATABASE_URL` points at a migrated PostGIS databa
 Run:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.ps1 -Root .
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.ps1 -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-platform-core-boundary -Root .
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract.tests
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ci\check-pnu-anchor-pbf-marker-contract -Root .
 ```
 
 Expected: all four commands exit 0.
@@ -202,7 +202,7 @@ Expected: all four commands exit 0.
 Run:
 
 ```powershell
-git diff --check -- migrations/30016_platform_core_event_inbox_anchor_import.sql crates/db/src/platform_core_anchor.rs crates/db/src/lib.rs crates/db/tests/platform_core_anchor_import_integration.rs services/api/src/routes/platform_core_events.rs services/api/src/main.rs services/api/src/bin/platform_core_anchor_import.rs services/api/src/platform_core_anchor_import.rs services/api/Cargo.toml apps/web/app/platform-core/events/route.ts apps/web/tests/unit/platform-core-events.test.ts docs/architecture/platform-core-boundary.v1.json scripts/ci/check-platform-core-boundary.ps1 scripts/ci/check-platform-core-boundary.tests.ps1 scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1 scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1
+git diff --check -- migrations/30016_platform_core_event_inbox_anchor_import.sql crates/db/src/platform_core_anchor.rs crates/db/src/lib.rs crates/db/tests/platform_core_anchor_import_integration.rs services/api/src/routes/platform_core_events.rs services/api/src/main.rs services/api/src/bin/platform_core_anchor_import.rs services/api/src/platform_core_anchor_import.rs services/api/Cargo.toml apps/web/app/platform-core/events/route.ts apps/web/tests/unit/platform-core-events.test.ts docs/architecture/platform-core-boundary.v1.json scripts/ci/check-platform-core-boundary scripts/ci/check-platform-core-boundary.tests scripts/ci/check-pnu-anchor-pbf-marker-contract scripts/ci/check-pnu-anchor-pbf-marker-contract.tests
 ```
 
 Expected: no output and exit 0.

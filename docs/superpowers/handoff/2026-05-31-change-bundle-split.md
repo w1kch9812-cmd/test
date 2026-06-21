@@ -95,22 +95,22 @@ Files:
 - `docs/research/2026-05-29-local-sizing-test-results.md`
 - `docs/runbooks/supply-chain-provenance-and-deploy-gate.md`
 - `docs/superpowers/plans/2026-05-29-load-test-capacity-sizing.md`
-- `scripts/load/run-k6.ps1`
-- `scripts/load/normalize-k6-summary.ps1`
-- `scripts/ci/check-load-test-assets.ps1`
-- `scripts/ci/check-load-test-assets.tests.ps1`
-- `scripts/ci/verify-load-test-capacity-evidence.ps1`
-- `scripts/ci/verify-load-test-capacity-evidence.tests.ps1`
-- `scripts/ci/check-production-edge-admission.ps1`
-- `scripts/ci/check-production-edge-admission.tests.ps1`
-- `scripts/ci/verify-production-deploy-candidate.ps1`
-- `scripts/ci/check-pulumi-local-preview.ps1`
+- `scripts/load/run-k6`
+- `scripts/load/normalize-k6-summary`
+- `scripts/ci/check-load-test-assets`
+- `scripts/ci/check-load-test-assets.tests`
+- `scripts/ci/verify-load-test-capacity-evidence`
+- `scripts/ci/verify-load-test-capacity-evidence.tests`
+- `scripts/ci/check-production-edge-admission`
+- `scripts/ci/check-production-edge-admission.tests`
+- `scripts/ci/verify-production-deploy-candidate`
+- `scripts/ci/check-pulumi-local-preview`
 - `infrastructure/**`
 
 Primary verification:
 
-- `check-load-test-assets.ps1` and `.tests.ps1`
-- `check-platform-integration-policy.ps1` and `.tests.ps1`
+- `check-load-test-assets` and `.tests`
+- `check-platform-integration-policy` and `.tests`
 - production admission verification scripts.
 
 Important: Bundle C does not prove launch capacity by itself. It proves the evidence pipeline and

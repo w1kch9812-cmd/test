@@ -46,9 +46,9 @@ opens the production-promotion workstream.
   - Adds the Platform Core service-auth environment contract.
 - Modify: `.env.example`
   - Documents only placeholder names for service-auth configuration.
-- Modify: `scripts/ci/check-platform-core-boundary.ps1`
+- Modify: `scripts/ci/check-platform-core-boundary`
   - Blocks Platform Core integration from dropping service-auth env contract.
-- Modify: `scripts/ci/check-platform-core-boundary.tests.ps1`
+- Modify: `scripts/ci/check-platform-core-boundary.tests`
   - Proves the guard fails when service-auth contract is missing.
 - Modify: `docs/ssot-matrix.md`
   - Records service-auth SSOT and enforcement.
@@ -75,7 +75,7 @@ opens the production-promotion workstream.
 ## Task 4: Enforce The Contract Automatically
 
 - [x] Add guardrail test fixtures that fail if the boundary manifest lacks service-auth env names.
-- [x] Update `check-platform-core-boundary.ps1` to enforce the service-auth env contract.
+- [x] Update `check-platform-core-boundary` to enforce the service-auth env contract.
 - [x] Run the guardrail tests and the real guardrail against the repo root.
 
 ## Task 4.5: Enforce Platform Core Receiver Side

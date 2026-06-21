@@ -24,9 +24,9 @@
   - Validate Bazel-built SBOMs and evidence manifest.
 - Modify: `docs/architecture/platform-integration/supply-chain-policy.v1.json`
   - Add Bazel targets and `bazel-bin` output paths for SBOM/evidence outputs.
-- Modify: `scripts/ci/check-platform-integration-policy.ps1`
+- Modify: `scripts/ci/check-platform-integration-policy`
   - Enforce Bazel-owned SBOM/evidence output paths and CI wiring.
-- Modify: `scripts/ci/check-platform-integration-policy.tests.ps1`
+- Modify: `scripts/ci/check-platform-integration-policy.tests`
   - Add RED coverage for non-Bazel SBOM outputs and missing evidence target wiring.
 - Modify: `.github/workflows/ci.yml`
   - Build `//:supply_chain_evidence_artifacts` and upload/attest Bazel-generated SBOMs.

@@ -98,8 +98,8 @@ Run: `pnpm --filter web test:unit -- map/marker-tile-contract.test.ts map/marker
 ## Task 5: Guardrails And Verification
 
 **Files:**
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.ps1`
-- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests.ps1`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract`
+- Modify: `scripts/ci/check-pnu-anchor-pbf-marker-contract.tests`
 - Modify: `docs/superpowers/handoff/2026-05-22-active-goal-completion-audit.md`
 
 - [x] **Step 1: Extend guardrails for the new route/table/source**
