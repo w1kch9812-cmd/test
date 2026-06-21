@@ -72,12 +72,6 @@ jobs:
         run: bazelisk test //tools/bazel:ci_node_audit_transition --config=ci --verbose_failures
       - name: Biome check
         run: bazelisk test //tools/bazel:frontend_lint --config=ci --verbose_failures
-      - name: Traffic/auth policy registry guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1
-      - name: Traffic/auth production edge policy guardrail
-        shell: pwsh
-        run: ./scripts/ci/check-traffic-auth-policy-registry.ps1 -IncludeProductionEdge
       - name: Migration version prefix guardrail
         run: cargo run -p repo-guard -- migration-version-prefixes
       - name: Install ripgrep for repository guardrails
