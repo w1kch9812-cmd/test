@@ -94,6 +94,9 @@ jobs:
       - name: Unit tests
         run: pnpm turbo test
 
+      - name: Redis-backed integration tests
+        run: pnpm --filter=@gongzzang/web run test:integration
+
       - name: Build
         run: pnpm turbo build
         env:
