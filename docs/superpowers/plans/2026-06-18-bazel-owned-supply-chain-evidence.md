@@ -1,5 +1,7 @@
 # Bazel-Owned Supply Chain Evidence Implementation Plan
 
+> ⛔ **[ADR-0044](../../adr/0044-bazel-transition-reconciliation.md)로 폐기됨 (2026-06-21 역전).** Bazel 전환은 취소됐고 cargo+pnpm/Turbo가 영구 빌드 SSOT다. 이 문서는 (취소된) 결정의 역사적 기록일 뿐 — 구현하지 말 것.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Promote supply-chain evidence to Bazel-owned graph outputs so CI only consumes declared artifacts and performs GitHub-bound attestation.

@@ -1,5 +1,7 @@
 # Gongzzang Current Project Full Audit
 
+> ⛔ **[ADR-0044](../adr/0044-bazel-transition-reconciliation.md)로 폐기됨 (2026-06-21 역전).** Bazel 전환은 취소됐고 cargo+pnpm/Turbo가 영구 빌드 SSOT다. 이 문서는 (취소된) 결정의 역사적 기록일 뿐 — 구현하지 말 것.
+
 Date: 2026-06-18
 Repo: `C:\Users\admin\Desktop\gongzzang`
 
