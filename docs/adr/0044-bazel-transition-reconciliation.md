@@ -13,9 +13,8 @@
 > SSOT.** "부분만 실행"은 `cargo test -p <crate>`로 충족. 본 문서의 "go Bazel" 결정은 무효이며,
 > 아래 내용은 역사적 기록으로만 남긴다. 신규 Bazel target/파일 추가 금지.
 | Decision owner | perfectoryinc (platform owner) |
-| Builds on | ADR-0040, ADR-0041, ADR-0042 |
-| Supersedes on acceptance | ADR-0002 (in part — turbo/pnpm as *terminal* SSOT), ADR-0043 |
-| Reframes | platform-core ADR-0010 (current-state diagnosis only; its rollback clause is void) |
+| Reverses | ADR-0040, ADR-0041, ADR-0042, ADR-0043 (Bazel adoption — all superseded-bannered) |
+| Reaffirms | ADR-0002 (turbo/pnpm as terminal SSOT) + platform-core ADR-0010 (cargo as build SSOT) |
 
 ## Context
 
@@ -45,86 +44,69 @@ Current reality (verified 2026-06-20):
 A single, unambiguous direction is required so that humans and code agents stop oscillating between
 "build it up" and "tear it down."
 
-## Decision
+## Decision (final — 2026-06-21 reversal)
 
-One direction for `gongzzang`, `platform-core`, and `dawneer` build strategy:
+One direction for `gongzzang`, `platform-core`, and `dawneer`:
 
-1. **PowerShell is eliminated.** All build/verification logic becomes Rust or native Bazel rules.
-   A PowerShell guardrail is never a permitted end-state.
+1. **Bazel is abandoned. `cargo` (Rust) + `pnpm`/`Turborepo` (frontend) are the PERMANENT build,
+   test, lint, and release SSOT.** There are no Bazel files, targets, rules, registries, or
+   `MODULE.bazel`/`BUILD.bazel`/`.bazelrc` anywhere in the three repos. (Why: this owner's Windows
+   machine cannot build under Bazel — `aws-lc-sys` fails; every full-Bazel success story is a giant
+   monorepo with a dedicated build team and remote-execution cluster, with zero small-Rust-polyrepo
+   precedent; the Rust-community norm is cargo for small teams. See the reversal banner above.)
 
-2. **Two-bucket cleanup.** Every existing Bazel-related surface is exactly one of:
-   - **DELETE (PowerShell-wrapper meta-machine):** the verification registry / projection /
-     CI-fragments, the impact selector, transition-ratchet and verification-task / control-plane
-     registries, `shell_test_compat.bzl`, `platform_core_guardrails.bzl`,
-     `run_platform_core_powershell.sh` / `run_guardrail_task.sh`, the `//:guardrails_*` and
-     `//:national_collection_*` PowerShell-wrapped suites, and the catalog JSON/YML SSOTs that drive
-     them. (Full list in *Affected Surfaces* below.)
-   - **KEEP + GROW (Rust-native):** the `rules_rust` graph (`crates/**/BUILD.bazel`,
-     `services/**/BUILD.bazel`, `tools/bazel/rust_workspace.bzl`, root `BUILD.bazel`, `MODULE.bazel`,
-     `.bazelrc`, `.bazelversion`) and `rules_js`/aspect JS rules (ADR-0041), with **dependencies
-     generated from cargo/lockfile metadata via `crate_universe`, never hand-mirrored.**
+2. **"Run only part, not everything"** — the original reason Bazel was considered — is native and
+   already works: `cargo build|test|check -p <crate>` (Rust) and `pnpm turbo <task> --filter <pkg>`
+   (frontend). No Bazel is required to get partial/incremental builds.
 
-3. **Bazel is the terminal long-term build / test / release SSOT. There is no rollback/abandon.**
-   `cargo`, `pnpm`, and `Turborepo` are transitional executors only, not the terminal SSOT.
+3. **PowerShell is eliminated.** All build/verification logic is Rust or standard tools (cargo-deny,
+   gitleaks, lefthook). The PowerShell "registry / projection / ratchet / control-plane" meta-machines
+   were deleted; the few real repo-specific guards were ported to one `repo-guard` Rust binary.
+   PowerShell scripts → **0** across all three repos.
 
-4. **Sequencing: enablers-first, release cutover last.** Release-artifact cutover must NOT precede
-   the enablers in *Open Decisions* below.
+4. **No meta-machines.** No verification / projection / ratchet / registry that verifies *itself*.
+   **Progress is measured by user-visible capability — not by registry/projection/document volume.**
 
-5. **Progress is measured by user-visible capability** — remote-cache hit-rate, CI minutes saved,
-   one-command cross-repo build — **not** by registry/projection/document volume. No new
-   registry/projection/selector meta-machine may be created.
+## Cleanup outcome (2026-06-21)
 
-## Enabler Decisions (resolved 2026-06-21)
+The Bazel-specific "enablers" from the original plan — a remote-cache backend, an OCI/release-via-Bazel
+artifact model, and a cross-repo Bazel `platform_contracts` module — are **void**: Bazel is abandoned,
+so none are built. The one piece that was real, and is **done**:
 
-Priority: do **#4 and #3 now** (they deliver "PowerShell out, all Rust" at zero infra cost); **defer
-enablers #1 and #2** (not urgent; #2 is the last step by definition).
-
-1. **Remote cache backend — DEFERRED.** Local disk cache (`--disk_cache`, already configured) is
-   sufficient for now. Pick a remote backend only when CI build time or cross-repo result sharing
-   becomes the measured bottleneck. No spend now.
-2. **Release / OCI artifact model — DEFERRED (last phase).** Not urgent pre-launch; release cutover is
-   the final step. Target when chosen: `rules_oci` + distroless + `cosign` keyless + a registry,
-   produced from Bazel outputs, replacing `cargo build --release`. Revisit near launch.
-3. **Cross-repo build-graph mechanism — ADOPTED.** A slim shared `platform_contracts` Bazel module
-   (housed in `platform-core`) that generates the Rust client + TS types as build targets; consumers
-   `bazel_dep` on the generated target so the build enforces the contract and the PowerShell pin
-   checks are retired. Final form = a private Bazel registry; interim bridge = `git_override` pinned
-   to a SHA (NOT `local_path_override`). Prereqs: reconcile Rust toolchains (gongzzang 1.91.1 vs
-   platform-core 1.95.0); keep the generated crate cargo-buildable while `dawneer` is not yet
-   Bazel-ified.
-4. **PowerShell → Rust port triage — ADOPTED (start here).** Value-triage with a DELETE default:
-   delete the meta-machine (registry/projection/ratchet/control-plane) and all PowerShell test
-   scripts; keep off-the-shelf tools (gitleaks, lefthook, cargo-deny); port only the few real
-   repo-specific guards into one `repo-guard` Rust binary. End state: PowerShell scripts → 0.
-   **Carve-out (verified 2026-06-21):** the `traffic-auth-policy-registry` / `traffic-auth-policy-generator`
-   cluster (~16 PowerShell files + `docs/architecture/traffic-auth-policy-registry.v1.json`, 1000 lines)
-   is NOT ceremony — it is the auth / authz / rate-limit + web↔API-proxy policy SSOT. Its 6-phase
-   generator emits real runtime code that the app imports: `services/api/src/traffic_auth_policy.rs`
-   (used by `app.rs` for `BackendAuthorizationState` + rate policies) and `listing_marker_policy.rs`,
-   plus `apps/web/lib/policies/traffic-auth-policy.generated.ts` and `.../api/api-proxy-client.generated.ts`
-   (imported across the web data layer: buildings/parcels/listings/notifications + the `/api/proxy` route).
-   Therefore KEEP it; it is the LARGEST, most careful PORT — the PowerShell generator → a Rust
-   codegen step, with regenerated-output parity verification. This generator was the last to be
-   ported; it is now the Rust binary `cargo run -p api --bin generate-traffic-auth-policy`, which
-   produces the committed `.generated.*` files, completing PowerShell scripts → 0.
+- **PowerShell → Rust port (completed).** Value-triage with a DELETE default: the meta-machine
+  (registry / projection / ratchet / control-plane) and all PowerShell test scripts were deleted;
+  off-the-shelf tools (gitleaks, lefthook, cargo-deny) were kept; the few real repo-specific guards were
+  ported into one `repo-guard` Rust binary. **PowerShell scripts → 0.**
+  - **Carve-out (real capability, ported — not ceremony):** the `traffic-auth-policy` generator cluster
+    is the auth / authz / rate-limit + web↔API-proxy policy SSOT. Its 6-phase PowerShell generator emitted
+    real runtime code the app imports: `services/api/src/traffic_auth_policy.rs` (used by `app.rs` for
+    `BackendAuthorizationState` + rate policies) and `listing_marker_policy.rs`, plus
+    `apps/web/lib/policies/traffic-auth-policy.generated.ts` and `.../api/api-proxy-client.generated.ts`
+    (imported across the web data layer + the `/api/proxy` route). It was ported to the Rust binary
+    `cargo run -p api --bin generate-traffic-auth-policy`, which reproduces the committed `.generated.*`
+    files byte-for-byte (a CI drift-guard enforces parity). SSOT = the single aggregate
+    `docs/architecture/traffic-auth-policy-registry.v1.json`.
 
 ## Alternatives
 
-- **Cargo-per-repo, drop Bazel entirely** (follow the cleanup inventory to its end): rejected — the
-  owner has chosen enterprise Bazel; the cross-repo graph value is wanted.
-- **Keep both directions / keep PowerShell wrappers as a long-term state**: rejected — this *is* the
-  current contradiction and the source of the ceremony.
-- **Adopt Buck2 instead**: rejected, consistent with ADR-0042.
+- **cargo + pnpm/Turbo, no Bazel (native partial builds)** — **ADOPTED** (this decision). `cargo -p`
+  and `turbo --filter` cover the partial / cross-repo build need without monorepo-scale Bazel overhead.
+- **Full Bazel as the terminal long-term SSOT** — **REJECTED (2026-06-21).** This was the
+  originally-proposed direction of this ADR; reversed because Bazel does not build on the team's actual
+  platform (Windows `aws-lc-sys` failure) and has no small-Rust-polyrepo precedent. Re-adoption requires
+  a new ADR (see *Re-adoption bar*).
+- **Keep PowerShell wrappers as a long-term state** — rejected: this was the source of the ceremony/contradiction.
+- **Adopt Buck2 instead** — rejected, consistent with ADR-0042.
 
 ## Consequences
 
-- Positive: one direction; the ~26 P0 contradictions resolve to a single rule; ceremony is deleted;
-  the consistency / SSOT pillars are restored.
+- Positive: one direction — cargo/native; the ~26 P0 Bazel contradictions resolve to "cargo is the
+  permanent SSOT, Bazel abandoned." Ceremony deleted; consistency / SSOT pillars restored.
 - Positive: code agents (including Codex) receive an unambiguous spec.
-- Cost: large documentation + code cleanup.
-- Cost: the four enablers require real infrastructure investment before release cutover.
-- Honest limitation: **until the enablers land, Bazel is NOT yet the real build system** — `cargo`
-  remains the shipping path *transitionally*. No "Bazel complete" claim is permitted in this window.
+- Positive: no remote-cache / OCI-via-Bazel / cross-repo-Bazel-graph infrastructure is needed — those
+  were enablers for the abandoned Bazel plan.
+- Cost: a large one-time documentation + code cleanup (Bazel files, PowerShell, ceremony) — completed.
+- `cargo` is the permanent build system, not a transitional stopgap; there is no "terminal vs transitional" split.
 
 ## Affected Surfaces
 
@@ -149,9 +131,10 @@ enablers #1 and #2** (not urgent; #2 is the last step by definition).
 - `gongzzang`: ADR-0043; `docs/superpowers/plans/2026-06-17-verification-control-plane.md`,
   `2026-06-18-bazel-transition-ratchet.md`, `2026-06-18-verification-task-registry-ssot.md`;
   `docs/superpowers/handoff/2026-06-07-bazel-commit-boundary.md`.
-- ADR-0002: turbo/pnpm downgraded from terminal SSOT to transitional executor.
-- `platform-core` ADR-0010: kept as current-state diagnosis only; its "rollback criteria" clause is
-  void (this ADR establishes no-rollback).
+- ADR-0002: turbo/pnpm **reaffirmed** as the terminal frontend SSOT (the earlier "downgrade to
+  transitional" is reversed); cargo joins as the terminal Rust build/test/release SSOT.
+- `platform-core` ADR-0010 (Cargo Build SSOT + Bazel Freeze): **reaffirmed** — cargo is the permanent
+  SSOT and Bazel is abandoned; the diagnosis stands and there is no Bazel-freeze thaw.
 
 **Documents edited to align** (enablers-first, no-rollback, PowerShell-elimination, cargo-metadata
 deps): `platform-core` ADR-0011 + the transition plan + remaining 2026-06-20 research notes;
@@ -161,23 +144,21 @@ handoff, `architecture/observability.md`, `architecture/layers.md`,
 `runbooks/supply-chain-provenance-and-deploy-gate.md`, `superpowers/next-actions.md`, `adr/README.md`;
 `dawneer` cross-repo alignment plan + spec.
 
-## Reassessment Triggers
+## Re-adoption bar
 
-> No-rollback (Decision 3) means these triggers cause a **re-plan, not an abandon** of Bazel.
-
-- A `rules_rust` / `rules_js` rule cannot support the pinned toolchain in Linux CI → fix/replace the
-  rule.
-- The Bzlmod lockfile strategy cannot reconcile with the file-size policy → adjust policy or lockfile
-  handling.
-- A chosen remote-cache backend proves unaffordable/unsafe → choose another backend (Open Decision 1).
+Bazel is abandoned, not paused. Re-adopting it requires a NEW ADR demonstrating BOTH: (a) Bazel builds
+on the team's actual dev machines (including the owner's Windows host, which currently fails on
+`aws-lc-sys`), and (b) a concrete, measured pain that `cargo build|test|check -p <crate>` /
+`pnpm turbo --filter` cannot solve. Absent that, do not add Bazel files, targets, rules, or registries.
 
 ## Implementation Status
 
-- 2026-06-20: this ADR proposed; ~39-document adversarial reconciliation audit complete.
-- Checkbox reality of the `platform-core` transition plan: Tasks 1–2 done, Tasks 3–4 partial,
-  Tasks 5–7 not started.
-- Pending: owner fills the four Open Decisions → then supersession banners, Rust-native replacements,
-  and DELETE-bucket removal (delegated to a code agent), enablers before release cutover.
+- 2026-06-20: proposed (originally "reconcile toward Bazel"); ~39-document adversarial audit.
+- 2026-06-21: **reversed** — Bazel abandoned; cargo/native is the permanent build/test/release SSOT.
+- Done: PowerShell → 0 (all three repos); all Bazel files/targets/registries removed; the traffic-auth
+  generator ported to Rust with a CI drift-guard; pro-Bazel ADRs (0040–0043, platform-core 0011)
+  superseded-bannered; Bazel + deleted-CI-machinery doc references reconciled across the three repos.
+- No open enablers remain (the Bazel enablers are void).
 
 ## References
 
