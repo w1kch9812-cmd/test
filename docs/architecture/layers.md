@@ -93,21 +93,22 @@ Important registries:
 - `docs/architecture/traffic-auth-policy-registry.v1.json`
 - `docs/architecture/platform-core-boundary.v1.json`
 - `docs/architecture/platform-integration/index.v1.json`
-- `docs/architecture/verification-transition-ratchet.v1.json`
 
 Generated or derived runtime files must follow those registries.
 
 ## 7. Build/Verification Layer
 
-Bazel is the direction for reproducible verification.
+`cargo` (Rust) and `pnpm` + `Turborepo` (frontend) are the build, test, and
+verification SSOT (ADR-0002; ADR-0044 reversed the abandoned Bazel transition).
 
 Current state:
 
-- native Bazel targets exist for key frontend/build/guardrail paths;
-- some CI tasks remain explicit transitions;
-- transition state is tracked by `docs/architecture/verification-transition-ratchet.v1.json`.
+- Rust is built/tested/linted with `cargo` (`cargo build`, `cargo test`, `cargo clippy`);
+- the frontend is built/tested with `pnpm` + `turbo` (`turbo run build`, `turbo run test`, `turbo run typecheck`);
+- off-the-shelf tools (gitleaks, lefthook, cargo-deny) and a small Rust `repo-guard` cover repo-specific guardrails.
 
-The goal is not to hide shell scripts. The goal is to retire transitional runners into native Bazel evidence targets when each replacement exists.
+The goal is reproducible verification through the native toolchains; there is no
+Bazel build graph and no transition ratchet (both removed per ADR-0044).
 
 ## 8. Guardrails
 

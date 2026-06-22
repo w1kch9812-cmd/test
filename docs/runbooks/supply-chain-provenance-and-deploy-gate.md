@@ -33,27 +33,29 @@ Each production candidate must have:
 
 Current subjects:
 
-- `bazel-bin/gongzzang-web-next-build.tgz`
-- `bazel-bin/gongzzang-api-release/api`
+- `target/supply-chain/gongzzang-web-next-build.tgz`
+- `target/release/api`
 
 Current SBOM files:
 
-- `bazel-bin/supply-chain/gongzzang-node-workspace-sbom.cdx.json`
-- `bazel-bin/supply-chain/gongzzang-rust-workspace-sbom.cdx.json`
+- `target/supply-chain/gongzzang-node-workspace-sbom.cdx.json`
+- `target/supply-chain/gongzzang-rust-workspace-sbom.cdx.json`
 
 Current evidence manifest:
 
-- `bazel-bin/supply-chain/evidence-manifest.json`
+- `target/supply-chain/evidence-manifest.json`
 
 ## Verification
 
 Before promotion, download the candidate artifact from the approved workflow
-run and verify provenance. The approved workflow must build and validate the
-Bazel-owned evidence graph first:
+run and verify provenance. The approved workflow must build the release
+candidates and generate the CycloneDX SBOMs and evidence manifest first, using
+the native toolchains (ADR-0044: `cargo` for Rust, `pnpm` + `Turborepo` for the
+frontend; there is no Bazel evidence graph):
 
 ```bash
-bazelisk build //:supply_chain_evidence_artifacts --config=ci --verbose_failures
-bazelisk test //:verify_supply_chain --config=ci --verbose_failures
+cargo build --release
+pnpm --filter=@gongzzang/web build
 ```
 
 ```bash
@@ -95,21 +97,21 @@ Manual verification rejects artifacts not built by the approved workflow or
 approved source ref. The verification commands are:
 
 ```bash
-gh attestation verify bazel-bin/gongzzang-web-next-build.tgz \
+gh attestation verify target/supply-chain/gongzzang-web-next-build.tgz \
   -R <owner>/gongzzang
 
-gh attestation verify bazel-bin/gongzzang-api-release/api \
+gh attestation verify target/release/api \
   -R <owner>/gongzzang
 ```
 
 Then verify the SBOM attestations:
 
 ```bash
-gh attestation verify bazel-bin/gongzzang-web-next-build.tgz \
+gh attestation verify target/supply-chain/gongzzang-web-next-build.tgz \
   -R <owner>/gongzzang \
   --predicate-type https://cyclonedx.org/bom
 
-gh attestation verify bazel-bin/gongzzang-api-release/api \
+gh attestation verify target/release/api \
   -R <owner>/gongzzang \
   --predicate-type https://cyclonedx.org/bom
 ```

@@ -38,13 +38,13 @@ pnpm dev
 | 명령어 | 설명 |
 |---|---|
 | `pnpm dev` | 개발 서버 (turbo) |
-| `bazelisk test //:frontend_build --config=ci` | production 빌드 |
-| `bazelisk test //:frontend_typecheck --config=ci` | TypeScript 검증 |
-| `bazelisk test //:frontend_unit_test --config=ci` | Vitest unit |
-| `bazelisk test //:frontend_e2e --config=ci` | Playwright e2e + a11y |
-| `bazelisk test //:frontend_lint --config=ci` | Biome lint |
+| `pnpm --filter=@gongzzang/web build` | production 빌드 (next build) |
+| `pnpm --filter=@gongzzang/web typecheck` | TypeScript 검증 (tsc --noEmit) |
+| `pnpm --filter=@gongzzang/web test` | Vitest unit |
+| `pnpm --filter=@gongzzang/web test:e2e` | Playwright e2e + a11y |
+| `pnpm --filter=@gongzzang/web lint` | Biome lint |
 | `pnpm format` | Biome format |
-| `bazelisk test //:frontend_bundle --config=ci` | size-limit bundle budget |
+| `pnpm --filter=@gongzzang/web test:bundle` | size-limit bundle budget |
 | `pnpm --filter=@gongzzang/api-types generate` | utoipa OpenAPI → TS types |
 
 ## 한국어 UI 컨벤션 (해요체)
@@ -71,12 +71,12 @@ pnpm dev
 
 | 게이트 | 도구 | CI step |
 |---|---|---|
-| Lint | Biome | `bazelisk test //:frontend_lint --config=ci` |
-| TypeScript | tsc --noEmit | `bazelisk test //:frontend_typecheck --config=ci` |
-| Unit | Vitest | `bazelisk test //:frontend_unit_test --config=ci` |
-| E2E | Playwright | `bazelisk test //:frontend_e2e --config=ci` |
-| a11y | @axe-core/playwright | `bazelisk test //:frontend_e2e --config=ci` (a11y.spec.ts) |
-| Bundle | size-limit | `bazelisk test //:frontend_bundle --config=ci` |
+| Lint | Biome | `pnpm --filter=@gongzzang/web lint` |
+| TypeScript | tsc --noEmit | `pnpm --filter=@gongzzang/web typecheck` |
+| Unit | Vitest | `pnpm --filter=@gongzzang/web test` |
+| E2E | Playwright | `pnpm --filter=@gongzzang/web test:e2e` |
+| a11y | @axe-core/playwright | `pnpm --filter=@gongzzang/web test:e2e` (a11y.spec.ts) |
+| Bundle | size-limit | `pnpm --filter=@gongzzang/web test:bundle` |
 | Format | Biome | `pnpm format --write` |
 
 ## 비목표 (다른 sub-project)

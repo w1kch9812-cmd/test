@@ -53,8 +53,9 @@ The current split is recorded in
 
 The short version:
 
-- Bazel transition ratchet, guardrail checker, and provisioning ADR evidence stay with the
-  Bazel worker.
+- Build/verification stays on the native toolchains: `cargo` for Rust, `pnpm` + `Turborepo`
+  for the frontend (ADR-0002; ADR-0044 reversed the abandoned Bazel transition, so there is no
+  Bazel worker / transition ratchet role).
 - Product architecture, ownership-boundary audit, and next-action clarity may proceed in a
   separate session.
 - Public-data collection, DB migrations, R2 deletion, production infrastructure, Kafka, and

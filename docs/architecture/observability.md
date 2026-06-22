@@ -103,8 +103,7 @@ The repo has tracing, health, audit, policy registries, and load-test evidence s
 Remaining hardening areas:
 
 - full OTel collector/exporter wiring is not represented here as a completed runtime deployment;
-- production SLO dashboards and alert routes are not yet proven in this audit;
-- transition from local/script evidence to native Bazel evidence is still in progress.
+- production SLO dashboards and alert routes are not yet proven in this audit.
 
 ## 8. Guardrails
 
