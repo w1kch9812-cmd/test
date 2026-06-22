@@ -1,5 +1,12 @@
 # 2026-05-31 Change Bundle Split
 
+> Historical record (2026-05-31). NOTE: the production deploy-admission /
+> provenance machinery listed under "Bundle C" below was later removed
+> pre-launch (ADR-0044) — `.github/workflows/production-deploy-admission.yml`,
+> `scripts/ci/verify-production-deploy-candidate`, and
+> `scripts/ci/check-production-edge-admission(.tests)` no longer exist. This file
+> is kept as a timestamped record, not current guidance.
+
 This workspace currently contains three logical change bundles. Keep them separate during review or
 commit staging so marker-serving behavior, test-runtime hardening, and operations gates do not hide
 each other.

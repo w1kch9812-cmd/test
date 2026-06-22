@@ -175,14 +175,14 @@ Gongzzang consumer boundary.
    mesh policy. That stage requires `GONGZZANG_WAF_REGIONAL_RESOURCE_ARN` or an
    explicit CloudFront attachment path.
 
-2. Any future production deploy workflow must call
-   `.github/workflows/production-deploy-admission.yml` before promotion. The
-   admission workflow verifies the attested CI run artifact, provenance, SBOM,
-   approved workflow, approved ref, subject digest, healthy perf/staging
-   load-test capacity evidence, and production edge admission.
-   The deploy-candidate verifier and supply-chain promotion runbook are
-   production-promotion artifacts; they are not required for the current
-   consumer integration gate.
+2. The pre-launch production deploy-admission ceremony was removed (ADR-0044):
+   there is no `.github/workflows/production-deploy-admission.yml`, no
+   provenance/SBOM-attestation steps, and no deploy-candidate verifier scripts.
+   The surviving supply-chain gate is native in `.github/workflows/ci.yml`
+   (`cargo-deny` + the `gitleaks` secret scan). If a future production deploy
+   needs a promotion/provenance gate, design it fresh with an ADR when there is
+   a real launch need; do not resurrect the removed admission workflow or
+   scripts.
 
 3. Load-test harness work is evidence-pipeline ready, not launch-capacity
    complete. Do not claim production launch sizing from local/ci smoke or
