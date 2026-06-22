@@ -94,4 +94,5 @@ via Pulumi, not an app rewrite.
 
 - [ADR-0030](./0030-three-service-architecture.md) three-service architecture; [ADR-0032](./0032-eventual-consistency-strategy.md) eventual consistency (outbox).
 - [ADR-0044](./0044-bazel-transition-reconciliation.md) product-first / no premature infra; [AGENTS.md](../../AGENTS.md) ✱ product-first.
+- [ADR-0047](./0047-collection-event-fabric.md) refines this: the Kafka-shaped (broker-deferred) Collection Event Fabric for Bronze ingestion. Adopted by `platform-core` ADR-0013.
 - `crates/outbox-publisher` (platform-core): `EventBroadcaster` trait + `WebhookBroadcaster`.
