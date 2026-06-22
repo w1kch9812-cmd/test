@@ -1,9 +1,11 @@
 # ADR-0042: Cross-Repo Bazel-Native Build Graph
 
+> ⛔ **[ADR-0044](./0044-bazel-transition-reconciliation.md)로 폐기됨 (2026-06-21 역전).** Bazel 전환은 취소됐고 **cargo(Rust) + pnpm/Turbo(프론트)가 영구 빌드 SSOT**다. 이 문서는 (취소된) cross-repo Bazel 그래프 결정의 *역사적 기록*일 뿐 — 구현하지 말 것.
+
 | | |
 |---|---|
 | Date | 2026-06-16 |
-| Status | Accepted |
+| Status | Superseded by ADR-0044 |
 | Decision owner | Platform engineering |
 
 ## Context
