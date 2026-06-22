@@ -31,10 +31,11 @@ meta-machines** spread across all three repos. These verify *themselves* (regist
 projection writers, impact selectors) rather than producing build/test/release value. They are the
 ceremony that makes the strategy look both "grown" and "deleted" at once.
 
-Current reality (verified 2026-06-20):
+State at the 2026-06-20 audit (Bazel has since been removed entirely — cargo is now the sole build system):
 
-- `cargo` builds, tests, lints, and ships everything. In `platform-core` CI, Bazel runs **only**
-  PowerShell-wrapper guardrail suites; `//:rust_fast` was removed from CI.
+- `cargo` built, tested, linted, and shipped everything. At that time `platform-core` CI ran Bazel
+  **only** for PowerShell-wrapper guardrail suites (`//:rust_fast` was already excluded from CI); all
+  of that Bazel scaffolding was removed on 2026-06-21.
 - There is **no Dockerfile** in `platform-core`; the release artifact is two `cargo build --release`
   binaries.
 - `cargo test --workspace --all-features` is genuinely green (700 passed / 0 failed), but the
@@ -136,8 +137,8 @@ so none are built. The one piece that was real, and is **done**:
 - `platform-core` ADR-0010 (Cargo Build SSOT + Bazel Freeze): **reaffirmed** — cargo is the permanent
   SSOT and Bazel is abandoned; the diagnosis stands and there is no Bazel-freeze thaw.
 
-**Documents edited to align** (enablers-first, no-rollback, PowerShell-elimination, cargo-metadata
-deps): `platform-core` ADR-0011 + the transition plan + remaining 2026-06-20 research notes;
+**Documents edited to align** (PowerShell elimination, Bazel removal, cargo as the build SSOT):
+`platform-core` ADR-0011 + the transition plan + remaining 2026-06-20 research notes;
 `gongzzang` ADR-0040, ADR-0042, the 2026-06-07 plans + spec, the 2026-06-16 cross-repo plan, the
 supply-chain-evidence plan, the verification-control-plane design spec, the concurrent-session
 handoff, `architecture/observability.md`, `architecture/layers.md`,
