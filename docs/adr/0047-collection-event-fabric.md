@@ -47,9 +47,15 @@ We want a single **Collection Event Fabric**: a small set of named topics, two c
 Two narrow traits (not one), because dispatch needs more verbs than publishing:
 
 - **`JobBus`** — the dispatch side (Planner produces, Worker consumes): `publish_jobs`, `poll_jobs(group, max, lease)`, `ack(lease_token)`, `nack(lease_token, retryable)`. `ack` ≡ commit offset; `nack(retryable=false)` ≡ DLQ.
-- **`RawWrittenSink`** — the post-write fan-out. This is the **existing `EventBroadcaster`** reused unchanged: `collection.raw_written` is published as an outbox event; downstream consumers are outbox consumers exactly like today's Catalog consumers.
+- **`RawWrittenSink`** — the **producer** seam: a collection worker hands its typed
+  `collection.raw_written` payload to the sink when it `ack`s a job. The production sink **inserts a
+  `catalog.outbox_event` row**; the **existing `OutboxWorker` + `EventBroadcaster`** then fan that row
+  out to consumers unchanged. So `EventBroadcaster` is still reused — for the *fan-out* half — but it
+  is **not** the producer seam itself.
 
-> **Resolved contradiction (facets 1/2 vs 4):** facets 1–3 spoke of "the `EventBroadcaster` trait" for both directions; facet 4 correctly observed `EventBroadcaster` is publish-only and cannot express pull/lease/ack. **We adopt the two-trait split.** `JobBus` owns dispatch; `RawWrittenSink = EventBroadcaster` owns fan-out. Both are `Arc<dyn …>`-injected, identical to how `OutboxWorker` holds `Arc<dyn EventBroadcaster>` today.
+> **Resolved contradiction (facets 1/2 vs 4):** facets 1–3 spoke of "the `EventBroadcaster` trait" for both directions; facet 4 correctly observed `EventBroadcaster` is publish-only and cannot express pull/lease/ack. **We adopt the two-trait split.** `JobBus` owns dispatch; `RawWrittenSink` owns producer-side emission; `EventBroadcaster` owns fan-out. Both new traits are `Arc<dyn …>`-injected, identical to how `OutboxWorker` holds `Arc<dyn EventBroadcaster>` today.
+>
+> **Refinement (2026-06-22, from the Slice 3-A implementation):** the producer seam is a **distinct typed trait `RawWrittenSink`**, *not* `EventBroadcaster` directly. Reason: `EventBroadcaster::publish` takes an `EventEnvelope` carrying an outbox `event_id` + `OutboxScope` that exist **only after** the outbox row is persisted, whereas the producer must emit *before* persisting (its input is the typed `CollectionRawWrittenV1`). `RawWrittenSink::emit(&CollectionRawWrittenV1)` is therefore the pre-persist producer port; its production impl persists the row and the existing `OutboxWorker`/`EventBroadcaster` path fans it out. This keeps producer-shaping out of the fan-out trait and avoids the "two `EventBroadcaster`s" the split rejected.
 
 **The ledger remains the SSOT** for "what should be collected" and "what was collected." The bus is *only* dispatch + lease + fan-out. If the bus is wiped, the ledger + event logs fully reconstruct state (the coverage check already does exactly this). Kafka never becomes the audit source of truth (SSS pillars 3 traceability + 6 SSOT).
 
