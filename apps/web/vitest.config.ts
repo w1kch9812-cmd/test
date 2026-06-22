@@ -6,11 +6,10 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     setupFiles: ["./tests/unit/setup.ts"],
-    include: [
-      "tests/unit/**/*.test.{ts,tsx}",
-      "tests/integration/**/*.test.{ts,tsx}",
-      "lib/**/*.test.{ts,tsx}",
-    ],
+    // Unit lane (the CI `turbo test` step): deterministic, mocked tests only.
+    // Integration tests need a live app server + redis/auth upstreams and run in a
+    // dedicated lane via `pnpm test:integration` (vitest.integration.config.ts).
+    include: ["tests/unit/**/*.test.{ts,tsx}", "lib/**/*.test.{ts,tsx}"],
     globals: true,
   },
   resolve: {

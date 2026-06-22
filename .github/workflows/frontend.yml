@@ -96,6 +96,11 @@ jobs:
 
       - name: Build
         run: pnpm turbo build
+        env:
+          # next build runs in production mode; lib/env.ts requires a non-loopback
+          # rediss:// URL there. The job-level loopback REDIS_URL is for the unit
+          # tests (real redis service); override it for the production build only.
+          REDIS_URL: rediss://redis.gongzzang.invalid:6379
 
       - name: Bundle size
         run: pnpm --filter=@gongzzang/web run test:bundle

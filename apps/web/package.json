@@ -9,6 +9,7 @@
     "lint": "biome check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "probe:naver": "playwright test --config playwright.probes.config.ts",
     "test:bundle": "size-limit"
