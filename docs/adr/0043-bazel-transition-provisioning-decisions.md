@@ -98,4 +98,4 @@ this ADR or a superseding ADR.
 
 - [ADR 0040: Bazel-first build and verification control plane](./0040-bazel-first-build-verification-control-plane.md)
 - [ADR 0042: Cross-Repo Bazel-Native Build Graph](./0042-cross-repo-bazel-native-build-graph.md)
-- [Verification transition ratchet](../architecture/verification-transition-ratchet.v1.json)
+- Verification transition ratchet registry — deleted under ADR-0044 (Bazel verification meta-machine removed)
