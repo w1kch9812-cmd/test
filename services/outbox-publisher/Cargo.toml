@@ -20,7 +20,7 @@ shared-kernel = { path = "../../crates/domain/core/shared-kernel", version = "0.
 async-trait = { workspace = true }
 aws-config = { version = "=1.8.17", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
 aws-credential-types = "=1.2.14"
-aws-sdk-s3 = { version = "=1.133.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "=1.134.0", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio"] }
 chrono = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
